@@ -21107,7 +21107,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     boostCounterLayoutSelector.draw(canvas);
                 }
 
-                adminLayoutRect.set(ax - dp(6), ay - dp(1), ax2, ay + dp(15));
+                adminLayoutRect.set(ax - dp(6), ay, ax2, ay + dp(17.5f));
                 adminLayoutRect.inset(dp(-4), dp(-4));
                 final float scale = adminLayoutBounce == null ? 1.0f : adminLayoutBounce.getScale(.05f);
                 canvas.scale(scale, scale, adminLayoutRect.centerX(), adminLayoutRect.centerY());
@@ -21116,7 +21116,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     Theme.chat_adminPaint.setAlpha((int) (Color.alpha(color) * transitionParams.animateChangeProgress));
                 }
                 if (adminLayoutIsAdmin) {
-                    AndroidUtilities.rectTmp.set(-dp(6), -dp(1), ax2 - ax, dp(15));
+                    AndroidUtilities.rectTmp.set(-dp(6), 0, ax2 - ax, dp(17.5f));
                     if (boostCounterSpan != null) {
                         if (boostCounterSpan.isRtl) {
                             AndroidUtilities.rectTmp.left += boostCounterSpan.getWidth();
