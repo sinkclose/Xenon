@@ -757,8 +757,8 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
         moreButtonView = new ActionBarMenuItem(context, null, 0, Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
         moreButtonView.setIcon(R.drawable.ic_ab_other);
-        moreButtonView.addSubItem(0, LocaleController.getString(R.string.ProxySettings));
-        moreButtonView.addSubItem(1, LocaleController.getString(R.string.QRLoginTitle));
+        moreButtonView.addSubItem(0, R.drawable.outline_shield_plain_24, getString(R.string.ProxySettings));
+        moreButtonView.addSubItem(1, R.drawable.msg_qrcode, getString(R.string.QRLoginTitle));
         moreButtonView.setDelegate(id -> {
             if (id == 0) {
                 presentFragment(new ProxyListActivity());
