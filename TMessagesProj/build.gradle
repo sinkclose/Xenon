@@ -93,6 +93,11 @@ android {
         }
     }
 
+    Properties localProperties = new Properties()
+    if (project.rootProject.file('local.properties').exists()) {
+        localProperties.load(project.rootProject.file('local.properties').newDataInputStream())
+    }
+
     buildTypes {
         debug {
             buildConfigField("long", "VERSION_CODE", "${APP_VERSION_CODE}")
@@ -100,6 +105,13 @@ android {
             buildConfigField("long", "BUILD_VERSION", "${TG_APP_VERSION_CODE}")
             buildConfigField("String","BUILD_VERSION_STRING","\"${TG_APP_VERSION_NAME}\"")
             buildConfigField("boolean", "DEBUG_PRIVATE_VERSION", "false")
+
+            buildConfigField("int","API_ID", "${localProperties.get("apiId")}")
+            buildConfigField("String","API_HASH", "\"${localProperties.get("apiHash")}\"")
+            buildConfigField("String","TWPIC_BOT_USERNAME", "\"${localProperties.get("twpicBotUsername")}\"")
+            buildConfigField("String","SENTRY_DSN", "\"${localProperties.get("sentryDsn")}\"")
+            buildConfigField("long","HELPER_BOT_ID", "${localProperties.get("helperBotId")}")
+            buildConfigField("String","HELPER_BOT_USERNAME", "\"${localProperties.get("helperBotUsername")}\"")
         }
 
         release {
@@ -108,6 +120,13 @@ android {
             buildConfigField("long", "BUILD_VERSION", "${TG_APP_VERSION_CODE}")
             buildConfigField("String","BUILD_VERSION_STRING","\"${TG_APP_VERSION_NAME}\"")
             buildConfigField("boolean", "DEBUG_PRIVATE_VERSION", "false")
+
+            buildConfigField("int","API_ID", "${localProperties.get("apiId")}")
+            buildConfigField("String","API_HASH", "\"${localProperties.get("apiHash")}\"")
+            buildConfigField("String","TWPIC_BOT_USERNAME", "\"${localProperties.get("twpicBotUsername")}\"")
+            buildConfigField("String","SENTRY_DSN", "\"${localProperties.get("sentryDsn")}\"")
+            buildConfigField("long","HELPER_BOT_ID", "${localProperties.get("helperBotId")}")
+            buildConfigField("String","HELPER_BOT_USERNAME", "\"${localProperties.get("helperBotUsername")}\"")
         }
     }
     namespace 'org.telegram.messenger'

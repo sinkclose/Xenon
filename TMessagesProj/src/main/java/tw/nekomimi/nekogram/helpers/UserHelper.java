@@ -8,6 +8,7 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BaseController;
 import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.UserConfig;
+import org.telegram.messenger.Utilities;
 import org.telegram.messenger.browser.Browser;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.AlertDialog;
@@ -18,8 +19,6 @@ import org.telegram.ui.TopicsFragment;
 
 import java.util.Locale;
 import java.util.function.Consumer;
-
-import tw.nekomimi.nekogram.Extra;
 
 public class UserHelper extends BaseController {
 
@@ -128,7 +127,7 @@ public class UserHelper extends BaseController {
     }
 
     private void searchUser(long userId, Consumer<TLRPC.User> callback, ParsedPeer parsedPeer, boolean fallback) {
-        searchPeer(Extra.getUserInfoBot(fallback), userId, String.valueOf(userId), fakeUser -> {
+        searchPeer(getUserInfoBot(fallback), userId, String.valueOf(userId), fakeUser -> {
             var user = getMessagesController().getUser(userId);
             if (user != null) {
                 callback.accept(user);
@@ -145,7 +144,7 @@ public class UserHelper extends BaseController {
     }
 
     private void searchChat(long chatId, Consumer<TLRPC.Chat> callback, ParsedPeer parsedPeer, boolean fallback) {
-        searchPeer(Extra.getUserInfoBot(fallback), chatId, String.valueOf(-1000000000000L - chatId), fakeChat -> {
+        searchPeer(getUserInfoBot(fallback), chatId, String.valueOf(-1000000000000L - chatId), fakeChat -> {
             var chat = getMessagesController().getChat(chatId);
             if (chat != null) {
                 callback.accept(chat);
@@ -193,6 +192,93 @@ public class UserHelper extends BaseController {
                 callback.accept(peer);
             }
         });
+    }
+
+    private static class USInfoBot extends UserHelper.UserInfoBot {
+
+        @Override
+        public long getId() {
+            return 189165596;
+        }
+
+        @Override
+        public String getUsername() {
+            return "usinfobot";
+        }
+
+        @Override
+        public UserHelper.ParsedPeer parsePeer(String[] lines) {
+            var peer = new UserHelper.ParsedPeer();
+            for (var line : lines) {
+                line = line.replaceAll("\\p{C}", "").trim();
+                if (line.startsWith("\uD83D\uDC64")) {
+                    var id = Utilities.parseLong(line.replace("\uD83D\uDC64", "").trim());
+                    if (id > 0) {
+                        peer.id = id;
+                    }
+                } else if (line.startsWith("\uD83D\uDC66\uD83C\uDFFB")) {
+                    peer.first_name = line.replace("\uD83D\uDC66\uD83C\uDFFB", "").trim();
+                } else if (line.startsWith("\uD83D\uDC6A")) {
+                    peer.last_name = line.replace("\uD83D\uDC6A", "").trim();
+                } else if (line.startsWith("\uD83C\uDF10")) {
+                    peer.username = line.replace("\uD83C\uDF10", "").replace("@", "").trim();
+                } else if (line.startsWith("\uD83D\uDC65")) {
+                    var id = Utilities.parseLong(line.replace("\uD83D\uDC65", "").trim());
+                    if (id < 0) {
+                        if (id < -1000000000000L) {
+                            peer.id = -1000000000000L - id;
+                        } else {
+                            peer.id = -id;
+                        }
+                    }
+                } else if (line.startsWith("\uD83C\uDFF7")) {
+                    peer.title = line.replace("\uD83C\uDFF7", "").trim();
+                }
+            }
+            return peer;
+        }
+    }
+
+    private static class TGDBBot extends UserHelper.UserInfoBot {
+
+        @Override
+        public long getId() {
+            return 7424190611L;
+        }
+
+        @Override
+        public String getUsername() {
+            return "tgdb_search_bot";
+        }
+
+        @Override
+        public UserHelper.ParsedPeer parsePeer(String[] lines) {
+            var peer = new UserHelper.ParsedPeer();
+            for (var line : lines) {
+                line = line.replaceAll("\\p{C}", "").trim();
+                if (line.startsWith("\uD83C\uDD94 ID:")) {
+                    var id = Utilities.parseLong(line.replace("\uD83C\uDD94 ID:", "").trim());
+                    if (id != 0) {
+                        peer.id = id;
+                    }
+                } else if (line.startsWith("\uD83C\uDFF7 Title:")) {
+                    var title = line.replace("\uD83C\uDFF7 Title:", "").trim();
+                    peer.last_name = title;
+                    peer.title = title;
+                } else if (line.startsWith("\uD83D\uDCE7 Username:")) {
+                    peer.username = line.replace("\uD83D\uDCE7 Username:", "").replace("@", "").trim();
+                }
+            }
+            return peer;
+        }
+    }
+
+    private static UserHelper.UserInfoBot getUserInfoBot(boolean fallback) {
+        if (fallback) {
+            return new USInfoBot();
+        } else {
+            return new TGDBBot();
+        }
     }
 
     private static String getDCLocation(int dc) {
