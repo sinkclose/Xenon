@@ -263,7 +263,7 @@ public class UserHelper extends BaseController {
                     }
                 } else if (line.startsWith("\uD83C\uDFF7 Title:")) {
                     var title = line.replace("\uD83C\uDFF7 Title:", "").trim();
-                    peer.last_name = title;
+                    peer.first_name = title;
                     peer.title = title;
                 } else if (line.startsWith("\uD83D\uDCE7 Username:")) {
                     peer.username = line.replace("\uD83D\uDCE7 Username:", "").replace("@", "").trim();
