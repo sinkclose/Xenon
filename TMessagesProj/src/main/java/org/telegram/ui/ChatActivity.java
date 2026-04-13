@@ -1217,7 +1217,6 @@ public class ChatActivity extends BaseFragment implements
     public final static int OPTION_GIFT = 108;
     public final static int OPTION_EDIT_TODO = 109;
     public final static int OPTION_ADD_TO_TODO = 110;
-    public final static int OPTION_GEMINI_SUMMARIZE = 200;
 
     public final static int OPTION_SUGGESTION_EDIT_PRICE = 111;
     public final static int OPTION_SUGGESTION_EDIT_TIME = 112;
@@ -10394,11 +10393,6 @@ public class ChatActivity extends BaseFragment implements
         undoView = new UndoView(getContext(), this, false, themeDelegate);
         undoView.setAdditionalTranslationY(AndroidUtilities.dp(51));
         contentView.addView(undoView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM | Gravity.LEFT, 8, 0, 8, 8));
-    }
-
-    private void showGeminiResultBottomSheet(String resultText) {
-        if (getParentActivity() == null || resultText == null) return;
-        zxc.iconic.xenon.helpers.gemini.GeminiResultBottomSheet.show(this, resultText);
     }
 
     @Override
@@ -33978,29 +33972,6 @@ public class ChatActivity extends BaseFragment implements
                 }, getResourceProvider(), AlertsCreator.SUGGEST_DATE_PICKER_MODE_EDIT).show(), AmountUtils.Amount.of(suggestedPost != null ? suggestedPost.price : null), !ChatObject.canManageMonoForum(currentAccount, getDialogId()));
                 break;
             }
-            case OPTION_GEMINI_SUMMARIZE: {
-                MessageObject messageObject = getMessageHelper().getMessageForTranslate(selectedObject, selectedObjectGroup);
-                if (messageObject != null) {
-                    String text = getMessageHelper().getMessagePlainText(messageObject);
-                    if (!text.isEmpty()) {
-                        zxc.iconic.xenon.helpers.gemini.GeminiSDKImplementation.askGemini(
-                                "Summarize this text briefly:\n" + text,
-                                (result, error) -> {
-                                    AndroidUtilities.runOnUIThread(() -> {
-                                        if (error != null) {
-                                            org.telegram.ui.Components.BulletinFactory.of(ChatActivity.this)
-                                                    .createErrorBulletin("Gemini error: " + error.getLocalizedMessage())
-                                                    .show();
-                                        } else if (result != null) {
-                                            showGeminiResultBottomSheet(result);
-                                        }
-                                    });
-                                }
-                        );
-                    }
-                }
-                break;
-            }
         }
         selectedObject = null;
         selectedObjectGroup = null;
@@ -45773,15 +45744,6 @@ public class ChatActivity extends BaseFragment implements
                         items.add(messageObject.translated ? LocaleController.getString(R.string.UndoTranslate) : LocaleController.getString(R.string.TranslateMessage));
                         options.add(OPTION_TRANSLATE);
                         icons.add(R.drawable.msg_translate);
-                    }
-                }
-                // Gemini AI: Summarize text messages
-                if (zxc.iconic.xenon.helpers.gemini.GeminiAssistantHelper.isAssistantAvailable()) {
-                    MessageObject messageObject = getMessageHelper().getMessageForTranslate(selectedObject, selectedObjectGroup);
-                    if (messageObject != null && !messageObject.isPoll()) {
-                        items.add("Summarize with Gemini");
-                        options.add(OPTION_GEMINI_SUMMARIZE);
-                        icons.add(R.drawable.msg_translate); // Using translate icon as placeholder
                     }
                 }
                 if (allowEdit) {
