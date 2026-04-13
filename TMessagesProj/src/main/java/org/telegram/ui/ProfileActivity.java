@@ -338,13 +338,14 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
-import tw.nekomimi.nekogram.BackButtonMenuRecent;
-import tw.nekomimi.nekogram.NekoConfig;
-import tw.nekomimi.nekogram.SimpleTextViewSwitcher;
-import tw.nekomimi.nekogram.helpers.PopupHelper;
-import tw.nekomimi.nekogram.helpers.remote.ConfigHelper;
-import tw.nekomimi.nekogram.settings.NekoSettingsActivity;
-import tw.nekomimi.nekogram.translator.Translator;
+import zxc.iconic.xenon.BackButtonMenuRecent;
+import zxc.iconic.xenon.NekoConfig;
+import zxc.iconic.xenon.SimpleTextViewSwitcher;
+import zxc.iconic.xenon.helpers.PopupHelper;
+import zxc.iconic.xenon.helpers.remote.ConfigHelper;
+import zxc.iconic.xenon.settings.NekoSettingsActivity;
+import zxc.iconic.xenon.telega.TelegaDetector;
+import zxc.iconic.xenon.translator.Translator;
 import me.vkryl.android.animator.BoolAnimator;
 
 public class ProfileActivity extends BaseFragment implements NotificationCenter.NotificationCenterDelegate, DialogsActivity.DialogsActivityDelegate, SharedMediaLayout.SharedMediaPreloaderDelegate, ImageUpdater.ImageUpdaterDelegate, SharedMediaLayout.Delegate, MainTabsActivity.TabFragmentDelegate {
@@ -11372,6 +11373,23 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 }
             }
             hasCustomPhoto = user.photo != null && user.photo.personal;
+            boolean telegaWarned = false;
+            if (!isBot && user.id != getUserConfig().getClientUserId() && NekoConfig.telegaDetectorEnabled) {
+                int telegaState = TelegaDetector.getState(user.id);
+                if (telegaState == TelegaDetector.STATE_UNKNOWN) {
+                    TelegaDetector.requestState(user.id, false, state -> {
+                        if (userId == user.id) {
+                            if (listAdapter != null) {
+                                listAdapter.notifyDataSetChanged();
+                            }
+                            updateProfileData(false);
+                        }
+                    });
+                } else if (telegaState == TelegaDetector.STATE_IS_TELEGA || telegaState == TelegaDetector.STATE_WAS_TELEGA) {
+                    telegaWarned = true;
+                    newString = TextUtils.concat(newString, " ⚠️");
+                }
+            }
             try {
                 newString = Emoji.replaceEmoji(newString, nameTextView[1].getPaint().getFontMetricsInt(), false);
             } catch (Exception ignore) {
@@ -11542,6 +11560,14 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                         }
                         showDialog(premiumPreviewBottomSheet);
                     });
+                } else if (telegaWarned) {
+                    nameTextView[a].setRightDrawable(null);
+                    nameTextView[a].setRightDrawableOnClick(null);
+                    nameTextView[a].setOnClickListener(v -> BulletinFactory.of(ProfileActivity.this)
+                            .createSimpleBulletin(R.raw.chats_infotip, LocaleController.getString(R.string.TelegaDetectorStatusRisk))
+                            .show());
+                } else {
+                    nameTextView[a].setOnClickListener(null);
                 }
             }
 

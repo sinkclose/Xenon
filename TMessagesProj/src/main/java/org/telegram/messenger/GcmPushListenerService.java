@@ -15,7 +15,7 @@ import com.google.firebase.messaging.RemoteMessage;
 
 import java.util.Map;
 
-import tw.nekomimi.nekogram.helpers.PushHelper;
+import zxc.iconic.xenon.helpers.PushHelper;
 
 public class GcmPushListenerService extends FirebaseMessagingService {
 

@@ -17,7 +17,7 @@
     <string name="Prpr">Peropero</string>
     <string name="EnableResidentNotification">Vis en resident underretning</string>
     <string name="DisableResidentNotification">Deaktiver residente notifikationer</string>
-    <string name="NekogramRunning">Nekogram kører</string>
+    <string name="NekogramRunning">Xenon kører</string>
     <string name="EventType">Sidebar ikon sæt</string>
     <string name="DependsOnDate">Afhænger af dato</string>
     <string name="Christmas">Jul</string>
@@ -58,8 +58,8 @@
     <string name="IgnoreBlockedAbout">Det er IKKE RIGTIG HIDE! Beskeder er stadig tilgængelige til at se, men tekst vil blive konverteret til Spoiler og medier vil ikke automatisk downloade.</string>
     <string name="Donate">Donér</string>
     <string name="DonateAbout">Støt vores udvikling.</string>
-    <string name="TranslationAbout">Hjælp os med at oversætte Nekogram til dit sprog.</string>
-    <string name="Translation">Oversæt Nekogram</string>
+    <string name="TranslationAbout">Hjælp os med at oversætte Xenon til dit sprog.</string>
+    <string name="Translation">Oversæt Xenon</string>
     <string name="GooglePlay">Google Play</string>
     <string name="ResetStickerSize">Nulstil klistermærkets størrelse</string>
     <string name="RestartAppToTakeEffect">Genstart app\'en for at træde i kraft.</string>
@@ -107,7 +107,7 @@
     <string name="RegistrationDate">Registreringsdato</string>
     <string name="WsEnableTls">Aktiver TLS</string>
     <string name="WsProvider">Udbyder</string>
-    <string name="UpdateNekogram">Opdater Nekogram</string>
+    <string name="UpdateNekogram">Opdater Xenon</string>
     <string name="TranslationTarget">Målsprog</string>
     <string name="TranslationTargetApp">Følg app</string>
     <string name="Translator">Oversætter</string>
@@ -132,12 +132,12 @@
     <string name="OfficialSite">Officiel hjemmeside</string>
     <string name="MutualContact">Gensidig kontakt</string>
     <string name="MutualContactDescription">Denne kontakt er en gensidig kontakt.</string>
-    <string name="InviteTextNeko">Hej, jeg bruger Nekogram til at chatte med. Tilmeld dig mig! Download det her: %1$s</string>
-    <string name="ShareNekogram">Del Nekogram...</string>
-    <string name="NekogramVersion">Nekogram %1$s\nBaseret på Telegram %2$s\nDesignet af %3$s</string>
+    <string name="InviteTextNeko">Hej, jeg bruger Xenon til at chatte med. Tilmeld dig mig! Download det her: %1$s</string>
+    <string name="ShareNekogram">Del Xenon...</string>
+    <string name="NekogramVersion">Xenon %1$s\nBaseret på Telegram %2$s\nDesignet af %3$s</string>
     <string name="UpdateInstalling">Installerer opdatering...</string>
     <string name="UpdateInstallingNotification">En meddelelse vil blive vist, når opdateringen er færdig.</string>
-    <string name="UpdateInstallingRelaunch">Nekogram vil genstarte, når opdateringen er færdig.</string>
+    <string name="UpdateInstallingRelaunch">Xenon vil genstarte, når opdateringen er færdig.</string>
     <string name="UpdateInstalledNotification">Installationen af opdateringer er færdig, tryk for at starte appen.</string>
     <string name="UpdateFailedToInstall">Opdateringen kunne ikke installeres: %d</string>
     <string name="QRLoginMessage">Scan QRCode med en anden enhed for at logge ind.</string>
@@ -156,7 +156,7 @@
     <string name="SaveToDownloadCount_few">Gemmer %1$d filer til downloads</string>
     <string name="SaveToDownloadCount_many">Gemmer %1$d filer til downloads</string>
     <string name="SaveToDownloadCount_other">Gemmer %1$d filer til downloads</string>
-    <string name="AppLinkNotVerifiedMessage">For Android 12 og nyere, skal du manuelt tilføje link til bekræftede links for at åbne t.me links i Nekogram.</string>
+    <string name="AppLinkNotVerifiedMessage">For Android 12 og nyere, skal du manuelt tilføje link til bekræftede links for at åbne t.me links i Xenon.</string>
     <string name="AppLinkNotVerifiedTitle">App-links ikke verificeret</string>
     <string name="AutoTranslate">Automatisk oversættelse</string>
     <string name="AutoTranslateAbout">Oversæt automatisk meddelelser, der er på et andet sprog.</string>

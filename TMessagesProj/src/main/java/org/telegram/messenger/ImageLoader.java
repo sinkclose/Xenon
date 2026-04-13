@@ -2452,7 +2452,7 @@ public class ImageLoader {
                     try {
                         if (ApplicationLoader.applicationContext.getExternalMediaDirs().length > 0) {
                             publicMediaDir = getPublicStorageDir();
-                            publicMediaDir = new File(publicMediaDir, "Nekogram");
+                            publicMediaDir = new File(publicMediaDir, "Xenon");
                             publicMediaDir.mkdirs();
                         }
                     } catch (Exception e) {

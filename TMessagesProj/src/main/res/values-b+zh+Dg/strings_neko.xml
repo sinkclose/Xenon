@@ -64,8 +64,8 @@
     <string name="IgnoreBlockedAbout">并不是真正的隐藏！仍然可以查看消息，但文本将被转换为黑幕，媒体也不会自动下载。</string>
     <string name="Donate">捐赠</string>
     <string name="DonateAbout">支持我们的开发。</string>
-    <string name="TranslationAbout">帮助我们将 Nekogram 翻译成您的语言。</string>
-    <string name="Translation">翻译 Nekogram</string>
+    <string name="TranslationAbout">帮助我们将 Xenon 翻译成您的语言。</string>
+    <string name="Translation">翻译 Xenon</string>
     <string name="GooglePlay">Google Play</string>
     <string name="ResetStickerSize">重置贴纸大小</string>
     <string name="RestartAppToTakeEffect">重启应用以生效。</string>
@@ -80,7 +80,7 @@
     <string name="AutoPauseVideo">自动暂停视频</string>
     <string name="AutoPauseVideoAbout">当锁定屏幕/切换到后台时。</string>
     <string name="DisableProximityEvents">禁用距离传感器事件</string>
-    <string name="Page1Message2">Nekogram 是使用 Telegram API\n的**非官方**应用</string>
+    <string name="Page1Message2">Xenon 是使用 Telegram API\n的**非官方**应用</string>
     <string name="MapDriftingFix">地图定位漂移修复</string>
     <string name="VoiceEnhancements">语音增强</string>
     <string name="VoiceEnhancementsAbout">噪声抑制和语音归一化</string>
@@ -115,7 +115,7 @@
     <string name="RegistrationDateNewer">晚于 %s</string>
     <string name="RegistrationDateOlder">早于 %s</string>
     <string name="RegistrationDateApproximately">大约 %s</string>
-    <string name="UpdateNekogram">更新 Nekogram</string>
+    <string name="UpdateNekogram">更新 Xenon</string>
     <string name="TranslationTarget">目标语言</string>
     <string name="TranslationTargetApp">跟随应用</string>
     <string name="Translator">翻译</string>
@@ -141,9 +141,9 @@
     <string name="OfficialSite">官方网站</string>
     <string name="MutualContact">双向联系人</string>
     <string name="MutualContactDescription">此联系人是一个双向联系人。</string>
-    <string name="InviteTextNeko">嗨，我在使用 Nekogram 聊天。加入我们吧！从这里下载：%1$s</string>
-    <string name="ShareNekogram">分享 Nekogram...</string>
-    <string name="NekogramVersion">Nekogram %1$s\n基于 Telegram %2$s\n由 %3$s 设计</string>
+    <string name="InviteTextNeko">嗨，我在使用 Xenon 聊天。加入我们吧！从这里下载：%1$s</string>
+    <string name="ShareNekogram">分享 Xenon...</string>
+    <string name="NekogramVersion">Xenon %1$s\n基于 Telegram %2$s\n由 %3$s 设计</string>
     <string name="UpdateInstalling">正在安装更新...</string>
     <string name="UpdateInstallingNotification">更新完成后，将显示一个通知。</string>
     <string name="UpdateInstallingRelaunch">更新完成后，应用将重新启动。</string>
@@ -166,7 +166,7 @@
     <string name="SaveToDownloadCount_few">正在保存 %1$d 个文件到下载</string>
     <string name="SaveToDownloadCount_many">正在保存 %1$d 个文件到下载</string>
     <string name="SaveToDownloadCount_other">正在保存 %1$d 个文件到下载</string>
-    <string name="AppLinkNotVerifiedMessage">对于 Android 12 及更高的版本，您需要手动添加链接到已验证链接才能在 Nekogram 中打开 t.me 链接。</string>
+    <string name="AppLinkNotVerifiedMessage">对于 Android 12 及更高的版本，您需要手动添加链接到已验证链接才能在 Xenon 中打开 t.me 链接。</string>
     <string name="AppLinkNotVerifiedTitle">应用链接未验证</string>
     <string name="AutoTranslate">自动翻译</string>
     <string name="AutoTranslateAbout">自动翻译其他语言的消息。</string>

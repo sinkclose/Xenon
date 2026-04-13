@@ -263,4 +263,15 @@
     <string name="RemindTodayAt">\'Отправить сегодня в\' HH:mm</string>
     <string name="RemindDayAt">\'Отправить\' d MMM \'в\' HH:mm</string>
     <string name="RemindDayYearAt">\'Напомнить\' d MMM yyyy \'в\' HH:mm</string>
+    <string name="MainTabsCustomizeTitle">Главные вкладки</string>
+    <string name="MainTabsCustomizeHint">Настройка порядка и видимости</string>
+    <string name="MainTabsCustomizeHintDescription">Нажмите на вкладку, чтобы включить или отключить её, а также переместить влево или вправо в нижней панели.</string>
+    <string name="MainTabsVisibilitySection">Видимость</string>
+    <string name="MainTabsOrderSection">Порядок</string>
+    <string name="MainTabsMoveLeft">Сдвинуть влево</string>
+    <string name="MainTabsMoveRight">Сдвинуть вправо</string>
+    <string name="MainTabsMoveToStart">Переместить в начало</string>
+    <string name="MainTabsMoveToEnd">Переместить в конец</string>
+    <string name="MainTabsResetHint">Восстановить стандартную раскладку</string>
+    <string name="MainTabsSettingsAlwaysEnabled">Эта вкладка всегда включена</string>
 </resources>

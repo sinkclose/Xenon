@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="NekoSettings">Ρυθμίσεις Nekogram</string>
+    <string name="NekoSettings">Ρυθμίσεις Xenon</string>
     <string name="PreferIPv6">Προτίμηση σύνδεσης μέσω IPv6</string>
     <string name="MessageMenu">Μενού μηνυμάτων</string>
     <string name="HidePhone">Απόκρυψη του αριθμού μου</string>
@@ -22,7 +22,7 @@
     <string name="AddToSavedMessages">Αποθήκευση Μηνύματος</string>
     <string name="CreateMention">Δημιουργία αναφοράς</string>
     <string name="Prpr">Peropero</string>
-    <string name="NekogramRunning">Το Nekogram εκτελείται</string>
+    <string name="NekogramRunning">Το Xenon εκτελείται</string>
     <string name="EventType">Εικονιδ πλευρικ μπάρας Αρχικής</string>
     <string name="DependsOnDate">Βάσει ημ/νίας</string>
     <string name="Christmas">Χριστούγεννα</string>
@@ -64,8 +64,8 @@
     <string name="IgnoreBlockedAbout">ΔΕΝ ΚΡΥΒΕΤΑΙ ΠΡΑΓΜΑΤΙΚΑ! Τα μηνύματα εξακολουθούν να είναι διαθέσιμα για προβολή, αλλά το κείμενο θα μετατραπεί σε Spoiler και χωρίς λήψη πολυμέσων.</string>
     <string name="Donate">Δωρεά</string>
     <string name="DonateAbout">Υποστηρίξτε την ανάπτυξη της εφαρμογής μας.</string>
-    <string name="TranslationAbout">Βοηθήστε να μεταφράσουμε το Nekogram στη γλώσσα σας.</string>
-    <string name="Translation">Μετάφραση Nekogram</string>
+    <string name="TranslationAbout">Βοηθήστε να μεταφράσουμε το Xenon στη γλώσσα σας.</string>
+    <string name="Translation">Μετάφραση Xenon</string>
     <string name="GooglePlay">Google Play</string>
     <string name="ResetStickerSize">Επαναφ. μεγέθ. αυτοκόλλητου</string>
     <string name="RestartAppToTakeEffect">Επανεκκίνηση για εφαρμογή αλλαγών.</string>
@@ -114,7 +114,7 @@
     <string name="RegistrationDateNewer">Νεότερο από %s</string>
     <string name="RegistrationDateOlder">Παλαιότερο από %s</string>
     <string name="RegistrationDateApproximately">Περίπου %s</string>
-    <string name="UpdateNekogram">Ενημέρωση Nekogram</string>
+    <string name="UpdateNekogram">Ενημέρωση Xenon</string>
     <string name="TranslationTarget">Μετάφραση σε</string>
     <string name="TranslationTargetApp">Γλώσσα εφαρμογής</string>
     <string name="Translator">Μεταφραστής</string>
@@ -140,9 +140,9 @@
     <string name="OfficialSite">Επίσημη ιστοσελίδα</string>
     <string name="MutualContact">Παρόμοια επαφή</string>
     <string name="MutualContactDescription">Αυτή είναι μια παρόμοια επαφή.</string>
-    <string name="InviteTextNeko">Γεια σας, χρησιμοποιώ το Nekogram για συνομιλία. Ελάτε μαζί μου! Κατεβάστε το εδώ: %1$s</string>
-    <string name="ShareNekogram">Κοινοποίηση Nekogram...</string>
-    <string name="NekogramVersion">Nekogram %1$s\nΒασισμένο στο Telegram %2$s\nΣχεδιάστηκε από %3$s</string>
+    <string name="InviteTextNeko">Γεια σας, χρησιμοποιώ το Xenon για συνομιλία. Ελάτε μαζί μου! Κατεβάστε το εδώ: %1$s</string>
+    <string name="ShareNekogram">Κοινοποίηση Xenon...</string>
+    <string name="NekogramVersion">Xenon %1$s\nΒασισμένο στο Telegram %2$s\nΣχεδιάστηκε από %3$s</string>
     <string name="UpdateInstalling">Εγκατάσταση ενημέρωσης...</string>
     <string name="UpdateInstallingNotification">Θα εμφανιστεί μια ειδοποίηση όταν ολοκληρωθεί η ενημέρωση.</string>
     <string name="UpdateInstallingRelaunch">Η εφαρμογή θα επανεκκινηθεί μόλις ολοκληρωθεί η ενημέρωση.</string>
@@ -165,7 +165,7 @@
     <string name="SaveToDownloadCount_few">Αποθήκ. %1$d αρχείων στις λήψεις</string>
     <string name="SaveToDownloadCount_many">Αποθήκ. %1$d αρχείων στις λήψεις</string>
     <string name="SaveToDownloadCount_other">Αποθήκ. %1$d αρχείων στις λήψεις</string>
-    <string name="AppLinkNotVerifiedMessage">Για το Android 12 και νεότερων, πρέπει να προσθέσετε χειροκίνητα το σύνδεσμο στους επαληθευμένους συνδέσμους για άνοιγμα του t.me στο Nekogram.</string>
+    <string name="AppLinkNotVerifiedMessage">Για το Android 12 και νεότερων, πρέπει να προσθέσετε χειροκίνητα το σύνδεσμο στους επαληθευμένους συνδέσμους για άνοιγμα του t.me στο Xenon.</string>
     <string name="AppLinkNotVerifiedTitle">Μη επαληθευμένοι σύνδεσμοι εφαρμογών</string>
     <string name="AutoTranslate">Αυτόματη Μετάφραση</string>
     <string name="AutoTranslateAbout">Αυτόματη μετάφραση μηνυμάτων άλλης γλώσσας χωρίς την παρέμβαση σας.</string>

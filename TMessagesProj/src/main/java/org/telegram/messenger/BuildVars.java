@@ -16,7 +16,7 @@ import com.android.billingclient.api.ProductDetails;
 
 import java.util.Objects;
 
-import tw.nekomimi.nekogram.Extra;
+import zxc.iconic.xenon.Extra;
 
 public class BuildVars {
 
@@ -48,7 +48,7 @@ public class BuildVars {
     static {
         APP_ID = Extra.APP_ID;
         APP_HASH = Extra.APP_HASH;
-        PLAYSTORE_APP_URL = "https://nekogram.app/download";
+        PLAYSTORE_APP_URL = "https://play.google.com/store/apps/details?id=zxc.iconic.xenon";
         if (ApplicationLoader.applicationContext != null) {
             SharedPreferences sharedPreferences = ApplicationLoader.applicationContext.getSharedPreferences("systemConfig", Context.MODE_PRIVATE);
             LOGS_ENABLED = DEBUG_VERSION || sharedPreferences.getBoolean("logsEnabled", DEBUG_VERSION);

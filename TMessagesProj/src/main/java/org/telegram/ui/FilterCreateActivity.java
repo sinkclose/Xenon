@@ -106,8 +106,8 @@ import org.telegram.ui.Components.spoilers.SpoilersTextView;
 import java.util.ArrayList;
 import java.util.Collections;
 
-import tw.nekomimi.nekogram.folder.FolderIconHelper;
-import tw.nekomimi.nekogram.folder.IconSelectorAlert;
+import zxc.iconic.xenon.folder.FolderIconHelper;
+import zxc.iconic.xenon.folder.IconSelectorAlert;
 
 public class FilterCreateActivity extends BaseFragment {
 

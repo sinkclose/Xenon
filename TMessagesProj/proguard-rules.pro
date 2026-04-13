@@ -117,10 +117,10 @@
 -keepclassmembernames,allowshrinking class org.telegram.ui.* { <fields>; }
 -keepclassmembernames,allowshrinking class org.telegram.ui.Cells.* { <fields>; }
 -keepclassmembernames,allowshrinking class org.telegram.ui.Components.* { <fields>; }
--keepclassmembernames,allowshrinking class tw.nekomimi.nekogram.MessageDetailsActivity$TextDetailSimpleCell { <fields>; }
--keepclassmembernames,allowshrinking class tw.nekomimi.nekogram.settings.AccountCell { <fields>; }
--keepclassmembernames,allowshrinking class tw.nekomimi.nekogram.settings.EmojiSetCell { <fields>; }
--keepclassmembernames,allowshrinking class tw.nekomimi.nekogram.settings.NekoChatSettingsActivity$StickerSizeCell { <fields>; }
+-keepclassmembernames,allowshrinking class zxc.iconic.xenon.MessageDetailsActivity$TextDetailSimpleCell { <fields>; }
+-keepclassmembernames,allowshrinking class zxc.iconic.xenon.settings.AccountCell { <fields>; }
+-keepclassmembernames,allowshrinking class zxc.iconic.xenon.settings.EmojiSetCell { <fields>; }
+-keepclassmembernames,allowshrinking class zxc.iconic.xenon.settings.NekoChatSettingsActivity$StickerSizeCell { <fields>; }
 
 -keepclassmembernames class androidx.core.widget.NestedScrollView {
     private android.widget.OverScroller mScroller;

@@ -26,7 +26,7 @@ import java.io.RandomAccessFile;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 
-import tw.nekomimi.nekogram.NekoConfig;
+import zxc.iconic.xenon.NekoConfig;
 
 public class FileUploadOperation {
 

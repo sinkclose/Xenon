@@ -170,9 +170,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import tw.nekomimi.nekogram.Extra;
-import tw.nekomimi.nekogram.helpers.WebAppHelper;
-
 public abstract class BotWebViewContainer extends FrameLayout implements NotificationCenter.NotificationCenterDelegate {
     private final static String DURGER_KING_USERNAME = "DurgerKingBot";
     private final static int REQUEST_CODE_WEB_VIEW_FILE = 3000, REQUEST_CODE_WEB_PERMISSION = 4000, REQUEST_CODE_QR_CAMERA_PERMISSION = 5000;
@@ -1339,11 +1336,6 @@ public abstract class BotWebViewContainer extends FrameLayout implements Notific
         }
         d("onEventReceived " + eventType);
         switch (eventType) {
-            case "neko_event":{
-                if (Extra.isTrustedBot(botUser.id)) {
-                    WebAppHelper.processBotEvents(delegate, eventData, data -> notifyEvent_fast("neko_event", data));
-                }
-            }
             case "web_app_allow_scroll": {
                 boolean x = true, y = true;
                 try {

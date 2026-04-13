@@ -17,7 +17,7 @@
     <string name="Prpr">Peropero</string>
     <string name="EnableResidentNotification">Rādīt rezidenta paziņojumu</string>
     <string name="DisableResidentNotification">Rādīt rezidenta paziņojumu</string>
-    <string name="NekogramRunning">Nekogram darbojas</string>
+    <string name="NekogramRunning">Xenon darbojas</string>
     <string name="EventType">Sānu joslas ikonu komplekts</string>
     <string name="DependsOnDate">Atkarībā no datuma</string>
     <string name="Christmas">Ziemassvētki</string>
@@ -60,8 +60,8 @@
     <string name="IgnoreBlockedAbout">TAS NAV ĪSTI PASLĒPT! Ziņojumi joprojām ir pieejami apskatei, bet teksts tiks pārveidots uz spoileru un multivides līdzekļi netiks automātiski lejupielādēti.</string>
     <string name="Donate">Ziedot</string>
     <string name="DonateAbout">Atbalstiet mūsu attīstību.</string>
-    <string name="TranslationAbout">Palīdziet mums tulkot Nekogram jūsu valodā.</string>
-    <string name="Translation">Tulkot Nekogram</string>
+    <string name="TranslationAbout">Palīdziet mums tulkot Xenon jūsu valodā.</string>
+    <string name="Translation">Tulkot Xenon</string>
     <string name="GooglePlay">Google Play</string>
     <string name="ResetStickerSize">Atiestatīt uzlīmes lielumu</string>
     <string name="RestartAppToTakeEffect">Restartējiet lietotni, lai tas stātos spēkā.</string>
@@ -112,7 +112,7 @@
     <string name="RegistrationDateApproximately">Aptuveni %s</string>
     <string name="WsEnableTls">TLS iespējošana</string>
     <string name="WsProvider">Nodrošinātājs</string>
-    <string name="UpdateNekogram">Nekogrammas atjaunināšana</string>
+    <string name="UpdateNekogram">Xenonmas atjaunināšana</string>
     <string name="TranslationTarget">Mērķa valoda</string>
     <string name="TranslationTargetApp">Sekojiet lietotnei</string>
     <string name="Translator">Tulkotājs</string>
@@ -137,9 +137,9 @@
     <string name="OfficialSite">Oficiālā vietne</string>
     <string name="MutualContact">Savstarpējs kontakts</string>
     <string name="MutualContactDescription">Šis kontakts ir savstarpējs kontakts.</string>
-    <string name="InviteTextNeko">Hei, es izmantoju Nekogram, lai tērzētu. Pievienojies man! Lejupielādējiet to šeit: %1$s</string>
-    <string name="ShareNekogram">Kopīgojiet Nekogram...</string>
-    <string name="NekogramVersion">Nekogram %1$s\nPamatojoties uz Telegram %2$s\n\n Izstrādāts %3$s</string>
+    <string name="InviteTextNeko">Hei, es izmantoju Xenon, lai tērzētu. Pievienojies man! Lejupielādējiet to šeit: %1$s</string>
+    <string name="ShareNekogram">Kopīgojiet Xenon...</string>
+    <string name="NekogramVersion">Xenon %1$s\nPamatojoties uz Telegram %2$s\n\n Izstrādāts %3$s</string>
     <string name="UpdateInstalling">Atjauninājumu instalēšana...</string>
     <string name="UpdateInstallingNotification">Pēc atjaunināšanas pabeigšanas tiks parādīts paziņojums.</string>
     <string name="UpdateInstallingRelaunch">Pēc atjaunināšanas pabeigšanas lietotne tiks palaista no jauna.</string>
@@ -161,7 +161,7 @@
     <string name="SaveToDownloadCount_few">%1$d failu saglabāšana lejupielādēs</string>
     <string name="SaveToDownloadCount_many">%1$d failu saglabāšana lejupielādēs</string>
     <string name="SaveToDownloadCount_other">%1$d failu saglabāšana lejupielādēs</string>
-    <string name="AppLinkNotVerifiedMessage">Lai atvērtu t.me saites programmā Nekogram, operētājsistēmā Android 12 un jaunākās versijās ir manuāli jāpievieno saite pārbaudītajām saitēm.</string>
+    <string name="AppLinkNotVerifiedMessage">Lai atvērtu t.me saites programmā Xenon, operētājsistēmā Android 12 un jaunākās versijās ir manuāli jāpievieno saite pārbaudītajām saitēm.</string>
     <string name="AppLinkNotVerifiedTitle">Programmu saites nav pārbaudītas</string>
     <string name="AutoTranslate">Automātiskais tulkojums</string>
     <string name="AutoTranslateAbout">Automātiski tulkot ziņojumus citā valodā.</string>

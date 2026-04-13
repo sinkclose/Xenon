@@ -14,7 +14,7 @@
     <string name="Prpr">Peropero</string>
     <string name="EnableResidentNotification">Vis en stedlig varsling</string>
     <string name="DisableResidentNotification">Deaktiver varsling om beboere</string>
-    <string name="NekogramRunning">Nekogram kjører</string>
+    <string name="NekogramRunning">Xenon kjører</string>
     <string name="EventType">Sidefelt ikon sett</string>
     <string name="DependsOnDate">Avhenger av dato</string>
     <string name="Christmas">Jul</string>
@@ -50,8 +50,8 @@
     <string name="About">Om</string>
     <string name="Donate">Donere</string>
     <string name="DonateAbout">Støtte til utvikling.</string>
-    <string name="TranslationAbout">Hjelp oss å oversette Nekogram til ditt språk.</string>
-    <string name="Translation">Oversett Nekogram</string>
+    <string name="TranslationAbout">Hjelp oss å oversette Xenon til ditt språk.</string>
+    <string name="Translation">Oversett Xenon</string>
     <string name="GooglePlay">Google Play</string>
     <string name="ResetStickerSize">Tilbakestill klistremerke</string>
     <string name="RestartAppToTakeEffect">Start appen på nytt for å tre i kraft.</string>

@@ -22,7 +22,7 @@
     <string name="AddToSavedMessages">Salvar Mensagem</string>
     <string name="CreateMention">Criar Menção</string>
     <string name="Prpr">Peropero</string>
-    <string name="NekogramRunning">Nekogram está em execução</string>
+    <string name="NekogramRunning">Xenon está em execução</string>
     <string name="EventType">Conjunto de ícones da barra lateral</string>
     <string name="DependsOnDate">Depende da data</string>
     <string name="Christmas">Natal</string>
@@ -64,8 +64,8 @@
     <string name="IgnoreBlockedAbout">NÃO É REALMENTE OCULTO! As mensagens ainda ficarão disponíveis para visualização, mas o texto será convertido para spoiler e não haverá o download automático de mídias.</string>
     <string name="Donate">Doar</string>
     <string name="DonateAbout">Apoie o nosso desenvolvimento.</string>
-    <string name="TranslationAbout">Ajude-nos a traduzir o Nekogram para o seu idioma.</string>
-    <string name="Translation">Traduzir Nekogram</string>
+    <string name="TranslationAbout">Ajude-nos a traduzir o Xenon para o seu idioma.</string>
+    <string name="Translation">Traduzir Xenon</string>
     <string name="GooglePlay">Google Play</string>
     <string name="ResetStickerSize">Redefinir tamanho do sticker</string>
     <string name="OfficialChannelUsername">nekoupdates</string>
@@ -115,7 +115,7 @@
     <string name="RegistrationDateNewer">Mais novo que %s</string>
     <string name="RegistrationDateOlder">Mais antigo que %s</string>
     <string name="RegistrationDateApproximately">Aproximadamente %s</string>
-    <string name="UpdateNekogram">Atualizar Nekogram</string>
+    <string name="UpdateNekogram">Atualizar Xenon</string>
     <string name="TranslationTarget">Idioma de destino</string>
     <string name="TranslationTargetApp">Seguir o aplicativo</string>
     <string name="Translator">Tradutor</string>
@@ -141,9 +141,9 @@
     <string name="OfficialSite">Site oficial</string>
     <string name="MutualContact">Contato em comum</string>
     <string name="MutualContactDescription">Este é um contato em comum.</string>
-    <string name="InviteTextNeko">Ei, estou usando Nekogram para conversar. Junte-se a mim! Baixe aqui: %1$s</string>
-    <string name="ShareNekogram">Compartilhar Nekogram...</string>
-    <string name="NekogramVersion">Nekogram %1$s\nCom base no Telegram %2$s\nProjetado por %3$s</string>
+    <string name="InviteTextNeko">Ei, estou usando Xenon para conversar. Junte-se a mim! Baixe aqui: %1$s</string>
+    <string name="ShareNekogram">Compartilhar Xenon...</string>
+    <string name="NekogramVersion">Xenon %1$s\nCom base no Telegram %2$s\nProjetado por %3$s</string>
     <string name="UpdateInstalling">Instalando atualização...</string>
     <string name="UpdateInstallingNotification">Uma notificação será exibida quando a atualização for concluída.</string>
     <string name="UpdateInstallingRelaunch">O aplicativo será reiniciado quando a atualização for concluída.</string>
@@ -166,7 +166,7 @@
     <string name="SaveToDownloadCount_few">Salvando %1$d arquivos para downloads</string>
     <string name="SaveToDownloadCount_many">Salvando %1$d arquivos para downloads</string>
     <string name="SaveToDownloadCount_other">Salvando %1$d arquivos para downloads</string>
-    <string name="AppLinkNotVerifiedMessage">Para Android 12 e superior, você precisa adicionar manualmente o link para os links verificados para abrir o t.me em Nekogram.</string>
+    <string name="AppLinkNotVerifiedMessage">Para Android 12 e superior, você precisa adicionar manualmente o link para os links verificados para abrir o t.me em Xenon.</string>
     <string name="AppLinkNotVerifiedTitle">Links do aplicativo não verificados</string>
     <string name="AutoTranslate">Tradução automática</string>
     <string name="AutoTranslateAbout">Traduzir automaticamente as mensagens que estão em outro idioma.</string>

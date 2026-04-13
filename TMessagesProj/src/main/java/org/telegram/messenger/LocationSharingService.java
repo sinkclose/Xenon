@@ -21,7 +21,7 @@ import org.telegram.ui.LaunchActivity;
 
 import java.util.ArrayList;
 
-import tw.nekomimi.nekogram.NekoConfig;
+import zxc.iconic.xenon.NekoConfig;
 
 public class LocationSharingService extends Service implements NotificationCenter.NotificationCenterDelegate {
 

@@ -76,6 +76,7 @@ dependencies {
 
     implementation 'com.google.firebase:firebase-analytics:23.2.0'
     implementation 'io.sentry:sentry-android:8.38.0'
+
 }
 
 lsparanoid {
@@ -107,10 +108,7 @@ android {
 
             buildConfigField("int","API_ID", "${localProperties.get("apiId")}")
             buildConfigField("String","API_HASH", "\"${localProperties.get("apiHash")}\"")
-            buildConfigField("String","TWPIC_BOT_USERNAME", "\"${localProperties.get("twpicBotUsername")}\"")
             buildConfigField("String","SENTRY_DSN", "\"${localProperties.get("sentryDsn")}\"")
-            buildConfigField("long","HELPER_BOT_ID", "${localProperties.get("helperBotId")}")
-            buildConfigField("String","HELPER_BOT_USERNAME", "\"${localProperties.get("helperBotUsername")}\"")
         }
 
         release {
@@ -122,10 +120,7 @@ android {
 
             buildConfigField("int","API_ID", "${localProperties.get("apiId")}")
             buildConfigField("String","API_HASH", "\"${localProperties.get("apiHash")}\"")
-            buildConfigField("String","TWPIC_BOT_USERNAME", "\"${localProperties.get("twpicBotUsername")}\"")
             buildConfigField("String","SENTRY_DSN", "\"${localProperties.get("sentryDsn")}\"")
-            buildConfigField("long","HELPER_BOT_ID", "${localProperties.get("helperBotId")}")
-            buildConfigField("String","HELPER_BOT_USERNAME", "\"${localProperties.get("helperBotUsername")}\"")
         }
     }
     namespace 'org.telegram.messenger'

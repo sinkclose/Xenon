@@ -53,8 +53,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Objects;
 
-import tw.nekomimi.nekogram.helpers.MessageHelper;
-import tw.nekomimi.nekogram.helpers.WhisperHelper;
+import zxc.iconic.xenon.helpers.MessageHelper;
+import zxc.iconic.xenon.helpers.WhisperHelper;
 
 public class TranscribeButton {
 

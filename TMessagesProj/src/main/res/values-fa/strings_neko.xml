@@ -143,7 +143,7 @@
     <string name="OfficialSite">سایت رسمی</string>
     <string name="MutualContact">مخاطب دو طرفه</string>
     <string name="MutualContactDescription">این مخاطب یک مخاطب دو طرفه است.</string>
-    <string name="InviteTextNeko">سلام، من از Nekogram برای چت استفاده می کنم. به من ملحق شو! Nekogram را از اینجا دانلود کن: %1$s</string>
+    <string name="InviteTextNeko">سلام، من از Xenon برای چت استفاده می کنم. به من ملحق شو! Xenon را از اینجا دانلود کن: %1$s</string>
     <string name="ShareNekogram">اشتراکگذاری نکوگرام...</string>
     <string name="NekogramVersion">نکوگرام %1$s\nبر اساس تلگرام %2$s\nطراحی شده %3$s</string>
     <string name="UpdateInstalling">در حال نصب بروز رسانی...</string>

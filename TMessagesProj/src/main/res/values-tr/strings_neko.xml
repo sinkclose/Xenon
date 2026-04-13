@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="NekoSettings">Nekogram Ayarları</string>
+    <string name="NekoSettings">Xenon Ayarları</string>
     <string name="PreferIPv6">IPv6 üzerinden bağlanmayı tercih edin</string>
     <string name="MessageMenu">Mesaj Menüsü</string>
     <string name="HidePhone">Telefon numaramı gizle</string>
@@ -21,7 +21,7 @@
     <string name="Repeat">Tekrarla</string>
     <string name="CreateMention">Bahset</string>
     <string name="Prpr">Peropero</string>
-    <string name="NekogramRunning">Nekogram çalışıyor</string>
+    <string name="NekogramRunning">Xenon çalışıyor</string>
     <string name="EventType">Kenar çubuğu simgeleri</string>
     <string name="DependsOnDate">Tarihe bağlı</string>
     <string name="Christmas">Yılbaşı</string>
@@ -63,8 +63,8 @@
     <string name="IgnoreBlockedAbout">GERÇEKTEN GİZLEYEMEZ! Mesajlar görüntülenmeye devam ederler, ama ancak metin spoilera dönüştürülürler ve medya otomatik olarak indirilmiyecek.</string>
     <string name="Donate">Bağış yapın</string>
     <string name="DonateAbout">Geliştiriciler destekleyiniz.</string>
-    <string name="TranslationAbout">Nekogrammızı sizin dilinize çevirmemize yardımcı olunuz.</string>
-    <string name="Translation">Nekogram\'ı diline çevir</string>
+    <string name="TranslationAbout">Xenonmızı sizin dilinize çevirmemize yardımcı olunuz.</string>
+    <string name="Translation">Xenon\'ı diline çevir</string>
     <string name="GooglePlay">Google Play</string>
     <string name="ResetStickerSize">Çıkartma boyutunu sıfırla</string>
     <string name="RestartAppToTakeEffect">Etkili olması için uygulamayı yeniden başlatın.</string>
@@ -113,7 +113,7 @@
     <string name="RegistrationDateNewer">Şu %s tarihinden sonra</string>
     <string name="RegistrationDateOlder">Şu %s tarihinden önce</string>
     <string name="RegistrationDateApproximately">Yaklaşık olarak %s</string>
-    <string name="UpdateNekogram">Nekogram\'ı Güncelleyiniz</string>
+    <string name="UpdateNekogram">Xenon\'ı Güncelleyiniz</string>
     <string name="TranslationTarget">Hedef dil</string>
     <string name="TranslationTargetApp">Uygulamayı takip edin</string>
     <string name="Translator">Çeviri</string>
@@ -139,9 +139,9 @@
     <string name="OfficialSite">Resmi site</string>
     <string name="MutualContact">Karşılıklı kişi</string>
     <string name="MutualContactDescription">Bu kişi de sizi kişilerine kaydetti.</string>
-    <string name="InviteTextNeko">Hey, sohbet etmek için Nekogram kullanıyorum. Bana katıl! Buradan indirilebilirsin: %1$s</string>
-    <string name="ShareNekogram">Nekogram\'ı paylaş...</string>
-    <string name="NekogramVersion">Telegram %2$s tabanlı\nNekogram %1$s\n%3$s tarafından tasarlandı</string>
+    <string name="InviteTextNeko">Hey, sohbet etmek için Xenon kullanıyorum. Bana katıl! Buradan indirilebilirsin: %1$s</string>
+    <string name="ShareNekogram">Xenon\'ı paylaş...</string>
+    <string name="NekogramVersion">Telegram %2$s tabanlı\nXenon %1$s\n%3$s tarafından tasarlandı</string>
     <string name="UpdateInstalling">Güncelleme yükleniyor...</string>
     <string name="UpdateInstallingNotification">Güncelleme tamamlandığında bir bildirim gösterilecek.</string>
     <string name="UpdateInstallingRelaunch">Güncelleme tamamlandığında uygulama kendini yeniden başlatacak.</string>
@@ -163,7 +163,7 @@
     <string name="SaveToDownloadCount_few">%1$d dosya indirilenlere kaydediliyor</string>
     <string name="SaveToDownloadCount_many">%1$d dosya indirilenlere kaydediliyor</string>
     <string name="SaveToDownloadCount_other">%1$d dosya indirilenlere kaydediliyor</string>
-    <string name="AppLinkNotVerifiedMessage">Android 12 ve üstü sürümlerde, t.me bağlantılarını Nekogram\'da açmak için doğrulanmış bağlantılara elle bağlantı eklemelisiniz.</string>
+    <string name="AppLinkNotVerifiedMessage">Android 12 ve üstü sürümlerde, t.me bağlantılarını Xenon\'da açmak için doğrulanmış bağlantılara elle bağlantı eklemelisiniz.</string>
     <string name="AppLinkNotVerifiedTitle">Uygulama bağlantıları doğrulanmamış</string>
     <string name="AutoTranslate">Otomatik çeviri</string>
     <string name="AutoTranslateAbout">Başka bir dilde olan mesajları otomatik olarak çevirin.</string>

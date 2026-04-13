@@ -167,7 +167,7 @@
     <string name="SaveToDownloadCount_few">حفظ %1$d ملفات للتنزيلات</string>
     <string name="SaveToDownloadCount_many">حفظ %1$d ملفات للتنزيلات</string>
     <string name="SaveToDownloadCount_other">حفظ الملفات للتنزيلات</string>
-    <string name="AppLinkNotVerifiedMessage">لنظام Android 12 والإصدارات الأحدث ، تحتاج إلى إضافة رابط يدويًا إلى الروابط التي تم التحقق منها لفتح روابط t.me في Nekogram.</string>
+    <string name="AppLinkNotVerifiedMessage">لنظام Android 12 والإصدارات الأحدث ، تحتاج إلى إضافة رابط يدويًا إلى الروابط التي تم التحقق منها لفتح روابط t.me في Xenon.</string>
     <string name="AppLinkNotVerifiedTitle">لم يتم التحقق من روابط التطبيق</string>
     <string name="AutoTranslate">ترجمة تلقائية</string>
     <string name="AutoTranslateAbout">يمكنك ترجمة الرسائل المكتوبة بلغة أخرى تلقائيًا.</string>

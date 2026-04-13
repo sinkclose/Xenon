@@ -24,7 +24,7 @@
     <string name="Prpr">Peropero</string>
     <string name="EnableResidentNotification">Afișează o notificare rezidentă</string>
     <string name="DisableResidentNotification">Dezactivează notificarea rezidentă</string>
-    <string name="NekogramRunning">Nekogram rulează</string>
+    <string name="NekogramRunning">Xenon rulează</string>
     <string name="EventType">Set pictograme bară laterală</string>
     <string name="DependsOnDate">În funcție de dată</string>
     <string name="Christmas">Crăciun</string>
@@ -67,8 +67,8 @@
     <string name="IgnoreBlockedAbout">NU SUNT CHIAR ASCUNSE! Mesajele sunt încă disponibile dar textul va fi transformat în Spoiler iar fișierele nu se vor descărca automat.</string>
     <string name="Donate">Donați</string>
     <string name="DonateAbout">Sprijiniți dezvoltarea noastră.</string>
-    <string name="TranslationAbout">Ajutați-ne să traducem Nekogram în limba dvs.</string>
-    <string name="Translation">Traduceți Nekogram</string>
+    <string name="TranslationAbout">Ajutați-ne să traducem Xenon în limba dvs.</string>
+    <string name="Translation">Traduceți Xenon</string>
     <string name="GooglePlay">Google Play</string>
     <string name="ResetStickerSize">Resetați dimensiunea stickerului</string>
     <string name="RestartAppToTakeEffect">Reporniți aplicația pentru a avea efect.</string>
@@ -117,7 +117,7 @@
     <string name="RegistrationDateNewer">Mai nou decât %s</string>
     <string name="RegistrationDateOlder">Mai vechi decât %s</string>
     <string name="RegistrationDateApproximately">Aproximativ %s</string>
-    <string name="UpdateNekogram">Actualizați Nekogram</string>
+    <string name="UpdateNekogram">Actualizați Xenon</string>
     <string name="TranslationTarget">Limbă țintă</string>
     <string name="TranslationTargetApp">Urmăriți aplicația</string>
     <string name="Translator">Traducător</string>
@@ -143,9 +143,9 @@
     <string name="OfficialSite">Site oficial</string>
     <string name="MutualContact">Contacte în comun</string>
     <string name="MutualContactDescription">Acest contact este un contact comun.</string>
-    <string name="InviteTextNeko">Salut, folosesc Nekogram pentru a vorbi. Alăturați-vă nouă! Descarcă aici: %1$s</string>
-    <string name="ShareNekogram">Distribuie Nekogram...</string>
-    <string name="NekogramVersion">Nekogram %1$s\nBazat pe Telegram %2$s\nProiectat de %3$s</string>
+    <string name="InviteTextNeko">Salut, folosesc Xenon pentru a vorbi. Alăturați-vă nouă! Descarcă aici: %1$s</string>
+    <string name="ShareNekogram">Distribuie Xenon...</string>
+    <string name="NekogramVersion">Xenon %1$s\nBazat pe Telegram %2$s\nProiectat de %3$s</string>
     <string name="UpdateInstalling">Se instalează actualizarea...</string>
     <string name="UpdateInstallingNotification">O notificare va fi afișată când actualizarea este finalizată.</string>
     <string name="UpdateInstallingRelaunch">Aplicația se va relansa când actualizarea este finalizată.</string>
@@ -168,7 +168,7 @@
     <string name="SaveToDownloadCount_few">Se salvează %1$d fișiere in descărcări</string>
     <string name="SaveToDownloadCount_many">Se salvează %1$d fișiere in descărcări</string>
     <string name="SaveToDownloadCount_other">Se salvează %1$d fișiere in descărcări</string>
-    <string name="AppLinkNotVerifiedMessage">Pentru Android 12 și versiunile mai noi, trebuie să adăugați manual link-ul la linkurile verificate pentru a deschide linkurile de tip \"t.me\" în Nekogram.</string>
+    <string name="AppLinkNotVerifiedMessage">Pentru Android 12 și versiunile mai noi, trebuie să adăugați manual link-ul la linkurile verificate pentru a deschide linkurile de tip \"t.me\" în Xenon.</string>
     <string name="AppLinkNotVerifiedTitle">Link-urile aplicației nu sunt verificate</string>
     <string name="AutoTranslate">Traducere automată</string>
     <string name="AutoTranslateAbout">Traduceți automat mesajele în altă limbă.</string>

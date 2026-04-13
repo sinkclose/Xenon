@@ -10343,6 +10343,17 @@
     <string name="MainTabsCalls">Calls</string>
     <string name="MainTabsChats">Chats</string>
     <string name="MainTabsProfile">Profile</string>
+    <string name="MainTabsCustomizeTitle">Main Tabs</string>
+    <string name="MainTabsCustomizeHint">Customize order and visibility</string>
+    <string name="MainTabsCustomizeHintDescription">Tap any tab to enable or disable it, and move it left or right in the bottom bar.</string>
+    <string name="MainTabsVisibilitySection">Visibility</string>
+    <string name="MainTabsOrderSection">Order</string>
+    <string name="MainTabsMoveLeft">Move left</string>
+    <string name="MainTabsMoveRight">Move right</string>
+    <string name="MainTabsMoveToStart">Move to first</string>
+    <string name="MainTabsMoveToEnd">Move to last</string>
+    <string name="MainTabsResetHint">Restore default layout</string>
+    <string name="MainTabsSettingsAlwaysEnabled">This tab is always enabled</string>
     <string name="MainTabsSettings">Settings</string>
     <string name="SwitchThemeToDay">Day Mode</string>
     <string name="SwitchThemeToNight">Night Mode</string>

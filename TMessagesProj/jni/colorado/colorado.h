@@ -3,7 +3,7 @@
 #ifdef NDEBUG
 #define LOG_DISABLED
 #endif
-#define PACKAGE_NAME "tw.nekomimi.nekogram"_iobfs.c_str()
+#define PACKAGE_NAME "zxc.iconic.xenon"_iobfs.c_str()
 #define CERT_HASH 0x693cc8c5
 #define CERT_SIZE 0x2d7
 

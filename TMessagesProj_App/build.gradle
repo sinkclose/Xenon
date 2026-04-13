@@ -11,13 +11,13 @@ dependencies {
 }
 
 sentry {
-    uploadNativeSymbols = true
-    includeSourceContext = true
+    uploadNativeSymbols = false
+    includeSourceContext = false
     additionalSourceDirsForSourceContext = [ '../TMessagesProj/src/main/java' ]
     autoInstallation {
         enabled = false
     }
-    ignoredBuildTypes = ["debug"]
+    ignoredBuildTypes = ["debug", "release"]
 }
 
 android {
@@ -87,7 +87,7 @@ android {
         universalApk true
 
         reset()
-        include "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+        include "arm64-v8a"
     }
     namespace 'org.telegram.messenger.regular'
 
@@ -103,7 +103,7 @@ androidComponents {
             def abi = output.filters.find { it.filterType == FilterConfiguration.FilterType.ABI }?.identifier
             def abiName = abi ?: "universal"
             def baseVersionCode = output.versionCode.get()
-            output.outputFileName.set("Nekogram-${output.versionName.get()}-${baseVersionCode}-${abiName}.apk")
+            output.outputFileName.set("Xenon-${output.versionName.get()}-${baseVersionCode}-${abiName}.apk")
             output.versionCode.set(baseVersionCode * 10)
         }
     }

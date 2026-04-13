@@ -264,16 +264,16 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
-import tw.nekomimi.nekogram.BackButtonMenuRecent;
-import tw.nekomimi.nekogram.forward.ForwardContext;
-import tw.nekomimi.nekogram.NekoConfig;
-import tw.nekomimi.nekogram.forward.SendOptionsMenuLayout;
-import tw.nekomimi.nekogram.helpers.PasscodeHelper;
+import zxc.iconic.xenon.BackButtonMenuRecent;
+import zxc.iconic.xenon.forward.ForwardContext;
+import zxc.iconic.xenon.NekoConfig;
+import zxc.iconic.xenon.forward.SendOptionsMenuLayout;
+import zxc.iconic.xenon.helpers.PasscodeHelper;
 import me.vkryl.android.animator.BoolAnimator;
 import me.vkryl.android.animator.FactorAnimator;
-import tw.nekomimi.nekogram.helpers.PopupHelper;
-import tw.nekomimi.nekogram.helpers.TypefaceHelper;
-import tw.nekomimi.nekogram.helpers.remote.ConfigHelper;
+import zxc.iconic.xenon.helpers.PopupHelper;
+import zxc.iconic.xenon.helpers.TypefaceHelper;
+import zxc.iconic.xenon.helpers.remote.ConfigHelper;
 
 public class DialogsActivity extends BaseFragment implements NotificationCenter.NotificationCenterDelegate, FloatingDebugProvider, FactorAnimator.Target, MainTabsActivity.TabFragmentDelegate {
     private final int ADDITIONAL_LIST_HEIGHT_DP = Build.VERSION.SDK_INT >= 31 ? 48 : 0;

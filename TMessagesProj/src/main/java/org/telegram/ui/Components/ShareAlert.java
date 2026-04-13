@@ -135,8 +135,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
-import tw.nekomimi.nekogram.forward.ForwardContext;
-import tw.nekomimi.nekogram.forward.SendOptionsMenuLayout;
+import zxc.iconic.xenon.forward.ForwardContext;
+import zxc.iconic.xenon.forward.SendOptionsMenuLayout;
 
 public class ShareAlert extends BottomSheet implements NotificationCenter.NotificationCenterDelegate {
 

@@ -22,7 +22,7 @@
     <string name="AddToSavedMessages">Zu Servermeldungen hinzufügen</string>
     <string name="CreateMention">Erwähnung erstellen</string>
     <string name="Prpr">ペロペロ</string>
-    <string name="NekogramRunning">Nekogram wird ausgeführt</string>
+    <string name="NekogramRunning">Xenon wird ausgeführt</string>
     <string name="EventType">Symbol-Set Seitenleiste</string>
     <string name="DependsOnDate">Abhängig vom Datum</string>
     <string name="Christmas">Weihnachten</string>
@@ -64,8 +64,8 @@
     <string name="IgnoreBlockedAbout">ES IST NICHT WIRKLICH VERSTECKT! Nachrichten sind immer noch verfügbar, aber Text wird in Spoiler konvertiert und Medien werden nicht automatisch heruntergeladen.</string>
     <string name="Donate">Spenden</string>
     <string name="DonateAbout">Unterstützen Sie unsere Entwicklung.</string>
-    <string name="TranslationAbout">Helfen Sie uns, Nekogram in Ihre Sprache zu übersetzen.</string>
-    <string name="Translation">Nekogram übersetzen</string>
+    <string name="TranslationAbout">Helfen Sie uns, Xenon in Ihre Sprache zu übersetzen.</string>
+    <string name="Translation">Xenon übersetzen</string>
     <string name="GooglePlay">Google Play</string>
     <string name="ResetStickerSize">Stickergröße zurücksetzen</string>
     <string name="RestartAppToTakeEffect">App neu starten, um Änderungen wirksam zu machen.</string>
@@ -114,7 +114,7 @@
     <string name="RegistrationDateNewer">Neuer als %s</string>
     <string name="RegistrationDateOlder">Älter als %s</string>
     <string name="RegistrationDateApproximately">Ungefähr %s</string>
-    <string name="UpdateNekogram">Nekogram aktualisieren</string>
+    <string name="UpdateNekogram">Xenon aktualisieren</string>
     <string name="TranslationTarget">Zielsprache</string>
     <string name="TranslationTargetApp">System folgen</string>
     <string name="Translator">Übersetzer</string>
@@ -140,12 +140,12 @@
     <string name="OfficialSite">Offizielle Webseite</string>
     <string name="MutualContact">Gegenseitiger Kontakt</string>
     <string name="MutualContactDescription">Dieser Kontakt ist ein gegenseitiger Kontakt.</string>
-    <string name="InviteTextNeko">Hey, ich benutze Nekogram um zu chatten. Mach mit! Lade es hier herunter: %1$s</string>
-    <string name="ShareNekogram">Nekogram teilen...</string>
-    <string name="NekogramVersion">Nekogram %1$s\nBasierend auf Telegram %2$s\nEntwickelt von %3$s</string>
+    <string name="InviteTextNeko">Hey, ich benutze Xenon um zu chatten. Mach mit! Lade es hier herunter: %1$s</string>
+    <string name="ShareNekogram">Xenon teilen...</string>
+    <string name="NekogramVersion">Xenon %1$s\nBasierend auf Telegram %2$s\nEntwickelt von %3$s</string>
     <string name="UpdateInstalling">Update wird installiert...</string>
     <string name="UpdateInstallingNotification">Wenn die Aktualisierung abgeschlossen ist, wird eine Benachrichtigung angezeigt.</string>
-    <string name="UpdateInstallingRelaunch">Nekogram wird neu gestartet, sobald das Update abgeschlossen ist.</string>
+    <string name="UpdateInstallingRelaunch">Xenon wird neu gestartet, sobald das Update abgeschlossen ist.</string>
     <string name="UpdateInstalledNotification">Installation der Aktualisierung beendet, zum Starten der Anwendung tippen.</string>
     <string name="UpdateFailedToInstall">Update konnte nicht installiert werden: %d</string>
     <string name="QRLoginMessage">Scanne den QRCode mit einem anderen Gerät, um dich anzumelden.</string>
@@ -165,7 +165,7 @@
     <string name="SaveToDownloadCount_few">%1$d Dateien werden in Downloads gespeichert</string>
     <string name="SaveToDownloadCount_many">%1$d Dateien werden in Downloads gespeichert</string>
     <string name="SaveToDownloadCount_other">%1$d Dateien werden in Downloads gespeichert </string>
-    <string name="AppLinkNotVerifiedMessage">Bei Android 12 und neuer mußt du manuell einen Link zu verifizierten Links hinzufügen, um t.me Links in Nekogram zu öffnen.</string>
+    <string name="AppLinkNotVerifiedMessage">Bei Android 12 und neuer mußt du manuell einen Link zu verifizierten Links hinzufügen, um t.me Links in Xenon zu öffnen.</string>
     <string name="AppLinkNotVerifiedTitle">App-Links nicht überprüft</string>
     <string name="AutoTranslate">Automatisch übersetzen</string>
     <string name="AutoTranslateAbout">Nachrichten in einer anderen Sprache automatisch übersetzen.</string>

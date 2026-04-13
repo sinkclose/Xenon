@@ -1,29 +1,67 @@
-# 🐾 Nekogram
-[![Crowdin](https://badges.crowdin.net/e/a094217ac83905ae1625526d59bba8dc/localized.svg)](https://neko.crowdin.com/nekogram)  
-Nekogram is a third-party Telegram client with not many but useful modifications.
+# Xenon
 
-- Website: https://nekogram.app
-- Telegram channel: https://t.me/nekoupdates
-- Downloads: https://nekogram.app/download
-- Feedback: https://github.com/Nekogram/Nekogram/issues
+Xenon is a third-party Telegram client for Android. This codebase is **based on [Nekogram](https://github.com/Nekogram/Nekogram)** (which in turn follows Telegram for Android). 
 
-## API, Protocol documentation
+## Documentation
 
-Telegram API manuals: https://core.telegram.org/api
+- [Telegram API](https://core.telegram.org/api)
+- [MTProto](https://core.telegram.org/mtproto)
 
-MTProto protocol manuals: https://core.telegram.org/mtproto
+## Build instructions
 
-## Compilation Guide
+### 1. Get the source
 
-1. Download the Nekogram source code ( `git clone https://github.com/Nekogram/Nekogram.git` )
-1. Fill out storeFile, storePassword, keyAlias, keyPassword in local.properties to access your release.keystore
-1. Go to https://console.firebase.google.com/, create two android apps with application IDs tw.nekomimi.nekogram and tw.nekomimi.nekogram.beta, turn on firebase messaging and download `google-services.json`, which should be copied into `TMessagesProj` folder.
-1. Open the project in the Studio (note that it should be opened, NOT imported).
-1. Fill out values in `TMessagesProj/src/main/java/tw/nekomimi/nekogram/Extra.java` – there’s a link for each of the variables showing where and which data to obtain.
-1. You are ready to compile Nekogram.
+Clone this repository and open the **project root** in Android Studio (use **Open**, not *Import*).
+
+### 2. JDK and Android SDK
+
+Use a recent Android Studio bundle so you have a compatible JDK and SDK. The project targets current Android Gradle Plugin requirements from the repo.
+
+### 3. Signing (release)
+
+Create or reuse a keystore for signing release builds. In the project root, add a `local.properties` file (or edit the existing one) and set:
+
+- `storeFile` — path to your `.jks` / keystore file  
+- `storePassword`, `keyAlias`, `keyPassword` — matching the keystore  
+
+Debug builds can use the debug keystore if these are omitted.
+
+### 4. API credentials and optional services
+
+In `local.properties`, configure at least:
+
+- `apiId` and `apiHash` — from [my.telegram.org](https://my.telegram.org) (required for any Telegram client)  
+- `sentryDsn` — optional; leave empty if you do not use Sentry error reporting  
+
+Gradle injects these into `BuildConfig`. The small class `zxc.iconic.xenon.Extra` only exposes those values (`APP_ID`, `APP_HASH`, `SENTRY_DSN`) plus helpers like `isDirectApp()` — you do not edit it by hand for normal builds.
+
+### 5. Firebase (push)
+
+If you use Firebase Cloud Messaging:
+
+1. In [Firebase Console](https://console.firebase.google.com/), create Android app(s) with application ID **`zxc.iconic.xenon`** (and **`zxc.iconic.xenon.beta`** for the debug suffix build, if you use FCM there).  
+2. Enable Cloud Messaging and download `google-services.json` into the **`TMessagesProj`** module directory.
+
+### 6. Compile
+
+From the project root:
+
+```bash
+./gradlew :TMessagesProj_App:assembleRelease
+```
+
+For a debug APK (package id will be `zxc.iconic.xenon.beta`):
+
+```bash
+./gradlew :TMessagesProj_App:assembleDebug
+```
+
+Output APK names follow the pattern configured in `TMessagesProj_App/build.gradle` (e.g. `Xenon-<version>-…`).
 
 ## Localization
 
-Nekogram is forked from Telegram, thus most locales follows the translations of Telegram for Android, checkout https://translations.telegram.org/en/android/.
+Base UI strings follow [Telegram for Android on translations.telegram.org](https://translations.telegram.org/). Fork-specific strings live in `strings_neko.xml` resources.
 
-As for the Nekogram specialized strings, we use Crowdin to translate Nekogram. Join project at https://neko.crowdin.com/nekogram. Help us bring Nekogram to the world!
+## License
+
+See the `LICENSE` file in this repository.

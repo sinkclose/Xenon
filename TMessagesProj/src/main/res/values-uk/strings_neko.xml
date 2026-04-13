@@ -22,7 +22,7 @@
     <string name="AddToSavedMessages">Зберегти повідомлення</string>
     <string name="CreateMention">Створити згадку</string>
     <string name="Prpr">Peropero</string>
-    <string name="NekogramRunning">Nekogram запущений</string>
+    <string name="NekogramRunning">Xenon запущений</string>
     <string name="EventType">Зображення бокової панелі</string>
     <string name="DependsOnDate">Залежить від дати</string>
     <string name="Christmas">Різдво</string>
@@ -64,8 +64,8 @@
     <string name="IgnoreBlockedAbout">Насправді вміст не буде повністю приховано! Повідомлення будуть показуватися, але текст буде сховано під засвіт, а медіа не будуть автоматично завантажуватись.</string>
     <string name="Donate">Підтримати</string>
     <string name="DonateAbout">Підтримайте нашу розробку.</string>
-    <string name="TranslationAbout">Допоможіть нам перекласти Nekogram на вашу мову.</string>
-    <string name="Translation">Перекласти Nekogram</string>
+    <string name="TranslationAbout">Допоможіть нам перекласти Xenon на вашу мову.</string>
+    <string name="Translation">Перекласти Xenon</string>
     <string name="GooglePlay">Google Play</string>
     <string name="ResetStickerSize">Скинути розмір наліпок</string>
     <string name="RestartAppToTakeEffect">Перезапустіть додаток для застосування змін.</string>
@@ -114,7 +114,7 @@
     <string name="RegistrationDateNewer">Пізніше %s</string>
     <string name="RegistrationDateOlder">Раніше %s</string>
     <string name="RegistrationDateApproximately">Приблизно %s</string>
-    <string name="UpdateNekogram">Оновити Nekogram</string>
+    <string name="UpdateNekogram">Оновити Xenon</string>
     <string name="TranslationTarget">Цільова мова</string>
     <string name="TranslationTargetApp">Мова додатку</string>
     <string name="Translator">Перекладач</string>
@@ -140,9 +140,9 @@
     <string name="OfficialSite">Офіційний сайт</string>
     <string name="MutualContact">Спільний контакт</string>
     <string name="MutualContactDescription">Цей контакт є спільним контактом.</string>
-    <string name="InviteTextNeko">Привіт, я використовую Nekogram для спілкування. Приєднуйся до мене! Завантаж його тут: %1$s</string>
-    <string name="ShareNekogram">Поділитися Nekogram...</string>
-    <string name="NekogramVersion">Nekogram %1$s\nБазується на Telegram %2$s\nРозроблений %3$s</string>
+    <string name="InviteTextNeko">Привіт, я використовую Xenon для спілкування. Приєднуйся до мене! Завантаж його тут: %1$s</string>
+    <string name="ShareNekogram">Поділитися Xenon...</string>
+    <string name="NekogramVersion">Xenon %1$s\nБазується на Telegram %2$s\nРозроблений %3$s</string>
     <string name="UpdateInstalling">Встановлюємо оновлення...</string>
     <string name="UpdateInstallingNotification">Після завершення оновлення буде показано сповіщення.</string>
     <string name="UpdateInstallingRelaunch">Після завершення оновлення додаток буде перезапущено.</string>
@@ -165,7 +165,7 @@
     <string name="SaveToDownloadCount_few">Збереження %1$d файлів до завантажень</string>
     <string name="SaveToDownloadCount_many">Збереження %1$d файлів до завантажень</string>
     <string name="SaveToDownloadCount_other">Збереження %1$d файлів до завантажень</string>
-    <string name="AppLinkNotVerifiedMessage">Щоб відкрити посилання t.me у Nekogram на Android 12 та вище, вам необхідно вручну додати таке посилання до списку перевірених.</string>
+    <string name="AppLinkNotVerifiedMessage">Щоб відкрити посилання t.me у Xenon на Android 12 та вище, вам необхідно вручну додати таке посилання до списку перевірених.</string>
     <string name="AppLinkNotVerifiedTitle">Посилання додатка неперевірені</string>
     <string name="AutoTranslate">Автоматичний переклад</string>
     <string name="AutoTranslateAbout">Автоматично перекладати іншомовні повідомлення.</string>

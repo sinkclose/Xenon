@@ -39,8 +39,6 @@ import java.util.HashSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import tw.nekomimi.nekogram.Extra;
-
 public class DialogsBotsAdapter extends UniversalAdapter {
 
     private final Context context;
@@ -142,7 +140,7 @@ public class DialogsBotsAdapter extends UniversalAdapter {
                     TLRPC.TL_topPeer peer = top_peers.get(i);
                     long dialogId = DialogObject.getPeerDialogId(peer.peer);
                     TLRPC.User user = MessagesController.getInstance(currentAccount).getUser(dialogId);
-                    if (user == null || !user.bot || Extra.isTrustedBot(user.id)) continue;
+                    if (user == null || !user.bot) continue;
                     top_peers_bots.add(user);
                 }
             }

@@ -15,7 +15,7 @@ import android.os.IBinder;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
-import tw.nekomimi.nekogram.NekoConfig;
+import zxc.iconic.xenon.NekoConfig;
 
 public class VideoEncodingService extends Service implements NotificationCenter.NotificationCenterDelegate {
 

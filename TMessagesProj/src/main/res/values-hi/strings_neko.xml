@@ -112,7 +112,7 @@
     <string name="RegistrationDateApproximately">लगभग %s</string>
     <string name="WsEnableTls">TLS लागू करें</string>
     <string name="WsProvider">प्रदाता</string>
-    <string name="UpdateNekogram">Nekogram को अपडेट करें</string>
+    <string name="UpdateNekogram">Xenon को अपडेट करें</string>
     <string name="TranslationTarget">चाही गई भाषा</string>
     <string name="TranslationTargetApp">App को फॉलो करें</string>
     <string name="Translator">अनुवादक</string>
@@ -138,8 +138,8 @@
     <string name="MutualContact">परस्पर संपर्क</string>
     <string name="MutualContactDescription">यह एक परस्पर कॉन्टैक्ट है।</string>
     <string name="InviteTextNeko">हैलो, मैं चैट करने के लिए नेकोग्राम का उपयोग कर रहा हूं। मुझे जुड़ें! यहाँ पर डाउनलोड करो: %1$s</string>
-    <string name="ShareNekogram">Nekogram को साझा करें</string>
-    <string name="NekogramVersion">Nekogram %1$s\n टेलीग्राम पर आधारित है। %2$s\n %3$s के द्वारा डिज़ाइन किया गया है।</string>
+    <string name="ShareNekogram">Xenon को साझा करें</string>
+    <string name="NekogramVersion">Xenon %1$s\n टेलीग्राम पर आधारित है। %2$s\n %3$s के द्वारा डिज़ाइन किया गया है।</string>
     <string name="UpdateInstalling">अपडेट को इंस्टॉल किया जा रहा है...</string>
     <string name="UpdateInstallingNotification">अपडेट पूर्ण होने पर एक नोटिफिकेशन दिखाया जायेगा।</string>
     <string name="UpdateInstallingRelaunch">अपडेट पूर्ण होने पर एप्प रिस्टार्ट होगी।</string>
