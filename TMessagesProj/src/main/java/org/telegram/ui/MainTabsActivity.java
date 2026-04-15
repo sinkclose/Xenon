@@ -262,6 +262,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         fadeDrawable.setFadeHeight(dp(60), true);
         fadeView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         fadeView.setBackground(fadeDrawable);
+        fadeView.setVisibility(NekoConfig.showMainTabs ? View.VISIBLE : View.GONE);
 
         contentView.addView(fadeView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.BOTTOM));
 
@@ -269,6 +270,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         tabsViewWrapper.setOnClickListener(v -> {});
         tabsViewWrapper.addView(tabsView, LayoutHelper.createFrame(328 + DialogsActivity.MAIN_TABS_MARGIN * 2, DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
         tabsViewWrapper.setClipToPadding(false);
+        tabsViewWrapper.setVisibility(NekoConfig.showMainTabs ? View.VISIBLE : View.GONE);
         contentView.addView(tabsViewWrapper, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM));
 
         updateLayoutWrapper = new UpdateLayoutWrapper(context);
@@ -982,6 +984,15 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         if (tabsView == null) {
             return;
         }
+        
+        // Скрываем табы визуально, но оставляем свайпы работать
+        if (tabsViewWrapper != null) {
+            tabsViewWrapper.setVisibility(NekoConfig.showMainTabs ? View.VISIBLE : View.GONE);
+        }
+        if (fadeView != null) {
+            fadeView.setVisibility(NekoConfig.showMainTabs ? View.VISIBLE : View.GONE);
+        }
+        
         MainTabsManager.TabType currentType = null;
         if (viewPager != null && currentTabsConfig != null) {
             int current = viewPager.getCurrentPosition();

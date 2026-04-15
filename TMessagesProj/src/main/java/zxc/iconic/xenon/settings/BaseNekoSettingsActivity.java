@@ -338,7 +338,7 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
     }
 
     protected void updateRows() {
-        listView.adapter.updateWithoutNotify();
+        listView.adapter.update(true);
     }
 
     protected void notifyItemChanged(int itemId) {

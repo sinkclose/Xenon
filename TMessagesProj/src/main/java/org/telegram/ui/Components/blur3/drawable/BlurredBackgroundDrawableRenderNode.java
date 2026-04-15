@@ -59,6 +59,15 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
         liquidGlassEffect = new LiquidGlassEffect(renderNodeFill);
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
+    public void recreateLiquidGlassEffect() {
+        if (liquidGlassEffect != null) {
+            liquidGlassEffect = new LiquidGlassEffect(renderNodeFill);
+            renderNodeInvalidated = true;
+        }
+    }
+
+
 
     @Override
     public BlurredBackgroundSource getSource() {
@@ -116,8 +125,8 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
             liquidGlassEffect.update(
                 0, 0, boundProps.boundsWithPadding.width(), boundProps.boundsWithPadding.height(),
                 boundProps.shaderRadii[0], boundProps.shaderRadii[2], boundProps.shaderRadii[4], boundProps.shaderRadii[6],
-                boundProps.liquidThickness <= 0 ? dp(11) : boundProps.liquidThickness,
-                boundProps.liquidIntensity,
+                boundProps.liquidThickness <= 0 ? dp(zxc.iconic.xenon.NekoConfig.liquidGlassThickness) : boundProps.liquidThickness,
+                boundProps.liquidIntensity <= 0 ? zxc.iconic.xenon.NekoConfig.liquidGlassIntensity : boundProps.liquidIntensity,
                 boundProps.liquidIndex,
                 backgroundColor
             );

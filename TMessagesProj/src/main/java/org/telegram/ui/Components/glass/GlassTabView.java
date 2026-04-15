@@ -614,4 +614,9 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
     public void onPreBind() {
 
     }
+
+    public void setShowTitle(boolean show) {
+        textView.setVisibility(show ? VISIBLE : GONE);
+    }
+
 }

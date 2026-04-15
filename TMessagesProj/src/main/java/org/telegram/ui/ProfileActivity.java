@@ -270,6 +270,7 @@ import org.telegram.ui.Components.SizeNotifierFrameLayout;
 import org.telegram.ui.Components.StarRatingView;
 import org.telegram.ui.Components.StickerEmptyView;
 import org.telegram.ui.Components.TagEditCell;
+import org.telegram.ui.Components.TextStyleSpan;
 import org.telegram.ui.Components.TimerDrawable;
 import org.telegram.ui.Components.TranslateAlert2;
 import org.telegram.ui.Components.TranslateAlert3;
@@ -13472,14 +13473,23 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                             //containsGift = !myProfile && today && !getMessagesController().premiumPurchaseBlocked();
                         }
                     } else if (position == phoneRow) {
-                        String text;
+                        CharSequence text;
                         TLRPC.User user = getMessagesController().getUser(userId);
                         String phoneNumber;
                         if (user != null && !TextUtils.isEmpty(vcardPhone)) {
                             text = PhoneFormat.getInstance().format("+" + vcardPhone);
                             phoneNumber = vcardPhone;
                         } else if (user != null && !TextUtils.isEmpty(user.phone)) {
-                            text = PhoneFormat.getInstance().format("+" + user.phone);
+                            String formattedPhone = PhoneFormat.getInstance().format("+" + user.phone);
+                            if (NekoConfig.hidePhoneNumber) {
+                                SpannableStringBuilder sb = new SpannableStringBuilder(formattedPhone);
+                                TextStyleSpan.TextStyleRun run = new TextStyleSpan.TextStyleRun();
+                                run.flags = TextStyleSpan.FLAG_STYLE_SPOILER;
+                                sb.setSpan(new TextStyleSpan(run), 0, formattedPhone.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                                text = sb;
+                            } else {
+                                text = formattedPhone;
+                            }
                             phoneNumber = user.phone;
                         } else {
                             text = LocaleController.getString(R.string.PhoneHidden);

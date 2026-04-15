@@ -142,6 +142,7 @@ import java.util.Set;
 
 import me.vkryl.android.animator.BoolAnimator;
 import me.vkryl.android.animator.FactorAnimator;
+import zxc.iconic.xenon.NekoConfig;
 import zxc.iconic.xenon.helpers.PasscodeHelper;
 import zxc.iconic.xenon.settings.NekoSettingsActivity;
 
@@ -178,6 +179,8 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
     private TextView subtitleView;
     private TextView versionView;
     public boolean hasMainTabs;
+
+    private boolean hidePhoneNumber = true;
 
     private View navigationBar;
 
@@ -458,6 +461,16 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         subtitleView.setGravity(Gravity.CENTER);
         subtitleView.setSingleLine();
         subtitleView.setEllipsize(TextUtils.TruncateAt.END);
+        subtitleView.setOnClickListener(v -> {
+            if (NekoConfig.hidePhoneNumber) {
+                hidePhoneNumber = false;
+                setInfo();
+                AndroidUtilities.runOnUIThread(() -> {
+                    hidePhoneNumber = true;
+                    setInfo();
+                }, 5000);
+            }
+        });
         topView.addView(subtitleView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 168 - 12, 0, 0));
 
         versionView = new TextView(context);
@@ -528,15 +541,28 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         avatarDrawable.setInfo(user);
         avatarView.setForUserOrChat(user, avatarDrawable);
         titleView.setText(UserObject.getUserName(user));
-        final StringBuilder sb = new StringBuilder();
+        
         if (user != null) {
-            sb.append(PhoneFormat.getInstance().format("+" + user.phone));
+            String phone = PhoneFormat.getInstance().format("+" + user.phone);
+            String username = UserObject.getPublicUsername(user);
+            
+            StringBuilder sb = new StringBuilder();
+            
+            if (NekoConfig.hidePhoneNumber && hidePhoneNumber) {
+                // Fallback: заменяем цифры на точки
+                sb.append(phone.replaceAll("[0-9]", "•"));
+            } else {
+                sb.append(phone);
+            }
+            
+            if (username != null) {
+                sb.append(" • @").append(username);
+            }
+            
+            subtitleView.setText(sb);
+        } else {
+            subtitleView.setText("");
         }
-        final String username = UserObject.getPublicUsername(user);
-        if (username != null) {
-            sb.append(" • @").append(username);
-        }
-        subtitleView.setText(sb);
 
         versionView.setText(getVersionName());
     }

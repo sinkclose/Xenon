@@ -29,6 +29,7 @@ public class MainTabsPreviewCell extends FrameLayout {
     private final TabsAdapter adapter;
     private List<MainTabsManager.Tab> tabs;
     private boolean editMode;
+    private boolean showTitle;
     private Theme.ResourcesProvider resourcesProvider;
     private int currentAccount;
     private Runnable onChanged;
@@ -89,6 +90,7 @@ public class MainTabsPreviewCell extends FrameLayout {
 
     public void setTabs(List<MainTabsManager.Tab> tabs, Context context, Theme.ResourcesProvider resourcesProvider, int currentAccount, boolean showTitle, boolean b) {
         this.tabs = tabs;
+        this.showTitle = showTitle;
         this.resourcesProvider = resourcesProvider;
         this.currentAccount = currentAccount;
         adapter.notifyDataSetChanged();
@@ -129,10 +131,14 @@ public class MainTabsPreviewCell extends FrameLayout {
 
             MainTabsManager.Tab tab = tabs.get(position);
             GlassTabView tabView = MainTabsManager.createTabView(context, resourcesProvider, currentAccount, tab.type);
-            tabView.setAlpha(tab.enabled || tab.type == MainTabsManager.TabType.SETTINGS ? 1.0f : 0.45f);
+            tabView.setShowTitle(showTitle);
+            
+            // CHATS и PROFILE нельзя отключить
+            boolean canDisable = tab.type != MainTabsManager.TabType.CHATS && tab.type != MainTabsManager.TabType.PROFILE;
+            tabView.setAlpha(tab.enabled ? 1.0f : 0.45f);
             
             tabView.setOnClickListener(v -> {
-                if (editMode && tab.type != MainTabsManager.TabType.SETTINGS) {
+                if (editMode && canDisable) {
                     tab.enabled = !tab.enabled;
                     tabView.setAlpha(tab.enabled ? 1.0f : 0.45f);
                     if (onChanged != null) {

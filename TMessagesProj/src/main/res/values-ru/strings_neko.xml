@@ -20,6 +20,7 @@
     <string name="NoCaptionForwardShort">Без текста</string>
     <string name="Repeat">Повторить</string>
     <string name="AddToSavedMessages">В избранное</string>
+    <string name="AddToSavedMessagesInGroups">В избранное в группах</string>
     <string name="CreateMention">Создать упоминание</string>
     <string name="Prpr">Peropero</string>
     <string name="NekogramRunning">Xenon запущен</string>
@@ -56,6 +57,8 @@
     <string name="TabTitleTypeIcon">Значки</string>
     <string name="TabTitleTypeMix">Значки с заголовками</string>
     <string name="ConfirmAVMessage">Подтверждение аудио/видео сообщений</string>
+    <string name="DisableTypingIndicator">Не отправлять статус печати</string>
+    <string name="DisableTypingIndicatorDesc">Другие не увидят, когда вы печатаете</string>
     <string name="AskBeforeCalling">Подтверждать звонки</string>
     <string name="DisableNumberRounding">Не округлять числа</string>
     <string name="Categories">Настройки</string>
@@ -78,6 +81,17 @@
     <string name="IdTypeHidden">Скрыть</string>
     <string name="IdTypeAPI">Telegram API</string>
     <string name="IdTypeBOTAPI">Bot API</string>
+    <string name="HidePhoneNumber">Скрыть номер телефона</string>
+    <string name="LiquidGlassSettings">Жидкое стекло (API 33+)</string>
+    <string name="UseAdvancedLiquidGlass">Продвинутое жидкое стекло</string>
+    <string name="UseAdvancedLiquidGlassDesc">Хроматическая дисперсия, свечение краёв Френеля, направленные блики. Требует перезапуск.</string>
+    <string name="LiquidGlassIntensity">Интенсивность преломления</string>
+    <string name="LiquidGlassThickness">Толщина стекла</string>
+    <string name="MainTabsHide">Скрыть табы</string>
+    <string name="MainTabsHideHint">Когда скрыты, вы всё ещё можете переключаться между экранами свайпами. Жесты продолжат работать.</string>
+    <string name="MainTabsAppearance">Внешний вид</string>
+    <string name="MainTabsPreviewHint">Нажмите чтобы включить/отключить, удерживайте и перетаскивайте для изменения порядка</string>
+    <string name="MainTabsShowTitle">Показывать названия табов</string>
     <string name="AutoPauseVideo">Авто-пауза видео</string>
     <string name="AutoPauseVideoAbout">Останавливать воспроизведение видео при блокировке экрана или сворачивании приложения.</string>
     <string name="DisableProximityEvents">Отключить датчик приближения</string>

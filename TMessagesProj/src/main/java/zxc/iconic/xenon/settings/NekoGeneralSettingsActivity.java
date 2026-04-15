@@ -38,11 +38,11 @@ public class NekoGeneralSettingsActivity extends BaseNekoSettingsActivity {
 
     private final int nameOrderRow = rowId++;
     private final int idTypeRow = rowId++;
+    private final int hidePhoneNumberRow = rowId++;
 
     private final int disabledInstantCameraRow = rowId++;
     private final int askBeforeCallRow = rowId++;
     private final int openArchiveOnPullRow = rowId++;
-    private final int telegaDetectorRow = rowId++;
 
     private CharSequence getTranslationProvider() {
         var providers = Translator.getProviders();
@@ -141,13 +141,13 @@ public class NekoGeneralSettingsActivity extends BaseNekoSettingsActivity {
             case NekoConfig.ID_TYPE_BOTAPI -> LocaleController.getString(R.string.IdTypeBOTAPI);
             default -> LocaleController.getString(R.string.IdTypeAPI);
         }).slug("idType"));
+        items.add(UItem.asCheck(hidePhoneNumberRow, LocaleController.getString(R.string.HidePhoneNumber)).slug("hidePhoneNumber").setChecked(NekoConfig.hidePhoneNumber));
         items.add(UItem.asShadow(LocaleController.getString(R.string.IdTypeAbout)));
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.General)));
         items.add(UItem.asCheck(disabledInstantCameraRow, LocaleController.getString(R.string.DisableInstantCamera)).slug("disabledInstantCamera").setChecked(NekoConfig.disableInstantCamera));
         items.add(UItem.asCheck(askBeforeCallRow, LocaleController.getString(R.string.AskBeforeCalling)).slug("askBeforeCall").setChecked(NekoConfig.askBeforeCall));
         items.add(UItem.asCheck(openArchiveOnPullRow, LocaleController.getString(R.string.OpenArchiveOnPull)).slug("openArchiveOnPull").setChecked(NekoConfig.openArchiveOnPull));
-        items.add(UItem.asCheck(telegaDetectorRow, LocaleController.getString(R.string.TelegaDetectorEnabled), LocaleController.getString(R.string.TelegaDetectorHint)).slug("telegaDetector").setChecked(NekoConfig.telegaDetectorEnabled));
         items.add(UItem.asShadow(null));
     }
 
@@ -210,12 +210,6 @@ public class NekoGeneralSettingsActivity extends BaseNekoSettingsActivity {
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.askBeforeCall);
             }
-        } else if (id == telegaDetectorRow) {
-            NekoConfig.setTelegaDetectorEnabled(!NekoConfig.telegaDetectorEnabled);
-            if (view instanceof TextCheckCell) {
-                ((TextCheckCell) view).setChecked(NekoConfig.telegaDetectorEnabled);
-            }
-            parentLayout.rebuildAllFragmentViews(false, false);
         } else if (id == idTypeRow) {
             ArrayList<String> arrayList = new ArrayList<>();
             ArrayList<Integer> types = new ArrayList<>();
@@ -231,6 +225,12 @@ public class NekoGeneralSettingsActivity extends BaseNekoSettingsActivity {
                 listView.adapter.notifyItemChanged(position, PARTIAL);
                 parentLayout.rebuildAllFragmentViews(false, false);
             }, resourcesProvider);
+        } else if (id == hidePhoneNumberRow) {
+            NekoConfig.toggleHidePhoneNumber();
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.hidePhoneNumber);
+            }
+            parentLayout.rebuildAllFragmentViews(false, false);
         } else if (id == accentAsNotificationColorRow) {
             NekoConfig.toggleAccentAsNotificationColor();
             if (view instanceof TextCheckCell) {

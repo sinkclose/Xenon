@@ -35,6 +35,14 @@ import zxc.iconic.xenon.helpers.remote.UpdateHelper;
 
 public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
 
+    private final int disableTypingRow = rowId++;
+    private final int telegaDetectorRow = rowId++;
+
+    private final int liquidGlassIntensityRow = rowId++;
+    private final int liquidGlassThicknessRow = rowId++;
+    private final int useAdvancedLiquidGlassRow = rowId++;
+    private final int useCamera2ApiRow = rowId++;
+
     private final int downloadSpeedBoostRow = rowId++;
     private final int keepFormattingRow = rowId++;
     private final int forceFontWeightFallbackRow = rowId++;
@@ -50,6 +58,23 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
     @Override
     protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
         items.add(UItem.asHeader(LocaleController.getString(R.string.Experiment)));
+        items.add(UItem.asCheck(disableTypingRow, LocaleController.getString(R.string.DisableTypingIndicator), LocaleController.getString(R.string.DisableTypingIndicatorDesc)).slug("disableTyping").setChecked(NekoConfig.disableTypingIndicator));
+        items.add(UItem.asCheck(telegaDetectorRow, LocaleController.getString(R.string.TelegaDetectorEnabled), LocaleController.getString(R.string.TelegaDetectorHint)).slug("telegaDetector").setChecked(NekoConfig.telegaDetectorEnabled));
+        items.add(UItem.asShadow(null));
+
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            items.add(UItem.asHeader(LocaleController.getString(R.string.LiquidGlassSettings)));
+            items.add(UItem.asCheck(useAdvancedLiquidGlassRow, LocaleController.getString(R.string.UseAdvancedLiquidGlass), LocaleController.getString(R.string.UseAdvancedLiquidGlassDesc)).slug("useAdvancedLiquidGlass").setChecked(NekoConfig.useAdvancedLiquidGlass));
+            items.add(TextSettingsCellFactory.of(liquidGlassIntensityRow, LocaleController.getString(R.string.LiquidGlassIntensity), String.format("%.2f", NekoConfig.liquidGlassIntensity)).slug("liquidGlassIntensity"));
+            items.add(TextSettingsCellFactory.of(liquidGlassThicknessRow, LocaleController.getString(R.string.LiquidGlassThickness), String.valueOf(NekoConfig.liquidGlassThickness)).slug("liquidGlassThickness"));
+            items.add(UItem.asShadow(null));
+        }
+
+        items.add(UItem.asHeader(LocaleController.getString(R.string.CameraSettings)));
+        items.add(UItem.asCheck(useCamera2ApiRow, LocaleController.getString(R.string.UseCamera2Api), LocaleController.getString(R.string.UseCamera2ApiDesc)).slug("useCamera2Api").setChecked(NekoConfig.useCamera2Api));
+        items.add(UItem.asShadow(null));
+
+        items.add(UItem.asHeader(LocaleController.getString(R.string.General)));
         if (!MessagesController.getInstance(currentAccount).getfileExperimentalParams) {
             items.add(TextSettingsCellFactory.of(downloadSpeedBoostRow, LocaleController.getString(R.string.DownloadSpeedBoost), switch (NekoConfig.downloadSpeedBoost) {
                 case NekoConfig.BOOST_NONE ->
@@ -82,7 +107,22 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
     @Override
     protected void onItemClick(UItem item, View view, int position, float x, float y) {
         int id = item.id;
-        if (false) {
+        if (id == disableTypingRow) {
+            NekoConfig.toggleDisableTypingIndicator();
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.disableTypingIndicator);
+            }
+        } else if (id == telegaDetectorRow) {
+            NekoConfig.setTelegaDetectorEnabled(!NekoConfig.telegaDetectorEnabled);
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.telegaDetectorEnabled);
+            }
+        } else if (id == useCamera2ApiRow) {
+            NekoConfig.toggleUseCamera2Api();
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.useCamera2Api);
+            }
+        } else if (false) {
             var builder = new AlertDialog.Builder(getParentActivity(), resourcesProvider);
             var message = new TextView(getParentActivity());
             message.setText(getSpannedString(R.string.SoonRemovedOption, "https://t.me/" + LocaleController.getString(R.string.OfficialChannelUsername)));
@@ -235,6 +275,43 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.keepFormatting);
             }
+        } else if (id == liquidGlassIntensityRow) {
+            ArrayList<String> arrayList = new ArrayList<>();
+            ArrayList<Float> values = new ArrayList<>();
+            for (float v = 0.0f; v <= 1.5f; v += 0.25f) {
+                arrayList.add(String.format("%.2f", v));
+                values.add(v);
+            }
+            int current = 0;
+            for (int i = 0; i < values.size(); i++) {
+                if (Math.abs(values.get(i) - NekoConfig.liquidGlassIntensity) < 0.01f) {
+                    current = i;
+                    break;
+                }
+            }
+            PopupHelper.show(arrayList, LocaleController.getString(R.string.LiquidGlassIntensity), current, getParentActivity(), view, i -> {
+                NekoConfig.setLiquidGlassIntensity(values.get(i));
+                item.textValue = arrayList.get(i);
+                listView.adapter.notifyItemChanged(position, PARTIAL);
+            }, resourcesProvider);
+        } else if (id == liquidGlassThicknessRow) {
+            ArrayList<String> arrayList = new ArrayList<>();
+            ArrayList<Integer> values = new ArrayList<>();
+            for (int v = 5; v <= 20; v += 1) {
+                arrayList.add(String.valueOf(v));
+                values.add(v);
+            }
+            PopupHelper.show(arrayList, LocaleController.getString(R.string.LiquidGlassThickness), values.indexOf(NekoConfig.liquidGlassThickness), getParentActivity(), view, i -> {
+                NekoConfig.setLiquidGlassThickness(values.get(i));
+                item.textValue = arrayList.get(i);
+                listView.adapter.notifyItemChanged(position, PARTIAL);
+            }, resourcesProvider);
+        } else if (id == useAdvancedLiquidGlassRow) {
+            NekoConfig.toggleUseAdvancedLiquidGlass();
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.useAdvancedLiquidGlass);
+            }
+            showRestartBulletin();
         }
     }
 

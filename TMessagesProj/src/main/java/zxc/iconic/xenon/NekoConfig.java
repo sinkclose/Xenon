@@ -94,6 +94,7 @@ public class NekoConfig {
     public static String cfApiToken = "";
 
     public static boolean showAddToSavedMessages = true;
+    public static boolean showAddToSavedMessagesInGroups = false;
     public static boolean showSetReminder = false;
     public static boolean showReport = false;
     public static boolean showPrPr = false;
@@ -146,6 +147,17 @@ public class NekoConfig {
     public static boolean openSettingsBySwipe = false;
     public static boolean showMainTabsTitle = true;
     public static boolean telegaDetectorEnabled = true;
+    public static boolean disableTypingIndicator = false;
+    public static boolean hidePhoneNumber = false;
+
+    public static float liquidGlassIntensity = 0.75f;
+    public static int liquidGlassThickness = 11;
+    public static boolean useAdvancedLiquidGlass = false;
+    
+    // Advanced liquid glass parameters (separate from standard)
+    public static float advancedGlassDispersion = 1.0f;
+    public static float advancedGlassFresnel = 1.0f;
+    public static float advancedGlassGlare = 1.0f;
 
     public static boolean shouldNOTTrustMe = false;
 
@@ -177,6 +189,7 @@ public class NekoConfig {
             tabletMode = preferences.getInt("tabletMode", TABLET_AUTO);
             nameOrder = preferences.getInt("nameOrder", 1);
             showAddToSavedMessages = preferences.getBoolean("showAddToSavedMessages", true);
+            showAddToSavedMessagesInGroups = preferences.getBoolean("showAddToSavedMessagesInGroups", false);
             showSetReminder = preferences.getBoolean("showSetReminder", false);
             showReport = preferences.getBoolean("showReport", false);
             showPrPr = preferences.getBoolean("showPrPr", false);
@@ -256,6 +269,14 @@ public class NekoConfig {
             openSettingsBySwipe = preferences.getBoolean("openSettingsBySwipe", false);
             showMainTabsTitle = preferences.getBoolean("showMainTabsTitle", tabsTitleType != TITLE_TYPE_ICON);
             telegaDetectorEnabled = preferences.getBoolean("telegaDetectorEnabled", true);
+            disableTypingIndicator = preferences.getBoolean("disableTypingIndicator", false);
+            hidePhoneNumber = preferences.getBoolean("hidePhoneNumber", false);
+            liquidGlassIntensity = preferences.getFloat("liquidGlassIntensity", 0.75f);
+            liquidGlassThickness = preferences.getInt("liquidGlassThickness", 11);
+            useAdvancedLiquidGlass = preferences.getBoolean("useAdvancedLiquidGlass", false);
+            advancedGlassDispersion = preferences.getFloat("advancedGlassDispersion", 1.0f);
+            advancedGlassFresnel = preferences.getFloat("advancedGlassFresnel", 1.0f);
+            advancedGlassGlare = preferences.getFloat("advancedGlassGlare", 1.0f);
 
             LensHelper.checkLensSupportAsync();
             preferences.registerOnSharedPreferenceChangeListener(listener);
@@ -477,6 +498,14 @@ public class NekoConfig {
         editor.apply();
     }
 
+    public static void toggleDisableTypingIndicator() {
+        disableTypingIndicator = !disableTypingIndicator;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("disableTypingIndicator", disableTypingIndicator);
+        editor.apply();
+    }
+
     public static void toggleKeepFormatting() {
         keepFormatting = !keepFormatting;
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
@@ -618,6 +647,14 @@ public class NekoConfig {
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("showAddToSavedMessages", showAddToSavedMessages);
+        editor.apply();
+    }
+
+    public static void toggleShowAddToSavedMessagesInGroups() {
+        showAddToSavedMessagesInGroups = !showAddToSavedMessagesInGroups;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("showAddToSavedMessagesInGroups", showAddToSavedMessagesInGroups);
         editor.apply();
     }
 
@@ -970,6 +1007,62 @@ public class NekoConfig {
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
         editor.putInt("maxRecentStickers", maxRecentStickers);
+        editor.apply();
+    }
+
+    public static void toggleHidePhoneNumber() {
+        hidePhoneNumber = !hidePhoneNumber;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("hidePhoneNumber", hidePhoneNumber);
+        editor.apply();
+    }
+
+    public static void setLiquidGlassIntensity(float intensity) {
+        liquidGlassIntensity = intensity;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putFloat("liquidGlassIntensity", liquidGlassIntensity);
+        editor.apply();
+    }
+
+    public static void setLiquidGlassThickness(int thickness) {
+        liquidGlassThickness = thickness;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putInt("liquidGlassThickness", liquidGlassThickness);
+        editor.apply();
+    }
+
+    public static void toggleUseAdvancedLiquidGlass() {
+        useAdvancedLiquidGlass = !useAdvancedLiquidGlass;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("useAdvancedLiquidGlass", useAdvancedLiquidGlass);
+        editor.apply();
+    }
+
+    public static void setAdvancedGlassDispersion(float value) {
+        advancedGlassDispersion = value;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putFloat("advancedGlassDispersion", advancedGlassDispersion);
+        editor.apply();
+    }
+
+    public static void setAdvancedGlassFresnel(float value) {
+        advancedGlassFresnel = value;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putFloat("advancedGlassFresnel", advancedGlassFresnel);
+        editor.apply();
+    }
+
+    public static void setAdvancedGlassGlare(float value) {
+        advancedGlassGlare = value;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putFloat("advancedGlassGlare", advancedGlassGlare);
         editor.apply();
     }
 

@@ -318,6 +318,7 @@ import zxc.iconic.xenon.forward.ForwardItem;
 import zxc.iconic.xenon.forward.ForwardPopupWrapper;
 import zxc.iconic.xenon.MessageDetailsActivity;
 import zxc.iconic.xenon.NekoConfig;
+import zxc.iconic.xenon.telega.TelegaDetector;
 import zxc.iconic.xenon.helpers.MessageHelper;
 import zxc.iconic.xenon.helpers.QrHelper;
 import zxc.iconic.xenon.helpers.EmojiHelper;
@@ -19720,7 +19721,23 @@ public class ChatActivity extends BaseFragment implements
                     }
                 } else if (threadMessageId > 0) {
                     final TLRPC.User user = getMessagesController().getUser(threadMessageId);
-                    avatarContainer.setTitle(AndroidUtilities.removeRTL(AndroidUtilities.removeDiacritics(UserObject.getUserName(user))), user.scam, user.fake, user.verified, user.premium, user.emoji_status, animated);
+                    CharSequence userName = AndroidUtilities.removeRTL(AndroidUtilities.removeDiacritics(UserObject.getUserName(user)));
+                    
+                    // Добавить значок Telega детектора
+                    if (NekoConfig.telegaDetectorEnabled && user != null && !user.bot) {
+                        int telegaState = TelegaDetector.getState(user.id);
+                        if (telegaState == TelegaDetector.STATE_UNKNOWN) {
+                            TelegaDetector.requestState(user.id, false, state -> {
+                                if (user != null && user.id == threadMessageId) {
+                                    updateTitle(true);
+                                }
+                            });
+                        } else if (telegaState == TelegaDetector.STATE_IS_TELEGA || telegaState == TelegaDetector.STATE_WAS_TELEGA) {
+                            userName = TextUtils.concat(userName, " ⚠️");
+                        }
+                    }
+                    
+                    avatarContainer.setTitle(userName, user.scam, user.fake, user.verified, user.premium, user.emoji_status, animated);
                 } else {
                     TLRPC.Chat chat = getMessagesController().getChat(-threadMessageId);
                     if (chat == null) chat = currentChat;
@@ -19759,7 +19776,26 @@ public class ChatActivity extends BaseFragment implements
             } else if (UserObject.isUserSelf(user)) {
                 avatarContainer.setTitle(LocaleController.getString(R.string.MyNotes));
             } else if (user != null) {
-                avatarContainer.setTitle(AndroidUtilities.removeRTL(AndroidUtilities.removeDiacritics(UserObject.getUserName(user))));
+                CharSequence userName = AndroidUtilities.removeRTL(AndroidUtilities.removeDiacritics(UserObject.getUserName(user)));
+                
+                // Добавить значок Telega детектора
+                if (NekoConfig.telegaDetectorEnabled && !user.bot) {
+                    int telegaState = TelegaDetector.getState(user.id);
+                    if (telegaState == TelegaDetector.STATE_UNKNOWN) {
+                        long userId = user.id;
+                        long finalDialogId = dialogId;
+                        TLRPC.User finalUser = user;
+                        TelegaDetector.requestState(user.id, false, state -> {
+                            if (finalUser != null && finalUser.id == finalDialogId) {
+                                updateTitle(true);
+                            }
+                        });
+                    } else if (telegaState == TelegaDetector.STATE_IS_TELEGA || telegaState == TelegaDetector.STATE_WAS_TELEGA) {
+                        userName = TextUtils.concat(userName, " ⚠️");
+                    }
+                }
+                
+                avatarContainer.setTitle(userName);
             } else if (chat != null) {
                 avatarContainer.setTitle(AndroidUtilities.removeRTL(AndroidUtilities.removeDiacritics(chat.title)));
             } else {
@@ -19795,7 +19831,24 @@ public class ChatActivity extends BaseFragment implements
             if (currentUser.self) {
                 avatarContainer.setTitle(LocaleController.getString(R.string.SavedMessages));
             } else {
-                avatarContainer.setTitle(AndroidUtilities.removeRTL(AndroidUtilities.removeDiacritics(UserObject.getUserName(currentUser))), currentUser.scam, currentUser.fake, currentUser.verified, getMessagesController().isPremiumUser(currentUser), !MessagesController.isSupportUser(currentUser) ? currentUser.emoji_status : null, animated);
+                CharSequence userName = AndroidUtilities.removeRTL(AndroidUtilities.removeDiacritics(UserObject.getUserName(currentUser)));
+                
+                // Добавить значок Telega детектора
+                if (NekoConfig.telegaDetectorEnabled && !currentUser.bot) {
+                    int telegaState = TelegaDetector.getState(currentUser.id);
+                    if (telegaState == TelegaDetector.STATE_UNKNOWN) {
+                        long userId = currentUser.id;
+                        TelegaDetector.requestState(currentUser.id, false, state -> {
+                            if (currentUser != null && currentUser.id == userId) {
+                                updateTitle(true);
+                            }
+                        });
+                    } else if (telegaState == TelegaDetector.STATE_IS_TELEGA || telegaState == TelegaDetector.STATE_WAS_TELEGA) {
+                        userName = TextUtils.concat(userName, " ⚠️");
+                    }
+                }
+                
+                avatarContainer.setTitle(userName, currentUser.scam, currentUser.fake, currentUser.verified, getMessagesController().isPremiumUser(currentUser), !MessagesController.isSupportUser(currentUser) ? currentUser.emoji_status : null, animated);
             }
         }
         setParentActivityTitle(avatarContainer.getTitleTextView().getText());
@@ -45693,7 +45746,7 @@ public class ChatActivity extends BaseFragment implements
                         options.add(OPTION_SET_REMINDER);
                         icons.add(R.drawable.msg_calendar2);
                     }
-                    if (NekoConfig.showAddToSavedMessages && !UserObject.isUserSelf(currentUser)) {
+                    if (NekoConfig.showAddToSavedMessages && (currentUser == null && NekoConfig.showAddToSavedMessagesInGroups || currentUser != null && !UserObject.isUserSelf(currentUser))) {
                         items.add(LocaleController.getString(R.string.AddToSavedMessages));
                         options.add(OPTION_SAVE_MESSAGE);
                         icons.add(R.drawable.msg_saved);

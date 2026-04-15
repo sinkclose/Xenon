@@ -25,7 +25,6 @@ public class MainTabsSettingsActivity extends BaseNekoSettingsActivity {
 
     private final int enableTabsRow = rowId++;
     private final int tabsPreviewRow = rowId++;
-    private final int openSettingsBySwipeRow = rowId++;
     private final int showTabTitleRow = rowId++;
     private MainTabsPreviewCell tabsView;
     private ArrayList<MainTabsManager.Tab> tabs;
@@ -49,41 +48,29 @@ public class MainTabsSettingsActivity extends BaseNekoSettingsActivity {
 
     @Override
     protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
-        items.add(UItem.asHeader(LocaleController.getString(R.string.MainTabsCustomizeTitle)));
+        items.add(UItem.asHeader(LocaleController.getString(R.string.MainTabsAppearance)));
 
-        items.add(UItem.asCheck(enableTabsRow, "Enable Tabs")
-                .setChecked(NekoConfig.showMainTabs)
-                .slug("enableTabsRow"));
+        FrameLayout previewContainer = new FrameLayout(getContext());
+        previewContainer.setClipToPadding(false);
+        previewContainer.setPadding(0, AndroidUtilities.dp(6), 0, AndroidUtilities.dp(6));
+        previewContainer.setMinimumHeight(AndroidUtilities.dp(60));
 
-        if (NekoConfig.showMainTabs) {
-            items.add(UItem.asShadow(null));
-            items.add(UItem.asHeader("Appearance"));
+        tabsView = new MainTabsPreviewCell(getContext());
+        tabsView.setEditMode(true);
+        tabsView.setTabs(tabs, getContext(), getResourceProvider(), currentAccount, NekoConfig.showMainTabsTitle, true);
+        tabsView.setOnChangedListener(this::postUpdateTabsNotification);
+        previewContainer.addView(tabsView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.CENTER, 12, 0, 12, 0));
 
-            FrameLayout previewContainer = new FrameLayout(getContext());
-            previewContainer.setClipToPadding(false);
-            previewContainer.setPadding(0, AndroidUtilities.dp(6), 0, AndroidUtilities.dp(6));
-            previewContainer.setMinimumHeight(AndroidUtilities.dp(60));
+        UItem customItem = UItem.asCustom(previewContainer);
+        customItem.id = tabsPreviewRow;
+        items.add(customItem);
+        items.add(UItem.asShadow(LocaleController.getString(R.string.MainTabsPreviewHint)));
 
-            tabsView = new MainTabsPreviewCell(getContext());
-            tabsView.setEditMode(true);
-            tabsView.setTabs(tabs, getContext(), getResourceProvider(), currentAccount, NekoConfig.showMainTabsTitle, true);
-            tabsView.setOnChangedListener(this::postUpdateTabsNotification);
-            previewContainer.addView(tabsView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.CENTER, 12, 0, 12, 0));
-
-            UItem customItem = UItem.asCustom(previewContainer);
-            customItem.id = tabsPreviewRow;
-            items.add(customItem);
-            items.add(UItem.asShadow("Tap to enable/disable, hold and drag to reorder.")); // AP_MainTabsPreviewSum
-
-            items.add(UItem.asCheck(showTabTitleRow, "Show tab titles")
-                    .setChecked(NekoConfig.showMainTabsTitle));
-            items.add(UItem.asShadow(null));
-
-            items.add(UItem.asHeader("Actions"));
-            items.add(UItem.asCheck(openSettingsBySwipeRow, "Open settings by swipe") // AP_OpenSettingsBySwipe
-                    .setChecked(NekoConfig.openSettingsBySwipe));
-            items.add(UItem.asShadow(null));
-        }
+        items.add(UItem.asCheck(showTabTitleRow, LocaleController.getString(R.string.MainTabsShowTitle))
+                .setChecked(NekoConfig.showMainTabsTitle));
+        items.add(UItem.asCheck(enableTabsRow, LocaleController.getString(R.string.MainTabsHide))
+                .setChecked(!NekoConfig.showMainTabs));
+        items.add(UItem.asShadow(LocaleController.getString(R.string.MainTabsHideHint)));
     }
 
     @Override
@@ -91,11 +78,7 @@ public class MainTabsSettingsActivity extends BaseNekoSettingsActivity {
         int id = item.id;
         if (id == enableTabsRow) {
             NekoConfig.setShowMainTabs(!NekoConfig.showMainTabs);
-            setChecked(view, NekoConfig.showMainTabs);
-            if (!NekoConfig.showMainTabs) {
-                resetMainTabsOrder();
-            }
-            updateRows();
+            setChecked(view, !NekoConfig.showMainTabs); // Инвертируем для "Hide"
             postUpdateTabsNotification();
         } else if (id == showTabTitleRow) {
             NekoConfig.setShowMainTabsTitle(!NekoConfig.showMainTabsTitle);
@@ -104,9 +87,6 @@ public class MainTabsSettingsActivity extends BaseNekoSettingsActivity {
                 tabsView.setTabs(tabs, getContext(), getResourceProvider(), currentAccount, NekoConfig.showMainTabsTitle, true);
             }
             postUpdateTabsNotification();
-        } else if (id == openSettingsBySwipeRow) {
-            NekoConfig.setOpenSettingsBySwipe(!NekoConfig.openSettingsBySwipe);
-            setChecked(view, NekoConfig.openSettingsBySwipe);
         }
     }
 

@@ -200,15 +200,17 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
         items.add(TextCheckbox2CellFactory.of(messageMenuRow + 1, LocaleController.getString(R.string.DeleteDownloadedFile)).slug("showDeleteDownloadedFile").setChecked(NekoConfig.showDeleteDownloadedFile));
         items.add(TextCheckbox2CellFactory.of(messageMenuRow + 2, LocaleController.getString(R.string.NoQuoteForward)).slug("showNoQuoteForward").setChecked(NekoConfig.showNoQuoteForward));
         items.add(TextCheckbox2CellFactory.of(messageMenuRow + 3, LocaleController.getString(R.string.AddToSavedMessages)).slug("showAddToSavedMessages").setChecked(NekoConfig.showAddToSavedMessages));
-        items.add(TextCheckbox2CellFactory.of(messageMenuRow + 4, LocaleController.getString(R.string.Repeat)).slug("showRepeat").setChecked(NekoConfig.showRepeat));
-        items.add(TextCheckbox2CellFactory.of(messageMenuRow + 5, LocaleController.getString(R.string.Prpr)).slug("showPrPr").setChecked(NekoConfig.showPrPr));
-        items.add(TextCheckbox2CellFactory.of(messageMenuRow + 6, LocaleController.getString(R.string.TranslateMessage)).slug("showTranslate").setChecked(NekoConfig.showTranslate));
-        items.add(TextCheckbox2CellFactory.of(messageMenuRow + 7, LocaleController.getString(R.string.ReportChat)).slug("showReport").setChecked(NekoConfig.showReport));
-        items.add(TextCheckbox2CellFactory.of(messageMenuRow + 8, LocaleController.getString(R.string.MessageDetails)).slug("showMessageDetails").setChecked(NekoConfig.showMessageDetails));
-        items.add(TextCheckbox2CellFactory.of(messageMenuRow + 9, LocaleController.getString(R.string.CopyPhoto)).slug("showCopyPhoto").setChecked(NekoConfig.showCopyPhoto));
-        items.add(TextCheckbox2CellFactory.of(messageMenuRow + 10, LocaleController.getString(R.string.SetReminder)).slug("showSetReminder").setChecked(NekoConfig.showSetReminder));
-        items.add(TextCheckbox2CellFactory.of(messageMenuRow + 11, LocaleController.getString(R.string.QrCode)).slug("showQrCode").setChecked(NekoConfig.showQrCode));
-        items.add(TextCheckbox2CellFactory.of(messageMenuRow + 12, LocaleController.getString(R.string.OpenInExternalApp)).slug("showOpenIn").setChecked(NekoConfig.showOpenIn));
+        items.add(TextCheckbox2CellFactory.of(messageMenuRow + 4, LocaleController.getString(R.string.AddToSavedMessagesInGroups)).slug("showAddToSavedMessagesInGroups").setChecked(NekoConfig.showAddToSavedMessagesInGroups));
+        items.add(TextCheckbox2CellFactory.of(messageMenuRow + 5, LocaleController.getString(R.string.Repeat)).slug("showRepeat").setChecked(NekoConfig.showRepeat));
+        items.add(TextCheckbox2CellFactory.of(messageMenuRow + 5, LocaleController.getString(R.string.Repeat)).slug("showRepeat").setChecked(NekoConfig.showRepeat));
+        items.add(TextCheckbox2CellFactory.of(messageMenuRow + 6, LocaleController.getString(R.string.Prpr)).slug("showPrPr").setChecked(NekoConfig.showPrPr));
+        items.add(TextCheckbox2CellFactory.of(messageMenuRow + 7, LocaleController.getString(R.string.TranslateMessage)).slug("showTranslate").setChecked(NekoConfig.showTranslate));
+        items.add(TextCheckbox2CellFactory.of(messageMenuRow + 8, LocaleController.getString(R.string.ReportChat)).slug("showReport").setChecked(NekoConfig.showReport));
+        items.add(TextCheckbox2CellFactory.of(messageMenuRow + 9, LocaleController.getString(R.string.MessageDetails)).slug("showMessageDetails").setChecked(NekoConfig.showMessageDetails));
+        items.add(TextCheckbox2CellFactory.of(messageMenuRow + 10, LocaleController.getString(R.string.CopyPhoto)).slug("showCopyPhoto").setChecked(NekoConfig.showCopyPhoto));
+        items.add(TextCheckbox2CellFactory.of(messageMenuRow + 11, LocaleController.getString(R.string.SetReminder)).slug("showSetReminder").setChecked(NekoConfig.showSetReminder));
+        items.add(TextCheckbox2CellFactory.of(messageMenuRow + 12, LocaleController.getString(R.string.QrCode)).slug("showQrCode").setChecked(NekoConfig.showQrCode));
+        items.add(TextCheckbox2CellFactory.of(messageMenuRow + 13, LocaleController.getString(R.string.OpenInExternalApp)).slug("showOpenIn").setChecked(NekoConfig.showOpenIn));
         items.add(UItem.asShadow(null));
     }
 
@@ -362,30 +364,36 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
                 NekoConfig.toggleShowAddToSavedMessages();
                 cell.setChecked(NekoConfig.showAddToSavedMessages);
             } else if (menuPosition == 3) {
+                NekoConfig.toggleShowAddToSavedMessagesInGroups();
+                cell.setChecked(NekoConfig.showAddToSavedMessagesInGroups);
+            } else if (menuPosition == 4) {
                 NekoConfig.toggleShowRepeat();
                 cell.setChecked(NekoConfig.showRepeat);
             } else if (menuPosition == 4) {
+                NekoConfig.toggleShowRepeat();
+                cell.setChecked(NekoConfig.showRepeat);
+            } else if (menuPosition == 5) {
                 NekoConfig.toggleShowPrPr();
                 cell.setChecked(NekoConfig.showPrPr);
-            } else if (menuPosition == 5) {
+            } else if (menuPosition == 6) {
                 NekoConfig.toggleShowTranslate();
                 cell.setChecked(NekoConfig.showTranslate);
-            } else if (menuPosition == 6) {
+            } else if (menuPosition == 7) {
                 NekoConfig.toggleShowReport();
                 cell.setChecked(NekoConfig.showReport);
-            } else if (menuPosition == 7) {
+            } else if (menuPosition == 8) {
                 NekoConfig.toggleShowMessageDetails();
                 cell.setChecked(NekoConfig.showMessageDetails);
-            } else if (menuPosition == 8) {
+            } else if (menuPosition == 9) {
                 NekoConfig.toggleShowCopyPhoto();
                 cell.setChecked(NekoConfig.showCopyPhoto);
-            } else if (menuPosition == 9) {
+            } else if (menuPosition == 10) {
                 NekoConfig.toggleShowSetReminder();
                 cell.setChecked(NekoConfig.showSetReminder);
-            } else if (menuPosition == 10) {
+            } else if (menuPosition == 11) {
                 NekoConfig.toggleShowQrCode();
                 cell.setChecked(NekoConfig.showQrCode);
-            } else if (menuPosition == 11) {
+            } else if (menuPosition == 12) {
                 NekoConfig.toggleShowOpenIn();
                 cell.setChecked(NekoConfig.showOpenIn);
             }

@@ -23,6 +23,7 @@
     <string name="NoCaptionForwardShort">No Caption</string>
     <string name="Repeat">Repeat</string>
     <string name="AddToSavedMessages">Save Message</string>
+    <string name="AddToSavedMessagesInGroups">Save Message in Groups</string>
     <string name="CreateMention">Create Mention</string>
     <string name="Prpr">Peropero</string>
     <string name="NekogramRunning">Xenon is running</string>
@@ -59,6 +60,8 @@
     <string name="TabTitleTypeIcon">Icons</string>
     <string name="TabTitleTypeMix">Icons with titles</string>
     <string name="ConfirmAVMessage">Confirm sending video/voice message</string>
+    <string name="DisableTypingIndicator">Don\'t send typing status</string>
+    <string name="DisableTypingIndicatorDesc">Others won\'t see when you\'re typing</string>
     <string name="AskBeforeCalling">Ask before calling</string>
     <string name="DisableNumberRounding">Disable number rounding</string>
     <string name="Categories">Categories</string>
@@ -81,6 +84,17 @@
     <string name="IdTypeHidden">Hide</string>
     <string name="IdTypeAPI">Telegram API</string>
     <string name="IdTypeBOTAPI">Bot API</string>
+    <string name="HidePhoneNumber">Hide phone number</string>
+    <string name="LiquidGlassSettings">Liquid Glass (API 33+)</string>
+    <string name="UseAdvancedLiquidGlass">Use advanced liquid glass</string>
+    <string name="UseAdvancedLiquidGlassDesc">Chromatic dispersion, Fresnel edge glow, directional glare. Requires app restart.</string>
+    <string name="LiquidGlassIntensity">Refraction intensity</string>
+    <string name="LiquidGlassThickness">Glass thickness</string>
+    <string name="MainTabsHide">Hide tabs</string>
+    <string name="MainTabsHideHint">When hidden, you can still swipe between screens. Swipe gestures will continue to work.</string>
+    <string name="MainTabsAppearance">Appearance</string>
+    <string name="MainTabsPreviewHint">Tap to enable/disable, hold and drag to reorder</string>
+    <string name="MainTabsShowTitle">Show tab titles</string>
     <string name="AutoPauseVideo">Auto pause video</string>
     <string name="AutoPauseVideoAbout">When lock screen/switch to background.</string>
     <string name="DisableProximityEvents">Disable proximity events</string>
