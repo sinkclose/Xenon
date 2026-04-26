@@ -22,13 +22,18 @@ jobs:
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v8
+        with:
+          name: outputs
+          path: outputs
 
       - name: Display downloaded files
-        run: ls -R
+        run: ls -R outputs
 
       - name: Release
         uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
         with:
+          generate_release_notes: true
           files: |
-            apk/**/*.apk
-            bundle/**/*.aab
+            outputs/apk/**/*.apk
+            outputs/bundle/**/*.aab
