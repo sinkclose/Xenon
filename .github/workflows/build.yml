@@ -101,3 +101,85 @@ jobs:
         with:
           name: outputs
           path: TMessagesProj_App/build/outputs
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: outputs
+          path: outputs
+
+      - name: Locate ARM64 APK
+        id: locate_apk
+        run: |
+          APK_PATH=$(find outputs/apk/release -name "*arm64-v8a*.apk" -type f | head -1)
+          if [ -z "$APK_PATH" ]; then
+            echo "ARM64 APK not found, trying any release APK..."
+            APK_PATH=$(find outputs/apk/release -name "*.apk" -type f | head -1)
+          fi
+          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+          echo "apk_name=$(basename $APK_PATH)" >> $GITHUB_OUTPUT
+          echo "Found APK: $APK_PATH"
+
+      - name: Generate Checksums
+        id: checksums
+        run: |
+          APK_PATH="${{ steps.locate_apk.outputs.apk_path }}"
+          SHA256=$(sha256sum "$APK_PATH" | awk '{print $1}')
+          MD5=$(md5sum "$APK_PATH" | awk '{print $1}')
+          FILE_SIZE=$(stat -c%s "$APK_PATH" | numfmt --to=iec)
+          
+          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+          echo "md5=$MD5" >> $GITHUB_OUTPUT
+          echo "size=$FILE_SIZE" >> $GITHUB_OUTPUT
+
+      - name: Get Commit Info
+        id: commit_info
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B | head -1)
+          COMMIT_HASH=$(git rev-parse --short HEAD)
+          COMMIT_FULL=$(git rev-parse HEAD)
+          
+          # Sanitize commit message for release title
+          SANITIZED=$(echo "$COMMIT_MSG" | sed 's/["<>]//g' | cut -c1-100)
+          
+          echo "title=$SANITIZED" >> $GITHUB_OUTPUT
+          echo "hash_short=$COMMIT_HASH" >> $GITHUB_OUTPUT
+          echo "hash_full=$COMMIT_FULL" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: "${{ steps.commit_info.outputs.title }}"
+          tag_name: "${{ steps.commit_info.outputs.hash_short }}"
+          body: |
+            ## Build Info
+            - **Commit:** `${{ steps.commit_info.outputs.hash_full }}`
+            - **Short Hash:** `${{ steps.commit_info.outputs.hash_short }}`
+            - **Branch:** `${{ github.ref_name }}`
+            - **Build Date:** ${{ github.event.head_commit.timestamp }}
+
+            ## APK Details
+            - **File:** `${{ steps.locate_apk.outputs.apk_name }}`
+            - **Size:** ${{ steps.checksums.outputs.size }}
+
+            ## Checksums
+            | Algorithm | Hash |
+            |-----------|------|
+            | SHA256 | `${{ steps.checksums.outputs.sha256 }}` |
+            | MD5 | `${{ steps.checksums.outputs.md5 }}` |
+          files: |
+            ${{ steps.locate_apk.outputs.apk_path }}
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
