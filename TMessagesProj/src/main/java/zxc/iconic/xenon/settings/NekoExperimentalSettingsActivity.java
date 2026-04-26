@@ -65,8 +65,8 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
         if (android.os.Build.VERSION.SDK_INT >= 33) {
             items.add(UItem.asHeader(LocaleController.getString(R.string.LiquidGlassSettings)));
             items.add(UItem.asCheck(useAdvancedLiquidGlassRow, LocaleController.getString(R.string.UseAdvancedLiquidGlass), LocaleController.getString(R.string.UseAdvancedLiquidGlassDesc)).slug("useAdvancedLiquidGlass").setChecked(NekoConfig.useAdvancedLiquidGlass));
-            items.add(TextSettingsCellFactory.of(liquidGlassIntensityRow, LocaleController.getString(R.string.LiquidGlassIntensity), String.format("%.2f", NekoConfig.liquidGlassIntensity)).slug("liquidGlassIntensity"));
-            items.add(TextSettingsCellFactory.of(liquidGlassThicknessRow, LocaleController.getString(R.string.LiquidGlassThickness), String.valueOf(NekoConfig.liquidGlassThickness)).slug("liquidGlassThickness"));
+            items.add(TextSettingsCellFactory.of(liquidGlassIntensityRow, LocaleController.getString(R.string.LiquidGlassIntensity), String.format("%.2f", NekoConfig.liquidGlassIntensity)).slug("liquidGlassIntensity").setEnabled(!NekoConfig.useAdvancedLiquidGlass));
+            items.add(TextSettingsCellFactory.of(liquidGlassThicknessRow, LocaleController.getString(R.string.LiquidGlassThickness), String.valueOf(NekoConfig.liquidGlassThickness)).slug("liquidGlassThickness").setEnabled(!NekoConfig.useAdvancedLiquidGlass));
             items.add(UItem.asShadow(null));
         }
 
@@ -311,6 +311,7 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.useAdvancedLiquidGlass);
             }
+            listView.adapter.update(true);
             showRestartBulletin();
         }
     }

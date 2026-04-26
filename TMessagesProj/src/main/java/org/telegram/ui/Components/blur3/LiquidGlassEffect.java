@@ -70,9 +70,14 @@ public class LiquidGlassEffect {
             shader.setFloatUniform("foreground_color_premultiplied", r, g, b, a);
             
             if (zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass) {
-                shader.setFloatUniform("config_dispersion", zxc.iconic.xenon.NekoConfig.advancedGlassDispersion * 5.0f);
-                shader.setFloatUniform("config_fresnel", zxc.iconic.xenon.NekoConfig.advancedGlassFresnel);
-                shader.setFloatUniform("config_glare", zxc.iconic.xenon.NekoConfig.advancedGlassGlare);
+                // Override with hardcoded iOS LiquidGlassKit.regular defaults
+                // Refraction: 20*dp(10)*0.354 = 70.71*density = exact iOS pixel offset
+                shader.setFloatUniform("thickness", AndroidUtilities.dp(10));
+                shader.setFloatUniform("refract_index", 1.5f);
+                shader.setFloatUniform("refract_intensity", 0.354f);
+                shader.setFloatUniform("config_dispersion", 5.0f);
+                shader.setFloatUniform("config_fresnel", 0.0f);
+                shader.setFloatUniform("config_glare", 0.1f);
             }
 
             node.setRenderEffect(effect = RenderEffect.createRuntimeShaderEffect(shader, "img"));

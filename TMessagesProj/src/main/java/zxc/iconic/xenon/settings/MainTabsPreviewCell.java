@@ -88,7 +88,7 @@ public class MainTabsPreviewCell extends FrameLayout {
         this.onChanged = onChanged;
     }
 
-    public void setTabs(List<MainTabsManager.Tab> tabs, Context context, Theme.ResourcesProvider resourcesProvider, int currentAccount, boolean showTitle, boolean b) {
+    public void setTabs(List<MainTabsManager.Tab> tabs, Context context, Theme.ResourcesProvider resourcesProvider, int currentAccount, boolean showTitle) {
         this.tabs = tabs;
         this.showTitle = showTitle;
         this.resourcesProvider = resourcesProvider;

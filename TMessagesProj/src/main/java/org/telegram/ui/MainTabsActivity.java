@@ -612,9 +612,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     }
 
     private boolean canScrollInternal(MotionEvent ev, boolean forward) {
-        if (isTabsHidden()) {
-            return false;
-        }
+        // Removed lockout: allow horizontal swiping even when tabs are hidden.
         final BaseFragment fragment = getCurrentVisibleFragment();
         if (fragment instanceof TabFragmentDelegate) {
             final TabFragmentDelegate delegate = (TabFragmentDelegate) fragment;
@@ -948,6 +946,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
             final int tabPosition = position;
             final MainTabsManager.TabType type = currentTabsConfig.get(position).type;
             final GlassTabView view = MainTabsManager.createTabView(context, resourceProvider, currentAccount, type);
+            view.setShowTitle(zxc.iconic.xenon.NekoConfig.showMainTabsTitle);
             tabs[position] = view;
             if (type == MainTabsManager.TabType.PROFILE || type == MainTabsManager.TabType.SETTINGS) {
                 view.setOnLongClickListener(v -> {

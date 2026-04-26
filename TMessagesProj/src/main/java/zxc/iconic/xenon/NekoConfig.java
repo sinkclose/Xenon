@@ -267,7 +267,7 @@ public class NekoConfig {
             strokeOnViews = preferences.getBoolean("strokeOnViews", true);
             showMainTabs = preferences.getBoolean("showMainTabs", true);
             openSettingsBySwipe = preferences.getBoolean("openSettingsBySwipe", false);
-            showMainTabsTitle = preferences.getBoolean("showMainTabsTitle", tabsTitleType != TITLE_TYPE_ICON);
+            showMainTabsTitle = preferences.getBoolean("showMainTabsTitle", true);
             telegaDetectorEnabled = preferences.getBoolean("telegaDetectorEnabled", true);
             disableTypingIndicator = preferences.getBoolean("disableTypingIndicator", false);
             hidePhoneNumber = preferences.getBoolean("hidePhoneNumber", false);
@@ -480,13 +480,6 @@ public class NekoConfig {
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("showMainTabsTitle", showMainTabsTitle);
-        if (showMainTabsTitle && tabsTitleType == TITLE_TYPE_ICON) {
-            tabsTitleType = TITLE_TYPE_MIX;
-            editor.putInt("tabsTitleType2", tabsTitleType);
-        } else if (!showMainTabsTitle && tabsTitleType != TITLE_TYPE_ICON) {
-            tabsTitleType = TITLE_TYPE_ICON;
-            editor.putInt("tabsTitleType2", tabsTitleType);
-        }
         editor.apply();
     }
 

@@ -57,7 +57,7 @@
     <string name="TabTitleTypeIcon">Значки</string>
     <string name="TabTitleTypeMix">Значки с заголовками</string>
     <string name="ConfirmAVMessage">Подтверждение аудио/видео сообщений</string>
-    <string name="DisableTypingIndicator">Не отправлять статус печати</string>
+    <string name="DisableTypingIndicator">Не отправлять статус \"Печатает...\"</string>
     <string name="DisableTypingIndicatorDesc">Другие не увидят, когда вы печатаете</string>
     <string name="AskBeforeCalling">Подтверждать звонки</string>
     <string name="DisableNumberRounding">Не округлять числа</string>
@@ -83,7 +83,7 @@
     <string name="IdTypeBOTAPI">Bot API</string>
     <string name="HidePhoneNumber">Скрыть номер телефона</string>
     <string name="LiquidGlassSettings">Жидкое стекло (API 33+)</string>
-    <string name="UseAdvancedLiquidGlass">Продвинутое жидкое стекло</string>
+    <string name="UseAdvancedLiquidGlass">Использовать улучшенное жидкое стекло (WIP)</string>
     <string name="UseAdvancedLiquidGlassDesc">Хроматическая дисперсия, свечение краёв Френеля, направленные блики. Требует перезапуск.</string>
     <string name="LiquidGlassIntensity">Интенсивность преломления</string>
     <string name="LiquidGlassThickness">Толщина стекла</string>
@@ -335,8 +335,8 @@
     <string name="TabsPositionTop">Сверху</string>
     <string name="TabsPositionBottom">Снизу</string>
     <string name="StrokeOnViews">Эффекты бликов</string>
-    <string name="TelegaDetectorEnabled">Детектор Telega</string>
-    <string name="TelegaDetectorHint">Проверяет, использует ли пользователь или использовал раньше клиент Telega.</string>
+    <string name="TelegaDetectorEnabled">Telega детектор</string>
+    <string name="TelegaDetectorHint">Проверяет, использовал ли пользователь или использует клиент Telega.</string>
     <string name="TelegaDetectorStatusTitle">Статус Telega</string>
     <string name="TelegaDetectorStatusUnknown">Проверяем…</string>
     <string name="TelegaDetectorStatusIs">Использует Telega</string>

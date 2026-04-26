@@ -57,7 +57,7 @@ public class MainTabsSettingsActivity extends BaseNekoSettingsActivity {
 
         tabsView = new MainTabsPreviewCell(getContext());
         tabsView.setEditMode(true);
-        tabsView.setTabs(tabs, getContext(), getResourceProvider(), currentAccount, NekoConfig.showMainTabsTitle, true);
+        tabsView.setTabs(tabs, getContext(), getResourceProvider(), currentAccount, NekoConfig.showMainTabsTitle);
         tabsView.setOnChangedListener(this::postUpdateTabsNotification);
         previewContainer.addView(tabsView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.CENTER, 12, 0, 12, 0));
 
@@ -67,7 +67,8 @@ public class MainTabsSettingsActivity extends BaseNekoSettingsActivity {
         items.add(UItem.asShadow(LocaleController.getString(R.string.MainTabsPreviewHint)));
 
         items.add(UItem.asCheck(showTabTitleRow, LocaleController.getString(R.string.MainTabsShowTitle))
-                .setChecked(NekoConfig.showMainTabsTitle));
+                .setChecked(NekoConfig.showMainTabsTitle)
+                .setEnabled(NekoConfig.showMainTabs));
         items.add(UItem.asCheck(enableTabsRow, LocaleController.getString(R.string.MainTabsHide))
                 .setChecked(!NekoConfig.showMainTabs));
         items.add(UItem.asShadow(LocaleController.getString(R.string.MainTabsHideHint)));
@@ -75,16 +76,18 @@ public class MainTabsSettingsActivity extends BaseNekoSettingsActivity {
 
     @Override
     protected void onItemClick(UItem item, View view, int position, float x, float y) {
+        if (!item.enabled) return;
         int id = item.id;
         if (id == enableTabsRow) {
             NekoConfig.setShowMainTabs(!NekoConfig.showMainTabs);
             setChecked(view, !NekoConfig.showMainTabs); // Инвертируем для "Hide"
             postUpdateTabsNotification();
+            updateRows();
         } else if (id == showTabTitleRow) {
             NekoConfig.setShowMainTabsTitle(!NekoConfig.showMainTabsTitle);
             setChecked(view, NekoConfig.showMainTabsTitle);
             if (tabsView != null) {
-                tabsView.setTabs(tabs, getContext(), getResourceProvider(), currentAccount, NekoConfig.showMainTabsTitle, true);
+                tabsView.setTabs(tabs, getContext(), getResourceProvider(), currentAccount, NekoConfig.showMainTabsTitle);
             }
             postUpdateTabsNotification();
         }
@@ -136,7 +139,7 @@ public class MainTabsSettingsActivity extends BaseNekoSettingsActivity {
         tabs.addAll(copyTabs(MainTabsManager.getAllTabs()));
         initialTabsState = tabsToState(tabs);
         if (tabsView != null) {
-            tabsView.setTabs(tabs, getContext(), getResourceProvider(), currentAccount, NekoConfig.showMainTabsTitle, true);
+            tabsView.setTabs(tabs, getContext(), getResourceProvider(), currentAccount, NekoConfig.showMainTabsTitle);
         }
     }
 

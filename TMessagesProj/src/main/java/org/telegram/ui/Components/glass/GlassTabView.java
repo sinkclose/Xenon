@@ -617,6 +617,21 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
 
     public void setShowTitle(boolean show) {
         textView.setVisibility(show ? VISIBLE : GONE);
+        int gravity = show ? (Gravity.CENTER_HORIZONTAL | Gravity.TOP) : Gravity.CENTER;
+
+        if (imageView != null && imageView.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) imageView.getLayoutParams();
+            lp.gravity = gravity;
+            lp.topMargin = show ? dp(4) : 0;
+            imageView.setLayoutParams(lp);
+        }
+
+        if (backupImageView != null && backupImageView.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+            FrameLayout.LayoutParams blp = (FrameLayout.LayoutParams) backupImageView.getLayoutParams();
+            blp.gravity = gravity;
+            blp.topMargin = show ? dp(5) : 0;
+            backupImageView.setLayoutParams(blp);
+        }
     }
 
 }

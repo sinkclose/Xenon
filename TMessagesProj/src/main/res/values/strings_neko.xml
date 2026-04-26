@@ -86,7 +86,7 @@
     <string name="IdTypeBOTAPI">Bot API</string>
     <string name="HidePhoneNumber">Hide phone number</string>
     <string name="LiquidGlassSettings">Liquid Glass (API 33+)</string>
-    <string name="UseAdvancedLiquidGlass">Use advanced liquid glass</string>
+    <string name="UseAdvancedLiquidGlass">Use enhanced liquid glass (WIP)</string>
     <string name="UseAdvancedLiquidGlassDesc">Chromatic dispersion, Fresnel edge glow, directional glare. Requires app restart.</string>
     <string name="LiquidGlassIntensity">Refraction intensity</string>
     <string name="LiquidGlassThickness">Glass thickness</string>
