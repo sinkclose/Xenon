@@ -15,11 +15,6 @@ import org.telegram.ui.ActionBar.BaseFragment;
 
 import java.util.HashMap;
 
-import io.sentry.Breadcrumb;
-import io.sentry.Sentry;
-import io.sentry.SentryLevel;
-import io.sentry.android.core.SentryAndroid;
-import io.sentry.protocol.User;
 import zxc.iconic.xenon.Extra;
 
 public class AnalyticsHelper {
@@ -46,19 +41,6 @@ public class AnalyticsHelper {
         firebaseAnalytics = FirebaseAnalytics.getInstance(application);
         firebaseAnalytics.setAnalyticsCollectionEnabled(true);
         firebaseAnalytics.setUserId(userId);
-        SentryAndroid.init(application, options -> {
-            options.setDsn(Extra.SENTRY_DSN);
-            options.setEnvironment(BuildConfig.BUILD_TYPE);
-            options.setPrintUncaughtStackTrace(true);
-            options.setSendDefaultPii(true);
-            options.setEnableUserInteractionTracing(true);
-            options.setAttachViewHierarchy(true);
-            options.setEnableSystemEventBreadcrumbsExtras(true);
-            options.setTracesSampleRate(0.01);
-        });
-        var user = new User();
-        user.setId(userId);
-        Sentry.setUser(user);
 
         if (BuildVars.LOGS_ENABLED) {
             FileLog.d("Analytics: userId = " + userId);
@@ -71,21 +53,9 @@ public class AnalyticsHelper {
 
     public static void trackFragmentLifecycle(String lifecycle, BaseFragment fragment) {
         if (analyticsDisabled || fragment == null) return;
-        var breadcrumb = new Breadcrumb();
-        breadcrumb.setType("navigation");
-        breadcrumb.setCategory("ui.fragment.lifecycle");
-        breadcrumb.setLevel(SentryLevel.INFO);
-        breadcrumb.setData("state", lifecycle);
-        breadcrumb.setData("screen", getFragmentName(fragment));
-        Sentry.addBreadcrumb(breadcrumb);
         if ("created".equals(lifecycle)) {
             firebaseAnalytics.logEvent(FirebaseAnalytics.Event.SCREEN_VIEW, null);
         }
-    }
-
-    private static String getFragmentName(BaseFragment fragment) {
-        var canonicalName = fragment.getClass().getCanonicalName();
-        return canonicalName != null ? canonicalName : fragment.getClass().getSimpleName();
     }
 
     public static void trackEvent(String event, HashMap<String, String> map) {

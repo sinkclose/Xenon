@@ -1,195 +1,106 @@
 uniform shader img;
 
-uniform float2 resolution;
-uniform float2 center;
 uniform float2 size;
+uniform float2 center;
 uniform float4 radius;
-uniform float thickness;
-uniform float refract_index;
-uniform float refract_intensity;
-uniform float4 foreground_color_premultiplied;
+uniform float refractionHeight;
+uniform float refractionAmount;
+uniform float depthEffect;
+uniform float chromaticAberration;
 
-// Advanced config uniforms (driven from Java)
-uniform float config_dispersion;
-uniform float config_fresnel;
-uniform float config_glare;
-
-// iOS LiquidGlassKit per-channel IOR
-const float IOR_RED   = 0.98;
-const float IOR_GREEN = 1.0;
-const float IOR_BLUE  = 1.02;
-const float PI = 3.14159265359;
-
-// ---- CIE LAB / LCH (matches LiquidGlassFragment.metal D65 pipeline) ----
-const float3 whiteRef = float3(0.95047, 1.0, 1.08883);
-
-float linearize(float c) {
-    return c > 0.04045 ? pow((c + 0.055) / 1.055, 2.4) : c / 12.92;
-}
-float gammaEnc(float c) {
-    return c <= 0.0031308 ? 12.92 * c : 1.055 * pow(c, 1.0/2.4) - 0.055;
-}
-float labF(float t) {
-    return t > 0.00885645167 ? pow(t, 1.0/3.0) : 7.78703703704 * t + 0.13793103448;
-}
-float labFInv(float t) {
-    return t > 0.206897 ? t*t*t : 0.12841854934 * (t - 0.137931034);
+float radiusAt(float2 coord, float4 radii) {
+    if (coord.x >= 0.0) {
+        if (coord.y <= 0.0) return radii.y;
+        else return radii.z;
+    } else {
+        if (coord.y <= 0.0) return radii.x;
+        else return radii.w;
+    }
 }
 
-float3 srgbToLch(float3 rgb) {
-    float3 lin = float3(linearize(rgb.r), linearize(rgb.g), linearize(rgb.b));
-    float3 xyz = float3(
-        0.4124*lin.r + 0.3576*lin.g + 0.1805*lin.b,
-        0.2126*lin.r + 0.7152*lin.g + 0.0722*lin.b,
-        0.0193*lin.r + 0.1192*lin.g + 0.9505*lin.b
-    );
-    float3 s = float3(labF(xyz.x/whiteRef.x), labF(xyz.y/whiteRef.y), labF(xyz.z/whiteRef.z));
-    float L = 116.0*s.y - 16.0;
-    float a = 500.0*(s.x - s.y);
-    float b = 200.0*(s.y - s.z);
-    return float3(L, sqrt(a*a + b*b), atan(b, a) * (180.0/PI));
+float sdRoundedRect(float2 coord, float2 halfSize, float r) {
+    float2 cornerCoord = abs(coord) - (halfSize - float2(r));
+    float outside = length(max(cornerCoord, 0.0)) - r;
+    float inside = min(max(cornerCoord.x, cornerCoord.y), 0.0);
+    return outside + inside;
 }
 
-float3 lchToSrgb(float3 lch) {
-    float hr = lch.z * (PI/180.0);
-    float a = lch.y * cos(hr);
-    float b = lch.y * sin(hr);
-    float fy = (lch.x + 16.0) / 116.0;
-    float3 xyz = whiteRef * float3(labFInv(fy + a/500.0), labFInv(fy), labFInv(fy - b/200.0));
-    float3 lin = float3(
-         3.2406255*xyz.x - 1.537208*xyz.y - 0.4986286*xyz.z,
-        -0.9689307*xyz.x + 1.8757561*xyz.y + 0.0415175*xyz.z,
-         0.0557101*xyz.x - 0.2040211*xyz.y + 1.0569959*xyz.z
-    );
-    return float3(
-        gammaEnc(clamp(lin.r, 0.0, 1.0)),
-        gammaEnc(clamp(lin.g, 0.0, 1.0)),
-        gammaEnc(clamp(lin.b, 0.0, 1.0))
-    );
+float2 gradSdRoundedRect(float2 coord, float2 halfSize, float r) {
+    float2 cornerCoord = abs(coord) - (halfSize - float2(r));
+    if (cornerCoord.x >= 0.0 || cornerCoord.y >= 0.0) {
+        return sign(coord) * normalize(max(cornerCoord, 0.0));
+    } else {
+        float gradX = step(cornerCoord.y, cornerCoord.x);
+        return sign(coord) * float2(gradX, 1.0 - gradX);
+    }
 }
 
-// ---- SDF (identical to working shader) ----
-half sdfRect(half2 p, half4 r) {
-    r.xy = (p.x > 0.0) ? r.xy : r.zw;
-    r.x  = (p.y > 0.0) ? r.x  : r.y;
-    half2 q = abs(p) - size + r.x;
-    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r.x;
+float circleMap(float x) {
+    return 1.0 - sqrt(1.0 - x * x);
 }
 
-half4 srcOver(half4 src, half4 dst) {
-    half3 outRGB = src.rgb + dst.rgb * (1.0 - src.a);
-    float outA = src.a + (1.0 - src.a) * dst.a;
-    return half4(outRGB, outA);
-}
+half4 main(float2 coord) {
+    float2 halfSize = size * 0.5;
+    float2 centeredCoord = coord - center;
+    float r = radiusAt(coord, radius);
 
-// ---- Main ----
-half4 main(in float2 fragCoord) {
-    half2 p = fragCoord - center;
-    half sd = sdfRect(p, radius);
+    float sd = sdRoundedRect(centeredCoord, halfSize, r);
 
-    if (sd < 0.0) {
-        // Forward-difference gradient (same as working basic shader)
-        half sdX = sdfRect(p + half2(2.0, 0.0), radius);
-        half sdY = sdfRect(p + half2(0.0, 2.0), radius);
-
-        // ---- Snell's law refraction (identical to Metal) ----
-        half normalizedDepth = -sd;
-        half depthRatio = 1.0 - normalizedDepth / thickness;
-        half incidentAngle = asin(clamp(pow(depthRatio, 2.0), 0.0, 1.0));
-        half transmittedAngle = asin(clamp(sin(incidentAngle) / refract_index, -1.0, 1.0));
-        half edgeShiftFactor = -tan(transmittedAngle - incidentAngle);
-
-        if (normalizedDepth >= thickness) {
-            edgeShiftFactor = 0.0;
-        }
-
-        // Gradient direction (unit vector)
-        half2 diff = half2(sdX - sd, sdY - sd);
-        half diffLen = length(diff);
-        half2 rawGradient = diffLen > 0.0001 ? diff / diffLen : half2(0.0);
-
-        // Pixel offset: calibrated so 20*thickness*refract_intensity = 70.71*contentsScale
-        // With refract_intensity=0.354 from Java, this gives exact iOS magnitude
-        half2 baseOffset = -rawGradient * (20.0 * thickness) * max(edgeShiftFactor, 0.0) * refract_intensity;
-
-        // ---- Chromatic dispersion (3 sharp samples, identical to Metal sampleWithDispersion) ----
-        // R: factor = 1.0 - (-0.02)*5 = 1.1  (shifts 10% MORE)
-        // G: factor = 1.0 - (0)*5    = 1.0  (neutral)
-        // B: factor = 1.0 - (0.02)*5 = 0.9  (shifts 10% LESS)
-        half2 offsetR = baseOffset * (1.0 - (IOR_RED   - 1.0) * config_dispersion);
-        half2 offsetG = baseOffset * (1.0 - (IOR_GREEN - 1.0) * config_dispersion);
-        half2 offsetB = baseOffset * (1.0 - (IOR_BLUE  - 1.0) * config_dispersion);
-
-        // iOS LiquidGlassKit.regular has backgroundTextureBlurRadius: 0.3
-        // We simulate this frosting with a 9-tap box blur, which softens the image 
-        // while preserving the exact RGB channel separation of the chromatic dispersion.
-        half3 color = half3(0.0);
-        float frost = 3.0;
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dy = -1; dy <= 1; dy++) {
-                half2 f_off = half2(float(dx), float(dy)) * frost;
-                color += half3(
-                    img.eval(fragCoord + offsetR + f_off).r,
-                    img.eval(fragCoord + offsetG + f_off).g,
-                    img.eval(fragCoord + offsetB + f_off).b
-                );
-            }
-        }
-        color /= 9.0;
-
-        // Material tint overlay
-        half4 result = srcOver(half4(foreground_color_premultiplied), half4(color, 1.0));
-
-        // ---- Glare: Directional LCH highlight (exact Metal translation) ----
-        // Only computed when edgeShiftFactor > 0 (near edges, not deep interior)
-        if (config_glare > 0.0 && edgeShiftFactor > 0.0) {
-            // Metal: shapeDistance * logicalResolution.y = sd_pixels / contentsScale
-            // Since thickness = dp(10) = 10*density, density = thickness/10
-            // So sd/density = sd * 10.0 / thickness
-            half normalizedSD = sd * 10.0 / thickness;
-
-            // Metal: pow(1.0 + normalizedSD/1500 * pow(500/30,2) + (-0.15), 5.0)
-            //      = pow(0.85 + normalizedSD * 0.18519, 5.0)
-            // Narrow edge-band: ~0.444 at edge, drops to 0 within ~14px
-            half glareGeometryValue = clamp(
-                pow(0.85 + normalizedSD * 0.18519, 5.0),
-                0.0, 1.0
-            );
-
-            // Metal: (vectorToAngle(normalize(surfaceNormal)) - PI/4 + glareDirectionOffset) * 2
-            // Regular preset: glareDirectionOffset = -PI/4
-            // → (angle - PI/4 - PI/4) * 2 = (angle - PI/2) * 2
-            half gradAngle = atan(rawGradient.y, rawGradient.x);
-            // Wrap to [0, 2PI]
-            if (gradAngle < 0.0) gradAngle += 2.0 * PI;
-            half glareAngle = (gradAngle - PI / 4.0 + (-PI / 4.0)) * 2.0;
-
-            // Metal: oppositeSideBias=1 → both sides get factor 1.2
-            half angularGlare = (0.5 + sin(glareAngle) * 0.5) * 1.2 * config_glare;
-
-            // Metal: pow(angularGlare, 0.1 + glareAngleConvergence * 2.0)
-            // Regular preset: convergence=0.1 → exponent = 0.3
-            // pow(x, 0.3) creates a BROAD, smooth highlight (range ~0.2 to ~0.53)
-            angularGlare = clamp(pow(max(angularGlare, 0.0001), 0.3), 0.0, 1.0);
-
-            // LCH color boost (separate highlight color, then mix)
-            float3 lch = srgbToLch(float3(color));
-            float boost = angularGlare * glareGeometryValue;
-            lch.x += 150.0 * boost;   // Lightness boost (big!)
-            lch.y += 30.0 * boost;    // Chroma boost
-            lch.x = clamp(lch.x, 0.0, 120.0);
-
-            // Metal mix weight: angularGlare * glareGeometryValue * length(surfaceNormal)
-            // length(surfaceNormal) is approx 0.55 on iOS (1414.2 / 2532.0 screen height).
-            // We use 0.55 directly instead of (1414.2 / resolution.y) because resolution.y 
-            // in Android is the view height (e.g. 120), which caused massive >10.0 weights (solid white border).
-            half mixWeight = boost * 0.55;
-
-            result = mix(result, half4(half3(lchToSrgb(lch)), 1.0), mixWeight);
-        }
-
-        return result;
+    // Deep inside: no refraction (same as reference lens)
+    if (-sd >= refractionHeight) {
+        return img.eval(coord);
     }
 
-    return srcOver(half4(foreground_color_premultiplied), img.eval(fragCoord));
+    // Edge zone: apply lens refraction
+    sd = min(sd, 0.0);
+    float d = circleMap(1.0 - -sd / refractionHeight) * refractionAmount;
+    float gradRadius = min(r * 1.5, min(halfSize.x, halfSize.y));
+    float2 grad = normalize(gradSdRoundedRect(centeredCoord, halfSize, gradRadius) + depthEffect * normalize(centeredCoord));
+
+    float2 refractedCoord = coord + d * grad;
+
+    half4 baseColor = img.eval(refractedCoord);
+    if (chromaticAberration <= 0.0) {
+        return baseColor;
+    }
+
+    // 7-channel chromatic dispersion
+    float dispersionIntensity = chromaticAberration * ((centeredCoord.x * centeredCoord.y) / (halfSize.x * halfSize.y));
+    float2 dispersedCoord = d * grad * dispersionIntensity;
+
+    half4 color = half4(0.0);
+
+    half4 red = img.eval(refractedCoord + dispersedCoord);
+    color.r += red.r / 3.5;
+    color.a += red.a / 7.0;
+
+    half4 orange = img.eval(refractedCoord + dispersedCoord * (2.0 / 3.0));
+    color.r += orange.r / 3.5;
+    color.g += orange.g / 7.0;
+    color.a += orange.a / 7.0;
+
+    half4 yellow = img.eval(refractedCoord + dispersedCoord * (1.0 / 3.0));
+    color.r += yellow.r / 3.5;
+    color.g += yellow.g / 3.5;
+    color.a += yellow.a / 7.0;
+
+    half4 green = img.eval(refractedCoord);
+    color.g += green.g / 3.5;
+    color.a += green.a / 7.0;
+
+    half4 cyan = img.eval(refractedCoord - dispersedCoord * (1.0 / 3.0));
+    color.g += cyan.g / 3.5;
+    color.b += cyan.b / 3.0;
+    color.a += cyan.a / 7.0;
+
+    half4 blue = img.eval(refractedCoord - dispersedCoord * (2.0 / 3.0));
+    color.b += blue.b / 3.0;
+    color.a += blue.a / 7.0;
+
+    half4 purple = img.eval(refractedCoord - dispersedCoord);
+    color.r += purple.r / 7.0;
+    color.b += purple.b / 3.0;
+    color.a += purple.a / 7.0;
+
+    return color;
 }

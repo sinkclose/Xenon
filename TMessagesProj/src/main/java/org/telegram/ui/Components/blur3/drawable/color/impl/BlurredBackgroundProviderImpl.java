@@ -19,7 +19,7 @@ public class BlurredBackgroundProviderImpl {
     public static BlurredBackgroundProvider mainTabs(Theme.ResourcesProvider resourcesProvider) {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
             .setBackgroundColor((r, isDark) -> {
-                final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.85f : 0.76f;
+                final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.80f : 0.76f;
                 final int colorBg = Theme.getColor(Theme.key_windowBackgroundWhite, r);
                 final int colorTarget = Theme.getColor(Theme.key_glass_targetMainTabs, r);
                 return solveSrcColor(colorBg, colorTarget, alpha);
@@ -35,7 +35,7 @@ public class BlurredBackgroundProviderImpl {
     public static BlurredBackgroundProvider topPanel(Theme.ResourcesProvider resourcesProvider) {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
             .setBackgroundColor((r, isDark) -> {
-                final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.85f : 0.76f;
+                final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.78f : 0.76f;
                 final int colorBg = Theme.getColor(Theme.key_windowBackgroundWhite, r);
                 final int colorTarget = Theme.getColor(Theme.key_glass_targetMainTopPanel, r);
                 return solveSrcColor(colorBg, colorTarget, alpha);
@@ -57,6 +57,23 @@ public class BlurredBackgroundProviderImpl {
             .setShadowColor(0x26000000, 0)
             .setShadowLayer(dpf2(4f), 0, 0)
             .setStrokeWidth(dpf2(2 / 3f), dpf2(2 / 3f))
+            .build();
+    }
+
+    public static BlurredBackgroundProvider scrimMenuBackgroundSoft(Theme.ResourcesProvider resourcesProvider) {
+        return new BlurredBackgroundProviderBuilder(resourcesProvider)
+            .setBackgroundColor((r, isDark) -> {
+                final int colorBg = Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground, r);
+                final int accent = Theme.getColor(Theme.key_chat_messageLinkIn, r);
+                final float accentMix = isDark ? 0.11f : 0.07f;
+                final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? (isDark ? 0.90f : 0.84f) : (isDark ? 0.87f : 0.82f);
+                return Theme.multAlpha(ColorUtils.blendARGB(colorBg, accent, accentMix), alpha);
+            })
+            .setStrokeColorTop(0x14000000, 0x1AFFFFFF)
+            .setStrokeColorBottom(0x0F000000, 0x10FFFFFF)
+            .setShadowColor(0x1E000000, 0x04000000)
+            .setShadowLayer(dpf2(4f), 0, dpf2(0.5f))
+            .setStrokeWidth(dpf2(0.5f), dpf2(0.5f))
             .build();
     }
 
@@ -93,14 +110,32 @@ public class BlurredBackgroundProviderImpl {
                             Theme.key_actionBarDefault : Theme.key_chat_topPanelBackground, r), 255);
                     }
 
-                    final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.85f : 0.76f;
+                    final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.82f : 0.78f;
                     final int colorBg = Theme.getColor(Theme.key_chat_topPanelBackground, r);
-                    return Theme.multAlpha(colorBg, alpha);
+                    final int accent = Theme.getColor(Theme.key_chat_messageLinkIn, r);
+                    final int tinted = ColorUtils.blendARGB(colorBg, accent, isDark ? 0.09f : 0.06f);
+                    return Theme.multAlpha(tinted, alpha);
                 })
                 .setStrokeColorTop(0xFFFFFFFF, 0x28FFFFFF)
                 .setStrokeColorBottom(0xFFFFFFFF, 0x14FFFFFF)
                 .setShadowColor(0x20000000, 0)
                 //.setShadowLayer(dpf2(10 / 3f), 0, dpf2(2 / 3f))
+                .setStrokeWidth(dpf2(0.5f), dpf2(0.5f))
+                .build();
+    }
+
+    public static BlurredBackgroundProvider chatTitlePill(Theme.ResourcesProvider resourcesProvider) {
+        return new BlurredBackgroundProviderBuilder(resourcesProvider)
+                .setBackgroundColor((r, isDark) -> {
+                    final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.77f : 0.78f;
+                    final int colorBg = Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground, r);
+                    final int accent = Theme.getColor(Theme.key_chat_messageLinkIn, r);
+                    final int tinted = ColorUtils.blendARGB(colorBg, accent, isDark ? 0.10f : 0.07f);
+                    return Theme.multAlpha(tinted, alpha);
+                })
+                .setStrokeColorTop(0x30FFFFFF, 0x24FFFFFF)
+                .setStrokeColorBottom(0x1AFFFFFF, 0x14FFFFFF)
+                .setShadowColor(0x18000000, 0)
                 .setStrokeWidth(dpf2(0.5f), dpf2(0.5f))
                 .build();
     }

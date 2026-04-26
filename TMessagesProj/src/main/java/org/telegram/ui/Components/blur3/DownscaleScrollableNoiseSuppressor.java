@@ -408,8 +408,8 @@ public class DownscaleScrollableNoiseSuppressor {
         private SourcePart() {
             if (isLiquidGlassEnabled) {
                 renderNodesForGlass = new DownscaledRenderNode("glass", 0, true);
-                renderNodesForGlass.setScale(4, 4);
-                renderNodesForGlass.setPrimaryEffectBlur(dpf2(1.66f), RenderNodeEffects.getSaturationX2RenderEffect());
+                renderNodesForGlass.setScale(2, 2);
+                renderNodesForGlass.setPrimaryEffectBlur(dpf2(4f), RenderNodeEffects.getSaturationX1_25RenderEffect());
                 renderNodesForBlur = new DownscaledRenderNode("blur", 0);
                 renderNodesForBlur.setScale(8, 8);
                 renderNodesForBlur.setPrimaryEffectBlur(dpf2(40 - 1.66f));

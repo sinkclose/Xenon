@@ -132,7 +132,7 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
             );
         }
         source.draw(c, sL, sT, sR, sB);
-        c.save();
+        c.restore();
         renderNodeFill.endRecording();
 
 

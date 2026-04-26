@@ -31,9 +31,8 @@ Debug builds can use the debug keystore if these are omitted.
 In `local.properties`, configure at least:
 
 - `apiId` and `apiHash` — from [my.telegram.org](https://my.telegram.org) (required for any Telegram client)  
-- `sentryDsn` — optional; leave empty if you do not use Sentry error reporting  
 
-Gradle injects these into `BuildConfig`. The small class `zxc.iconic.xenon.Extra` only exposes those values (`APP_ID`, `APP_HASH`, `SENTRY_DSN`) plus helpers like `isDirectApp()` — you do not edit it by hand for normal builds.
+Gradle injects these into `BuildConfig`. The small class `zxc.iconic.xenon.Extra` only exposes these values (`APP_ID`, `APP_HASH`) plus helpers like `isDirectApp()` — you do not edit it by hand for normal builds.
 
 ### 5. Firebase (push)
 
