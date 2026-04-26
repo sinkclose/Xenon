@@ -75,6 +75,7 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
     private TLRPC.TL_attachMenuBot tabAnimationBot;
 
     private final TextPaint defaultTextPaint;
+    private boolean showTitle = true;
 
     public GlassTabView(@NonNull Context context) {
         super(context);
@@ -616,7 +617,11 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
     }
 
     public void setShowTitle(boolean show) {
-        textView.setVisibility(show ? VISIBLE : GONE);
+        setShowTitle(show, false);
+    }
+
+    public void setShowTitle(boolean show, boolean animated) {
+        showTitle = show;
         int gravity = show ? (Gravity.CENTER_HORIZONTAL | Gravity.TOP) : Gravity.CENTER;
 
         if (imageView != null && imageView.getLayoutParams() instanceof FrameLayout.LayoutParams) {
@@ -631,6 +636,41 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
             blp.gravity = gravity;
             blp.topMargin = show ? dp(5) : 0;
             backupImageView.setLayoutParams(blp);
+        }
+
+        textView.animate().cancel();
+        if (!animated) {
+            textView.setVisibility(show ? VISIBLE : GONE);
+            textView.setAlpha(show ? 1f : 0f);
+            textView.setTranslationY(0f);
+            return;
+        }
+
+        if (show) {
+            textView.setVisibility(VISIBLE);
+            textView.setAlpha(0f);
+            textView.setTranslationY(dp(2));
+            textView.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setDuration(180)
+                    .setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT)
+                    .start();
+        } else {
+            textView.setAlpha(1f);
+            textView.setTranslationY(0f);
+            textView.animate()
+                    .alpha(0f)
+                    .translationY(-dp(2))
+                    .setDuration(160)
+                    .setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT)
+                    .withEndAction(() -> {
+                        if (!showTitle) {
+                            textView.setVisibility(GONE);
+                            textView.setTranslationY(0f);
+                        }
+                    })
+                    .start();
         }
     }
 

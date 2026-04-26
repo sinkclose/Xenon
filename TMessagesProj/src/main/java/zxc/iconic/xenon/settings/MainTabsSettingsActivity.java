@@ -87,7 +87,7 @@ public class MainTabsSettingsActivity extends BaseNekoSettingsActivity {
             NekoConfig.setShowMainTabsTitle(!NekoConfig.showMainTabsTitle);
             setChecked(view, NekoConfig.showMainTabsTitle);
             if (tabsView != null) {
-                tabsView.setTabs(tabs, getContext(), getResourceProvider(), currentAccount, NekoConfig.showMainTabsTitle);
+                tabsView.setShowTitle(NekoConfig.showMainTabsTitle, true);
             }
             postUpdateTabsNotification();
         }

@@ -96,6 +96,22 @@ public class MainTabsPreviewCell extends FrameLayout {
         adapter.notifyDataSetChanged();
     }
 
+    public void setShowTitle(boolean showTitle, boolean animated) {
+        if (this.showTitle == showTitle && !animated) {
+            return;
+        }
+        this.showTitle = showTitle;
+        for (int i = 0; i < listView.getChildCount(); i++) {
+            View child = listView.getChildAt(i);
+            if (child instanceof FrameLayout frameLayout && frameLayout.getChildCount() > 0) {
+                View tabChild = frameLayout.getChildAt(0);
+                if (tabChild instanceof GlassTabView tabView) {
+                    tabView.setShowTitle(showTitle, animated);
+                }
+            }
+        }
+    }
+
     private class TabsAdapter extends RecyclerListView.SelectionAdapter {
 
         private final Context context;
@@ -131,7 +147,7 @@ public class MainTabsPreviewCell extends FrameLayout {
 
             MainTabsManager.Tab tab = tabs.get(position);
             GlassTabView tabView = MainTabsManager.createTabView(context, resourcesProvider, currentAccount, tab.type);
-            tabView.setShowTitle(showTitle);
+            tabView.setShowTitle(showTitle, false);
             
             // CHATS и PROFILE нельзя отключить
             boolean canDisable = tab.type != MainTabsManager.TabType.CHATS && tab.type != MainTabsManager.TabType.PROFILE;

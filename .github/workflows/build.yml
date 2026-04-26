@@ -72,9 +72,6 @@ jobs:
           echo "apiHash=${{ secrets.API_HASH }}" >> local.properties
           echo "helperBotId=${{ secrets.HELPER_BOT_ID }}" >> local.properties
           echo "helperBotUsername=${{ secrets.HELPER_BOT_USERNAME }}" >> local.properties
-          echo "sentryDsn=${{ secrets.SENTRY_DSN }}" >> local.properties
-
-          echo "${{ secrets.SENTRY_PROPERTIES }}" | base64 --decode > sentry.properties
 
       - name: Configure Build
         run: |
@@ -92,7 +89,6 @@ jobs:
         run: |
           ./gradlew assembleRelease
           ./gradlew bundlePlay
-          ./gradlew sentryUploadSourceBundlePlay
 
       - name: Attest
         if: github.event_name != 'pull_request'
