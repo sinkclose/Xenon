@@ -8,11 +8,27 @@ plugins {
 }
 
 def libv2rayFile = file("$projectDir/libs/libv2ray.aar")
-def libv2rayUrl = "https://github.com/2dust/AndroidLibV2rayLite/releases/latest/download/libv2ray.aar"
+def libv2rayUrl = "https://github.com/2dust/AndroidLibXrayLite/releases/latest/download/libv2ray.aar"
+
+def isValidAar = { File target ->
+    if (!target.exists() || target.length() <= 0) {
+        return false
+    }
+    try {
+        ZipFile zip = new ZipFile(target)
+        zip.close()
+        return true
+    } catch (Throwable ignore) {
+        return false
+    }
+}
 
 def ensureLibv2rayAar = {
-    if (libv2rayFile.exists() && libv2rayFile.length() > 0) {
+    if (isValidAar(libv2rayFile)) {
         return
+    } else if (libv2rayFile.exists()) {
+        logger.lifecycle("Existing libv2ray.aar is invalid, re-downloading.")
+        libv2rayFile.delete()
     }
 
     if (gradle.startParameter.isOffline()) {
@@ -44,12 +60,9 @@ def ensureLibv2rayAar = {
         throw new GradleException("Downloaded libv2ray.aar is empty")
     }
 
-    try {
-        ZipFile zip = new ZipFile(libv2rayFile)
-        zip.close()
-    } catch (Throwable t) {
+    if (!isValidAar(libv2rayFile)) {
         libv2rayFile.delete()
-        throw new GradleException("Downloaded libv2ray.aar is invalid", t)
+        throw new GradleException("Downloaded libv2ray.aar is invalid")
     }
 }
 

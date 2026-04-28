@@ -40,8 +40,27 @@ public final class XrayConfigValidator {
                 continue;
             }
             String protocol = inbound.optString("protocol", "");
+            if (TextUtils.isEmpty(protocol)) {
+                return ValidationResult.invalid("Inbound protocol is empty");
+            }
             int port = inbound.optInt("port", -1);
             if ("socks".equals(protocol) && port == localPort) {
+                JSONObject settings = inbound.optJSONObject("settings");
+                if (settings != null && "password".equalsIgnoreCase(settings.optString("auth", ""))) {
+                    JSONArray accounts = settings.optJSONArray("accounts");
+                    if (accounts == null || accounts.length() == 0) {
+                        return ValidationResult.invalid("SOCKS password auth requires non-empty accounts");
+                    }
+                    for (int j = 0; j < accounts.length(); j++) {
+                        JSONObject account = accounts.optJSONObject(j);
+                        if (account == null) {
+                            return ValidationResult.invalid("SOCKS account item is invalid");
+                        }
+                        if (TextUtils.isEmpty(account.optString("user", "")) || TextUtils.isEmpty(account.optString("pass", ""))) {
+                            return ValidationResult.invalid("SOCKS account user/pass must be non-empty");
+                        }
+                    }
+                }
                 hasLocalSocksInbound = true;
                 break;
             }
@@ -54,6 +73,16 @@ public final class XrayConfigValidator {
         JSONArray outbounds = root.optJSONArray("outbounds");
         if (outbounds == null || outbounds.length() == 0) {
             return ValidationResult.invalid("Config must contain outbounds");
+        }
+
+        for (int i = 0; i < outbounds.length(); i++) {
+            JSONObject outbound = outbounds.optJSONObject(i);
+            if (outbound == null) {
+                return ValidationResult.invalid("Outbound item is invalid");
+            }
+            if (TextUtils.isEmpty(outbound.optString("protocol", ""))) {
+                return ValidationResult.invalid("Outbound protocol is empty");
+            }
         }
 
         return ValidationResult.valid();

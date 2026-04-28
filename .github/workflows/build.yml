@@ -32,12 +32,9 @@ jobs:
         run: |
           set -euo pipefail
           LIB_PATH="TMessagesProj/libs/libv2ray.aar"
-          if [ -f "$LIB_PATH" ]; then
-            echo "Using bundled $LIB_PATH"
-            exit 0
-          fi
+          rm -f "$LIB_PATH"
 
-          URL="https://github.com/2dust/AndroidLibV2rayLite/releases/latest/download/libv2ray.aar"
+          URL="https://github.com/2dust/AndroidLibXrayLite/releases/latest/download/libv2ray.aar"
           echo "Downloading libv2ray.aar from: $URL"
 
           mkdir -p TMessagesProj/libs

@@ -2,12 +2,19 @@ package zxc.iconic.xenon.proxy;
 
 import android.text.TextUtils;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.FileLog;
 
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -29,6 +36,7 @@ public final class XrayAppProxyManager {
     private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor();
     private static final AtomicBoolean STARTING_OR_STOPPING = new AtomicBoolean(false);
     private static final int MAX_RECENT_LOG_LINES = 200;
+    private static final String DEFAULT_DELAY_TEST_URL = "https://www.gstatic.com/generate_204";
     private static final Object LOG_LOCK = new Object();
     private static final ArrayList<String> RECENT_LOGS = new ArrayList<>();
     private static final SimpleDateFormat LOG_TIME_FORMAT = new SimpleDateFormat("HH:mm:ss", Locale.US);
@@ -52,12 +60,7 @@ public final class XrayAppProxyManager {
     }
 
     public static boolean isLibraryAvailable() {
-        try {
-            Class.forName("libv2ray.Libv2ray");
-            return true;
-        } catch (Throwable ignore) {
-            return false;
-        }
+        return XrayCoreEngine.isLibraryAvailable();
     }
 
     /**
@@ -65,136 +68,39 @@ public final class XrayAppProxyManager {
      * Edge cases handled: missing library, duplicate starts, malformed config.
      */
     public static void start(String configJson, StartCallback callback) {
-        addLog("start requested");
-        if (TextUtils.isEmpty(configJson)) {
-            addLog("start rejected: empty config");
-            if (callback != null) {
-                callback.onComplete(false, "Empty config");
-            }
-            return;
-        }
-        if (!STARTING_OR_STOPPING.compareAndSet(false, true)) {
-            addLog("start rejected: busy");
-            if (callback != null) {
-                callback.onComplete(false, "Busy");
-            }
-            return;
-        }
-
-        EXECUTOR.execute(() -> {
-            try {
-                if (running) {
-                    addLog("start skipped: already running");
-                    notifyStart(callback, true, "Already running");
-                    return;
-                }
-                ensureCoreInitialized();
-                if (coreController == null) {
-                    addLog("start failed: library missing");
-                    notifyStart(callback, false, "AndroidLibXrayLite is missing");
-                    return;
-                }
-                invokeStartLoop(coreController, configJson);
-                running = true;
-                addLog("start success");
-                notifyStart(callback, true, "Started");
-            } catch (Throwable t) {
-                FileLog.e(TAG + ": start failed", t);
-                running = false;
-                addLog("start failed: " + (t.getMessage() == null ? "unknown" : t.getMessage()));
-                notifyStart(callback, false, t.getMessage() == null ? "Start failed" : t.getMessage());
-            } finally {
-                STARTING_OR_STOPPING.set(false);
-            }
-        });
+        XrayCoreEngine.start(configJson, callback);
     }
 
     /**
      * Stops embedded Xray core if running.
      */
     public static void stop(StopCallback callback) {
-        addLog("stop requested");
-        if (!STARTING_OR_STOPPING.compareAndSet(false, true)) {
-            addLog("stop rejected: busy");
-            if (callback != null) {
-                callback.onComplete(false, "Busy");
-            }
-            return;
-        }
-
-        EXECUTOR.execute(() -> {
-            try {
-                if (coreController != null) {
-                    Method stopLoop = coreController.getClass().getMethod("stopLoop");
-                    stopLoop.invoke(coreController);
-                }
-                running = false;
-                addLog("stop success");
-                notifyStop(callback, true, "Stopped");
-            } catch (Throwable t) {
-                FileLog.e(TAG + ": stop failed", t);
-                addLog("stop failed: " + (t.getMessage() == null ? "unknown" : t.getMessage()));
-                notifyStop(callback, false, t.getMessage() == null ? "Stop failed" : t.getMessage());
-            } finally {
-                STARTING_OR_STOPPING.set(false);
-            }
-        });
+        XrayCoreEngine.stop(callback);
     }
 
     public static boolean isRunning() {
-        return running;
+        return XrayCoreEngine.isRunning();
     }
 
     /**
      * Measures outbound delay using provided config and test URL.
      */
     public static void measureDelay(String configJson, String testUrl, DelayCallback callback) {
-        addLog("delay check requested");
-        if (TextUtils.isEmpty(configJson) || TextUtils.isEmpty(testUrl)) {
-            addLog("delay check rejected: empty config or url");
-            if (callback != null) {
-                callback.onComplete(false, -1, "Config or URL is empty");
-            }
-            return;
-        }
-        EXECUTOR.execute(() -> {
-            try {
-                Class<?> libClass = Class.forName("libv2ray.Libv2ray");
-                Method method = libClass.getMethod("measureOutboundDelay", String.class, String.class);
-                Object result = method.invoke(null, configJson, testUrl);
-                long delay = result instanceof Number ? ((Number) result).longValue() : -1;
-                if (delay < 0) {
-                    addLog("delay check failed");
-                    notifyDelay(callback, false, -1, "Delay check failed");
-                } else {
-                    addLog("delay check success: " + delay + "ms");
-                    notifyDelay(callback, true, delay, "OK");
-                }
-            } catch (Throwable t) {
-                FileLog.e(TAG + ": delay check failed", t);
-                addLog("delay check error: " + (t.getMessage() == null ? "unknown" : t.getMessage()));
-                notifyDelay(callback, false, -1, t.getMessage() == null ? "Delay check failed" : t.getMessage());
-            }
-        });
+        XrayCoreEngine.measureDelay(configJson, testUrl, callback);
     }
 
     /**
      * Returns recent in-memory core lifecycle logs for UI.
      */
     public static ArrayList<String> getRecentLogs() {
-        synchronized (LOG_LOCK) {
-            return new ArrayList<>(RECENT_LOGS);
-        }
+        return XrayCoreEngine.getRecentLogs();
     }
 
     /**
      * Clears in-memory log buffer.
      */
     public static void clearRecentLogs() {
-        synchronized (LOG_LOCK) {
-            RECENT_LOGS.clear();
-        }
-        addLog("logs cleared");
+        XrayCoreEngine.clearRecentLogs();
     }
 
     private static void ensureCoreInitialized() throws Exception {
@@ -210,31 +116,434 @@ public final class XrayAppProxyManager {
         }
 
         String envPath = ApplicationLoader.applicationContext.getFilesDir().getAbsolutePath();
-        Method initCoreEnv = libClass.getMethod("initCoreEnv", String.class, String.class);
-        initCoreEnv.invoke(null, envPath, "");
+        invokeInitCoreEnv(libClass, envPath);
+        coreController = invokeNewCoreController(libClass);
+    }
 
-        Class<?> callbackInterface = Class.forName("libv2ray.CoreCallbackHandler");
-        Object callback = Proxy.newProxyInstance(
-                callbackInterface.getClassLoader(),
-                new Class[]{callbackInterface},
-                new CoreCallbackInvocationHandler()
-        );
+    private static Object invokeMeasureOutboundDelay(Class<?> libClass, String configJson, String testUrl) throws Exception {
+        Method method;
+        try {
+            method = libClass.getMethod("measureOutboundDelay", String.class, String.class);
+            return method.invoke(null, configJson, testUrl);
+        } catch (NoSuchMethodException ignored) {
+        }
 
-        Method newCoreController = libClass.getMethod("newCoreController", callbackInterface);
-        coreController = newCoreController.invoke(null, callback);
+        try {
+            method = libClass.getMethod("measureOutboundDelay", String.class);
+            return method.invoke(null, configJson);
+        } catch (NoSuchMethodException ignored) {
+        }
+
+        for (Method candidate : libClass.getMethods()) {
+            if (!"measureOutboundDelay".equals(candidate.getName())) {
+                continue;
+            }
+            Class<?>[] params = candidate.getParameterTypes();
+            if (params.length == 0 || params[0] != String.class) {
+                continue;
+            }
+            Object[] args = new Object[params.length];
+            args[0] = configJson;
+            for (int i = 1; i < params.length; i++) {
+                Class<?> type = params[i];
+                if (type == String.class) {
+                    args[i] = testUrl;
+                } else if (type == int.class || type == Integer.class) {
+                    args[i] = 0;
+                } else if (type == long.class || type == Long.class) {
+                    args[i] = 0L;
+                } else if (type == boolean.class || type == Boolean.class) {
+                    args[i] = false;
+                } else {
+                    args[i] = null;
+                }
+            }
+            return candidate.invoke(null, args);
+        }
+
+        throw new NoSuchMethodException(libClass.getName() + ".measureOutboundDelay compatible signature not found");
+    }
+
+    private static void invokeInitCoreEnv(Class<?> libClass, String envPath) throws Exception {
+        Method initCoreEnv;
+        try {
+            initCoreEnv = libClass.getMethod("initCoreEnv", String.class, String.class);
+            initCoreEnv.invoke(null, envPath, "");
+            return;
+        } catch (NoSuchMethodException ignored) {
+        }
+
+        try {
+            initCoreEnv = libClass.getMethod("initCoreEnv", String.class);
+            initCoreEnv.invoke(null, envPath);
+            return;
+        } catch (NoSuchMethodException ignored) {
+        }
+
+        throw new NoSuchMethodException(libClass.getName() + ".initCoreEnv compatible signature not found");
+    }
+
+    private static Object invokeNewCoreController(Class<?> libClass) throws Exception {
+        try {
+            Class<?> callbackInterface = Class.forName("libv2ray.CoreCallbackHandler");
+            Object callback = Proxy.newProxyInstance(
+                    callbackInterface.getClassLoader(),
+                    new Class[]{callbackInterface},
+                    new CoreCallbackInvocationHandler()
+            );
+            Method newCoreController = libClass.getMethod("newCoreController", callbackInterface);
+            return newCoreController.invoke(null, callback);
+        } catch (NoSuchMethodException ignored) {
+        } catch (ClassNotFoundException ignored) {
+        }
+
+        Method newCoreController = libClass.getMethod("newCoreController");
+        return newCoreController.invoke(null);
     }
 
     private static void invokeStartLoop(Object controller, String configJson) throws Exception {
         Method startLoop;
         try {
-            startLoop = controller.getClass().getMethod("startLoop", String.class, int.class);
-            startLoop.invoke(controller, configJson, 0);
+            startLoop = controller.getClass().getMethod("startLoop", String.class);
+            Object startResult = startLoop.invoke(controller, configJson);
+            ensureNoInvocationError("startLoop", startResult);
             return;
         } catch (NoSuchMethodException ignored) {
         }
 
-        startLoop = controller.getClass().getMethod("startLoop", String.class, long.class);
-        startLoop.invoke(controller, configJson, 0L);
+        try {
+            startLoop = controller.getClass().getMethod("startLoop", String.class, int.class);
+            Object startResult = startLoop.invoke(controller, configJson, 0);
+            ensureNoInvocationError("startLoop", startResult);
+            return;
+        } catch (NoSuchMethodException ignored) {
+        }
+
+        try {
+            startLoop = controller.getClass().getMethod("startLoop", String.class, long.class);
+            Object startResult = startLoop.invoke(controller, configJson, 0L);
+            ensureNoInvocationError("startLoop", startResult);
+            return;
+        } catch (NoSuchMethodException ignored) {
+        }
+
+        Method[] methods = controller.getClass().getMethods();
+        for (Method method : methods) {
+            if (!"startLoop".equals(method.getName())) {
+                continue;
+            }
+            Class<?>[] params = method.getParameterTypes();
+            if (params.length == 0 || params[0] != String.class) {
+                continue;
+            }
+            Object[] args = new Object[params.length];
+            args[0] = configJson;
+            for (int i = 1; i < params.length; i++) {
+                Class<?> type = params[i];
+                if (type == int.class || type == Integer.class) {
+                    args[i] = 0;
+                } else if (type == long.class || type == Long.class) {
+                    args[i] = 0L;
+                } else if (type == boolean.class || type == Boolean.class) {
+                    args[i] = false;
+                } else if (type == String.class) {
+                    args[i] = "";
+                } else {
+                    args[i] = null;
+                }
+            }
+            Object startResult = method.invoke(controller, args);
+            ensureNoInvocationError("startLoop", startResult);
+            return;
+        }
+
+        throw new NoSuchMethodException(controller.getClass().getName() + ".startLoop compatible signature not found");
+    }
+
+    private static void verifyLocalSocksReachable(String configJson) throws Exception {
+        LocalSocksEndpoint endpoint = extractLocalSocksEndpoint(configJson);
+        if (endpoint == null || endpoint.port <= 0) {
+            return;
+        }
+
+        long deadline = System.currentTimeMillis() + 4500L;
+        Throwable lastError = null;
+        while (System.currentTimeMillis() < deadline) {
+            try (Socket socket = new Socket()) {
+                socket.connect(new InetSocketAddress("127.0.0.1", endpoint.port), 450);
+                socket.setSoTimeout(800);
+                if (TextUtils.isEmpty(endpoint.username) || TextUtils.isEmpty(endpoint.password)) {
+                    return;
+                }
+                if (performSocks5Auth(socket, endpoint.username, endpoint.password)) {
+                    return;
+                }
+                lastError = new Exception("SOCKS auth rejected by local inbound");
+            } catch (Throwable t) {
+                lastError = t;
+            }
+
+            try {
+                Thread.sleep(120L);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                throw new Exception("Interrupted while waiting local SOCKS startup", ie);
+            }
+        }
+
+        String reason = extractErrorMessage(lastError, "unknown");
+        throw new Exception("Local SOCKS inbound is not reachable on 127.0.0.1:" + endpoint.port + " (" + reason + ")");
+    }
+
+    private static LocalSocksEndpoint extractLocalSocksEndpoint(String configJson) {
+        try {
+            JSONObject root = new JSONObject(configJson);
+            JSONArray inbounds = root.optJSONArray("inbounds");
+            if (inbounds == null || inbounds.length() == 0) {
+                return null;
+            }
+
+            JSONObject preferred = null;
+            for (int i = 0; i < inbounds.length(); i++) {
+                JSONObject inbound = inbounds.optJSONObject(i);
+                if (inbound == null || !"socks".equalsIgnoreCase(inbound.optString("protocol", ""))) {
+                    continue;
+                }
+                String listen = inbound.optString("listen", "");
+                if (TextUtils.isEmpty(listen) || "127.0.0.1".equals(listen) || "localhost".equalsIgnoreCase(listen)) {
+                    preferred = inbound;
+                    break;
+                }
+                if (preferred == null) {
+                    preferred = inbound;
+                }
+            }
+
+            if (preferred == null) {
+                return null;
+            }
+
+            int port = parseIntFlexible(preferred.opt("port"), -1);
+            if (port <= 0) {
+                return null;
+            }
+
+            JSONObject settings = preferred.optJSONObject("settings");
+            if (settings == null) {
+                return new LocalSocksEndpoint(port, "", "");
+            }
+            JSONArray accounts = settings.optJSONArray("accounts");
+            if (accounts == null || accounts.length() == 0) {
+                return new LocalSocksEndpoint(port, "", "");
+            }
+            JSONObject account = accounts.optJSONObject(0);
+            if (account == null) {
+                return new LocalSocksEndpoint(port, "", "");
+            }
+            String username = account.optString("user", "");
+            String password = account.optString("pass", "");
+            return new LocalSocksEndpoint(port, username, password);
+        } catch (Throwable ignore) {
+            return null;
+        }
+    }
+
+    private static boolean performSocks5Auth(Socket socket, String username, String password) throws Exception {
+        byte[] userBytes = username.getBytes("UTF-8");
+        byte[] passBytes = password.getBytes("UTF-8");
+        if (userBytes.length == 0 || userBytes.length > 255 || passBytes.length == 0 || passBytes.length > 255) {
+            return false;
+        }
+
+        OutputStream out = socket.getOutputStream();
+        InputStream in = socket.getInputStream();
+
+        out.write(new byte[]{0x05, 0x01, 0x02});
+        out.flush();
+
+        byte[] methodSelect = readExact(in, 2);
+        if (methodSelect[0] != 0x05 || methodSelect[1] != 0x02) {
+            return false;
+        }
+
+        byte[] auth = new byte[3 + userBytes.length + passBytes.length];
+        auth[0] = 0x01;
+        auth[1] = (byte) userBytes.length;
+        System.arraycopy(userBytes, 0, auth, 2, userBytes.length);
+        auth[2 + userBytes.length] = (byte) passBytes.length;
+        System.arraycopy(passBytes, 0, auth, 3 + userBytes.length, passBytes.length);
+
+        out.write(auth);
+        out.flush();
+
+        byte[] authResponse = readExact(in, 2);
+        return authResponse[0] == 0x01 && authResponse[1] == 0x00;
+    }
+
+    private static byte[] readExact(InputStream in, int size) throws Exception {
+        byte[] data = new byte[size];
+        int offset = 0;
+        while (offset < size) {
+            int count = in.read(data, offset, size - offset);
+            if (count < 0) {
+                throw new Exception("Unexpected EOF while reading local SOCKS response");
+            }
+            offset += count;
+        }
+        return data;
+    }
+
+    private static int parseIntFlexible(Object value, int fallback) {
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        if (value instanceof String) {
+            try {
+                return Integer.parseInt(((String) value).trim());
+            } catch (Throwable ignore) {
+                return fallback;
+            }
+        }
+        return fallback;
+    }
+
+    private static void tryStopCoreAfterFailedStart() {
+        if (coreController == null) {
+            return;
+        }
+        try {
+            Method stopLoop = coreController.getClass().getMethod("stopLoop");
+            stopLoop.invoke(coreController);
+        } catch (Throwable ignore) {
+        }
+    }
+
+    private static String extractErrorMessage(Throwable error, String fallback) {
+        if (error == null) {
+            return fallback;
+        }
+        Throwable cursor = error;
+        while (cursor.getCause() != null && cursor.getCause() != cursor) {
+            cursor = cursor.getCause();
+        }
+        String message = cursor.getMessage();
+        if (!TextUtils.isEmpty(message)) {
+            return message;
+        }
+        message = error.getMessage();
+        if (!TextUtils.isEmpty(message)) {
+            return message;
+        }
+        return fallback;
+    }
+
+    private static void ensureNoInvocationError(String methodName, Object result) throws Exception {
+        if (result == null) {
+            return;
+        }
+        if (result instanceof Throwable) {
+            Throwable throwable = (Throwable) result;
+            throw new Exception(throwable.getMessage() == null ? methodName + " failed" : throwable.getMessage(), throwable);
+        }
+        if (result instanceof Boolean) {
+            if (!((Boolean) result)) {
+                throw new Exception(methodName + " returned false");
+            }
+            return;
+        }
+        if (result instanceof Number) {
+            long value = ((Number) result).longValue();
+            if (value == 0L) {
+                return;
+            }
+            if (value < 0L) {
+                throw new Exception(methodName + " returned " + value);
+            }
+            return;
+        }
+        if (result instanceof CharSequence) {
+            String message = result.toString().trim();
+            if (TextUtils.isEmpty(message)
+                    || "null".equalsIgnoreCase(message)
+                    || "<nil>".equalsIgnoreCase(message)
+                    || "ok".equalsIgnoreCase(message)
+                    || "success".equalsIgnoreCase(message)
+                    || "started".equalsIgnoreCase(message)
+                    || "stopped".equalsIgnoreCase(message)) {
+                return;
+            }
+            throw new Exception(message);
+        }
+    }
+
+    private static Boolean queryControllerRunningState(Object controller) {
+        if (controller == null) {
+            return false;
+        }
+
+        try {
+            Method method = controller.getClass().getMethod("isRunning");
+            Object value = method.invoke(controller);
+            if (value instanceof Boolean) {
+                return (Boolean) value;
+            }
+        } catch (Throwable ignored) {
+        }
+
+        try {
+            Method method = controller.getClass().getMethod("getIsRunning");
+            Object value = method.invoke(controller);
+            if (value instanceof Boolean) {
+                return (Boolean) value;
+            }
+        } catch (Throwable ignored) {
+        }
+
+        try {
+            Field field = controller.getClass().getField("isRunning");
+            Object value = field.get(controller);
+            if (value instanceof Boolean) {
+                return (Boolean) value;
+            }
+        } catch (Throwable ignored) {
+        }
+
+        try {
+            Field field = controller.getClass().getField("IsRunning");
+            Object value = field.get(controller);
+            if (value instanceof Boolean) {
+                return (Boolean) value;
+            }
+        } catch (Throwable ignored) {
+        }
+
+        return null;
+    }
+
+    private static void updateRunningStateFromStatus(String status) {
+        if (TextUtils.isEmpty(status)) {
+            return;
+        }
+        String lower = status.toLowerCase(Locale.US);
+        if (lower.contains("stopped") || lower.contains("shutdown") || lower.contains("failed") || lower.contains("error")) {
+            running = false;
+            return;
+        }
+        if (lower.contains("running") || lower.contains("started")) {
+            running = true;
+        }
+    }
+
+    private static final class LocalSocksEndpoint {
+        final int port;
+        final String username;
+        final String password;
+
+        LocalSocksEndpoint(int port, String username, String password) {
+            this.port = port;
+            this.username = username;
+            this.password = password;
+        }
     }
 
     private static void notifyStart(StartCallback callback, boolean success, String message) {
@@ -269,6 +578,23 @@ public final class XrayAppProxyManager {
         FileLog.d(TAG + " log: " + text);
     }
 
+    private static String validateConfigShape(String configJson) {
+        try {
+            JSONObject root = new JSONObject(configJson);
+            JSONArray inbounds = root.optJSONArray("inbounds");
+            if (inbounds == null || inbounds.length() == 0) {
+                return "Config must contain inbounds";
+            }
+            JSONArray outbounds = root.optJSONArray("outbounds");
+            if (outbounds == null || outbounds.length() == 0) {
+                return "Config must contain outbounds";
+            }
+            return null;
+        } catch (Throwable t) {
+            return "Invalid JSON config";
+        }
+    }
+
     private static final class CoreCallbackInvocationHandler implements InvocationHandler {
         @Override
         public Object invoke(Object proxy, Method method, Object[] args) {
@@ -276,10 +602,17 @@ public final class XrayAppProxyManager {
                 String name = method.getName();
                 if ("onEmitStatus".equals(name)) {
                     if (args != null && args.length > 1 && args[1] != null) {
-                        FileLog.d(TAG + " status: " + args[1]);
-                        addLog("status: " + args[1]);
+                        String status = String.valueOf(args[1]);
+                        FileLog.d(TAG + " status: " + status);
+                        addLog("status: " + status);
+                        updateRunningStateFromStatus(status);
                     }
-                } else if ("startup".equals(name) || "shutdown".equals(name)) {
+                } else if ("startup".equals(name)) {
+                    running = true;
+                    FileLog.d(TAG + " callback: " + name);
+                    addLog("callback: " + name);
+                } else if ("shutdown".equals(name)) {
+                    running = false;
                     FileLog.d(TAG + " callback: " + name);
                     addLog("callback: " + name);
                 } else {

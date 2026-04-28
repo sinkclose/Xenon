@@ -9,6 +9,7 @@ import org.json.JSONObject;
 import org.telegram.messenger.ApplicationLoader;
 
 import java.security.SecureRandom;
+import java.util.Locale;
 
 /**
  * Manages local SOCKS auth credentials for app-only Xray proxy and injects them into runtime config.
@@ -59,6 +60,7 @@ public final class XrayLocalSocksAuth {
         }
 
         JSONObject root = new JSONObject(rawConfig);
+        normalizeOutboundTransport(root);
         JSONArray inbounds = root.optJSONArray("inbounds");
         if (inbounds == null) {
             inbounds = new JSONArray();
@@ -71,7 +73,8 @@ public final class XrayLocalSocksAuth {
             if (inbound == null) {
                 continue;
             }
-            if ("socks".equalsIgnoreCase(inbound.optString("protocol", "")) && inbound.optInt("port", -1) == localPort) {
+            if ("socks".equalsIgnoreCase(inbound.optString("protocol", ""))
+                    && parseIntFlexible(inbound.opt("port"), -1) == localPort) {
                 targetInbound = inbound;
                 break;
             }
@@ -99,6 +102,66 @@ public final class XrayLocalSocksAuth {
         settings.put("accounts", new JSONArray().put(account));
 
         return root.toString();
+    }
+
+    private static void normalizeOutboundTransport(JSONObject root) throws Exception {
+        JSONArray outbounds = root.optJSONArray("outbounds");
+        if (outbounds == null) {
+            return;
+        }
+
+        for (int i = 0; i < outbounds.length(); i++) {
+            JSONObject outbound = outbounds.optJSONObject(i);
+            if (outbound == null) {
+                continue;
+            }
+
+            String protocol = outbound.optString("protocol", "").toLowerCase(Locale.US);
+            JSONObject streamSettings = outbound.optJSONObject("streamSettings");
+            if (streamSettings == null && "trojan".equals(protocol)) {
+                streamSettings = new JSONObject();
+                outbound.put("streamSettings", streamSettings);
+            }
+            if (streamSettings == null) {
+                continue;
+            }
+
+            String security = streamSettings.optString("security", "");
+            String normalized = normalizeSecurityValue(security);
+            if ("trojan".equals(protocol) && (TextUtils.isEmpty(normalized) || "none".equals(normalized))) {
+                streamSettings.put("security", "tls");
+            } else if (!TextUtils.isEmpty(normalized)) {
+                streamSettings.put("security", normalized);
+            }
+        }
+    }
+
+    private static String normalizeSecurityValue(String security) {
+        if (TextUtils.isEmpty(security)) {
+            return "";
+        }
+        String value = security.trim().toLowerCase(Locale.US);
+        if ("1".equals(value) || "true".equals(value) || "xtls".equals(value)) {
+            return "tls";
+        }
+        if ("0".equals(value) || "false".equals(value)) {
+            return "none";
+        }
+        return value;
+    }
+
+    private static int parseIntFlexible(Object value, int fallback) {
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        if (value instanceof String) {
+            try {
+                return Integer.parseInt(((String) value).trim());
+            } catch (Throwable ignore) {
+                return fallback;
+            }
+        }
+        return fallback;
     }
 
     private static Credentials saveNewCredentials(SharedPreferences preferences) {

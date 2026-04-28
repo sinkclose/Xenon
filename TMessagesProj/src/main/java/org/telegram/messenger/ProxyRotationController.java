@@ -10,6 +10,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import zxc.iconic.xenon.NekoConfig;
+
 public class ProxyRotationController implements NotificationCenter.NotificationCenterDelegate {
     private final static ProxyRotationController INSTANCE = new ProxyRotationController();
 
@@ -59,6 +61,10 @@ public class ProxyRotationController implements NotificationCenter.NotificationC
     private void switchToAvailable() {
         isCurrentlyChecking = false;
 
+        if (isXrayLocalProxyActive()) {
+            return;
+        }
+
         if (!SharedConfig.proxyRotationEnabled) {
             return;
         }
@@ -102,6 +108,9 @@ public class ProxyRotationController implements NotificationCenter.NotificationC
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
         if (id == NotificationCenter.proxyCheckDone) {
+            if (isXrayLocalProxyActive()) {
+                return;
+            }
             if (!SharedConfig.isProxyEnabled() || !SharedConfig.proxyRotationEnabled || SharedConfig.proxyList.size() <= 1 || !isCurrentlyChecking) {
                 return;
             }
@@ -110,6 +119,10 @@ public class ProxyRotationController implements NotificationCenter.NotificationC
         } else if (id == NotificationCenter.proxySettingsChanged) {
             AndroidUtilities.cancelRunOnUIThread(checkProxyAndSwitchRunnable);
         } else if (id == NotificationCenter.didUpdateConnectionState && account == UserConfig.selectedAccount) {
+            if (isXrayLocalProxyActive()) {
+                AndroidUtilities.cancelRunOnUIThread(checkProxyAndSwitchRunnable);
+                return;
+            }
             if (!SharedConfig.isProxyEnabled() && !SharedConfig.proxyRotationEnabled || SharedConfig.proxyList.size() <= 1) {
                 return;
             }
@@ -124,5 +137,13 @@ public class ProxyRotationController implements NotificationCenter.NotificationC
                 AndroidUtilities.cancelRunOnUIThread(checkProxyAndSwitchRunnable);
             }
         }
+    }
+
+    private boolean isXrayLocalProxyActive() {
+        if (!NekoConfig.xrayAppProxyEnabled || !SharedConfig.isProxyEnabled() || SharedConfig.currentProxy == null) {
+            return false;
+        }
+        String address = SharedConfig.currentProxy.address;
+        return "127.0.0.1".equals(address) || "localhost".equalsIgnoreCase(address);
     }
 }

@@ -150,10 +150,12 @@ public class NekoConfig {
     public static boolean disableTypingIndicator = false;
     public static boolean hidePhoneNumber = false;
 
+    private static final String XRAY_DEFAULT_CHECK_URL = "https://www.gstatic.com/generate_204";
+
     public static boolean xrayAppProxyEnabled = false;
     public static int xrayAppProxyLocalPort = 10808;
     public static String xrayAppProxyConfigJson = "";
-    public static String xrayAppProxyCheckUrl = "https://www.gstatic.com/generate_204";
+    public static String xrayAppProxyCheckUrl = XRAY_DEFAULT_CHECK_URL;
 
     public static float liquidGlassIntensity = 0.75f;
     public static int liquidGlassThickness = 11;
@@ -279,7 +281,7 @@ public class NekoConfig {
             xrayAppProxyEnabled = preferences.getBoolean("xrayAppProxyEnabled", false);
             xrayAppProxyLocalPort = preferences.getInt("xrayAppProxyLocalPort", 10808);
             xrayAppProxyConfigJson = preferences.getString("xrayAppProxyConfigJson", "");
-            xrayAppProxyCheckUrl = preferences.getString("xrayAppProxyCheckUrl", "https://www.gstatic.com/generate_204");
+            xrayAppProxyCheckUrl = normalizeXrayCheckUrl(preferences.getString("xrayAppProxyCheckUrl", XRAY_DEFAULT_CHECK_URL));
             liquidGlassIntensity = preferences.getFloat("liquidGlassIntensity", 0.75f);
             liquidGlassThickness = preferences.getInt("liquidGlassThickness", 11);
             useAdvancedLiquidGlass = preferences.getBoolean("useAdvancedLiquidGlass", false);
@@ -1045,11 +1047,19 @@ public class NekoConfig {
     }
 
     public static void setXrayAppProxyCheckUrl(String checkUrl) {
-        xrayAppProxyCheckUrl = checkUrl == null ? "" : checkUrl;
+        xrayAppProxyCheckUrl = normalizeXrayCheckUrl(checkUrl);
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
         editor.putString("xrayAppProxyCheckUrl", xrayAppProxyCheckUrl);
         editor.apply();
+    }
+
+    private static String normalizeXrayCheckUrl(String checkUrl) {
+        if (checkUrl == null) {
+            return XRAY_DEFAULT_CHECK_URL;
+        }
+        String value = checkUrl.trim();
+        return value.isEmpty() ? XRAY_DEFAULT_CHECK_URL : value;
     }
 
     public static void setLiquidGlassIntensity(float intensity) {

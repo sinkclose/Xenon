@@ -166,6 +166,9 @@ public final class XrayUriConfigFactory {
         int port = resolvePort(uri, 443);
         String password = requireText(uri.getUserInfo(), "Trojan password is missing");
         Map<String, String> q = parseQuery(uri.getRawQuery());
+        if (TextUtils.isEmpty(q.get("security"))) {
+            q.put("security", "tls");
+        }
 
         JSONObject server = new JSONObject();
         server.put("address", host);
@@ -293,13 +296,20 @@ public final class XrayUriConfigFactory {
         String network = defaultIfEmpty(q.get("type"), defaultNetwork).toLowerCase(Locale.US);
         stream.put("network", network);
 
-        String security = defaultIfEmpty(q.get("security"), "none").toLowerCase(Locale.US);
+        String security = normalizeTransportSecurity(defaultIfEmpty(q.get("security"), "none"));
         if (!"none".equals(security)) {
             stream.put("security", security);
             if ("tls".equals(security)) {
                 JSONObject tls = new JSONObject();
                 putIfNotEmpty(tls, "serverName", defaultIfEmpty(q.get("sni"), hostFallback));
                 putIfNotEmpty(tls, "fingerprint", q.get("fp"));
+                if (isTruthy(q.get("allowinsecure"))
+                        || isTruthy(q.get("allow_insecure"))
+                        || isTruthy(q.get("insecure"))
+                        || isTruthy(q.get("skip-cert-verify"))
+                        || isTruthy(q.get("skipcertverify"))) {
+                    tls.put("allowInsecure", true);
+                }
                 if (!TextUtils.isEmpty(q.get("alpn"))) {
                     JSONArray alpn = new JSONArray();
                     for (String item : q.get("alpn").split(",")) {
@@ -436,6 +446,34 @@ public final class XrayUriConfigFactory {
 
     private static String defaultIfEmpty(String value, String fallback) {
         return TextUtils.isEmpty(value) ? fallback : value;
+    }
+
+    private static String normalizeTransportSecurity(String value) {
+        if (TextUtils.isEmpty(value)) {
+            return "none";
+        }
+        String normalized = value.trim().toLowerCase(Locale.US);
+        if ("1".equals(normalized) || "true".equals(normalized)) {
+            return "tls";
+        }
+        if ("0".equals(normalized) || "false".equals(normalized)) {
+            return "none";
+        }
+        if ("xtls".equals(normalized)) {
+            return "tls";
+        }
+        return normalized;
+    }
+
+    private static boolean isTruthy(String value) {
+        if (TextUtils.isEmpty(value)) {
+            return false;
+        }
+        String normalized = value.trim().toLowerCase(Locale.US);
+        return "1".equals(normalized)
+                || "true".equals(normalized)
+                || "yes".equals(normalized)
+                || "on".equals(normalized);
     }
 
     private static String[] splitByFirst(String value, char separator) {

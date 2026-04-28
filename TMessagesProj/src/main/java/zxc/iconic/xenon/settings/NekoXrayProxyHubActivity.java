@@ -7,6 +7,7 @@ import android.view.View;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
+import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.messenger.SharedConfig;
 import org.telegram.tgnet.ConnectionsManager;
@@ -201,7 +202,13 @@ public class NekoXrayProxyHubActivity extends BaseNekoSettingsActivity {
         if (active == null || TextUtils.isEmpty(active.configJson)) {
             return false;
         }
-        return XrayConfigValidator.validate(active.configJson, active.localPort).valid;
+        RuntimeConfig runtimeConfig;
+        try {
+            runtimeConfig = buildRuntimeConfig(active);
+        } catch (Throwable t) {
+            return false;
+        }
+        return XrayConfigValidator.validate(runtimeConfig.configJson, active.localPort).valid;
     }
 
     /**
@@ -223,10 +230,9 @@ public class NekoXrayProxyHubActivity extends BaseNekoSettingsActivity {
             return;
         }
 
-        XrayLocalSocksAuth.Credentials credentials = XrayLocalSocksAuth.getOrCreateCredentials();
-        String runtimeConfig;
+        RuntimeConfig runtimeConfig;
         try {
-            runtimeConfig = XrayLocalSocksAuth.applyCredentials(active.configJson, active.localPort, credentials);
+            runtimeConfig = buildRuntimeConfig(active);
         } catch (Throwable t) {
             NekoConfig.setXrayAppProxyEnabled(false);
             showError(LocaleController.getString(R.string.XrayProxyConfigApplyAuthError));
@@ -234,7 +240,7 @@ public class NekoXrayProxyHubActivity extends BaseNekoSettingsActivity {
             return;
         }
 
-        XrayConfigValidator.ValidationResult result = XrayConfigValidator.validate(runtimeConfig, active.localPort);
+        XrayConfigValidator.ValidationResult result = XrayConfigValidator.validate(runtimeConfig.configJson, active.localPort);
         if (!result.valid) {
             NekoConfig.setXrayAppProxyEnabled(false);
             showError(result.message);
@@ -242,14 +248,14 @@ public class NekoXrayProxyHubActivity extends BaseNekoSettingsActivity {
             return;
         }
 
-        XrayAppProxyManager.start(runtimeConfig, (success, message) -> AndroidUtilities.runOnUIThread(() -> {
+        XrayAppProxyManager.start(runtimeConfig.configJson, (success, message) -> AndroidUtilities.runOnUIThread(() -> {
             if (!success) {
                 NekoConfig.setXrayAppProxyEnabled(false);
                 showError(message);
                 listView.adapter.update(true);
                 return;
             }
-            applyTelegramLocalProxy(true, active.localPort, credentials);
+            applyTelegramLocalProxy(true, active.localPort, runtimeConfig.credentials);
             listView.adapter.update(true);
         }));
     }
@@ -287,6 +293,7 @@ public class NekoXrayProxyHubActivity extends BaseNekoSettingsActivity {
 
             SharedConfig.currentProxy = new SharedConfig.ProxyInfo("127.0.0.1", localPort, proxyUser, proxyPass, "");
             ConnectionsManager.setProxySettings(true, "127.0.0.1", localPort, proxyUser, proxyPass, "");
+            NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.proxySettingsChanged);
         } else {
             boolean isOurProxy = "127.0.0.1".equals(preferences.getString("proxy_ip", ""))
                     && preferences.getInt("proxy_port", 0) == localPort;
@@ -304,6 +311,7 @@ public class NekoXrayProxyHubActivity extends BaseNekoSettingsActivity {
 
             ConnectionsManager.setProxySettings(false, "", 0, "", "", "");
             SharedConfig.currentProxy = null;
+            NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.proxySettingsChanged);
         }
     }
 
@@ -319,13 +327,25 @@ public class NekoXrayProxyHubActivity extends BaseNekoSettingsActivity {
             return;
         }
 
-        XrayConfigValidator.ValidationResult result = XrayConfigValidator.validate(active.configJson, active.localPort);
+        RuntimeConfig runtimeConfig;
+        try {
+            runtimeConfig = buildRuntimeConfig(active);
+        } catch (Throwable t) {
+            showError(LocaleController.getString(R.string.XrayProxyConfigApplyAuthError));
+            return;
+        }
+
+        XrayConfigValidator.ValidationResult result = XrayConfigValidator.validate(runtimeConfig.configJson, active.localPort);
         if (!result.valid) {
             showError(result.message);
             return;
         }
 
-        XrayAppProxyManager.measureDelay(active.configJson, active.checkUrl, (success, delayMs, message) -> AndroidUtilities.runOnUIThread(() -> {
+        String checkUrl = TextUtils.isEmpty(active.checkUrl)
+                ? XrayProxyProfileStore.DEFAULT_CHECK_URL
+                : active.checkUrl.trim();
+
+        XrayAppProxyManager.measureDelay(runtimeConfig.configJson, checkUrl, (success, delayMs, message) -> AndroidUtilities.runOnUIThread(() -> {
             if (!success) {
                 showError(message);
                 return;
@@ -334,6 +354,25 @@ public class NekoXrayProxyHubActivity extends BaseNekoSettingsActivity {
                     LocaleController.getString(R.string.XrayProxyDelayCheck),
                     LocaleController.formatStringSimple(LocaleController.getString(R.string.XrayProxyDelayCheckResult), String.valueOf(delayMs)));
         }));
+    }
+
+    /**
+     * Builds runtime config by injecting current local SOCKS credentials into selected profile.
+     */
+    private RuntimeConfig buildRuntimeConfig(XrayProxyProfileStore.Profile active) throws Exception {
+        XrayLocalSocksAuth.Credentials credentials = XrayLocalSocksAuth.getOrCreateCredentials();
+        String configJson = XrayLocalSocksAuth.applyCredentials(active.configJson, active.localPort, credentials);
+        return new RuntimeConfig(configJson, credentials);
+    }
+
+    private static final class RuntimeConfig {
+        final String configJson;
+        final XrayLocalSocksAuth.Credentials credentials;
+
+        RuntimeConfig(String configJson, XrayLocalSocksAuth.Credentials credentials) {
+            this.configJson = configJson;
+            this.credentials = credentials;
+        }
     }
 
     private void showError(String message) {

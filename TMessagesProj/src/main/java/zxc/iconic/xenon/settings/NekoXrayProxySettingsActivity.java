@@ -14,6 +14,7 @@ import android.widget.LinearLayout;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
+import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.messenger.SharedConfig;
 import org.telegram.tgnet.ConnectionsManager;
@@ -33,6 +34,7 @@ import java.util.ArrayList;
 import zxc.iconic.xenon.NekoConfig;
 import zxc.iconic.xenon.proxy.XrayAppProxyManager;
 import zxc.iconic.xenon.proxy.XrayConfigValidator;
+import zxc.iconic.xenon.proxy.XrayLocalSocksAuth;
 import zxc.iconic.xenon.proxy.XrayUriConfigFactory;
 
 public class NekoXrayProxySettingsActivity extends BaseNekoSettingsActivity {
@@ -87,7 +89,13 @@ public class NekoXrayProxySettingsActivity extends BaseNekoSettingsActivity {
         if (TextUtils.isEmpty(NekoConfig.xrayAppProxyConfigJson)) {
             return false;
         }
-        return XrayConfigValidator.validate(NekoConfig.xrayAppProxyConfigJson, NekoConfig.xrayAppProxyLocalPort).valid;
+        RuntimeConfig runtimeConfig;
+        try {
+            runtimeConfig = buildRuntimeConfig();
+        } catch (Throwable t) {
+            return false;
+        }
+        return XrayConfigValidator.validate(runtimeConfig.configJson, NekoConfig.xrayAppProxyLocalPort).valid;
     }
 
     /**
@@ -324,7 +332,17 @@ public class NekoXrayProxySettingsActivity extends BaseNekoSettingsActivity {
             return;
         }
 
-        XrayConfigValidator.ValidationResult result = XrayConfigValidator.validate(NekoConfig.xrayAppProxyConfigJson, NekoConfig.xrayAppProxyLocalPort);
+        RuntimeConfig runtimeConfig;
+        try {
+            runtimeConfig = buildRuntimeConfig();
+        } catch (Throwable t) {
+            NekoConfig.setXrayAppProxyEnabled(false);
+            showError(LocaleController.getString(R.string.XrayProxyConfigApplyAuthError));
+            listView.adapter.update(true);
+            return;
+        }
+
+        XrayConfigValidator.ValidationResult result = XrayConfigValidator.validate(runtimeConfig.configJson, NekoConfig.xrayAppProxyLocalPort);
         if (!result.valid) {
             NekoConfig.setXrayAppProxyEnabled(false);
             showError(result.message);
@@ -332,14 +350,14 @@ public class NekoXrayProxySettingsActivity extends BaseNekoSettingsActivity {
             return;
         }
 
-        XrayAppProxyManager.start(NekoConfig.xrayAppProxyConfigJson, (success, message) -> AndroidUtilities.runOnUIThread(() -> {
+        XrayAppProxyManager.start(runtimeConfig.configJson, (success, message) -> AndroidUtilities.runOnUIThread(() -> {
             if (!success) {
                 NekoConfig.setXrayAppProxyEnabled(false);
                 showError(message);
                 listView.adapter.update(true);
                 return;
             }
-            applyTelegramLocalProxy(true);
+            applyTelegramLocalProxy(true, runtimeConfig.credentials);
             listView.adapter.update(true);
         }));
     }
@@ -353,26 +371,29 @@ public class NekoXrayProxySettingsActivity extends BaseNekoSettingsActivity {
                 showError(message);
                 return;
             }
-            applyTelegramLocalProxy(false);
+            applyTelegramLocalProxy(false, null);
             listView.adapter.update(true);
         }));
     }
 
-    private void applyTelegramLocalProxy(boolean enabled) {
+    private void applyTelegramLocalProxy(boolean enabled, XrayLocalSocksAuth.Credentials credentials) {
         SharedPreferences preferences = MessagesController.getGlobalMainSettings();
         SharedPreferences.Editor editor = preferences.edit();
 
         if (enabled) {
+            String proxyUser = credentials == null ? "" : credentials.username;
+            String proxyPass = credentials == null ? "" : credentials.password;
             editor.putBoolean("proxy_enabled", true);
             editor.putString("proxy_ip", "127.0.0.1");
             editor.putInt("proxy_port", NekoConfig.xrayAppProxyLocalPort);
-            editor.putString("proxy_user", "");
-            editor.putString("proxy_pass", "");
+            editor.putString("proxy_user", proxyUser);
+            editor.putString("proxy_pass", proxyPass);
             editor.putString("proxy_secret", "");
             editor.apply();
 
-            SharedConfig.currentProxy = new SharedConfig.ProxyInfo("127.0.0.1", NekoConfig.xrayAppProxyLocalPort, "", "", "");
-            ConnectionsManager.setProxySettings(true, "127.0.0.1", NekoConfig.xrayAppProxyLocalPort, "", "", "");
+            SharedConfig.currentProxy = new SharedConfig.ProxyInfo("127.0.0.1", NekoConfig.xrayAppProxyLocalPort, proxyUser, proxyPass, "");
+            ConnectionsManager.setProxySettings(true, "127.0.0.1", NekoConfig.xrayAppProxyLocalPort, proxyUser, proxyPass, "");
+            NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.proxySettingsChanged);
         } else {
             boolean isOurProxy = "127.0.0.1".equals(preferences.getString("proxy_ip", ""))
                     && preferences.getInt("proxy_port", 0) == NekoConfig.xrayAppProxyLocalPort;
@@ -390,6 +411,7 @@ public class NekoXrayProxySettingsActivity extends BaseNekoSettingsActivity {
 
             ConnectionsManager.setProxySettings(false, "", 0, "", "", "");
             SharedConfig.currentProxy = null;
+            NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.proxySettingsChanged);
         }
     }
 
@@ -489,19 +511,50 @@ public class NekoXrayProxySettingsActivity extends BaseNekoSettingsActivity {
             return;
         }
 
-        XrayConfigValidator.ValidationResult result = XrayConfigValidator.validate(NekoConfig.xrayAppProxyConfigJson, NekoConfig.xrayAppProxyLocalPort);
+        RuntimeConfig runtimeConfig;
+        try {
+            runtimeConfig = buildRuntimeConfig();
+        } catch (Throwable t) {
+            showError(LocaleController.getString(R.string.XrayProxyConfigApplyAuthError));
+            return;
+        }
+
+        XrayConfigValidator.ValidationResult result = XrayConfigValidator.validate(runtimeConfig.configJson, NekoConfig.xrayAppProxyLocalPort);
         if (!result.valid) {
             showError(result.message);
             return;
         }
 
-        XrayAppProxyManager.measureDelay(NekoConfig.xrayAppProxyConfigJson, NekoConfig.xrayAppProxyCheckUrl, (success, delayMs, message) -> AndroidUtilities.runOnUIThread(() -> {
+        String checkUrl = TextUtils.isEmpty(NekoConfig.xrayAppProxyCheckUrl)
+                ? "https://www.gstatic.com/generate_204"
+                : NekoConfig.xrayAppProxyCheckUrl.trim();
+
+        XrayAppProxyManager.measureDelay(runtimeConfig.configJson, checkUrl, (success, delayMs, message) -> AndroidUtilities.runOnUIThread(() -> {
             if (!success) {
                 showError(message);
                 return;
             }
             AlertsCreator.showSimpleAlert(this, LocaleController.getString(R.string.XrayProxyDelayCheck), LocaleController.formatStringSimple(LocaleController.getString(R.string.XrayProxyDelayCheckResult), String.valueOf(delayMs)));
         }));
+    }
+
+    /**
+     * Builds runtime config by injecting current local SOCKS credentials into active single-profile config.
+     */
+    private RuntimeConfig buildRuntimeConfig() throws Exception {
+        XrayLocalSocksAuth.Credentials credentials = XrayLocalSocksAuth.getOrCreateCredentials();
+        String configJson = XrayLocalSocksAuth.applyCredentials(NekoConfig.xrayAppProxyConfigJson, NekoConfig.xrayAppProxyLocalPort, credentials);
+        return new RuntimeConfig(configJson, credentials);
+    }
+
+    private static final class RuntimeConfig {
+        final String configJson;
+        final XrayLocalSocksAuth.Credentials credentials;
+
+        RuntimeConfig(String configJson, XrayLocalSocksAuth.Credentials credentials) {
+            this.configJson = configJson;
+            this.credentials = credentials;
+        }
     }
 
     @Override
