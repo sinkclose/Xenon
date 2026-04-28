@@ -114,8 +114,8 @@ jobs:
       - name: Build with Gradle
         if: github.event_name != 'pull_request'
         run: |
-          ./gradlew assembleRelease
-          ./gradlew bundlePlay
+          ./gradlew :TMessagesProj_App:assembleRelease
+          ./gradlew :TMessagesProj_App:bundleRelease
 
       - name: Attest
         if: github.event_name != 'pull_request'
