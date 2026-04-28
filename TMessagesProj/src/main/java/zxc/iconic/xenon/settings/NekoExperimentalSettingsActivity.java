@@ -1,6 +1,7 @@
 package zxc.iconic.xenon.settings;
 
 import android.os.CountDownTimer;
+import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.View;
 import android.widget.TextView;
@@ -32,6 +33,7 @@ import zxc.iconic.xenon.helpers.AnalyticsHelper;
 import zxc.iconic.xenon.helpers.PopupHelper;
 import zxc.iconic.xenon.helpers.SettingsHelper;
 import zxc.iconic.xenon.helpers.remote.UpdateHelper;
+import zxc.iconic.xenon.proxy.XrayProxyProfileStore;
 
 public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
 
@@ -48,6 +50,7 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
     private final int forceFontWeightFallbackRow = rowId++;
     private final int contentRestrictionRow = rowId++;
     private final int showRPCErrorRow = rowId++;
+    private final int xrayProxySettingsRow = rowId++;
 
     private final int sendBugReportRow = rowId++;
     private final int deleteDataRow = rowId++;
@@ -90,6 +93,12 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
             items.add(UItem.asCheck(contentRestrictionRow, LocaleController.getString(R.string.IgnoreContentRestriction)).slug("contentRestriction").setChecked(NekoConfig.ignoreContentRestriction));
         }
         items.add(UItem.asCheck(showRPCErrorRow, LocaleController.getString(R.string.ShowRPCError), LocaleController.formatString(R.string.ShowRPCErrorException, "FILE_REFERENCE_EXPIRED")).slug("showRPCError").setChecked(NekoConfig.showRPCError));
+        XrayProxyProfileStore.Profile activeProfile = XrayProxyProfileStore.getActiveProfile();
+        String xrayStatus = NekoConfig.xrayAppProxyEnabled ? LocaleController.getString(R.string.XrayProxyStatusRunning) : LocaleController.getString(R.string.XrayProxyStatusStopped);
+        if (activeProfile != null && !TextUtils.isEmpty(activeProfile.name)) {
+            xrayStatus = xrayStatus + " • " + activeProfile.name;
+        }
+        items.add(TextSettingsCellFactory.of(xrayProxySettingsRow, LocaleController.getString(R.string.XrayProxyTitle), xrayStatus).slug("xrayProxy"));
         items.add(UItem.asShadow(null));
 
         if (AnalyticsHelper.isSettingsAvailable()) {
@@ -122,6 +131,8 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.useCamera2Api);
             }
+        } else if (id == xrayProxySettingsRow) {
+            presentFragment(new NekoXrayProxyHubActivity());
         } else if (false) {
             var builder = new AlertDialog.Builder(getParentActivity(), resourcesProvider);
             var message = new TextView(getParentActivity());

@@ -16,6 +16,7 @@ import android.text.TextPaint;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
@@ -624,24 +625,14 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
         showTitle = show;
         int gravity = show ? (Gravity.CENTER_HORIZONTAL | Gravity.TOP) : Gravity.CENTER;
 
-        if (imageView != null && imageView.getLayoutParams() instanceof FrameLayout.LayoutParams) {
-            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) imageView.getLayoutParams();
-            lp.gravity = gravity;
-            lp.topMargin = show ? dp(4) : 0;
-            imageView.setLayoutParams(lp);
-        }
-
-        if (backupImageView != null && backupImageView.getLayoutParams() instanceof FrameLayout.LayoutParams) {
-            FrameLayout.LayoutParams blp = (FrameLayout.LayoutParams) backupImageView.getLayoutParams();
-            blp.gravity = gravity;
-            blp.topMargin = show ? dp(5) : 0;
-            backupImageView.setLayoutParams(blp);
-        }
+        animateIconLayoutToState(imageView, gravity, show ? dp(4) : 0, animated, show);
+        animateIconLayoutToState(backupImageView, gravity, show ? dp(5) : 0, animated, show);
 
         textView.animate().cancel();
         if (!animated) {
             textView.setVisibility(show ? VISIBLE : GONE);
             textView.setAlpha(show ? 1f : 0f);
+
             textView.setTranslationY(0f);
             return;
         }
@@ -674,4 +665,35 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
         }
     }
 
+    private void animateIconLayoutToState(View iconView, int gravity, int topMargin, boolean animated, boolean targetShowState) {
+        if (iconView == null || !(iconView.getLayoutParams() instanceof FrameLayout.LayoutParams layoutParams)) {
+            return;
+        }
+
+        iconView.animate().cancel();
+
+        final float oldY = iconView.getY();
+        layoutParams.gravity = gravity;
+        layoutParams.topMargin = topMargin;
+        iconView.setLayoutParams(layoutParams);
+
+        if (!animated) {
+            iconView.setTranslationY(0f);
+            return;
+        }
+
+        iconView.post(() -> {
+            if (showTitle != targetShowState || iconView.getParent() == null) {
+                return;
+            }
+
+            final float deltaY = oldY - iconView.getY();
+            iconView.setTranslationY(deltaY);
+            iconView.animate()
+                    .translationY(0f)
+                    .setDuration(targetShowState ? 180 : 160)
+                    .setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT)
+                    .start();
+        });
+    }
 }

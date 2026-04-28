@@ -150,6 +150,11 @@ public class NekoConfig {
     public static boolean disableTypingIndicator = false;
     public static boolean hidePhoneNumber = false;
 
+    public static boolean xrayAppProxyEnabled = false;
+    public static int xrayAppProxyLocalPort = 10808;
+    public static String xrayAppProxyConfigJson = "";
+    public static String xrayAppProxyCheckUrl = "https://www.gstatic.com/generate_204";
+
     public static float liquidGlassIntensity = 0.75f;
     public static int liquidGlassThickness = 11;
     public static boolean useAdvancedLiquidGlass = false;
@@ -271,6 +276,10 @@ public class NekoConfig {
             telegaDetectorEnabled = preferences.getBoolean("telegaDetectorEnabled", true);
             disableTypingIndicator = preferences.getBoolean("disableTypingIndicator", false);
             hidePhoneNumber = preferences.getBoolean("hidePhoneNumber", false);
+            xrayAppProxyEnabled = preferences.getBoolean("xrayAppProxyEnabled", false);
+            xrayAppProxyLocalPort = preferences.getInt("xrayAppProxyLocalPort", 10808);
+            xrayAppProxyConfigJson = preferences.getString("xrayAppProxyConfigJson", "");
+            xrayAppProxyCheckUrl = preferences.getString("xrayAppProxyCheckUrl", "https://www.gstatic.com/generate_204");
             liquidGlassIntensity = preferences.getFloat("liquidGlassIntensity", 0.75f);
             liquidGlassThickness = preferences.getInt("liquidGlassThickness", 11);
             useAdvancedLiquidGlass = preferences.getBoolean("useAdvancedLiquidGlass", false);
@@ -1008,6 +1017,38 @@ public class NekoConfig {
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("hidePhoneNumber", hidePhoneNumber);
+        editor.apply();
+    }
+
+    public static void setXrayAppProxyEnabled(boolean enabled) {
+        xrayAppProxyEnabled = enabled;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("xrayAppProxyEnabled", xrayAppProxyEnabled);
+        editor.apply();
+    }
+
+    public static void setXrayAppProxyLocalPort(int localPort) {
+        xrayAppProxyLocalPort = localPort;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putInt("xrayAppProxyLocalPort", xrayAppProxyLocalPort);
+        editor.apply();
+    }
+
+    public static void setXrayAppProxyConfigJson(String configJson) {
+        xrayAppProxyConfigJson = configJson == null ? "" : configJson;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putString("xrayAppProxyConfigJson", xrayAppProxyConfigJson);
+        editor.apply();
+    }
+
+    public static void setXrayAppProxyCheckUrl(String checkUrl) {
+        xrayAppProxyCheckUrl = checkUrl == null ? "" : checkUrl;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putString("xrayAppProxyCheckUrl", xrayAppProxyCheckUrl);
         editor.apply();
     }
 
