@@ -75,6 +75,11 @@
     <string name="GooglePlay">Google Play</string>
     <string name="ResetStickerSize">Reset sticker size</string>
     <string name="OfficialChannelUsername">nekoupdates</string>
+    <string name="XenonCreator">Creator</string>
+    <string name="XenonCreatorUsername">@thinkaboutrue</string>
+    <string name="XenonChannel">Channel</string>
+    <string name="XenonTitle">Xenon</string>
+    <string name="XenonGitHub">GitHub</string>
     <string name="RestartAppToTakeEffect">Restart the app to take effect.</string>
     <string name="DisableAppBarShadow">Disable title bar shadow</string>
     <string name="MediaPreview">Media preview in dialog list</string>

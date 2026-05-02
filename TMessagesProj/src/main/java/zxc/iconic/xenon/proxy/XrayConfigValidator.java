@@ -43,8 +43,8 @@ public final class XrayConfigValidator {
             if (TextUtils.isEmpty(protocol)) {
                 return ValidationResult.invalid("Inbound protocol is empty");
             }
-            int port = inbound.optInt("port", -1);
-            if ("socks".equals(protocol) && port == localPort) {
+            int port = parseIntFlexible(inbound.opt("port"), -1);
+            if ("socks".equalsIgnoreCase(protocol) && port == localPort) {
                 JSONObject settings = inbound.optJSONObject("settings");
                 if (settings != null && "password".equalsIgnoreCase(settings.optString("auth", ""))) {
                     JSONArray accounts = settings.optJSONArray("accounts");
@@ -86,6 +86,20 @@ public final class XrayConfigValidator {
         }
 
         return ValidationResult.valid();
+    }
+
+    private static int parseIntFlexible(Object value, int fallback) {
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        if (value instanceof String) {
+            try {
+                return Integer.parseInt(((String) value).trim());
+            } catch (Throwable ignore) {
+                return fallback;
+            }
+        }
+        return fallback;
     }
 
     public static final class ValidationResult {

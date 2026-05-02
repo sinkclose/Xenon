@@ -57,6 +57,7 @@ import zxc.iconic.xenon.proxy.XrayAppProxyManager;
 import zxc.iconic.xenon.proxy.XrayConfigValidator;
 import zxc.iconic.xenon.proxy.XrayLocalSocksAuth;
 import zxc.iconic.xenon.proxy.XrayProxyProfileStore;
+import zxc.iconic.xenon.proxy.XrayTelegramProxyBridge;
 
 public class ApplicationLoader extends Application {
 
@@ -367,6 +368,8 @@ public class ApplicationLoader extends Application {
             XrayProxyProfileStore.Profile activeProfile = XrayProxyProfileStore.getActiveProfile();
             if (activeProfile == null) {
                 FileLog.e("Xray startup skipped: no active profile");
+                NekoConfig.setXrayAppProxyEnabled(false);
+                AndroidUtilities.runOnUIThread(() -> XrayTelegramProxyBridge.disableLocalProxyIfOwned());
             } else {
                 XrayLocalSocksAuth.Credentials credentials = XrayLocalSocksAuth.getOrCreateCredentials();
                 String runtimeConfig;
@@ -374,6 +377,8 @@ public class ApplicationLoader extends Application {
                     runtimeConfig = XrayLocalSocksAuth.applyCredentials(activeProfile.configJson, activeProfile.localPort, credentials);
                 } catch (Throwable t) {
                     FileLog.e("Xray startup skipped: failed to apply socks auth", t);
+                    NekoConfig.setXrayAppProxyEnabled(false);
+                    AndroidUtilities.runOnUIThread(() -> XrayTelegramProxyBridge.disableLocalProxyIfOwned());
                     runtimeConfig = null;
                 }
 
@@ -383,28 +388,16 @@ public class ApplicationLoader extends Application {
                         XrayAppProxyManager.start(runtimeConfig, (success, message) -> {
                             if (!success) {
                                 FileLog.e("Xray startup failed: " + message);
+                                NekoConfig.setXrayAppProxyEnabled(false);
+                                AndroidUtilities.runOnUIThread(() -> XrayTelegramProxyBridge.disableLocalProxyIfOwned());
                                 return;
                             }
-                            AndroidUtilities.runOnUIThread(() -> {
-                                SharedPreferences preferences = MessagesController.getGlobalMainSettings();
-                                SharedPreferences.Editor editor = preferences.edit();
-                                editor.putBoolean("proxy_enabled", true);
-                                editor.putString("proxy_ip", "127.0.0.1");
-                                editor.putInt("proxy_port", activeProfile.localPort);
-                                editor.putString("proxy_user", credentials.username);
-                                editor.putString("proxy_pass", credentials.password);
-                                editor.putString("proxy_secret", "");
-                                editor.apply();
-
-                                SharedConfig.currentProxy = new SharedConfig.ProxyInfo("127.0.0.1", activeProfile.localPort,
-                                        credentials.username, credentials.password, "");
-                                ConnectionsManager.setProxySettings(true, "127.0.0.1", activeProfile.localPort,
-                                        credentials.username, credentials.password, "");
-                                NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.proxySettingsChanged);
-                            });
+                            AndroidUtilities.runOnUIThread(() -> XrayTelegramProxyBridge.enableLocalProxy(activeProfile.localPort, credentials));
                         });
                     } else {
                         FileLog.e("Xray startup skipped: " + validationResult.message);
+                        NekoConfig.setXrayAppProxyEnabled(false);
+                        AndroidUtilities.runOnUIThread(() -> XrayTelegramProxyBridge.disableLocalProxyIfOwned());
                     }
                 }
             }

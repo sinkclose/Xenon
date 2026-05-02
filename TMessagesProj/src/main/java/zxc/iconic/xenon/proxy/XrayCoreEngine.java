@@ -1,6 +1,7 @@
 package zxc.iconic.xenon.proxy;
 
 import android.content.Context;
+import android.os.Build;
 import android.text.TextUtils;
 
 import org.json.JSONArray;
@@ -52,6 +53,7 @@ final class XrayCoreEngine {
     private static volatile CoreController coreController;
     private static volatile boolean running;
     private static volatile Method startLoopMethod;
+    private static volatile boolean unsupportedAbiLogged;
 
     private XrayCoreEngine() {
     }
@@ -60,6 +62,13 @@ final class XrayCoreEngine {
      * Checks whether libv2ray Java bindings are present in classpath.
      */
     static boolean isLibraryAvailable() {
+        if (!isCpuAbiSupported()) {
+            if (!unsupportedAbiLogged) {
+                unsupportedAbiLogged = true;
+                addLog("xray disabled on unsupported ABI: " + getPrimaryAbi());
+            }
+            return false;
+        }
         try {
             Class.forName("go.Seq");
             Class.forName("libv2ray.Libv2ray");
@@ -75,6 +84,11 @@ final class XrayCoreEngine {
      */
     static void start(String configJson, XrayAppProxyManager.StartCallback callback) {
         addLog("start requested");
+        if (!isLibraryAvailable()) {
+            addLog("start rejected: unsupported ABI or missing library");
+            notifyStart(callback, false, "AndroidLibXrayLite is unavailable on this CPU ABI");
+            return;
+        }
         if (TextUtils.isEmpty(configJson)) {
             addLog("start rejected: empty config");
             notifyStart(callback, false, "Empty config");
@@ -187,6 +201,11 @@ final class XrayCoreEngine {
      */
     static void measureDelay(String configJson, String testUrl, XrayAppProxyManager.DelayCallback callback) {
         addLog("delay check requested");
+        if (!isLibraryAvailable()) {
+            addLog("delay check rejected: unsupported ABI or missing library");
+            notifyDelay(callback, false, -1, "AndroidLibXrayLite is unavailable on this CPU ABI");
+            return;
+        }
         if (TextUtils.isEmpty(configJson)) {
             addLog("delay check rejected: empty config");
             notifyDelay(callback, false, -1, "Config is empty");
@@ -249,6 +268,9 @@ final class XrayCoreEngine {
     }
 
     private static void ensureCoreEnvInitialized() throws Exception {
+        if (!isCpuAbiSupported()) {
+            throw new Exception("Unsupported CPU ABI: " + getPrimaryAbi());
+        }
         if (coreEnvInitialized) {
             return;
         }
@@ -496,6 +518,26 @@ final class XrayCoreEngine {
             }
         }
         return fallback;
+    }
+
+    private static boolean isCpuAbiSupported() {
+        String primaryAbi = getPrimaryAbi();
+        if (TextUtils.isEmpty(primaryAbi) || "unknown".equals(primaryAbi)) {
+            return false;
+        }
+        String abi = primaryAbi.toLowerCase(Locale.US);
+        if (abi.startsWith("x86") || abi.startsWith("riscv") || abi.startsWith("mips")) {
+            return false;
+        }
+        return abi.startsWith("arm64") || abi.startsWith("armeabi");
+    }
+
+    private static String getPrimaryAbi() {
+        String[] abis = Build.SUPPORTED_ABIS;
+        if (abis == null || abis.length == 0 || TextUtils.isEmpty(abis[0])) {
+            return "unknown";
+        }
+        return abis[0];
     }
 
     private static String extractErrorMessage(Throwable error, String fallback) {

@@ -10670,6 +10670,14 @@
     <string name="TranslateCopy">Copy Translation</string>
     <string name="TranslateEntireChat">Translate Entire Chat</string>
     <string name="XrayProxyTitle">Xray App Proxy</string>
+    <string name="XrayProxyLoginQuickTitle">Quick Xray Proxy</string>
+    <string name="XrayProxyLoginQuickHint">Connect a local VLESS/VMess/Trojan route before login to reach Telegram in restricted networks.</string>
+    <string name="XrayProxyLoginUriLabel">Proxy URI</string>
+    <string name="XrayProxyLoginUriHint">vless:// / vmess:// / trojan://</string>
+    <string name="XrayProxyLoginPaste">Paste from clipboard</string>
+    <string name="XrayProxyLoginConnect">Connect proxy</string>
+    <string name="XrayProxyLoginDisconnect">Disconnect proxy</string>
+    <string name="XrayProxyLoginLocalEndpoint">SOCKS 127.0.0.1:%1$s</string>
     <string name="XrayProxyEnable">Enable app-only proxy</string>
     <string name="XrayProxyEnableDesc">Routes Telegram traffic via local Xray SOCKS endpoint without system VPN.</string>
     <string name="XrayProxyStatus">Core status</string>

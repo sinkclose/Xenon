@@ -50,6 +50,9 @@ import zxc.iconic.xenon.helpers.remote.ConfigHelper;
 public class NekoSettingsActivity extends BaseNekoSettingsActivity implements FactorAnimator.Target {
 
     private static final int ANIMATOR_ID_SEARCH_PAGE_VISIBLE = 0;
+    private static final String CREATOR_URL = "https://t.me/thinkaboutrue";
+    private static final String CHANNEL_URL = "https://t.me/xenongram";
+    private static final String SOURCE_CODE_URL = "https://github.com/sinkclose/Xenon";
 
     private final BoolAnimator animatorSearchPageVisible = new BoolAnimator(ANIMATOR_ID_SEARCH_PAGE_VISIBLE,
             this, CubicBezierInterpolator.EASE_OUT_QUINT, 350);
@@ -171,9 +174,9 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
         items.add(UItem.asShadow(null));
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.About)));
-        items.add(UItem.asButton(creatorRow, R.drawable.msg_contacts, "Creator", "@thinkaboutrue").slug("creator"));
-        items.add(UItem.asButton(channelRow, R.drawable.msg_channel, "Channel", "Xenon").slug("channel"));
-        items.add(UItem.asButton(sourceCodeRow, R.drawable.msg_link, LocaleController.getString(R.string.ViewSourceCode), "GitHub").slug("sourceCode"));
+        items.add(UItem.asButton(creatorRow, R.drawable.msg_contacts, LocaleController.getString(R.string.XenonCreator), LocaleController.getString(R.string.XenonCreatorUsername)).slug("creator"));
+        items.add(UItem.asButton(channelRow, R.drawable.msg_channel, LocaleController.getString(R.string.XenonChannel), LocaleController.getString(R.string.XenonTitle)).slug("channel"));
+        items.add(UItem.asButton(sourceCodeRow, R.drawable.msg_link, LocaleController.getString(R.string.ViewSourceCode), LocaleController.getString(R.string.XenonGitHub)).slug("sourceCode"));
         items.add(UItem.asShadow(null));
 
         newsList.clear();
@@ -209,11 +212,11 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
         } else if (id == accessibilityRow) {
             presentFragment(new AccessibilitySettingsActivity());
         } else if (id == creatorRow) {
-            Browser.openUrl(getParentActivity(), "https://t.me/thinkaboutrue");
+            Browser.openUrl(getParentActivity(), CREATOR_URL);
         } else if (id == channelRow) {
-            Browser.openUrl(getParentActivity(), "https://t.me/xenongram");
+            Browser.openUrl(getParentActivity(), CHANNEL_URL);
         } else if (id == sourceCodeRow) {
-            Browser.openUrl(getParentActivity(), "https://github.com/sinkclose/Xenon");
+            Browser.openUrl(getParentActivity(), SOURCE_CODE_URL);
         } else if (id >= sponsorRow) {
             var news = newsList.get(id - sponsorRow);
             Browser.openUrl(getParentActivity(), news.url);
@@ -315,9 +318,9 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
             }));
         }));
 
-        searchResultList.add(new SearchResult(20002, "Creator", "@thinkaboutrue", R.drawable.msg_contacts, () -> Browser.openUrl(getParentActivity(), "https://t.me/thinkaboutrue")));
-        searchResultList.add(new SearchResult(20003, "Channel", "Xenon", R.drawable.msg_channel, () -> Browser.openUrl(getParentActivity(), "https://t.me/xenongram")));
-        searchResultList.add(new SearchResult(20004, LocaleController.getString(R.string.ViewSourceCode), "GitHub", R.drawable.msg_link, () -> Browser.openUrl(getParentActivity(), "https://github.com/sinkclose/Xenon")));
+        searchResultList.add(new SearchResult(20002, LocaleController.getString(R.string.XenonCreator), LocaleController.getString(R.string.XenonCreatorUsername), R.drawable.msg_contacts, () -> Browser.openUrl(getParentActivity(), CREATOR_URL)));
+        searchResultList.add(new SearchResult(20003, LocaleController.getString(R.string.XenonChannel), LocaleController.getString(R.string.XenonTitle), R.drawable.msg_channel, () -> Browser.openUrl(getParentActivity(), CHANNEL_URL)));
+        searchResultList.add(new SearchResult(20004, LocaleController.getString(R.string.ViewSourceCode), LocaleController.getString(R.string.XenonGitHub), R.drawable.msg_link, () -> Browser.openUrl(getParentActivity(), SOURCE_CODE_URL)));
 
         return searchResultList;
     }

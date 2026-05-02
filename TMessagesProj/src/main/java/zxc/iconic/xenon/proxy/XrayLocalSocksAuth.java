@@ -82,11 +82,12 @@ public final class XrayLocalSocksAuth {
 
         if (targetInbound == null) {
             targetInbound = new JSONObject();
-            targetInbound.put("listen", "127.0.0.1");
-            targetInbound.put("port", localPort);
-            targetInbound.put("protocol", "socks");
             inbounds.put(targetInbound);
         }
+
+        targetInbound.put("listen", "127.0.0.1");
+        targetInbound.put("port", localPort);
+        targetInbound.put("protocol", "socks");
 
         JSONObject settings = targetInbound.optJSONObject("settings");
         if (settings == null) {

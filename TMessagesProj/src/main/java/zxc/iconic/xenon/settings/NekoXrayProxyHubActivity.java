@@ -1,16 +1,11 @@
 package zxc.iconic.xenon.settings;
 
-import android.content.SharedPreferences;
 import android.text.TextUtils;
 import android.view.View;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
-import org.telegram.messenger.MessagesController;
-import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
-import org.telegram.messenger.SharedConfig;
-import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.ui.Cells.TextCheckCell;
 import org.telegram.ui.Components.AlertsCreator;
 import org.telegram.ui.Components.UItem;
@@ -23,6 +18,7 @@ import zxc.iconic.xenon.proxy.XrayAppProxyManager;
 import zxc.iconic.xenon.proxy.XrayConfigValidator;
 import zxc.iconic.xenon.proxy.XrayLocalSocksAuth;
 import zxc.iconic.xenon.proxy.XrayProxyProfileStore;
+import zxc.iconic.xenon.proxy.XrayTelegramProxyBridge;
 
 /**
  * Main dashboard for app-only Xray proxy with quick status/actions and navigation to sub-screens.
@@ -67,14 +63,12 @@ public class NekoXrayProxyHubActivity extends BaseNekoSettingsActivity {
             return;
         }
 
-        XrayProxyProfileStore.Profile active = XrayProxyProfileStore.getActiveProfile();
-        int localPort = active != null ? active.localPort : NekoConfig.xrayAppProxyLocalPort;
         XrayAppProxyManager.stop((success, message) -> AndroidUtilities.runOnUIThread(() -> {
             if (!success) {
                 showError(message);
                 return;
             }
-            applyTelegramLocalProxy(false, localPort, null);
+            XrayTelegramProxyBridge.disableLocalProxyIfOwned();
             startProxyFlow();
         }));
     }
@@ -255,7 +249,8 @@ public class NekoXrayProxyHubActivity extends BaseNekoSettingsActivity {
                 listView.adapter.update(true);
                 return;
             }
-            applyTelegramLocalProxy(true, active.localPort, runtimeConfig.credentials);
+            NekoConfig.setXrayAppProxyEnabled(true);
+            XrayTelegramProxyBridge.enableLocalProxy(active.localPort, runtimeConfig.credentials);
             listView.adapter.update(true);
         }));
     }
@@ -264,55 +259,14 @@ public class NekoXrayProxyHubActivity extends BaseNekoSettingsActivity {
      * Stops core and disables local Telegram proxy if it was configured by this feature.
      */
     private void stopProxyFlow() {
-        XrayProxyProfileStore.Profile active = XrayProxyProfileStore.getActiveProfile();
-        int localPort = active != null ? active.localPort : NekoConfig.xrayAppProxyLocalPort;
         XrayAppProxyManager.stop((success, message) -> AndroidUtilities.runOnUIThread(() -> {
             if (!success) {
                 showError(message);
                 return;
             }
-            applyTelegramLocalProxy(false, localPort, null);
+            XrayTelegramProxyBridge.disableLocalProxyIfOwned();
             listView.adapter.update(true);
         }));
-    }
-
-    private void applyTelegramLocalProxy(boolean enabled, int localPort, XrayLocalSocksAuth.Credentials credentials) {
-        SharedPreferences preferences = MessagesController.getGlobalMainSettings();
-        SharedPreferences.Editor editor = preferences.edit();
-
-        if (enabled) {
-            String proxyUser = credentials == null ? "" : credentials.username;
-            String proxyPass = credentials == null ? "" : credentials.password;
-            editor.putBoolean("proxy_enabled", true);
-            editor.putString("proxy_ip", "127.0.0.1");
-            editor.putInt("proxy_port", localPort);
-            editor.putString("proxy_user", proxyUser);
-            editor.putString("proxy_pass", proxyPass);
-            editor.putString("proxy_secret", "");
-            editor.apply();
-
-            SharedConfig.currentProxy = new SharedConfig.ProxyInfo("127.0.0.1", localPort, proxyUser, proxyPass, "");
-            ConnectionsManager.setProxySettings(true, "127.0.0.1", localPort, proxyUser, proxyPass, "");
-            NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.proxySettingsChanged);
-        } else {
-            boolean isOurProxy = "127.0.0.1".equals(preferences.getString("proxy_ip", ""))
-                    && preferences.getInt("proxy_port", 0) == localPort;
-            if (!isOurProxy) {
-                return;
-            }
-
-            editor.putBoolean("proxy_enabled", false);
-            editor.putString("proxy_ip", "");
-            editor.putInt("proxy_port", 1080);
-            editor.putString("proxy_user", "");
-            editor.putString("proxy_pass", "");
-            editor.putString("proxy_secret", "");
-            editor.apply();
-
-            ConnectionsManager.setProxySettings(false, "", 0, "", "", "");
-            SharedConfig.currentProxy = null;
-            NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.proxySettingsChanged);
-        }
     }
 
     private void runDelayCheck() {

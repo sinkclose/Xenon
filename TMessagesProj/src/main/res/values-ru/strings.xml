@@ -276,6 +276,14 @@
     <string name="MainTabsSettingsAlwaysEnabled">Эта вкладка всегда включена</string>
 
     <string name="XrayProxyTitle">Xray-прокси приложения</string>
+    <string name="XrayProxyLoginQuickTitle">Быстрый прокси Xray</string>
+    <string name="XrayProxyLoginQuickHint">Подключите VLESS/VMess/Trojan перед входом, чтобы Telegram работал в ограниченной сети.</string>
+    <string name="XrayProxyLoginUriLabel">URI прокси</string>
+    <string name="XrayProxyLoginUriHint">vless:// / vmess:// / trojan://</string>
+    <string name="XrayProxyLoginPaste">Вставить URI из буфера</string>
+    <string name="XrayProxyLoginConnect">Подключить прокси</string>
+    <string name="XrayProxyLoginDisconnect">Отключить прокси</string>
+    <string name="XrayProxyLoginLocalEndpoint">SOCKS 127.0.0.1:%1$s</string>
     <string name="XrayProxyEnable">Включить прокси только для приложения</string>
     <string name="XrayProxyEnableDesc">Перенаправляет трафик Telegram через локальный SOCKS-эндпоинт Xray без системного VPN.</string>
     <string name="XrayProxyStatus">Состояние ядра</string>
