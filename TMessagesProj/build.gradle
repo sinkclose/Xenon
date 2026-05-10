@@ -148,6 +148,10 @@ lsparanoid {
 }
 
 android {
+    buildFeatures {
+        buildConfig true
+    }
+
     sourceSets.main.jniLibs.srcDirs = ['./jni/']
 
     externalNativeBuild {
