@@ -38,6 +38,7 @@
     <string name="StickerSizeDialogMessage">Ооо! Как мило! Чёрная кошка!</string>
     <string name="StickerSizeDialogMessageReplyTo">Мяу</string>
     <string name="Experiment">Экспериментальные настройки</string>
+    <string name="Tweaks">Дополнительно</string>
     <string name="MessageDetails">Подробности</string>
     <string name="DeleteAccount">Удалить аккаунт Telegram</string>
     <string name="TranslateFailed">Ошибка сервера переводчика</string>

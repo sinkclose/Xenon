@@ -173,13 +173,13 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
         if (am != null && am.isTouchExplorationEnabled()) {
             items.add(UItem.asButton(accessibilityRow, LocaleController.getString(R.string.AccessibilitySettings)).slug("accessibility"));
         }
-        items.add(UItem.asButton(checkUpdateRow, R.drawable.msg_download, LocaleController.getString(R.string.CheckUpdate)).slug("checkUpdate"));
         items.add(UItem.asShadow(null));
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.About)));
         items.add(UItem.asButton(creatorRow, R.drawable.msg_contacts, LocaleController.getString(R.string.XenonCreator), LocaleController.getString(R.string.XenonCreatorUsername)).slug("creator"));
         items.add(UItem.asButton(channelRow, R.drawable.msg_channel, LocaleController.getString(R.string.XenonChannel), LocaleController.getString(R.string.XenonTitle)).slug("channel"));
         items.add(UItem.asButton(sourceCodeRow, R.drawable.msg_link, LocaleController.getString(R.string.ViewSourceCode), LocaleController.getString(R.string.XenonGitHub)).slug("sourceCode"));
+        items.add(UItem.asButton(checkUpdateRow, R.drawable.msg_download, LocaleController.getString(R.string.CheckUpdate)).slug("checkUpdate"));
         items.add(UItem.asShadow(null));
 
         newsList.clear();

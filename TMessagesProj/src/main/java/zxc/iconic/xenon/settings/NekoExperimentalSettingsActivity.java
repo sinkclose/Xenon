@@ -73,11 +73,8 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
             items.add(UItem.asShadow(null));
         }
 
-        items.add(UItem.asHeader(LocaleController.getString(R.string.CameraSettings)));
+        items.add(UItem.asHeader(LocaleController.getString(R.string.Tweaks)));
         items.add(UItem.asCheck(useCamera2ApiRow, LocaleController.getString(R.string.UseCamera2Api), LocaleController.getString(R.string.UseCamera2ApiDesc)).slug("useCamera2Api").setChecked(NekoConfig.useCamera2Api));
-        items.add(UItem.asShadow(null));
-
-        items.add(UItem.asHeader(LocaleController.getString(R.string.General)));
         if (!MessagesController.getInstance(currentAccount).getfileExperimentalParams) {
             items.add(TextSettingsCellFactory.of(downloadSpeedBoostRow, LocaleController.getString(R.string.DownloadSpeedBoost), switch (NekoConfig.downloadSpeedBoost) {
                 case NekoConfig.BOOST_NONE ->
