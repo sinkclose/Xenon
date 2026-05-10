@@ -162,7 +162,7 @@ def resolvedGitHash = project.findProperty('gitCommitHash') ?: {
 
 def resolvedGitShort = project.findProperty('gitCommitShort') ?: {
     try {
-        def process = ['git', 'rev-parse', '--short', 'HEAD'].execute(null, rootProject.rootDir)
+        def process = ['git', 'rev-parse', '--short=7', 'HEAD'].execute(null, rootProject.rootDir)
         def result = process.text.trim()
         process.waitFor()
         return result.isEmpty() ? "unknown" : result

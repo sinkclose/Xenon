@@ -108,13 +108,13 @@ jobs:
         run: |
           ./gradlew :TMessagesProj_App:assembleDebug \
             -PgitCommitHash=$(git rev-parse HEAD) \
-            -PgitCommitShort=$(git rev-parse --short HEAD)
+            -PgitCommitShort=$(git rev-parse --short=7 HEAD)
 
       - name: Build with Gradle
         if: github.event_name != 'pull_request'
         run: |
           GIT_HASH=$(git rev-parse HEAD)
-          GIT_SHORT=$(git rev-parse --short HEAD)
+          GIT_SHORT=$(git rev-parse --short=7 HEAD)
           echo "Embedding commit: $GIT_SHORT ($GIT_HASH)"
           ./gradlew :TMessagesProj_App:assembleRelease \
             -PgitCommitHash=$GIT_HASH \
@@ -180,7 +180,7 @@ jobs:
         id: commit_info
         run: |
           COMMIT_MSG=$(git log -1 --pretty=%B | head -1)
-          COMMIT_HASH=$(git rev-parse --short HEAD)
+          COMMIT_HASH=$(git rev-parse --short=7 HEAD)
           COMMIT_FULL=$(git rev-parse HEAD)
           
           # Sanitize commit message for release title

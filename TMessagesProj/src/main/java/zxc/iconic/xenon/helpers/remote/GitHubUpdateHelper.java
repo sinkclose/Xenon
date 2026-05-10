@@ -91,7 +91,13 @@ public class GitHubUpdateHelper {
                     return;
                 }
 
-                boolean isSameBuild = release.tagName.trim().equalsIgnoreCase(currentHash.trim());
+                // Use startsWith comparison because git short hash length varies
+                // depending on clone depth (shallow vs full), so the embedded hash
+                // and the release tag may have different lengths (e.g. 7 vs 9 chars).
+                String remote = release.tagName.trim().toLowerCase();
+                String local = currentHash.trim().toLowerCase();
+                boolean isSameBuild = remote.startsWith(local)
+                        || local.startsWith(remote);
                 if (isSameBuild) {
                     FileLog.d(TAG + ": hashes match, no update");
                     AndroidUtilities.runOnUIThread(callback::onNoUpdate);
