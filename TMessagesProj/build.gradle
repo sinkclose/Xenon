@@ -147,6 +147,33 @@ lsparanoid {
     variantFilter = { variant -> variant.buildType == "release" || variant.buildType == "play" }
 }
 
+// Resolve git commit hashes at the top level, OUTSIDE android {} block.
+// Priority: Gradle property (-PgitCommitHash=...) > local git > "unknown"
+def resolvedGitHash = project.findProperty('gitCommitHash') ?: {
+    try {
+        def process = ['git', 'rev-parse', 'HEAD'].execute(null, rootProject.rootDir)
+        def result = process.text.trim()
+        process.waitFor()
+        return result.isEmpty() ? "unknown" : result
+    } catch (ignored) {
+        return "unknown"
+    }
+}()
+
+def resolvedGitShort = project.findProperty('gitCommitShort') ?: {
+    try {
+        def process = ['git', 'rev-parse', '--short', 'HEAD'].execute(null, rootProject.rootDir)
+        def result = process.text.trim()
+        process.waitFor()
+        return result.isEmpty() ? "unknown" : result
+    } catch (ignored) {
+        return "unknown"
+    }
+}()
+
+logger.lifecycle("Git commit hash: ${resolvedGitHash}")
+logger.lifecycle("Git commit short: ${resolvedGitShort}")
+
 android {
     buildFeatures {
         buildConfig true
@@ -165,32 +192,6 @@ android {
         localProperties.load(project.rootProject.file('local.properties').newDataInputStream())
     }
 
-    def gitCommitHash = { ->
-        try {
-            def stdout = new ByteArrayOutputStream()
-            exec {
-                commandLine 'git', 'rev-parse', 'HEAD'
-                standardOutput = stdout
-            }
-            return stdout.toString().trim()
-        } catch (ignored) {
-            return "unknown"
-        }
-    }
-
-    def gitCommitShort = { ->
-        try {
-            def stdout = new ByteArrayOutputStream()
-            exec {
-                commandLine 'git', 'rev-parse', '--short', 'HEAD'
-                standardOutput = stdout
-            }
-            return stdout.toString().trim()
-        } catch (ignored) {
-            return "unknown"
-        }
-    }
-
     buildTypes {
         debug {
             buildConfigField("long", "VERSION_CODE", "${APP_VERSION_CODE}")
@@ -198,8 +199,8 @@ android {
             buildConfigField("long", "BUILD_VERSION", "${TG_APP_VERSION_CODE}")
             buildConfigField("String","BUILD_VERSION_STRING","\"${TG_APP_VERSION_NAME}\"")
             buildConfigField("boolean", "DEBUG_PRIVATE_VERSION", "false")
-            buildConfigField("String", "GIT_COMMIT_HASH", "\"${gitCommitHash()}\"")
-            buildConfigField("String", "GIT_COMMIT_SHORT", "\"${gitCommitShort()}\"")
+            buildConfigField("String", "GIT_COMMIT_HASH", "\"${resolvedGitHash}\"")
+            buildConfigField("String", "GIT_COMMIT_SHORT", "\"${resolvedGitShort}\"")
 
             buildConfigField("int","API_ID", "${localProperties.get("apiId")}")
             buildConfigField("String","API_HASH", "\"${localProperties.get("apiHash")}\"")
@@ -211,8 +212,8 @@ android {
             buildConfigField("long", "BUILD_VERSION", "${TG_APP_VERSION_CODE}")
             buildConfigField("String","BUILD_VERSION_STRING","\"${TG_APP_VERSION_NAME}\"")
             buildConfigField("boolean", "DEBUG_PRIVATE_VERSION", "false")
-            buildConfigField("String", "GIT_COMMIT_HASH", "\"${gitCommitHash()}\"")
-            buildConfigField("String", "GIT_COMMIT_SHORT", "\"${gitCommitShort()}\"")
+            buildConfigField("String", "GIT_COMMIT_HASH", "\"${resolvedGitHash}\"")
+            buildConfigField("String", "GIT_COMMIT_SHORT", "\"${resolvedGitShort}\"")
 
             buildConfigField("int","API_ID", "${localProperties.get("apiId")}")
             buildConfigField("String","API_HASH", "\"${localProperties.get("apiHash")}\"")

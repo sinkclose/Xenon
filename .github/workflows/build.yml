@@ -106,13 +106,22 @@ jobs:
       - name: Build with Gradle (Debug)
         if: github.event_name == 'pull_request'
         run: |
-          ./gradlew :TMessagesProj_App:assembleDebug
+          ./gradlew :TMessagesProj_App:assembleDebug \
+            -PgitCommitHash=$(git rev-parse HEAD) \
+            -PgitCommitShort=$(git rev-parse --short HEAD)
 
       - name: Build with Gradle
         if: github.event_name != 'pull_request'
         run: |
-          ./gradlew :TMessagesProj_App:assembleRelease
-          ./gradlew :TMessagesProj_App:bundleRelease
+          GIT_HASH=$(git rev-parse HEAD)
+          GIT_SHORT=$(git rev-parse --short HEAD)
+          echo "Embedding commit: $GIT_SHORT ($GIT_HASH)"
+          ./gradlew :TMessagesProj_App:assembleRelease \
+            -PgitCommitHash=$GIT_HASH \
+            -PgitCommitShort=$GIT_SHORT
+          ./gradlew :TMessagesProj_App:bundleRelease \
+            -PgitCommitHash=$GIT_HASH \
+            -PgitCommitShort=$GIT_SHORT
 
       - name: Attest
         if: github.event_name != 'pull_request'
