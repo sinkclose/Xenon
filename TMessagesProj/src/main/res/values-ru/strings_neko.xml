@@ -100,7 +100,11 @@
     <string name="AutoPauseVideo">Авто-пауза видео</string>
     <string name="AutoPauseVideoAbout">Останавливать воспроизведение видео при блокировке экрана или сворачивании приложения.</string>
     <string name="DisableProximityEvents">Отключить датчик приближения</string>
+    <string name="Page1Message2">Xenon — **неофициальное** приложение для обмена сообщениями, использующее API Telegram.</string>
     <string name="MapDriftingFix">Исправление карт для Китая</string>
+    <string name="CameraSettings">Камера</string>
+    <string name="UseCamera2Api">Использовать Camera2 API</string>
+    <string name="UseCamera2ApiDesc">Экспериментально: использовать Camera2 API для видеосообщений</string>
     <string name="VoiceEnhancements">Улучшение голоса</string>
     <string name="VoiceEnhancementsAbout">Шумоподавление и нормализация голоса</string>
     <string name="DisableInstantCamera">Отключить встроенную камеру</string>

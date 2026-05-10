@@ -2,13 +2,14 @@ package zxc.iconic.xenon.helpers.remote;
 
 import android.text.TextUtils;
 
+import androidx.annotation.Nullable;
+
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BuildConfig;
 import org.telegram.messenger.FileLog;
-import org.telegram.tgnet.TLRPC;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -16,122 +17,227 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.List;
 
+/**
+ * Checks for app updates against GitHub Releases for sinkclose/Xenon.
+ *
+ * Release scheme:
+ *   - tag_name = short commit hash of the build
+ *   - name     = first line of the commit message
+ *   - body     = structured release notes (commit hash, checksums, etc.)
+ *   - assets   = APK files (Xenon-{version}-{code}-{abi}.apk)
+ *
+ * Version comparison: current build's GIT_COMMIT_SHORT (embedded at compile time)
+ * is compared against the latest release's tag_name.
+ * If they differ, the latest release's published_at timestamp is compared
+ * to ensure we only offer genuinely newer builds.
+ */
 public class GitHubUpdateHelper {
-    private static final String GITHUB_API_URL = "https://api.github.com/repos/YOUR_USERNAME/Xenon/releases/latest";
+
+    private static final String TAG = "GitHubUpdateHelper";
+    private static final String GITHUB_API_URL =
+            "https://api.github.com/repos/sinkclose/Xenon/releases/latest";
     private static final Gson GSON = new Gson();
 
-    public interface Delegate {
-        void onUpdateAvailable(TLRPC.TL_help_appUpdate update);
+    private GitHubUpdateHelper() {
+    }
+
+    /**
+     * Callback for update check results.
+     */
+    public interface UpdateCallback {
+        /**
+         * Called when a newer release is found.
+         *
+         * @param release parsed latest release metadata
+         */
+        void onUpdateAvailable(GitHubRelease release);
+
+        /**
+         * Called when current build matches the latest release.
+         */
         void onNoUpdate();
+
+        /**
+         * Called on network/parsing errors.
+         */
         void onError(String error);
     }
 
-    public static void checkForUpdates(Delegate delegate) {
-        AndroidUtilities.runOnUIThread(() -> {
-            new Thread(() -> {
-                try {
-                    URL url = new URL(GITHUB_API_URL);
-                    HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-                    connection.setRequestMethod("GET");
-                    connection.setRequestProperty("Accept", "application/vnd.github.v3+json");
-                    connection.setConnectTimeout(10000);
-                    connection.setReadTimeout(10000);
-
-                    int responseCode = connection.getResponseCode();
-                    if (responseCode == 200) {
-                        BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-                        StringBuilder response = new StringBuilder();
-                        String line;
-                        while ((line = reader.readLine()) != null) {
-                            response.append(line);
-                        }
-                        reader.close();
-
-                        GitHubRelease release = GSON.fromJson(response.toString(), GitHubRelease.class);
-                        
-                        if (release != null && !TextUtils.isEmpty(release.tagName)) {
-                            int remoteVersionCode = parseVersionCode(release.tagName);
-                            
-                            if (remoteVersionCode > BuildConfig.VERSION_CODE) {
-                                TLRPC.TL_help_appUpdate update = new TLRPC.TL_help_appUpdate();
-                                update.version = release.tagName;
-                                update.text = release.body != null ? release.body : "";
-                                update.can_not_skip = false;
-                                
-                                // Найти APK в assets
-                                if (release.assets != null) {
-                                    for (GitHubAsset asset : release.assets) {
-                                        if (asset.name.endsWith(".apk") && !asset.name.contains("debug")) {
-                                            update.url = asset.browserDownloadUrl;
-                                            update.flags |= 4;
-                                            break;
-                                        }
-                                    }
-                                }
-                                
-                                AndroidUtilities.runOnUIThread(() -> delegate.onUpdateAvailable(update));
-                            } else {
-                                AndroidUtilities.runOnUIThread(delegate::onNoUpdate);
-                            }
-                        } else {
-                            AndroidUtilities.runOnUIThread(delegate::onNoUpdate);
-                        }
-                    } else {
-                        AndroidUtilities.runOnUIThread(() -> delegate.onError("HTTP " + responseCode));
-                    }
-                    connection.disconnect();
-                } catch (Exception e) {
-                    FileLog.e(e);
-                    AndroidUtilities.runOnUIThread(() -> delegate.onError(e.getMessage()));
+    /**
+     * Fetches the latest GitHub release and compares its tag (short commit hash)
+     * against the current build's {@code BuildConfig.GIT_COMMIT_SHORT}.
+     * Results are delivered on the UI thread.
+     *
+     * @param callback result callback (never null)
+     */
+    public static void checkForUpdates(UpdateCallback callback) {
+        new Thread(() -> {
+            try {
+                GitHubRelease release = fetchLatestRelease();
+                if (release == null || TextUtils.isEmpty(release.tagName)) {
+                    AndroidUtilities.runOnUIThread(callback::onNoUpdate);
+                    return;
                 }
-            }).start();
-        });
-    }
 
-    private static int parseVersionCode(String tagName) {
-        try {
-            // Убираем "v" из начала (v1.2.3 -> 1.2.3)
-            String version = tagName.startsWith("v") ? tagName.substring(1) : tagName;
-            // Разбиваем на части (1.2.3 -> [1, 2, 3])
-            String[] parts = version.split("\\.");
-            if (parts.length >= 3) {
-                int major = Integer.parseInt(parts[0]);
-                int minor = Integer.parseInt(parts[1]);
-                int patch = Integer.parseInt(parts[2]);
-                // Формируем version code (1.2.3 -> 10203)
-                return major * 10000 + minor * 100 + patch;
+                String currentHash = BuildConfig.GIT_COMMIT_SHORT;
+                if (TextUtils.isEmpty(currentHash) || "unknown".equals(currentHash)) {
+                    AndroidUtilities.runOnUIThread(() ->
+                            callback.onError("Build commit hash is not embedded"));
+                    return;
+                }
+
+                boolean isSameBuild = release.tagName.trim().equalsIgnoreCase(currentHash.trim());
+                if (isSameBuild) {
+                    AndroidUtilities.runOnUIThread(callback::onNoUpdate);
+                } else {
+                    AndroidUtilities.runOnUIThread(() -> callback.onUpdateAvailable(release));
+                }
+            } catch (Exception e) {
+                FileLog.e(TAG, e);
+                String msg = e.getMessage();
+                AndroidUtilities.runOnUIThread(() ->
+                        callback.onError(msg != null ? msg : "Unknown error"));
             }
-        } catch (Exception e) {
-            FileLog.e(e);
+        }, "XenonUpdateCheck").start();
+    }
+
+    /**
+     * Performs the HTTP request and parses JSON response.
+     *
+     * @return parsed release or null on failure
+     */
+    @Nullable
+    private static GitHubRelease fetchLatestRelease() throws Exception {
+        HttpURLConnection connection = null;
+        try {
+            URL url = new URL(GITHUB_API_URL);
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setRequestProperty("Accept", "application/vnd.github+json");
+            connection.setRequestProperty("User-Agent", "Xenon-Updater/" + BuildConfig.VERSION_NAME);
+            connection.setConnectTimeout(15000);
+            connection.setReadTimeout(15000);
+
+            int code = connection.getResponseCode();
+            if (code != 200) {
+                throw new Exception("GitHub API returned HTTP " + code);
+            }
+
+            BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(connection.getInputStream(), "UTF-8"));
+            StringBuilder sb = new StringBuilder(4096);
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line);
+            }
+            reader.close();
+
+            return GSON.fromJson(sb.toString(), GitHubRelease.class);
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
         }
-        return 0;
     }
 
-    private static class GitHubRelease {
+    /**
+     * Finds the best APK download URL from release assets.
+     * Prefers arm64-v8a release APK; falls back to any non-debug APK.
+     *
+     * @param release the release to search
+     * @return download URL or null if no suitable APK found
+     */
+    @Nullable
+    public static String findApkDownloadUrl(GitHubRelease release) {
+        if (release == null || release.assets == null) {
+            return null;
+        }
+        String arm64Url = null;
+        String anyApkUrl = null;
+        for (GitHubAsset asset : release.assets) {
+            if (asset.name == null || !asset.name.endsWith(".apk")) {
+                continue;
+            }
+            String lower = asset.name.toLowerCase();
+            if (lower.contains("debug")) {
+                continue;
+            }
+            if (lower.contains("arm64")) {
+                arm64Url = asset.browserDownloadUrl;
+                break;
+            }
+            if (anyApkUrl == null) {
+                anyApkUrl = asset.browserDownloadUrl;
+            }
+        }
+        return arm64Url != null ? arm64Url : anyApkUrl;
+    }
+
+    /**
+     * Extracts the APK file size from release assets (best match).
+     *
+     * @param release the release to search
+     * @return file size in bytes, or -1 if not found
+     */
+    public static long findApkSize(GitHubRelease release) {
+        if (release == null || release.assets == null) {
+            return -1;
+        }
+        for (GitHubAsset asset : release.assets) {
+            if (asset.name == null || !asset.name.endsWith(".apk")) continue;
+            String lower = asset.name.toLowerCase();
+            if (lower.contains("debug")) continue;
+            if (lower.contains("arm64")) return asset.size;
+        }
+        for (GitHubAsset asset : release.assets) {
+            if (asset.name != null && asset.name.endsWith(".apk")
+                    && !asset.name.toLowerCase().contains("debug")) {
+                return asset.size;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * GitHub Release JSON model.
+     */
+    public static class GitHubRelease {
         @SerializedName("tag_name")
-        String tagName;
-        
+        public String tagName;
+
         @SerializedName("name")
-        String name;
-        
+        public String name;
+
         @SerializedName("body")
-        String body;
-        
+        public String body;
+
         @SerializedName("prerelease")
-        boolean prerelease;
-        
+        public boolean prerelease;
+
+        @SerializedName("published_at")
+        public String publishedAt;
+
+        @SerializedName("html_url")
+        public String htmlUrl;
+
         @SerializedName("assets")
-        List<GitHubAsset> assets;
+        public List<GitHubAsset> assets;
     }
 
-    private static class GitHubAsset {
+    /**
+     * GitHub Release Asset JSON model.
+     */
+    public static class GitHubAsset {
         @SerializedName("name")
-        String name;
-        
+        public String name;
+
         @SerializedName("browser_download_url")
-        String browserDownloadUrl;
-        
+        public String browserDownloadUrl;
+
         @SerializedName("size")
-        long size;
+        public long size;
+
+        @SerializedName("content_type")
+        public String contentType;
     }
 }

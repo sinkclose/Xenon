@@ -66,6 +66,8 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
     private final int experimentRow = rowId++;
     private final int accessibilityRow = rowId++;
 
+    private final int checkUpdateRow = rowId++;
+
     private final int aboutHeaderRow = rowId++;
     private final int creatorRow = rowId++;
     private final int channelRow = rowId++;
@@ -171,6 +173,7 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
         if (am != null && am.isTouchExplorationEnabled()) {
             items.add(UItem.asButton(accessibilityRow, LocaleController.getString(R.string.AccessibilitySettings)).slug("accessibility"));
         }
+        items.add(UItem.asButton(checkUpdateRow, R.drawable.msg_download, LocaleController.getString(R.string.CheckUpdate)).slug("checkUpdate"));
         items.add(UItem.asShadow(null));
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.About)));
@@ -217,6 +220,10 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
             Browser.openUrl(getParentActivity(), CHANNEL_URL);
         } else if (id == sourceCodeRow) {
             Browser.openUrl(getParentActivity(), SOURCE_CODE_URL);
+        } else if (id == checkUpdateRow) {
+            if (getParentActivity() instanceof org.telegram.ui.LaunchActivity la) {
+                la.checkAppUpdate(true, new Browser.Progress());
+            }
         } else if (id >= sponsorRow) {
             var news = newsList.get(id - sponsorRow);
             Browser.openUrl(getParentActivity(), news.url);

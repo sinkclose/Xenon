@@ -2,7 +2,9 @@ package zxc.iconic.xenon.proxy;
 
 import android.content.Context;
 import android.os.Build;
+import android.provider.Settings;
 import android.text.TextUtils;
+import android.util.Base64;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -13,8 +15,12 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.HashSet;
+import java.util.Set;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -45,6 +51,31 @@ final class XrayCoreEngine {
     private static final Object LOG_LOCK = new Object();
     private static final int MAX_RECENT_LOG_LINES = 200;
     private static final String DEFAULT_DELAY_TEST_URL = "https://www.gstatic.com/generate_204";
+    private static final int PORT_CONFLICT_MAX_RETRIES = 5;
+    private static final int PORT_RANGE_START = 10808;
+    private static final int PORT_RANGE_END = 65535;
+
+    /** Commonly used ports that should be avoided when auto-selecting a SOCKS port. */
+    private static final Set<Integer> RESERVED_PORTS = new HashSet<>();
+    static {
+        // System/well-known
+        for (int p = 1; p <= 1023; p++) RESERVED_PORTS.add(p);
+        // Popular services
+        int[] common = {
+                1080, 1081, 1082,    // SOCKS defaults
+                3128, 3129,          // Squid proxy
+                5353,                // mDNS
+                8080, 8081, 8443,    // HTTP alt / HTTPS alt
+                8888, 8889,          // Common proxy ports
+                9050, 9051, 9150,    // Tor
+                10809, 10810,        // v2rayNG HTTP port range
+                1080, 2080, 2082, 2083, 2086, 2087, 2095, 2096, // Cloudflare
+                3306, 5432, 6379,    // MySQL, Postgres, Redis
+                5228, 5229, 5230,    // GCM/FCM
+                27017,               // MongoDB
+        };
+        for (int p : common) RESERVED_PORTS.add(p);
+    }
     private static final SimpleDateFormat LOG_TIME_FORMAT = new SimpleDateFormat("HH:mm:ss", Locale.US);
     private static final ArrayList<String> RECENT_LOGS = new ArrayList<>();
     private static final CoreCallbackHandler CORE_CALLBACK = new CoreCallback();
@@ -52,6 +83,7 @@ final class XrayCoreEngine {
     private static volatile boolean coreEnvInitialized;
     private static volatile CoreController coreController;
     private static volatile boolean running;
+    private static volatile String currentConfigJson;
     private static volatile Method startLoopMethod;
     private static volatile boolean unsupportedAbiLogged;
 
@@ -117,23 +149,66 @@ final class XrayCoreEngine {
                 }
 
                 if (isControllerRunning(controller)) {
-                    running = true;
-                    addLog("start skipped: already running");
-                    notifyStart(callback, true, "Already running");
-                    return;
+                    addLog("start restarting running core");
+                    controller.stopLoop();
+                    running = false;
+                    currentConfigJson = null;
                 }
 
-                startCoreLoop(controller, configJson);
+                String activeConfig = configJson;
+                startCoreLoop(controller, activeConfig);
                 if (!isControllerRunning(controller)) {
                     throw new Exception("Core did not switch to running state");
                 }
 
-                verifyLocalSocksReachable(configJson);
+                // Port conflict recovery: if SOCKS probe fails due to port conflict,
+                // auto-select a free port, regenerate credentials, re-patch config, and retry.
+                boolean socksOk = false;
+                int retriesLeft = PORT_CONFLICT_MAX_RETRIES;
+                while (!socksOk) {
+                    try {
+                        verifyLocalSocksReachable(activeConfig);
+                        socksOk = true;
+                    } catch (Throwable probeErr) {
+                        int boundPort = extractSocksPort(activeConfig);
+                        boolean portConflict = boundPort > 0 && !isPortAvailable(boundPort);
+                        if (!portConflict || retriesLeft <= 0) {
+                            throw probeErr;
+                        }
+                        retriesLeft--;
+                        int newPort = findAvailablePort(boundPort);
+                        addLog("port conflict on " + boundPort + ", rebinding to " + newPort);
+
+                        controller.stopLoop();
+                        running = false;
+                        currentConfigJson = null;
+
+                        XrayLocalSocksAuth.Credentials newCreds = XrayLocalSocksAuth.resetCredentials();
+                        activeConfig = rebindConfigToPort(configJson, newPort);
+                        activeConfig = XrayLocalSocksAuth.applyCredentials(activeConfig, newPort, newCreds);
+
+                        startCoreLoop(controller, activeConfig);
+                        if (!isControllerRunning(controller)) {
+                            throw new Exception("Core did not switch to running state after port rebind");
+                        }
+                    }
+                }
+
                 running = true;
+                currentConfigJson = activeConfig;
                 addLog("start success");
                 notifyStart(callback, true, "Started");
+
+                // Persist new port in active profile if it changed
+                int finalPort = extractSocksPort(activeConfig);
+                int originalPort = extractSocksPort(configJson);
+                if (finalPort > 0 && finalPort != originalPort) {
+                    addLog("port rebind persisted: " + originalPort + " -> " + finalPort);
+                    updateActiveProfilePort(finalPort);
+                }
             } catch (Throwable t) {
                 running = false;
+                currentConfigJson = null;
                 tryStopCoreAfterFailedStart();
                 String error = extractErrorMessage(t, "Start failed");
                 addLog("start failed: " + error);
@@ -161,6 +236,7 @@ final class XrayCoreEngine {
                 CoreController controller = coreController;
                 if (controller == null || !isControllerRunning(controller)) {
                     running = false;
+                    currentConfigJson = null;
                     addLog("stop skipped: already stopped");
                     notifyStop(callback, true, "Already stopped");
                     return;
@@ -168,6 +244,7 @@ final class XrayCoreEngine {
 
                 controller.stopLoop();
                 running = false;
+                currentConfigJson = null;
                 addLog("stop success");
                 notifyStop(callback, true, "Stopped");
             } catch (Throwable t) {
@@ -221,7 +298,13 @@ final class XrayCoreEngine {
         EXECUTOR.execute(() -> {
             try {
                 ensureCoreEnvInitialized();
-                long delay = Libv2ray.measureOutboundDelay(configJson, safeTestUrl);
+                long delay;
+                CoreController controller = coreController;
+                if (controller != null && isControllerRunning(controller) && TextUtils.equals(configJson, currentConfigJson)) {
+                    delay = controller.measureDelay(safeTestUrl);
+                } else {
+                    delay = Libv2ray.measureOutboundDelay(buildDelayCheckConfig(configJson), safeTestUrl);
+                }
                 if (delay < 0) {
                     addLog("delay check failed");
                     notifyDelay(callback, false, -1, "Delay check failed");
@@ -288,11 +371,27 @@ final class XrayCoreEngine {
             Context appContext = context.getApplicationContext();
             Seq.setContext(appContext);
             String envPath = appContext.getFilesDir().getAbsolutePath();
-            Libv2ray.initCoreEnv(envPath, "");
+            Libv2ray.initCoreEnv(envPath, getXudpBaseKey(appContext));
             coreEnvInitialized = true;
 
             addLog("core env initialized: " + envPath);
             addLog("lib version: " + safeCoreVersion());
+        }
+    }
+
+    /**
+     * Generates device-unique XUDP base key from ANDROID_ID.
+     * Matches v2rayNG's Utils.getDeviceIdForXUDPBaseKey() implementation.
+     */
+    private static String getXudpBaseKey(Context context) {
+        try {
+            byte[] androidId = Settings.Secure.ANDROID_ID.getBytes("UTF-8");
+            byte[] padded = new byte[32];
+            System.arraycopy(androidId, 0, padded, 0, Math.min(androidId.length, 32));
+            return Base64.encodeToString(padded, Base64.URL_SAFE | Base64.NO_PADDING | Base64.NO_WRAP);
+        } catch (Throwable t) {
+            FileLog.e(TAG + ": failed to generate XUDP base key", t);
+            return "";
         }
     }
 
@@ -364,6 +463,97 @@ final class XrayCoreEngine {
         try {
             controller.stopLoop();
         } catch (Throwable ignore) {
+        }
+        currentConfigJson = null;
+    }
+
+    private static String buildDelayCheckConfig(String configJson) throws Exception {
+        JSONObject root = new JSONObject(configJson);
+        root.remove("inbounds");
+        return root.toString();
+    }
+
+    /**
+     * Checks whether a TCP port is available for binding on localhost.
+     */
+    private static boolean isPortAvailable(int port) {
+        try (ServerSocket ss = new ServerSocket()) {
+            ss.setReuseAddress(false);
+            ss.bind(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), port));
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
+     * Scans for an available port starting after excludePort, skipping reserved/common ports.
+     * Range: PORT_RANGE_START..PORT_RANGE_END, wrapping around once.
+     */
+    private static int findAvailablePort(int excludePort) throws Exception {
+        int start = Math.max(PORT_RANGE_START, excludePort + 1);
+        for (int port = start; port <= PORT_RANGE_END; port++) {
+            if (!RESERVED_PORTS.contains(port) && isPortAvailable(port)) {
+                return port;
+            }
+        }
+        for (int port = PORT_RANGE_START; port < start && port <= PORT_RANGE_END; port++) {
+            if (!RESERVED_PORTS.contains(port) && port != excludePort && isPortAvailable(port)) {
+                return port;
+            }
+        }
+        throw new Exception("No available port found in range " + PORT_RANGE_START + ".." + PORT_RANGE_END);
+    }
+
+    /**
+     * Extracts the SOCKS inbound port from runtime config JSON.
+     */
+    private static int extractSocksPort(String configJson) {
+        try {
+            JSONObject root = new JSONObject(configJson);
+            JSONArray inbounds = root.optJSONArray("inbounds");
+            if (inbounds == null) return -1;
+            for (int i = 0; i < inbounds.length(); i++) {
+                JSONObject inbound = inbounds.optJSONObject(i);
+                if (inbound != null && "socks".equalsIgnoreCase(inbound.optString("protocol", ""))) {
+                    return parseIntFlexible(inbound.opt("port"), -1);
+                }
+            }
+        } catch (Throwable ignore) {
+        }
+        return -1;
+    }
+
+    /**
+     * Replaces SOCKS inbound port in config JSON with a new port value.
+     */
+    private static String rebindConfigToPort(String configJson, int newPort) throws Exception {
+        JSONObject root = new JSONObject(configJson);
+        JSONArray inbounds = root.optJSONArray("inbounds");
+        if (inbounds != null) {
+            for (int i = 0; i < inbounds.length(); i++) {
+                JSONObject inbound = inbounds.optJSONObject(i);
+                if (inbound != null && "socks".equalsIgnoreCase(inbound.optString("protocol", ""))) {
+                    inbound.put("port", newPort);
+                    break;
+                }
+            }
+        }
+        return root.toString();
+    }
+
+    /**
+     * Persists the new port back into the active profile store.
+     */
+    private static void updateActiveProfilePort(int newPort) {
+        try {
+            XrayProxyProfileStore.Profile active = XrayProxyProfileStore.getActiveProfile();
+            if (active != null) {
+                active.localPort = newPort;
+                XrayProxyProfileStore.updateProfile(active);
+            }
+        } catch (Throwable t) {
+            FileLog.e(TAG + ": failed to persist port rebind", t);
         }
     }
 
@@ -621,6 +811,7 @@ final class XrayCoreEngine {
         String lower = status.toLowerCase(Locale.US);
         if (lower.contains("stopped") || lower.contains("shutdown") || lower.contains("failed") || lower.contains("error")) {
             running = false;
+            currentConfigJson = null;
             return;
         }
         if (lower.contains("running") || lower.contains("started")) {
@@ -639,6 +830,7 @@ final class XrayCoreEngine {
         @Override
         public long shutdown() {
             running = false;
+            currentConfigJson = null;
             addLog("callback: shutdown");
             return 0L;
         }

@@ -197,6 +197,9 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
         canvas.save();
         canvas.translate(boundProps.boundsWithPadding.left, boundProps.boundsWithPadding.top);
         canvas.drawRenderNode(renderNode);
+        if (liquidGlassEffect != null && Build.VERSION.SDK_INT >= 33) {
+            liquidGlassEffect.drawHighlight(canvas, renderNode.getAlpha());
+        }
         canvas.restore();
     }
 

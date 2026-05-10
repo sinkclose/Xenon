@@ -16,7 +16,7 @@ import java.util.regex.Pattern;
 
 public final class XrayUriConfigFactory {
 
-    private static final Pattern LINK_PATTERN = Pattern.compile("(?i)(vless|vmess|trojan|ss|socks)://[^\\s]+", Pattern.CASE_INSENSITIVE);
+    private static final Pattern LINK_PATTERN = Pattern.compile("(?i)(vless|vmess|trojan|ss|socks5?|hysteria2?|hy2?|wireguard|wg)://[^\\s]+", Pattern.CASE_INSENSITIVE);
 
     private XrayUriConfigFactory() {
     }
@@ -73,7 +73,7 @@ public final class XrayUriConfigFactory {
             if (lower.startsWith("ss://")) {
                 return parseShadowsocks(link, localPort);
             }
-            if (lower.startsWith("socks://")) {
+            if (lower.startsWith("socks://") || lower.startsWith("socks5://")) {
                 return parseSocksOrHttp(link, localPort, "socks");
             }
             if (lower.startsWith("http://")) {
@@ -142,13 +142,16 @@ public final class XrayUriConfigFactory {
 
         Map<String, String> q = new HashMap<>();
         q.put("type", node.optString("net", node.optString("type", "tcp")));
+        q.put("headertype", node.optString("type", "none"));
         q.put("security", node.optString("tls", node.optString("security", "none")));
         q.put("sni", node.optString("sni", ""));
         q.put("fp", node.optString("fp", ""));
         q.put("alpn", node.optString("alpn", ""));
         q.put("host", node.optString("host", ""));
         q.put("path", node.optString("path", ""));
-        q.put("serviceName", node.optString("serviceName", ""));
+        q.put("servicename", node.optString("serviceName", ""));
+        q.put("mode", node.optString("mode", ""));
+        q.put("authority", node.optString("authority", ""));
 
         JSONObject outbound = new JSONObject();
         outbound.put("tag", "proxy");
@@ -219,14 +222,14 @@ public final class XrayUriConfigFactory {
         }
 
         String[] hostPort = splitHostPort(parts[1]);
-        String host = requireText(hostPort[0], "Shadowsocks host is missing");
+        String host = requireText(stripIpv6Brackets(hostPort[0]), "Shadowsocks host is missing");
         int port = parsePort(hostPort[1], 8388);
 
         JSONObject server = new JSONObject();
         server.put("address", host);
         server.put("port", port);
-        server.put("method", methodPass[0]);
-        server.put("password", methodPass[1]);
+        server.put("method", decode(methodPass[0]));
+        server.put("password", decode(methodPass[1]));
 
         JSONObject settings = new JSONObject();
         settings.put("servers", new JSONArray().put(server));
@@ -285,7 +288,17 @@ public final class XrayUriConfigFactory {
         block.put("tag", "block");
         block.put("protocol", "blackhole");
 
+        JSONObject log = new JSONObject();
+        log.put("loglevel", "warning");
+
+        JSONObject dnsObj = new JSONObject();
+        dnsObj.put("servers", new JSONArray()
+                .put("https+local://1.1.1.1/dns-query")
+                .put("localhost"));
+
         JSONObject root = new JSONObject();
+        root.put("log", log);
+        root.put("dns", dnsObj);
         root.put("inbounds", new JSONArray().put(inbound));
         root.put("outbounds", new JSONArray().put(mainOutbound).put(direct).put(block));
         return root;
@@ -297,8 +310,8 @@ public final class XrayUriConfigFactory {
         stream.put("network", network);
 
         String security = normalizeTransportSecurity(defaultIfEmpty(q.get("security"), "none"));
+        stream.put("security", security);
         if (!"none".equals(security)) {
-            stream.put("security", security);
             if ("tls".equals(security)) {
                 JSONObject tls = new JSONObject();
                 putIfNotEmpty(tls, "serverName", defaultIfEmpty(q.get("sni"), hostFallback));
@@ -333,7 +346,34 @@ public final class XrayUriConfigFactory {
             }
         }
 
-        if ("ws".equals(network)) {
+        if ("tcp".equals(network)) {
+            String headerType = q.get("headertype");
+            if ("http".equalsIgnoreCase(headerType)) {
+                JSONObject tcpSettings = new JSONObject();
+                JSONObject header = new JSONObject();
+                header.put("type", "http");
+                JSONObject request = new JSONObject();
+                if (!TextUtils.isEmpty(q.get("host"))) {
+                    JSONObject headers = new JSONObject();
+                    JSONArray hostArr = new JSONArray();
+                    for (String h : q.get("host").split(",")) {
+                        if (!TextUtils.isEmpty(h.trim())) hostArr.put(h.trim());
+                    }
+                    headers.put("Host", hostArr);
+                    request.put("headers", headers);
+                }
+                if (!TextUtils.isEmpty(q.get("path"))) {
+                    JSONArray pathArr = new JSONArray();
+                    for (String p : q.get("path").split(",")) {
+                        if (!TextUtils.isEmpty(p.trim())) pathArr.put(p.trim());
+                    }
+                    request.put("path", pathArr);
+                }
+                header.put("request", request);
+                tcpSettings.put("header", header);
+                stream.put("tcpSettings", tcpSettings);
+            }
+        } else if ("ws".equals(network)) {
             JSONObject ws = new JSONObject();
             putIfNotEmpty(ws, "path", q.get("path"));
             if (!TextUtils.isEmpty(q.get("host"))) {
@@ -342,19 +382,39 @@ public final class XrayUriConfigFactory {
                 ws.put("headers", headers);
             }
             stream.put("wsSettings", ws);
+        } else if ("h2".equals(network) || "http".equals(network)) {
+            stream.put("network", "h2");
+            JSONObject h2 = new JSONObject();
+            if (!TextUtils.isEmpty(q.get("host"))) {
+                JSONArray hostArr = new JSONArray();
+                for (String h : q.get("host").split(",")) {
+                    if (!TextUtils.isEmpty(h.trim())) hostArr.put(h.trim());
+                }
+                h2.put("host", hostArr);
+            }
+            putIfNotEmpty(h2, "path", defaultIfEmpty(q.get("path"), "/"));
+            stream.put("httpSettings", h2);
         } else if ("grpc".equals(network)) {
             JSONObject grpc = new JSONObject();
-            putIfNotEmpty(grpc, "serviceName", q.get("serviceName"));
+            putIfNotEmpty(grpc, "serviceName", queryValue(q, "serviceName"));
+            String mode = q.get("mode");
+            if ("multi".equalsIgnoreCase(mode)) {
+                grpc.put("multiMode", true);
+            }
+            putIfNotEmpty(grpc, "authority", q.get("authority"));
+            grpc.put("idle_timeout", 60);
+            grpc.put("health_check_timeout", 20);
             stream.put("grpcSettings", grpc);
         } else if ("httpupgrade".equals(network)) {
             JSONObject hu = new JSONObject();
             putIfNotEmpty(hu, "path", q.get("path"));
             putIfNotEmpty(hu, "host", q.get("host"));
             stream.put("httpupgradeSettings", hu);
-        } else if ("splithttp".equals(network)) {
+        } else if ("splithttp".equals(network) || "xhttp".equals(network)) {
             JSONObject sh = new JSONObject();
             putIfNotEmpty(sh, "path", q.get("path"));
             putIfNotEmpty(sh, "host", q.get("host"));
+            putIfNotEmpty(sh, "mode", q.get("mode"));
             stream.put("splithttpSettings", sh);
         }
 
@@ -463,6 +523,27 @@ public final class XrayUriConfigFactory {
             return "tls";
         }
         return normalized;
+    }
+
+    private static String queryValue(Map<String, String> q, String key) {
+        if (q == null || TextUtils.isEmpty(key)) {
+            return "";
+        }
+        String value = q.get(key);
+        if (!TextUtils.isEmpty(value)) {
+            return value;
+        }
+        return q.get(key.toLowerCase(Locale.US));
+    }
+
+    private static String stripIpv6Brackets(String host) {
+        if (TextUtils.isEmpty(host) || host.length() < 2) {
+            return host;
+        }
+        if (host.charAt(0) == '[' && host.charAt(host.length() - 1) == ']') {
+            return host.substring(1, host.length() - 1);
+        }
+        return host;
     }
 
     private static boolean isTruthy(String value) {

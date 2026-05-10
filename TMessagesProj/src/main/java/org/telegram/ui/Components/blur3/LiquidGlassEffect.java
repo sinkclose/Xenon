@@ -3,6 +3,7 @@ package org.telegram.ui.Components.blur3;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.BlendMode;
+import android.graphics.BlurMaskFilter;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
@@ -39,10 +40,11 @@ public class LiquidGlassEffect {
             String highlightCode = AndroidUtilities.readRes(R.raw.liquid_glass_highlight);
             highlightShader = new RuntimeShader(highlightCode);
             highlightPaint.setStyle(Paint.Style.STROKE);
-            highlightPaint.setStrokeWidth(AndroidUtilities.dp(0.5f) * 2f);
+            highlightPaint.setStrokeWidth(AndroidUtilities.dp(0.35f) * 2f);
+            highlightPaint.setMaskFilter(new BlurMaskFilter(AndroidUtilities.dp(0.5f), BlurMaskFilter.Blur.NORMAL));
             highlightPaint.setBlendMode(BlendMode.PLUS);
             highlightPaint.setColor(Color.WHITE);
-            highlightPaint.setAlpha(128); // 50% white, like the lib's default
+            highlightPaint.setAlpha(42);
         }
     }
 
@@ -131,7 +133,7 @@ public class LiquidGlassEffect {
      * Draw the directional edge highlight on top of the glass.
      * Call this from onDraw() AFTER the glass RenderNode has been drawn.
      */
-    public void drawHighlight(Canvas canvas) {
+    public void drawHighlight(Canvas canvas, float parentAlpha) {
         if (highlightShader == null || highlightCornerRadii == null) return;
 
         canvas.save();
@@ -139,8 +141,9 @@ public class LiquidGlassEffect {
         highlightClipPath.addRoundRect(highlightRect, highlightCornerRadii, Path.Direction.CW);
         canvas.clipPath(highlightClipPath);
 
+        highlightPaint.setAlpha(Math.round(42f * Math.max(0f, Math.min(1f, parentAlpha))));
         highlightPaint.setShader(highlightShader);
-        canvas.drawRoundRect(highlightRect, highlightCornerRadii[0], highlightCornerRadii[2], highlightPaint);
+        canvas.drawPath(highlightClipPath, highlightPaint);
         canvas.restore();
     }
 }

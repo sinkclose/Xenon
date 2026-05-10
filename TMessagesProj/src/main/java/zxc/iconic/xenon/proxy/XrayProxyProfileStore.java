@@ -278,7 +278,15 @@ public final class XrayProxyProfileStore {
 
     private static int suggestPortLocked() {
         int base = 10808;
+        java.util.Set<Integer> usedPorts = new java.util.HashSet<>();
+        for (int i = 0; i < cachedProfiles.size(); i++) {
+            usedPorts.add(cachedProfiles.get(i).localPort);
+        }
         int candidate = base + cachedProfiles.size();
+        // Skip ports already used by other profiles
+        while (candidate <= 65535 && usedPorts.contains(candidate)) {
+            candidate++;
+        }
         if (candidate > 65535) {
             candidate = 10808;
         }
