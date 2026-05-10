@@ -73,13 +73,18 @@ public class GitHubUpdateHelper {
     public static void checkForUpdates(UpdateCallback callback) {
         new Thread(() -> {
             try {
+                FileLog.d(TAG + ": checking for updates...");
                 GitHubRelease release = fetchLatestRelease();
                 if (release == null || TextUtils.isEmpty(release.tagName)) {
+                    FileLog.d(TAG + ": release is null or has no tag");
                     AndroidUtilities.runOnUIThread(callback::onNoUpdate);
                     return;
                 }
 
                 String currentHash = BuildConfig.GIT_COMMIT_SHORT;
+                FileLog.d(TAG + ": local=" + currentHash
+                        + " remote=" + release.tagName
+                        + " name=" + release.name);
                 if (TextUtils.isEmpty(currentHash) || "unknown".equals(currentHash)) {
                     AndroidUtilities.runOnUIThread(() ->
                             callback.onError("Build commit hash is not embedded"));
@@ -88,8 +93,11 @@ public class GitHubUpdateHelper {
 
                 boolean isSameBuild = release.tagName.trim().equalsIgnoreCase(currentHash.trim());
                 if (isSameBuild) {
+                    FileLog.d(TAG + ": hashes match, no update");
                     AndroidUtilities.runOnUIThread(callback::onNoUpdate);
                 } else {
+                    String apkUrl = findApkDownloadUrl(release);
+                    FileLog.d(TAG + ": update available, apk=" + apkUrl);
                     AndroidUtilities.runOnUIThread(() -> callback.onUpdateAvailable(release));
                 }
             } catch (Exception e) {

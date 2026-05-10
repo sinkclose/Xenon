@@ -222,7 +222,12 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
             Browser.openUrl(getParentActivity(), SOURCE_CODE_URL);
         } else if (id == checkUpdateRow) {
             if (getParentActivity() instanceof org.telegram.ui.LaunchActivity la) {
-                la.checkAppUpdate(true, new Browser.Progress());
+                var spinner = new org.telegram.ui.ActionBar.AlertDialog(getParentActivity(), org.telegram.ui.ActionBar.AlertDialog.ALERT_TYPE_SPINNER);
+                spinner.setCanCancel(true);
+                spinner.show();
+                la.checkAppUpdate(true, new Browser.Progress(null, () -> {
+                    try { spinner.dismiss(); } catch (Throwable ignored) {}
+                }));
             }
         } else if (id >= sponsorRow) {
             var news = newsList.get(id - sponsorRow);

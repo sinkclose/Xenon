@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.text.TextUtils;
 import android.view.ViewGroup;
+import android.widget.Toast;
 
 import org.telegram.messenger.regular.BuildConfig;
 import org.telegram.tgnet.TLRPC;
@@ -39,6 +40,7 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
     private volatile boolean downloading;
     private volatile float downloadProgress;
     private volatile File downloadedApkFile;
+    private volatile int checkCounter;
 
     @Override
     protected String onGetApplicationId() {
@@ -57,6 +59,13 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
 
     @Override
     public void checkUpdate(boolean force, Runnable whenDone) {
+        // Increment counter so each check produces a BetaUpdate with a unique
+        // (monotonically increasing) versionCode. This prevents
+        // BetaUpdate.higherThan() from returning false on repeated manual checks
+        // when the same GitHub release is found — LaunchActivity captures
+        // prevUpdate *before* calling checkUpdate(), so without this counter
+        // the dialog would only appear on the very first check.
+        final int thisCheck = ++checkCounter;
         GitHubUpdateHelper.checkForUpdates(new GitHubUpdateHelper.UpdateCallback() {
             @Override
             public void onUpdateAvailable(GitHubUpdateHelper.GitHubRelease release) {
@@ -65,18 +74,16 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
                 pendingRelease = release;
                 pendingApkUrl = GitHubUpdateHelper.findApkDownloadUrl(release);
                 pendingTitle = title;
-                // version must be parseable as "x.y.z" for BetaUpdate.higherThan() comparison.
-                // Use APP_VERSION_NAME + ".1" to guarantee it's always higher than the
-                // current build's version (same base). The tag_name (commit hash) uniqueness
-                // already ensures we only reach here when a genuinely new release exists.
+                // version must be parseable as "x.y.z" for BetaUpdate.higherThan().
+                // Use VERSION_NAME + ".1" so it's always >= current build.
+                // thisCheck in versionCode guarantees higherThan(prevUpdate) == true
+                // on every manual re-check of the same release.
                 String versionStr = BuildConfig.VERSION_NAME + ".1";
-                int versionCode = (int) (BuildConfig.VERSION_CODE + 1);
+                int versionCode = (int) (BuildConfig.VERSION_CODE + thisCheck);
                 pendingUpdate = new BetaUpdate(versionStr, versionCode, changelog);
                 downloadedApkFile = null;
                 downloading = false;
-                if (whenDone != null) {
-                    AndroidUtilities.runOnUIThread(whenDone);
-                }
+                if (whenDone != null) whenDone.run();
             }
 
             @Override
@@ -84,20 +91,22 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
                 pendingUpdate = null;
                 pendingRelease = null;
                 pendingApkUrl = null;
-                if (whenDone != null) {
-                    AndroidUtilities.runOnUIThread(whenDone);
-                }
+                if (whenDone != null) whenDone.run();
             }
 
             @Override
             public void onError(String error) {
-                FileLog.d(TAG + ": update check error: " + error);
+                FileLog.e(TAG + ": update check error: " + error);
                 pendingUpdate = null;
                 pendingRelease = null;
                 pendingApkUrl = null;
-                if (whenDone != null) {
-                    AndroidUtilities.runOnUIThread(whenDone);
-                }
+                // Show error to user — LaunchActivity would otherwise display
+                // "Your version is up to date" because pendingUpdate is null.
+                try {
+                    Toast.makeText(applicationContext,
+                            "Update check failed: " + error, Toast.LENGTH_LONG).show();
+                } catch (Throwable ignored) {}
+                if (whenDone != null) whenDone.run();
             }
         });
     }
