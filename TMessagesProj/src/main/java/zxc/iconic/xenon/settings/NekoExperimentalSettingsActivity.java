@@ -95,7 +95,7 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
         if (activeProfile != null && !TextUtils.isEmpty(activeProfile.name)) {
             xrayStatus = xrayStatus + " • " + activeProfile.name;
         }
-        items.add(TextSettingsCellFactory.of(xrayProxySettingsRow, LocaleController.getString(R.string.XrayProxyTitle), xrayStatus).slug("xrayProxy"));
+        items.add(TextDetailSettingsCellFactory.of(xrayProxySettingsRow, LocaleController.getString(R.string.XrayProxyTitle), xrayStatus).slug("xrayProxy"));
         items.add(UItem.asShadow(null));
 
         if (AnalyticsHelper.isSettingsAvailable()) {

@@ -10752,4 +10752,27 @@
     <string name="XrayProxyExperimentalHint">Experimental: requires AndroidLibXrayLite linked in build. If library is missing, start will fail safely.</string>
     <string name="XrayProxyLibMissing">AndroidLibXrayLite is not linked in this build.</string>
     <string name="XrayProxyConfigApplyAuthError">Failed to apply local SOCKS auth to config.</string>
+    <string name="XrayProxyAbout">About</string>
+    <string name="XrayProxyAboutTitle">About Xray proxy</string>
+    <string name="XrayProxyAboutSummary">Xenon embeds an Xray core to route Telegram traffic through a local SOCKS inbound without using a system VPN slot.</string>
+    <string name="XrayProxyAboutSupportedProtocols">Supported share-URI protocols</string>
+    <string name="XrayProxyAboutProtocolRow">%1$s — %2$s</string>
+    <string name="XrayProxyAdvancedTitle">Advanced</string>
+    <string name="XrayProxyAdvancedSection">Advanced</string>
+    <string name="XrayProxySocksAuthUsername">Username</string>
+    <string name="XrayProxySocksAuthPassword">Password</string>
+    <string name="XrayProxySocksAuthHint">Tap a row to copy. Reset regenerates new random credentials and reconnects the core if it is running.</string>
+    <string name="XrayProxyEndpointSection">Endpoint</string>
+    <string name="XrayProxyLocalEndpoint">Local endpoint</string>
+    <string name="XrayProxyLocalEndpointFormat">127.0.0.1:%1$s</string>
+    <string name="XrayProxyLocalEndpointHint">Address exposed to Telegram by the active profile.</string>
+    <string name="XrayProxyTransportSection">Transport</string>
+    <string name="XrayProxyTransportHint">Transport can only be imported via share URI. Raw JSON editing is disabled.</string>
+    <string name="XrayProxyTransportHintWithSummary">Current: %1$s. Transport can only be imported via share URI. Raw JSON editing is disabled.</string>
+    <string name="XrayProxyLocalPortHint">Local SOCKS port is allocated per profile (default 10808 + profile index).</string>
+    <string name="XrayProxyReplaceFromClipboard">Replace transport from clipboard</string>
+    <string name="XrayProxyReplaceFromUri">Replace transport from URI</string>
+    <string name="XrayProxyProfilesEmpty">No proxy profiles. Paste a share URI from clipboard to add your first one.</string>
+    <string name="XrayProxyLoginActiveNoneTitle">No saved profile</string>
+    <string name="XrayProxyLoginActiveNoneHint">Paste a share URI below and tap Connect.</string>
 </resources>

@@ -1,17 +1,24 @@
 package zxc.iconic.xenon.settings;
 
+import android.app.Activity;
+import android.content.Context;
 import android.text.TextUtils;
 import android.view.View;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
+import org.telegram.ui.ActionBar.ActionBar;
+import org.telegram.ui.ActionBar.ActionBarMenu;
+import org.telegram.ui.ActionBar.ActionBarMenuItem;
+import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.Cells.TextCheckCell;
 import org.telegram.ui.Components.AlertsCreator;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 
 import java.util.ArrayList;
+import java.util.List;
 
 import zxc.iconic.xenon.NekoConfig;
 import zxc.iconic.xenon.proxy.XrayAppProxyManager;
@@ -19,24 +26,57 @@ import zxc.iconic.xenon.proxy.XrayConfigValidator;
 import zxc.iconic.xenon.proxy.XrayLocalSocksAuth;
 import zxc.iconic.xenon.proxy.XrayProxyProfileStore;
 import zxc.iconic.xenon.proxy.XrayTelegramProxyBridge;
+import zxc.iconic.xenon.proxy.XrayUriConfigFactory;
 
 /**
- * Main dashboard for app-only Xray proxy with quick status/actions and navigation to sub-screens.
+ * Dashboard for app-only Xray proxy — compact Telegram-style settings screen.
+ * Connect/disconnect and active profile selection live on main list;
+ * logs / advanced / about are in the ActionBar overflow menu.
  */
 public class NekoXrayProxyHubActivity extends BaseNekoSettingsActivity {
+
+    private static final int MENU_LOGS = 100;
+    private static final int MENU_ADVANCED = 101;
+    private static final int MENU_ABOUT = 102;
 
     private final int enabledRow = rowId++;
     private final int statusRow = rowId++;
     private final int activeProfileRow = rowId++;
-    private final int socksAuthRow = rowId++;
-    private final int resetSocksAuthRow = rowId++;
 
     private final int profilesRow = rowId++;
-    private final int logsRow = rowId++;
-
     private final int delayCheckRow = rowId++;
 
-    private boolean socksAuthRevealed;
+    @Override
+    public ActionBar createActionBar(Context context) {
+        ActionBar actionBar = super.createActionBar(context);
+        ActionBarMenu menu = actionBar.createMenu();
+        ActionBarMenuItem overflow = menu.addItem(0, R.drawable.ic_ab_other);
+        overflow.setContentDescription(LocaleController.getString(R.string.AccDescrMoreOptions));
+        overflow.addSubItem(MENU_LOGS, R.drawable.msg_log, LocaleController.getString(R.string.XrayProxyLogs));
+        overflow.addSubItem(MENU_ADVANCED, R.drawable.msg_settings, LocaleController.getString(R.string.XrayProxyAdvancedSection));
+        overflow.addSubItem(MENU_ABOUT, R.drawable.msg_info, LocaleController.getString(R.string.XrayProxyAbout));
+        actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
+            @Override
+            public void onItemClick(int id) {
+                if (id == -1) {
+                    finishFragment();
+                    return;
+                }
+                if (id == MENU_LOGS) {
+                    presentFragment(new NekoXrayProxyLogsActivity());
+                    return;
+                }
+                if (id == MENU_ADVANCED) {
+                    presentFragment(new NekoXrayProxyAdvancedActivity());
+                    return;
+                }
+                if (id == MENU_ABOUT) {
+                    showAboutDialog();
+                }
+            }
+        });
+        return actionBar;
+    }
 
     @Override
     public void onResume() {
@@ -46,48 +86,25 @@ public class NekoXrayProxyHubActivity extends BaseNekoSettingsActivity {
         }
     }
 
-    private void resetLocalSocksAuth() {
-        XrayLocalSocksAuth.resetCredentials();
-        socksAuthRevealed = false;
-        listView.adapter.update(true);
-
-        if (!NekoConfig.xrayAppProxyEnabled) {
-            AlertsCreator.showSimpleAlert(this,
-                    LocaleController.getString(R.string.XrayProxySocksAuth),
-                    LocaleController.getString(R.string.XrayProxySocksAuthResetDone));
-            return;
-        }
-
-        if (!XrayAppProxyManager.isRunning()) {
-            startProxyFlow();
-            return;
-        }
-
-        XrayAppProxyManager.stop((success, message) -> AndroidUtilities.runOnUIThread(() -> {
-            if (!success) {
-                showError(message);
-                return;
-            }
-            XrayTelegramProxyBridge.disableLocalProxyIfOwned();
-            startProxyFlow();
-        }));
-    }
-
     @Override
     protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
         XrayProxyProfileStore.Profile active = XrayProxyProfileStore.getActiveProfile();
         boolean running = XrayAppProxyManager.isRunning();
         boolean canRun = hasUsableActiveProfile(active);
-        XrayLocalSocksAuth.Credentials credentials = XrayLocalSocksAuth.getOrCreateCredentials();
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.Connection)));
-        items.add(UItem.asCheck(enabledRow, LocaleController.getString(R.string.XrayProxyEnable), LocaleController.getString(R.string.XrayProxyEnableDesc))
+        items.add(UItem.asCheck(enabledRow,
+                        LocaleController.getString(R.string.XrayProxyEnable),
+                        LocaleController.getString(R.string.XrayProxyEnableDesc))
                 .setChecked(NekoConfig.xrayAppProxyEnabled)
+                .setEnabled(canRun || NekoConfig.xrayAppProxyEnabled)
                 .slug("xrayProxyEnabled"));
         UItem statusItem = UItem.asButton(statusRow,
                 running ? R.drawable.msg_online : R.drawable.msg_disable,
                 LocaleController.getString(R.string.XrayProxyStatus),
-                running ? LocaleController.getString(R.string.XrayProxyStatusRunning) : LocaleController.getString(R.string.XrayProxyStatusStopped)).slug("xrayProxyStatus");
+                running ? LocaleController.getString(R.string.XrayProxyStatusRunning)
+                        : LocaleController.getString(R.string.XrayProxyStatusStopped))
+                .slug("xrayProxyStatus");
         if (running) {
             statusItem.accent();
         } else {
@@ -96,45 +113,27 @@ public class NekoXrayProxyHubActivity extends BaseNekoSettingsActivity {
         statusItem.setEnabled(false);
         items.add(statusItem);
 
-        String activeName = active == null ? LocaleController.getString(R.string.XrayProxyNoProfiles) : active.name;
-        UItem activeItem = UItem.asButton(activeProfileRow, R.drawable.msg_settings,
-                LocaleController.getString(R.string.XrayProxyActiveProfile),
-                activeName).slug("xrayProxyActiveProfile");
+        String activeName = active == null
+                ? LocaleController.getString(R.string.XrayProxyNoProfiles)
+                : active.name;
+        UItem activeItem = UItem.asButtonSubtext(activeProfileRow, R.drawable.msg_settings,
+                LocaleController.getString(R.string.XrayProxyActiveProfile), activeName)
+                .slug("xrayProxyActiveProfile");
         if (active != null) {
             activeItem.accent();
         }
         items.add(activeItem);
-
-        items.add(UItem.asButton(socksAuthRow, R.drawable.msg_info,
-                LocaleController.getString(R.string.XrayProxySocksAuth),
-                socksAuthRevealed ? LocaleController.getString(R.string.XrayProxySocksAuthHide)
-                                  : LocaleController.getString(R.string.XrayProxySocksAuthReveal))
-                .slug("xrayProxySocksAuth"));
-        if (socksAuthRevealed) {
-            String authDetail = LocaleController.formatStringSimple(
-                    LocaleController.getString(R.string.XrayProxySocksAuthValue),
-                    credentials.username,
-                    credentials.password
-            );
-            items.add(UItem.asShadow(authDetail));
-        }
-        items.add(UItem.asButton(resetSocksAuthRow, R.drawable.msg_delete,
-                LocaleController.getString(R.string.XrayProxySocksAuthReset)).red().slug("xrayProxySocksAuthReset"));
         items.add(UItem.asShadow(LocaleController.getString(R.string.XrayProxyConnectionHint)));
 
-        items.add(UItem.asHeader(LocaleController.getString(R.string.XrayProxyManagementSection)));
-        items.add(UItem.asButton(profilesRow, R.drawable.msg_settings,
+        items.add(UItem.asHeader(LocaleController.getString(R.string.XrayProxyProfileSection)));
+        items.add(UItem.asButton(profilesRow, R.drawable.msg_link2,
                 LocaleController.getString(R.string.XrayProxyProfiles),
-                LocaleController.formatStringSimple(LocaleController.getString(R.string.XrayProxyProfilesCount),
-                        String.valueOf(XrayProxyProfileStore.getProfiles().size()))).slug("xrayProxyProfiles"));
-        items.add(UItem.asButton(logsRow, R.drawable.msg_log,
-                LocaleController.getString(R.string.XrayProxyLogs),
-                String.valueOf(XrayAppProxyManager.getRecentLogs().size())).slug("xrayProxyLogs"));
-        items.add(UItem.asShadow(LocaleController.getString(R.string.XrayProxyManagementHint)));
-
-        items.add(UItem.asHeader(LocaleController.getString(R.string.XrayProxyActionsSection)));
+                LocaleController.formatStringSimple(
+                        LocaleController.getString(R.string.XrayProxyProfilesCount),
+                        String.valueOf(XrayProxyProfileStore.getProfiles().size())))
+                .slug("xrayProxyProfiles"));
         items.add(UItem.asButton(delayCheckRow, R.drawable.proxy_check,
-                LocaleController.getString(R.string.XrayProxyDelayCheck))
+                        LocaleController.getString(R.string.XrayProxyDelayCheck))
                 .setEnabled(canRun).slug("xrayProxyDelay"));
         items.add(UItem.asShadow(LocaleController.getString(R.string.XrayProxyRuntimeHint)));
     }
@@ -168,22 +167,6 @@ public class NekoXrayProxyHubActivity extends BaseNekoSettingsActivity {
             } else {
                 presentFragment(new NekoXrayProxyProfilesActivity());
             }
-            return;
-        }
-
-        if (id == socksAuthRow) {
-            socksAuthRevealed = !socksAuthRevealed;
-            listView.adapter.update(true);
-            return;
-        }
-
-        if (id == resetSocksAuthRow) {
-            resetLocalSocksAuth();
-            return;
-        }
-
-        if (id == logsRow) {
-            presentFragment(new NekoXrayProxyLogsActivity());
             return;
         }
 
@@ -306,7 +289,9 @@ public class NekoXrayProxyHubActivity extends BaseNekoSettingsActivity {
             }
             AlertsCreator.showSimpleAlert(this,
                     LocaleController.getString(R.string.XrayProxyDelayCheck),
-                    LocaleController.formatStringSimple(LocaleController.getString(R.string.XrayProxyDelayCheckResult), String.valueOf(delayMs)));
+                    LocaleController.formatStringSimple(
+                            LocaleController.getString(R.string.XrayProxyDelayCheckResult),
+                            String.valueOf(delayMs)));
         }));
     }
 
@@ -327,6 +312,45 @@ public class NekoXrayProxyHubActivity extends BaseNekoSettingsActivity {
             this.configJson = configJson;
             this.credentials = credentials;
         }
+    }
+
+    /**
+     * Shows an informational Telegram-style alert listing share-URI protocols
+     * supported by {@link XrayUriConfigFactory}. The protocol list is pulled
+     * from the factory, not hardcoded in the UI layer.
+     */
+    private void showAboutDialog() {
+        Activity context = getParentActivity();
+        if (context == null) {
+            return;
+        }
+
+        List<XrayUriConfigFactory.ProtocolInfo> protocols = XrayUriConfigFactory.getSupportedProtocols();
+
+        StringBuilder message = new StringBuilder();
+        message.append(LocaleController.getString(R.string.XrayProxyAboutSummary));
+        if (!protocols.isEmpty()) {
+            message.append("\n\n");
+            message.append(LocaleController.getString(R.string.XrayProxyAboutSupportedProtocols));
+            String rowTemplate = LocaleController.getString(R.string.XrayProxyAboutProtocolRow);
+            for (XrayUriConfigFactory.ProtocolInfo info : protocols) {
+                StringBuilder schemes = new StringBuilder();
+                for (String scheme : info.uriSchemes) {
+                    if (schemes.length() > 0) {
+                        schemes.append(", ");
+                    }
+                    schemes.append(scheme).append("://");
+                }
+                message.append('\n');
+                message.append(LocaleController.formatStringSimple(rowTemplate, info.displayName, schemes.toString()));
+            }
+        }
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(context, resourcesProvider);
+        builder.setTitle(LocaleController.getString(R.string.XrayProxyAboutTitle));
+        builder.setMessage(message.toString());
+        builder.setPositiveButton(LocaleController.getString(R.string.OK), null);
+        showDialog(builder.create());
     }
 
     private void showError(String message) {

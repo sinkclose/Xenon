@@ -1,97 +1,168 @@
 package zxc.iconic.xenon.settings;
 
-import android.text.TextUtils;
+import android.content.Context;
+import android.content.Intent;
+import android.graphics.Typeface;
+import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.View;
+import android.widget.FrameLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
-import org.telegram.ui.Components.UItem;
-import org.telegram.ui.Components.UniversalAdapter;
+import org.telegram.ui.ActionBar.ActionBar;
+import org.telegram.ui.ActionBar.ActionBarMenu;
+import org.telegram.ui.ActionBar.ActionBarMenuItem;
+import org.telegram.ui.ActionBar.BaseFragment;
+import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.Components.BulletinFactory;
+import org.telegram.ui.Components.LayoutHelper;
 
 import java.util.ArrayList;
 
 import zxc.iconic.xenon.proxy.XrayAppProxyManager;
 
 /**
- * Read-only screen with recent Xray core lifecycle logs.
+ * Read-only monospace viewer for recent Xray core lifecycle logs.
+ * Uses the Telegram native action bar; overflow menu hosts copy/share/clear.
  */
-public class NekoXrayProxyLogsActivity extends BaseNekoSettingsActivity {
+public class NekoXrayProxyLogsActivity extends BaseFragment {
 
-    private final int copyAllRow = rowId++;
-    private final int clearRow = rowId++;
-    private final int logStartRow = 100;
+    private static final int MENU_COPY = 1;
+    private static final int MENU_SHARE = 2;
+    private static final int MENU_CLEAR = 3;
 
-    private final ArrayList<String> logs = new ArrayList<>();
-
-    @Override
-    protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
-        logs.clear();
-        logs.addAll(XrayAppProxyManager.getRecentLogs());
-
-        items.add(UItem.asHeader(LocaleController.getString(R.string.XrayProxyLogs)));
-        items.add(UItem.asButton(copyAllRow, R.drawable.msg_copy,
-                LocaleController.getString(R.string.XrayProxyCopyLogs)).accent().slug("xrayProxyCopyLogs"));
-        items.add(UItem.asButton(clearRow, R.drawable.msg_delete,
-                LocaleController.getString(R.string.XrayProxyClearLogs)).red().slug("xrayProxyClearLogs"));
-
-        if (logs.isEmpty()) {
-            items.add(UItem.asShadow(LocaleController.getString(R.string.XrayProxyLogsEmpty)));
-            return;
-        }
-
-        items.add(UItem.asHeader(LocaleController.getString(R.string.XrayProxyLogsRecent)));
-        for (int i = logs.size() - 1, row = 0; i >= 0; i--, row++) {
-            String line = logs.get(i);
-            String title = line;
-            String subtitle = "";
-            if (!TextUtils.isEmpty(line) && line.length() > 10 && line.charAt(8) == ' ') {
-                title = line.substring(0, 8);
-                subtitle = line.substring(10);
-            }
-            items.add(TextDetailSettingsCellFactory.of(logStartRow + row, title, subtitle).slug("xrayProxyLogLine" + row));
-        }
-        items.add(UItem.asShadow(LocaleController.getString(R.string.XrayProxyLogsHint)));
-    }
+    private TextView logView;
+    private ScrollView scrollView;
 
     @Override
-    protected void onItemClick(UItem item, View view, int position, float x, float y) {
-        int id = item.id;
-        if (id == copyAllRow) {
-            ArrayList<String> copyLogs = XrayAppProxyManager.getRecentLogs();
-            StringBuilder builder = new StringBuilder();
-            for (int i = 0; i < copyLogs.size(); i++) {
-                if (i > 0) {
-                    builder.append('\n');
+    public View createView(Context context) {
+        actionBar.setBackButtonImage(R.drawable.ic_ab_back);
+        actionBar.setAllowOverlayTitle(false);
+        actionBar.setTitle(LocaleController.getString(R.string.XrayProxyLogs));
+        actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
+            @Override
+            public void onItemClick(int id) {
+                if (id == -1) {
+                    finishFragment();
+                    return;
                 }
-                builder.append(copyLogs.get(i));
+                if (id == MENU_COPY) {
+                    copyAllLogs();
+                    return;
+                }
+                if (id == MENU_SHARE) {
+                    shareAllLogs();
+                    return;
+                }
+                if (id == MENU_CLEAR) {
+                    clearLogs();
+                }
             }
-            AndroidUtilities.addToClipboard(builder.toString());
+        });
+
+        ActionBarMenu menu = actionBar.createMenu();
+        ActionBarMenuItem overflow = menu.addItem(0, R.drawable.ic_ab_other);
+        overflow.setContentDescription(LocaleController.getString(R.string.AccDescrMoreOptions));
+        overflow.addSubItem(MENU_COPY, R.drawable.msg_copy, LocaleController.getString(R.string.XrayProxyCopyLogs));
+        overflow.addSubItem(MENU_SHARE, R.drawable.msg_share, LocaleController.getString(R.string.ShareFile));
+        overflow.addSubItem(MENU_CLEAR, R.drawable.msg_delete, LocaleController.getString(R.string.XrayProxyClearLogs));
+
+        FrameLayout root = new FrameLayout(context);
+        root.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+
+        scrollView = new ScrollView(context);
+        scrollView.setFillViewport(true);
+
+        logView = new TextView(context);
+        logView.setTypeface(Typeface.MONOSPACE);
+        logView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        logView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+        logView.setPadding(AndroidUtilities.dp(16), AndroidUtilities.dp(12), AndroidUtilities.dp(16), AndroidUtilities.dp(16));
+        logView.setTextIsSelectable(true);
+        logView.setGravity(Gravity.TOP | Gravity.START);
+
+        scrollView.addView(logView, LayoutHelper.createScroll(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0));
+        root.addView(scrollView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+
+        fragmentView = root;
+        refreshLogs();
+        return fragmentView;
+    }
+
+    private void refreshLogs() {
+        if (logView == null) {
             return;
         }
-
-        if (id == clearRow) {
-            XrayAppProxyManager.clearRecentLogs();
-            listView.adapter.update(true);
+        ArrayList<String> logs = XrayAppProxyManager.getRecentLogs();
+        if (logs == null || logs.isEmpty()) {
+            logView.setText(LocaleController.getString(R.string.XrayProxyLogsEmpty));
+            logView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2));
             return;
         }
-
-        if (id >= logStartRow) {
-            int index = id - logStartRow;
-            int reverseIndex = logs.size() - 1 - index;
-            if (reverseIndex >= 0 && reverseIndex < logs.size()) {
-                AndroidUtilities.addToClipboard(logs.get(reverseIndex));
+        logView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < logs.size(); i++) {
+            if (i > 0) {
+                sb.append('\n');
             }
+            sb.append(logs.get(i));
+        }
+        logView.setText(sb.toString());
+        if (scrollView != null) {
+            scrollView.post(() -> scrollView.fullScroll(ScrollView.FOCUS_DOWN));
         }
     }
 
-    @Override
-    protected String getActionBarTitle() {
-        return LocaleController.getString(R.string.XrayProxyLogs);
+    private void copyAllLogs() {
+        ArrayList<String> logs = XrayAppProxyManager.getRecentLogs();
+        if (logs == null || logs.isEmpty()) {
+            return;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < logs.size(); i++) {
+            if (i > 0) {
+                sb.append('\n');
+            }
+            sb.append(logs.get(i));
+        }
+        AndroidUtilities.addToClipboard(sb.toString());
+        BulletinFactory.of(this).createCopyBulletin(LocaleController.getString(R.string.TextCopied)).show();
+    }
+
+    private void shareAllLogs() {
+        ArrayList<String> logs = XrayAppProxyManager.getRecentLogs();
+        if (logs == null || logs.isEmpty()) {
+            return;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < logs.size(); i++) {
+            if (i > 0) {
+                sb.append('\n');
+            }
+            sb.append(logs.get(i));
+        }
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.setType("text/plain");
+        intent.putExtra(Intent.EXTRA_TEXT, sb.toString());
+        intent.putExtra(Intent.EXTRA_SUBJECT, LocaleController.getString(R.string.XrayProxyLogs));
+        if (getParentActivity() != null) {
+            getParentActivity().startActivity(
+                    Intent.createChooser(intent, LocaleController.getString(R.string.ShareFile)));
+        }
+    }
+
+    private void clearLogs() {
+        XrayAppProxyManager.clearRecentLogs();
+        refreshLogs();
     }
 
     @Override
-    protected String getKey() {
-        return "xrayLogs";
+    public void onResume() {
+        super.onResume();
+        refreshLogs();
     }
 }

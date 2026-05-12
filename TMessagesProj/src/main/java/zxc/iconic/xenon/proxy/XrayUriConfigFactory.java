@@ -8,7 +8,11 @@ import org.json.JSONObject;
 
 import java.net.URI;
 import java.net.URLDecoder;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -16,9 +20,46 @@ import java.util.regex.Pattern;
 
 public final class XrayUriConfigFactory {
 
-    private static final Pattern LINK_PATTERN = Pattern.compile("(?i)(vless|vmess|trojan|ss|socks5?|hysteria2?|hy2?|wireguard|wg)://[^\\s]+", Pattern.CASE_INSENSITIVE);
+    /**
+     * Single source of truth for supported share-URI protocols.
+     * All dispatch in {@link #fromLink(String, int)}, the clipboard {@link #LINK_PATTERN}
+     * and the public {@link #getSupportedProtocols()} are derived from this list.
+     */
+    private static final List<ProtocolInfo> SUPPORTED_PROTOCOLS = Collections.unmodifiableList(Arrays.asList(
+            new ProtocolInfo("VLESS", "vless"),
+            new ProtocolInfo("VMess", "vmess"),
+            new ProtocolInfo("Trojan", "trojan"),
+            new ProtocolInfo("Shadowsocks", "ss"),
+            new ProtocolInfo("SOCKS", "socks", "socks5"),
+            new ProtocolInfo("HTTP", "http"),
+            new ProtocolInfo("Hysteria2", "hysteria2", "hy2"),
+            new ProtocolInfo("WireGuard", "wireguard", "wg")
+    ));
+
+    private static final Pattern LINK_PATTERN = buildLinkPattern();
 
     private XrayUriConfigFactory() {
+    }
+
+    /**
+     * Returns a read-only list of protocols that can be imported as share-URI.
+     * Intended for UI surfaces (e.g. About dialog) so they don't hardcode entries.
+     */
+    public static List<ProtocolInfo> getSupportedProtocols() {
+        return SUPPORTED_PROTOCOLS;
+    }
+
+    private static Pattern buildLinkPattern() {
+        StringBuilder alt = new StringBuilder();
+        for (ProtocolInfo info : SUPPORTED_PROTOCOLS) {
+            for (String scheme : info.uriSchemes) {
+                if (alt.length() > 0) {
+                    alt.append('|');
+                }
+                alt.append(Pattern.quote(scheme));
+            }
+        }
+        return Pattern.compile("(?i)(" + alt + ")://[^\\s]+", Pattern.CASE_INSENSITIVE);
     }
 
     /**
@@ -78,6 +119,12 @@ public final class XrayUriConfigFactory {
             }
             if (lower.startsWith("http://")) {
                 return parseSocksOrHttp(link, localPort, "http");
+            }
+            if (lower.startsWith("hysteria2://") || lower.startsWith("hy2://")) {
+                return parseHysteria2(link, localPort);
+            }
+            if (lower.startsWith("wireguard://") || lower.startsWith("wg://")) {
+                return parseWireGuard(link, localPort);
             }
             return ParseResult.invalid("Unsupported URI scheme");
         } catch (Throwable t) {
@@ -269,6 +316,165 @@ public final class XrayUriConfigFactory {
         outbound.put("settings", settings);
 
         return ParseResult.valid(protocol, host, port, protocol, toConfig(localPort, outbound));
+    }
+
+    /**
+     * Parses hysteria2:// / hy2:// share links into an Xray outbound.
+     * URI shape: hysteria2://&lt;password&gt;@host:port/?sni=&obfs=salamander&obfs-password=&insecure=&alpn=h3&mport=#remarks
+     *
+     * Produces JSON compatible with AndroidLibXrayLite (v2rayNG's fork of Xray-core):
+     * - outbound.protocol   = "hysteria"   (shared with hysteria v1; version switches via settings)
+     * - settings.{address, port, version: 2}
+     * - streamSettings.network = "hysteria"
+     * - streamSettings.hysteriaSettings = {version: 2, auth: password}
+     * - salamander obfs: streamSettings.finalmask.udp[0].{type, settings.password}
+     */
+    private static ParseResult parseHysteria2(String link, int localPort) throws Exception {
+        URI uri = URI.create(link);
+        String host = requireHost(uri);
+        int port = resolvePort(uri, 443);
+        String password = requireText(uri.getUserInfo(), "Hysteria2 password is missing");
+        Map<String, String> q = parseQuery(uri.getRawQuery());
+
+        JSONObject settings = new JSONObject();
+        settings.put("address", host);
+        settings.put("port", port);
+        settings.put("version", 2);
+
+        // Stream: always TLS, default alpn h3.
+        JSONObject stream = new JSONObject();
+        stream.put("network", "hysteria");
+        stream.put("security", "tls");
+
+        JSONObject tls = new JSONObject();
+        String sni = defaultIfEmpty(q.get("sni"), host);
+        putIfNotEmpty(tls, "serverName", sni);
+        putIfNotEmpty(tls, "fingerprint", q.get("fp"));
+        if (isTruthy(q.get("allowinsecure"))
+                || isTruthy(q.get("allow_insecure"))
+                || isTruthy(q.get("insecure"))
+                || isTruthy(q.get("skip-cert-verify"))
+                || isTruthy(q.get("skipcertverify"))) {
+            tls.put("allowInsecure", true);
+        }
+        JSONArray alpnArr = new JSONArray();
+        String alpnParam = defaultIfEmpty(q.get("alpn"), "h3");
+        for (String item : alpnParam.split(",")) {
+            String trimmed = item.trim();
+            if (!TextUtils.isEmpty(trimmed)) {
+                alpnArr.put(trimmed);
+            }
+        }
+        if (alpnArr.length() == 0) {
+            alpnArr.put("h3");
+        }
+        tls.put("alpn", alpnArr);
+        stream.put("tlsSettings", tls);
+
+        JSONObject hysteriaSettings = new JSONObject();
+        hysteriaSettings.put("version", 2);
+        hysteriaSettings.put("auth", password);
+        stream.put("hysteriaSettings", hysteriaSettings);
+
+        String obfsType = q.get("obfs");
+        String obfsPassword = q.get("obfs-password");
+        if (TextUtils.isEmpty(obfsPassword)) {
+            obfsPassword = q.get("obfspassword");
+        }
+        if (!TextUtils.isEmpty(obfsPassword)) {
+            JSONObject mask = new JSONObject();
+            mask.put("type", defaultIfEmpty(obfsType, "salamander"));
+            JSONObject maskSettings = new JSONObject();
+            maskSettings.put("password", obfsPassword);
+            mask.put("settings", maskSettings);
+            JSONObject finalmask = new JSONObject();
+            finalmask.put("udp", new JSONArray().put(mask));
+            stream.put("finalmask", finalmask);
+        }
+
+        JSONObject outbound = new JSONObject();
+        outbound.put("tag", "proxy");
+        outbound.put("protocol", "hysteria");
+        outbound.put("settings", settings);
+        outbound.put("streamSettings", stream);
+
+        return ParseResult.valid("hysteria2", host, port, getNodeName(uri, q), toConfig(localPort, outbound));
+    }
+
+    /**
+     * Parses wireguard:// / wg:// share links into an Xray WireGuard outbound.
+     * URI shape: wireguard://<secretKey>@host:port/?publickey=&address=&mtu=&reserved=&presharedkey=#remarks
+     */
+    private static ParseResult parseWireGuard(String link, int localPort) throws Exception {
+        URI uri = URI.create(link);
+        String host = requireHost(uri);
+        int port = resolvePort(uri, 51820);
+        String secretKey = requireText(uri.getUserInfo(), "WireGuard private key is missing");
+        Map<String, String> q = parseQuery(uri.getRawQuery());
+
+        String publicKey = q.get("publickey");
+        if (TextUtils.isEmpty(publicKey)) {
+            return ParseResult.invalid("WireGuard peer public key is missing");
+        }
+
+        JSONObject settings = new JSONObject();
+        settings.put("secretKey", secretKey);
+
+        JSONArray addresses = new JSONArray();
+        String addressParam = defaultIfEmpty(q.get("address"), "172.16.0.2/32");
+        for (String a : addressParam.split(",")) {
+            String trimmed = a.trim();
+            if (!TextUtils.isEmpty(trimmed)) {
+                addresses.put(trimmed);
+            }
+        }
+        if (addresses.length() == 0) {
+            addresses.put("172.16.0.2/32");
+        }
+        settings.put("address", addresses);
+
+        JSONObject peer = new JSONObject();
+        peer.put("publicKey", publicKey);
+        String preSharedKey = q.get("presharedkey");
+        if (!TextUtils.isEmpty(preSharedKey)) {
+            peer.put("preSharedKey", preSharedKey);
+        }
+        peer.put("endpoint", formatEndpoint(host, port));
+        settings.put("peers", new JSONArray().put(peer));
+
+        int mtu = parsePort(defaultIfEmpty(q.get("mtu"), ""), 1420);
+        settings.put("mtu", mtu);
+
+        JSONArray reserved = new JSONArray();
+        String reservedParam = defaultIfEmpty(q.get("reserved"), "0,0,0");
+        for (String part : reservedParam.split(",")) {
+            String trimmed = part.trim();
+            if (TextUtils.isEmpty(trimmed)) {
+                continue;
+            }
+            try {
+                reserved.put(Integer.parseInt(trimmed));
+            } catch (NumberFormatException ignore) {
+                // skip non-numeric tokens silently
+            }
+        }
+        if (reserved.length() > 0) {
+            settings.put("reserved", reserved);
+        }
+
+        JSONObject outbound = new JSONObject();
+        outbound.put("tag", "proxy");
+        outbound.put("protocol", "wireguard");
+        outbound.put("settings", settings);
+
+        return ParseResult.valid("wireguard", host, port, getNodeName(uri, q), toConfig(localPort, outbound));
+    }
+
+    private static String formatEndpoint(String host, int port) {
+        if (!TextUtils.isEmpty(host) && host.indexOf(':') >= 0 && host.charAt(0) != '[') {
+            return "[" + host + "]:" + port;
+        }
+        return host + ":" + port;
     }
 
     private static JSONObject toConfig(int localPort, JSONObject mainOutbound) throws Exception {
@@ -653,6 +859,27 @@ public final class XrayUriConfigFactory {
 
         public static ParseResult invalid(String message) {
             return new ParseResult(false, message, "", "", 0, "", null);
+        }
+    }
+
+    /**
+     * Describes a single supported share-URI protocol family.
+     * {@link #displayName} is a non-localized technical identifier (e.g. "VLESS").
+     * {@link #uriSchemes} holds all accepted URI scheme prefixes without "://".
+     */
+    public static final class ProtocolInfo {
+        public final String displayName;
+        public final List<String> uriSchemes;
+
+        public ProtocolInfo(String displayName, String... uriSchemes) {
+            this.displayName = displayName;
+            List<String> schemes = new ArrayList<>(uriSchemes.length);
+            for (String scheme : uriSchemes) {
+                if (!TextUtils.isEmpty(scheme)) {
+                    schemes.add(scheme.toLowerCase(Locale.US));
+                }
+            }
+            this.uriSchemes = Collections.unmodifiableList(schemes);
         }
     }
 }

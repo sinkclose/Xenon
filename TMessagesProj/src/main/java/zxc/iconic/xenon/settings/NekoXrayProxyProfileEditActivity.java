@@ -34,14 +34,11 @@ public class NekoXrayProxyProfileEditActivity extends BaseNekoSettingsActivity {
 
     private static final String ARG_PROFILE_ID = "xray_profile_id";
 
-    private final int setActiveRow = rowId++;
     private final int nameRow = rowId++;
-    private final int endpointRow = rowId++;
-    private final int localPortRow = rowId++;
     private final int checkUrlRow = rowId++;
-    private final int configRow = rowId++;
-    private final int importClipboardRow = rowId++;
-    private final int importUriRow = rowId++;
+    private final int replaceClipboardRow = rowId++;
+    private final int replaceUriRow = rowId++;
+    private final int localPortRow = rowId++;
     private final int deleteRow = rowId++;
 
     private String profileId;
@@ -86,42 +83,35 @@ public class NekoXrayProxyProfileEditActivity extends BaseNekoSettingsActivity {
             return;
         }
 
-        XrayProxyProfileStore.Profile active = XrayProxyProfileStore.getActiveProfile();
-        boolean isActive = active != null && TextUtils.equals(active.id, profile.id);
-
         items.add(UItem.asHeader(LocaleController.getString(R.string.XrayProxyProfileSection)));
-        items.add(UItem.asButton(nameRow, R.drawable.msg_edit,
+        items.add(UItem.asButtonSubtext(nameRow, R.drawable.msg_edit,
                 LocaleController.getString(R.string.XrayProxyProfileName),
                 profile.name).slug("xrayProfileName"));
-        items.add(UItem.asButton(endpointRow, R.drawable.msg_link2,
-                LocaleController.getString(R.string.XrayProxyEndpoint),
-                XrayConfigSummary.endpoint(profile.configJson, LocaleController.getString(R.string.XrayProxyConfigEmpty))).slug("xrayProfileEndpoint"));
+        items.add(UItem.asButtonSubtext(checkUrlRow, R.drawable.msg_link,
+                LocaleController.getString(R.string.XrayProxyCheckUrl),
+                profile.checkUrl).slug("xrayProfileCheckUrl"));
+        items.add(UItem.asShadow(LocaleController.getString(R.string.XrayProxyProfileHint)));
+
+        items.add(UItem.asHeader(LocaleController.getString(R.string.XrayProxyTransportSection)));
+        items.add(UItem.asButton(replaceClipboardRow, R.drawable.msg_copy,
+                LocaleController.getString(R.string.XrayProxyReplaceFromClipboard)).accent().slug("xrayProfileReplaceClipboard"));
+        items.add(UItem.asButton(replaceUriRow, R.drawable.msg_link2,
+                LocaleController.getString(R.string.XrayProxyReplaceFromUri)).slug("xrayProfileReplaceUri"));
+        String endpoint = XrayConfigSummary.endpoint(profile.configJson, null);
+        String transportHint;
+        if (TextUtils.isEmpty(endpoint)) {
+            transportHint = LocaleController.getString(R.string.XrayProxyTransportHint);
+        } else {
+            transportHint = LocaleController.formatStringSimple(
+                    LocaleController.getString(R.string.XrayProxyTransportHintWithSummary), endpoint);
+        }
+        items.add(UItem.asShadow(transportHint));
+
+        items.add(UItem.asHeader(LocaleController.getString(R.string.XrayProxyAdvancedSection)));
         items.add(UItem.asButton(localPortRow, R.drawable.msg_settings,
                 LocaleController.getString(R.string.XrayProxyLocalPort),
                 String.valueOf(profile.localPort)).slug("xrayProfilePort"));
-        items.add(UItem.asButton(checkUrlRow, R.drawable.msg_link,
-                LocaleController.getString(R.string.XrayProxyCheckUrl),
-                profile.checkUrl).slug("xrayProfileCheckUrl"));
-        items.add(UItem.asButton(configRow, R.drawable.msg_info,
-                LocaleController.getString(R.string.XrayProxyConfig),
-                TextUtils.isEmpty(profile.configJson) ? LocaleController.getString(R.string.XrayProxyConfigEmpty) : LocaleController.getString(R.string.XrayProxyConfigReady)).slug("xrayProfileConfig"));
-        items.add(UItem.asShadow(LocaleController.getString(R.string.XrayProxyProfileHint)));
-
-        items.add(UItem.asHeader(LocaleController.getString(R.string.XrayProxyImportSection)));
-        items.add(UItem.asButton(importClipboardRow, R.drawable.msg_copy,
-                LocaleController.getString(R.string.XrayProxyImportClipboard)).accent().slug("xrayProfileImportClipboard"));
-        items.add(UItem.asButton(importUriRow, R.drawable.msg_link2,
-                LocaleController.getString(R.string.XrayProxyImportUri)).slug("xrayProfileImportUri"));
-        items.add(UItem.asShadow(LocaleController.getString(R.string.XrayProxyImportHint)));
-
-        items.add(UItem.asHeader(LocaleController.getString(R.string.XrayProxyActionsSection)));
-        UItem setActive = UItem.asButton(setActiveRow, R.drawable.msg_settings,
-                LocaleController.getString(R.string.XrayProxySetActive)).slug("xrayProfileSetActive");
-        if (!isActive) {
-            setActive.accent();
-        }
-        setActive.setEnabled(!isActive);
-        items.add(setActive);
+        items.add(UItem.asShadow(LocaleController.getString(R.string.XrayProxyLocalPortHint)));
 
         items.add(UItem.asButton(deleteRow, R.drawable.msg_delete,
                 LocaleController.getString(R.string.XrayProxyDeleteProfile)).red().slug("xrayProfileDelete"));
@@ -135,12 +125,6 @@ public class NekoXrayProxyProfileEditActivity extends BaseNekoSettingsActivity {
         }
 
         int id = item.id;
-        if (id == setActiveRow) {
-            XrayProxyProfileStore.setActiveProfile(profile.id);
-            listView.adapter.update(true);
-            return;
-        }
-
         if (id == nameRow) {
             showSingleFieldDialog(LocaleController.getString(R.string.XrayProxyProfileName), profile.name,
                     InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES,
@@ -151,6 +135,22 @@ public class NekoXrayProxyProfileEditActivity extends BaseNekoSettingsActivity {
                             return false;
                         }
                         profile.name = newValue;
+                        saveProfile();
+                        return true;
+                    });
+            return;
+        }
+
+        if (id == checkUrlRow) {
+            showSingleFieldDialog(LocaleController.getString(R.string.XrayProxyCheckUrl), profile.checkUrl,
+                    InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI,
+                    value -> {
+                        String newValue = value.trim();
+                        if (TextUtils.isEmpty(newValue)) {
+                            showError(LocaleController.getString(R.string.XrayProxyErrorUrlEmpty));
+                            return false;
+                        }
+                        profile.checkUrl = newValue;
                         saveProfile();
                         return true;
                     });
@@ -179,33 +179,12 @@ public class NekoXrayProxyProfileEditActivity extends BaseNekoSettingsActivity {
             return;
         }
 
-        if (id == checkUrlRow) {
-            showSingleFieldDialog(LocaleController.getString(R.string.XrayProxyCheckUrl), profile.checkUrl,
-                    InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI,
-                    value -> {
-                        String newValue = value.trim();
-                        if (TextUtils.isEmpty(newValue)) {
-                            showError(LocaleController.getString(R.string.XrayProxyErrorUrlEmpty));
-                            return false;
-                        }
-                        profile.checkUrl = newValue;
-                        saveProfile();
-                        return true;
-                    });
-            return;
-        }
-
-        if (id == configRow) {
-            showMultiLineConfigDialog();
-            return;
-        }
-
-        if (id == importClipboardRow) {
+        if (id == replaceClipboardRow) {
             importFromClipboard();
             return;
         }
 
-        if (id == importUriRow) {
+        if (id == replaceUriRow) {
             showUriImportDialog();
             return;
         }
@@ -308,58 +287,6 @@ public class NekoXrayProxyProfileEditActivity extends BaseNekoSettingsActivity {
                     : result.nodeName;
         }
         saveProfile();
-    }
-
-    private void showMultiLineConfigDialog() {
-        Activity context = getParentActivity();
-        if (context == null || profile == null) {
-            return;
-        }
-
-        AlertDialog.Builder builder = new AlertDialog.Builder(context, resourcesProvider);
-        builder.setTitle(LocaleController.getString(R.string.XrayProxyConfig));
-
-        LinearLayout container = new LinearLayout(context);
-        container.setOrientation(LinearLayout.VERTICAL);
-
-        EditTextBoldCursor editText = new EditTextBoldCursor(context);
-        editText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
-        editText.setTextColor(getThemedColor(org.telegram.ui.ActionBar.Theme.key_dialogTextBlack));
-        editText.setHintText(LocaleController.getString(R.string.XrayProxyConfigHint));
-        editText.setHintColor(getThemedColor(org.telegram.ui.ActionBar.Theme.key_windowBackgroundWhiteHintText));
-        editText.setSingleLine(false);
-        editText.setMinLines(8);
-        editText.setMaxLines(16);
-        editText.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        editText.setText(profile.configJson);
-        editText.setBackground(null);
-        editText.setPadding(0, 0, 0, 0);
-        container.addView(editText, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 24, 0, 24, 0));
-
-        builder.setView(container);
-        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
-        builder.setPositiveButton(LocaleController.getString(R.string.OK), null);
-        AlertDialog dialog = builder.create();
-        showDialog(dialog);
-
-        View positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
-        if (positive != null) {
-            positive.setOnClickListener(v -> {
-                String value = editText.getText() == null ? "" : editText.getText().toString().trim();
-                if (TextUtils.isEmpty(value)) {
-                    showError(LocaleController.getString(R.string.XrayProxyConfigEmpty));
-                    return;
-                }
-                XrayConfigValidator.ValidationResult validation = XrayConfigValidator.validate(value, profile.localPort);
-                if (!validation.valid) {
-                    showError(validation.message);
-                    return;
-                }
-                profile.configJson = value;
-                saveProfile();
-                dialog.dismiss();
-            });
-        }
     }
 
     private void showSingleFieldDialog(String title, String value, int inputType, ValueCommit callback) {

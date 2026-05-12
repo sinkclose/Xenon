@@ -15,6 +15,7 @@ import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.Components.AlertsCreator;
 import org.telegram.ui.Components.EditTextBoldCursor;
+import org.telegram.ui.Components.ItemOptions;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
@@ -27,16 +28,27 @@ import zxc.iconic.xenon.proxy.XrayProxyProfileStore;
 import zxc.iconic.xenon.proxy.XrayUriConfigFactory;
 
 /**
- * Proxy profiles list screen with active profile selector and profile management actions.
+ * Proxy profiles list with a Telegram-style selectable list.
+ * Row click -> set profile as active. Trailing overflow icon -> per-profile action menu.
+ * Long-press still opens the same action menu for accessibility.
  */
 public class NekoXrayProxyProfilesActivity extends BaseNekoSettingsActivity {
 
     private final int addClipboardRow = rowId++;
     private final int addUriRow = rowId++;
 
+    /** Row ids for profile rows start from this offset. */
     private final int profileStartRow = 100;
 
     private final ArrayList<XrayProxyProfileStore.Profile> profiles = new ArrayList<>();
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (listView != null) {
+            listView.adapter.update(true);
+        }
+    }
 
     @Override
     protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
@@ -45,34 +57,36 @@ public class NekoXrayProxyProfilesActivity extends BaseNekoSettingsActivity {
         XrayProxyProfileStore.Profile active = XrayProxyProfileStore.getActiveProfile();
         String activeId = active == null ? "" : active.id;
 
-        items.add(UItem.asHeader(LocaleController.getString(R.string.XrayProxyProfiles)));
+        items.add(UItem.asHeader(LocaleController.getString(R.string.XrayProxyImportSection)));
         items.add(UItem.asButton(addClipboardRow, R.drawable.msg_copy,
-                LocaleController.getString(R.string.XrayProxyAddFromClipboard)).accent().slug("xrayProfileAddClipboard"));
+                        LocaleController.getString(R.string.XrayProxyAddFromClipboard))
+                .accent().slug("xrayProfileAddClipboard"));
         items.add(UItem.asButton(addUriRow, R.drawable.msg_link2,
-                LocaleController.getString(R.string.XrayProxyAddFromUri)).slug("xrayProfileAddUri"));
+                        LocaleController.getString(R.string.XrayProxyAddFromUri))
+                .slug("xrayProfileAddUri"));
         items.add(UItem.asShadow(LocaleController.getString(R.string.XrayProxyProfilesHint)));
+
+        if (profiles.isEmpty()) {
+            items.add(UItem.asShadow(LocaleController.getString(R.string.XrayProxyProfilesEmpty)));
+            return;
+        }
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.XrayProxyProfilesListSection)));
         for (int i = 0; i < profiles.size(); i++) {
             XrayProxyProfileStore.Profile profile = profiles.get(i);
             boolean isActive = profile.id.equals(activeId);
-            String endpoint = XrayConfigSummary.endpoint(profile.configJson, LocaleController.getString(R.string.XrayProxyConfigEmpty));
-            String value = endpoint + " • " + profile.localPort;
-            if (isActive) {
-                value = LocaleController.getString(R.string.XrayProxyActiveShort) + " • " + value;
-            }
-            UItem profileItem = UItem.asButton(profileStartRow + i, R.drawable.msg_link2, profile.name, value)
-                    .slug("xrayProfileItem" + i);
-            if (isActive) {
-                profileItem.accent();
-            }
-            items.add(profileItem);
+            String endpoint = XrayConfigSummary.endpoint(
+                    profile.configJson,
+                    LocaleController.getString(R.string.XrayProxyConfigEmpty));
+            final String profileId = profile.id;
+            items.add(XrayProfileCellFactory.of(
+                    profileStartRow + i,
+                    profile.name,
+                    endpoint,
+                    isActive,
+                    () -> showProfileActionsById(profileId)));
         }
-        if (profiles.isEmpty()) {
-            items.add(UItem.asShadow(LocaleController.getString(R.string.XrayProxyNoProfiles)));
-        } else {
-            items.add(UItem.asShadow(LocaleController.getString(R.string.XrayProxyProfilesListHint)));
-        }
+        items.add(UItem.asShadow(LocaleController.getString(R.string.XrayProxyProfilesListHint)));
     }
 
     @Override
@@ -82,23 +96,16 @@ public class NekoXrayProxyProfilesActivity extends BaseNekoSettingsActivity {
             addFromClipboard();
             return;
         }
-
         if (id == addUriRow) {
             showUriImportDialog();
             return;
         }
-
         if (id >= profileStartRow) {
             int index = id - profileStartRow;
             if (index >= 0 && index < profiles.size()) {
                 XrayProxyProfileStore.Profile selected = profiles.get(index);
-                XrayProxyProfileStore.Profile active = XrayProxyProfileStore.getActiveProfile();
-                if (active != null && TextUtils.equals(active.id, selected.id)) {
-                    presentFragment(NekoXrayProxyProfileEditActivity.forProfile(selected.id));
-                } else {
-                    XrayProxyProfileStore.setActiveProfile(selected.id);
-                    listView.adapter.update(true);
-                }
+                XrayProxyProfileStore.setActiveProfile(selected.id);
+                listView.adapter.update(true);
             }
         }
     }
@@ -109,23 +116,71 @@ public class NekoXrayProxyProfilesActivity extends BaseNekoSettingsActivity {
         if (id < profileStartRow) {
             return false;
         }
-
         int index = id - profileStartRow;
         if (index < 0 || index >= profiles.size()) {
             return false;
         }
-
-        XrayProxyProfileStore.Profile profile = profiles.get(index);
-        showProfileActions(profile);
+        showProfileActions(profiles.get(index), view);
         return true;
     }
 
-    @Override
-    public void onResume() {
-        super.onResume();
-        if (listView != null) {
-            listView.adapter.update(true);
+    /**
+     * Shows the per-profile action menu (Edit / Duplicate / Delete).
+     * Used by both long-press on a row and the trailing overflow icon.
+     */
+    private void showProfileActionsById(String profileId) {
+        XrayProxyProfileStore.Profile profile = findProfile(profileId);
+        if (profile == null) {
+            return;
         }
+        View anchor = listView != null ? listView.findViewByItemId(locateRowId(profileId)) : null;
+        showProfileActions(profile, anchor);
+    }
+
+    private void showProfileActions(XrayProxyProfileStore.Profile profile, View anchorView) {
+        ItemOptions options = ItemOptions.makeOptions(this, anchorView == null ? fragmentView : anchorView);
+        options.add(R.drawable.msg_edit, LocaleController.getString(R.string.Edit),
+                () -> presentFragment(NekoXrayProxyProfileEditActivity.forProfile(profile.id)));
+        options.add(R.drawable.msg_copy, LocaleController.getString(R.string.XrayProxyDuplicateProfile), () -> {
+            XrayProxyProfileStore.Profile copy = profile.copy();
+            copy.id = "";
+            copy.name = profile.name + " (copy)";
+            XrayProxyProfileStore.addProfile(copy, false);
+            listView.adapter.update(true);
+        });
+        options.addIf(XrayProxyProfileStore.getProfiles().size() > 1,
+                R.drawable.msg_delete, LocaleController.getString(R.string.Delete), true,
+                () -> {
+                    boolean deleted = XrayProxyProfileStore.deleteProfile(profile.id);
+                    if (!deleted) {
+                        showError(LocaleController.getString(R.string.XrayProxyDeleteLastProfileError));
+                    }
+                    listView.adapter.update(true);
+                });
+        options.setMinWidth(190);
+        options.show();
+    }
+
+    /**
+     * Maps a profile id to its UItem row id inside the current list snapshot.
+     */
+    private int locateRowId(String profileId) {
+        for (int i = 0; i < profiles.size(); i++) {
+            if (TextUtils.equals(profiles.get(i).id, profileId)) {
+                return profileStartRow + i;
+            }
+        }
+        return -1;
+    }
+
+    private XrayProxyProfileStore.Profile findProfile(String profileId) {
+        for (int i = 0; i < profiles.size(); i++) {
+            XrayProxyProfileStore.Profile candidate = profiles.get(i);
+            if (TextUtils.equals(candidate.id, profileId)) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     /**
@@ -217,43 +272,6 @@ public class NekoXrayProxyProfilesActivity extends BaseNekoSettingsActivity {
         XrayProxyProfileStore.addProfile(profile, true);
         listView.adapter.update(true);
         presentFragment(NekoXrayProxyProfileEditActivity.forProfile(profile.id));
-    }
-
-    private void showProfileActions(XrayProxyProfileStore.Profile profile) {
-        Activity context = getParentActivity();
-        if (context == null) {
-            return;
-        }
-
-        ArrayList<String> options = new ArrayList<>();
-        options.add(LocaleController.getString(R.string.Edit));
-        options.add(LocaleController.getString(R.string.XrayProxySetActive));
-        options.add(LocaleController.getString(R.string.XrayProxyDuplicateProfile));
-        options.add(LocaleController.getString(R.string.Delete));
-
-        AlertDialog.Builder builder = new AlertDialog.Builder(context, resourcesProvider);
-        builder.setTitle(profile.name);
-        builder.setItems(options.toArray(new CharSequence[0]), (dialog, which) -> {
-            if (which == 0) {
-                presentFragment(NekoXrayProxyProfileEditActivity.forProfile(profile.id));
-            } else if (which == 1) {
-                XrayProxyProfileStore.setActiveProfile(profile.id);
-                listView.adapter.update(true);
-            } else if (which == 2) {
-                XrayProxyProfileStore.Profile copy = profile.copy();
-                copy.id = "";
-                copy.name = profile.name + " (copy)";
-                XrayProxyProfileStore.addProfile(copy, false);
-                listView.adapter.update(true);
-            } else if (which == 3) {
-                boolean deleted = XrayProxyProfileStore.deleteProfile(profile.id);
-                if (!deleted) {
-                    showError(LocaleController.getString(R.string.XrayProxyDeleteLastProfileError));
-                }
-                listView.adapter.update(true);
-            }
-        });
-        showDialog(builder.create());
     }
 
     private String readClipboardText() {

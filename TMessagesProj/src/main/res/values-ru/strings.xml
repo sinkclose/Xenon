@@ -358,4 +358,27 @@
     <string name="XrayProxyExperimentalHint">Экспериментально: требуется AndroidLibXrayLite, подключённая в сборку. Если библиотека отсутствует, запуск безопасно завершится ошибкой.</string>
     <string name="XrayProxyLibMissing">AndroidLibXrayLite не подключена в этой сборке.</string>
     <string name="XrayProxyConfigApplyAuthError">Не удалось применить локальную SOCKS-авторизацию к конфигу.</string>
+    <string name="XrayProxyAbout">О подсистеме</string>
+    <string name="XrayProxyAboutTitle">О подсистеме Xray</string>
+    <string name="XrayProxyAboutSummary">Xenon использует встроенное ядро Xray, чтобы направлять трафик Telegram через локальный SOCKS inbound без системного VPN-слота.</string>
+    <string name="XrayProxyAboutSupportedProtocols">Поддерживаемые протоколы share-URI</string>
+    <string name="XrayProxyAboutProtocolRow">%1$s — %2$s</string>
+    <string name="XrayProxyAdvancedTitle">Дополнительно</string>
+    <string name="XrayProxyAdvancedSection">Дополнительно</string>
+    <string name="XrayProxySocksAuthUsername">Пользователь</string>
+    <string name="XrayProxySocksAuthPassword">Пароль</string>
+    <string name="XrayProxySocksAuthHint">Нажмите на строку, чтобы скопировать. Сброс генерирует новые случайные данные и перезапускает ядро, если оно работает.</string>
+    <string name="XrayProxyEndpointSection">Эндпойнт</string>
+    <string name="XrayProxyLocalEndpoint">Локальный адрес</string>
+    <string name="XrayProxyLocalEndpointFormat">127.0.0.1:%1$s</string>
+    <string name="XrayProxyLocalEndpointHint">Адрес, который активный профиль предоставляет Telegram.</string>
+    <string name="XrayProxyTransportSection">Транспорт</string>
+    <string name="XrayProxyTransportHint">Транспорт импортируется только из share-URI. Правка JSON вручную отключена.</string>
+    <string name="XrayProxyTransportHintWithSummary">Текущий: %1$s. Транспорт импортируется только из share-URI. Правка JSON вручную отключена.</string>
+    <string name="XrayProxyLocalPortHint">Локальный SOCKS-порт уникален для каждого профиля (по умолчанию 10808 + индекс).</string>
+    <string name="XrayProxyReplaceFromClipboard">Заменить транспорт из буфера</string>
+    <string name="XrayProxyReplaceFromUri">Заменить транспорт из URI</string>
+    <string name="XrayProxyProfilesEmpty">Нет сохранённых профилей. Вставьте share-URI из буфера, чтобы добавить первый.</string>
+    <string name="XrayProxyLoginActiveNoneTitle">Нет сохранённого профиля</string>
+    <string name="XrayProxyLoginActiveNoneHint">Вставьте share-URI ниже и нажмите «Connect».</string>
 </resources>
