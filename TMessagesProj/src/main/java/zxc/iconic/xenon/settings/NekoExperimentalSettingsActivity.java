@@ -112,6 +112,9 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
 
     @Override
     protected void onItemClick(UItem item, View view, int position, float x, float y) {
+        if (!item.enabled) {
+            return;
+        }
         int id = item.id;
         if (id == disableTypingRow) {
             NekoConfig.toggleDisableTypingIndicator();

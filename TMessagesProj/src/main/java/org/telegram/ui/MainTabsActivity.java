@@ -985,15 +985,17 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         if (tabsView == null) {
             return;
         }
-        
-        // Скрываем табы визуально, но оставляем свайпы работать
+
+        // Hide tabs visually, but keep swipes working.
         if (tabsViewWrapper != null) {
             tabsViewWrapper.setVisibility(NekoConfig.showMainTabs ? View.VISIBLE : View.GONE);
         }
         if (fadeView != null) {
             fadeView.setVisibility(NekoConfig.showMainTabs ? View.VISIBLE : View.GONE);
         }
-        
+
+        // Capture the active tab type so we can restore the same tab after the rebuild,
+        // even if its index changed (because tabs were reordered or some were disabled).
         MainTabsManager.TabType currentType = null;
         if (viewPager != null && currentTabsConfig != null) {
             int current = viewPager.getCurrentPosition();
@@ -1001,31 +1003,39 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
                 currentType = currentTabsConfig.get(current).type;
             }
         }
+
+        // Drop the fragment cache. ViewPagerFixed.rebuild(...) below will ask the adapter
+        // for a fresh view at the new currentPosition, which will lazily call
+        // createBaseFragmentAt(...) for any missing entry in fragmentsArr.
         while (fragmentsArr.size() > 0) {
             dropFragmentAtPosition(fragmentsArr.keyAt(0));
         }
+
         Context context = getContext() != null ? getContext() : tabsView.getContext();
         rebuildTabsViews(context);
+
         int count = getFragmentsCount();
-        if (count <= 0) {
+        if (count <= 0 || viewPager == null) {
             return;
         }
+
         int target = currentType != null ? MainTabsManager.getPosition(currentType) : -1;
         if (target < 0) {
             target = getStartPosition();
         }
         int safeTarget = Math.max(0, Math.min(target, count - 1));
-        if (fragmentsArr.get(safeTarget) == null) {
-            BaseFragment fragment = createBaseFragmentAt(safeTarget);
-            if (fragment != null) {
-                putFragmentAtPosition(safeTarget, fragment);
-            }
-        }
+
+        // Snap to the new index without any cross-fade animation between the stale page
+        // and the new one. setPosition(...) is a no-op if the index is unchanged.
+        viewPager.setPosition(safeTarget);
+
+        // Tell ViewPagerFixed to recreate viewPages[0] from the adapter so the page
+        // contents reflect the new fragment set. Without this, the old (already destroyed)
+        // fragmentView stays attached to the pager and shows up as a black screen.
+        viewPager.rebuild(false);
+
         selectTab(safeTarget, false);
-        if (viewPager != null) {
-            viewPager.requestLayout();
-            viewPager.scrollToPosition(safeTarget);
-        }
+
         checkUnreadCount(false);
         checkContactsTabBadge();
         checkUi_fadeView();

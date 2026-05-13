@@ -19,7 +19,7 @@ public class BlurredBackgroundProviderImpl {
     public static BlurredBackgroundProvider mainTabs(Theme.ResourcesProvider resourcesProvider) {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
             .setBackgroundColor((r, isDark) -> {
-                final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.80f : 0.76f;
+                final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.86f : 0.82f;
                 final int colorBg = Theme.getColor(Theme.key_windowBackgroundWhite, r);
                 final int colorTarget = Theme.getColor(Theme.key_glass_targetMainTabs, r);
                 return solveSrcColor(colorBg, colorTarget, alpha);
@@ -35,7 +35,7 @@ public class BlurredBackgroundProviderImpl {
     public static BlurredBackgroundProvider topPanel(Theme.ResourcesProvider resourcesProvider) {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
             .setBackgroundColor((r, isDark) -> {
-                final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.78f : 0.76f;
+                final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.86f : 0.82f;
                 final int colorBg = Theme.getColor(Theme.key_windowBackgroundWhite, r);
                 final int colorTarget = Theme.getColor(Theme.key_glass_targetMainTopPanel, r);
                 return solveSrcColor(colorBg, colorTarget, alpha);
@@ -66,7 +66,7 @@ public class BlurredBackgroundProviderImpl {
                 final int colorBg = Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground, r);
                 final int accent = Theme.getColor(Theme.key_chat_messageLinkIn, r);
                 final float accentMix = isDark ? 0.11f : 0.07f;
-                final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? (isDark ? 0.90f : 0.84f) : (isDark ? 0.87f : 0.82f);
+                final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? (isDark ? 0.94f : 0.91f) : (isDark ? 0.91f : 0.88f);
                 return Theme.multAlpha(ColorUtils.blendARGB(colorBg, accent, accentMix), alpha);
             })
             .setStrokeColorTop(0x14000000, 0x1AFFFFFF)
@@ -110,10 +110,10 @@ public class BlurredBackgroundProviderImpl {
                             Theme.key_actionBarDefault : Theme.key_chat_topPanelBackground, r), 255);
                     }
 
-                    final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.82f : 0.78f;
+                    final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.92f : 0.88f;
                     final int colorBg = Theme.getColor(Theme.key_chat_topPanelBackground, r);
                     final int accent = Theme.getColor(Theme.key_chat_messageLinkIn, r);
-                    final int tinted = ColorUtils.blendARGB(colorBg, accent, isDark ? 0.09f : 0.06f);
+                    final int tinted = ColorUtils.blendARGB(colorBg, accent, isDark ? 0.12f : 0.08f);
                     return Theme.multAlpha(tinted, alpha);
                 })
                 .setStrokeColorTop(0xFFFFFFFF, 0x28FFFFFF)
@@ -127,10 +127,10 @@ public class BlurredBackgroundProviderImpl {
     public static BlurredBackgroundProvider chatTitlePill(Theme.ResourcesProvider resourcesProvider) {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
                 .setBackgroundColor((r, isDark) -> {
-                    final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.77f : 0.78f;
+                    final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.90f : 0.86f;
                     final int colorBg = Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground, r);
                     final int accent = Theme.getColor(Theme.key_chat_messageLinkIn, r);
-                    final int tinted = ColorUtils.blendARGB(colorBg, accent, isDark ? 0.10f : 0.07f);
+                    final int tinted = ColorUtils.blendARGB(colorBg, accent, isDark ? 0.13f : 0.09f);
                     return Theme.multAlpha(tinted, alpha);
                 })
                 .setStrokeColorTop(0x30FFFFFF, 0x24FFFFFF)

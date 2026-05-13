@@ -98,8 +98,13 @@
     <string name="LiquidGlassThickness">Glass thickness</string>
     <string name="MainTabsHide">Hide tabs</string>
     <string name="MainTabsHideHint">When hidden, you can still swipe between screens. Swipe gestures will continue to work.</string>
+    <string name="MainTabsShow">Show navigation tabs</string>
+    <string name="MainTabsShowHint">When tabs are hidden, you can still swipe between screens. Tabs in this preview are previewed regardless of order.</string>
+    <string name="MainTabsResetOrder">Reset to default order</string>
+    <string name="MainTabsResetOrderHint">Restores the original tab order and re-enables all tabs.</string>
+    <string name="MainTabsResetOrderConfirm">Restore the original tab order and re-enable all tabs?</string>
     <string name="MainTabsAppearance">Appearance</string>
-    <string name="MainTabsPreviewHint">Tap to enable/disable, hold and drag to reorder</string>
+    <string name="MainTabsPreviewHint">Tap a tab to enable or disable it. Long-press and drag to reorder.</string>
     <string name="MainTabsShowTitle">Show tab titles</string>
     <string name="AutoPauseVideo">Auto pause video</string>
     <string name="AutoPauseVideoAbout">When lock screen/switch to background.</string>
