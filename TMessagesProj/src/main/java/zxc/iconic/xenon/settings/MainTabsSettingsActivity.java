@@ -187,10 +187,10 @@ public class MainTabsSettingsActivity extends BaseNekoSettingsActivity {
         }
         tabsSaved = true;
         String currentState = tabsToState(tabs);
-        MainTabsManager.saveTabs(tabs);
         if (!currentState.equals(initialTabsState)) {
+            MainTabsManager.saveTabs(tabs);
             initialTabsState = currentState;
-            postUpdateTabsNotification();
+            hadChanges = true;
         }
     }
 

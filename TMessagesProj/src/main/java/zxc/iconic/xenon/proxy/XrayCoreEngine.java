@@ -385,7 +385,11 @@ final class XrayCoreEngine {
      */
     private static String getXudpBaseKey(Context context) {
         try {
-            byte[] androidId = Settings.Secure.ANDROID_ID.getBytes("UTF-8");
+            String deviceId = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ANDROID_ID);
+            if (TextUtils.isEmpty(deviceId)) {
+                deviceId = "fallback";
+            }
+            byte[] androidId = deviceId.getBytes("UTF-8");
             byte[] padded = new byte[32];
             System.arraycopy(androidId, 0, padded, 0, Math.min(androidId.length, 32));
             return Base64.encodeToString(padded, Base64.URL_SAFE | Base64.NO_PADDING | Base64.NO_WRAP);

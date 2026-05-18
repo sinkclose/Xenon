@@ -96,6 +96,7 @@
     <string name="UseAdvancedLiquidGlassDesc">Chromatic dispersion, Fresnel edge glow, directional glare. Requires app restart.</string>
     <string name="LiquidGlassIntensity">Refraction intensity</string>
     <string name="LiquidGlassThickness">Glass thickness</string>
+    <string name="AdvancedGlassTintPercent">Glass tint strength</string>
     <string name="MainTabsHide">Hide tabs</string>
     <string name="MainTabsHideHint">When hidden, you can still swipe between screens. Swipe gestures will continue to work.</string>
     <string name="MainTabsShow">Show navigation tabs</string>

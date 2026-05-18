@@ -165,6 +165,7 @@ public class NekoConfig {
     public static float advancedGlassDispersion = 1.0f;
     public static float advancedGlassFresnel = 1.0f;
     public static float advancedGlassGlare = 1.0f;
+    public static int advancedGlassTintPercent = 0;
 
     public static boolean shouldNOTTrustMe = false;
 
@@ -288,6 +289,7 @@ public class NekoConfig {
             advancedGlassDispersion = preferences.getFloat("advancedGlassDispersion", 1.0f);
             advancedGlassFresnel = preferences.getFloat("advancedGlassFresnel", 1.0f);
             advancedGlassGlare = preferences.getFloat("advancedGlassGlare", 1.0f);
+            advancedGlassTintPercent = preferences.getInt("advancedGlassTintPercent", 0);
 
             LensHelper.checkLensSupportAsync();
             preferences.registerOnSharedPreferenceChangeListener(listener);
@@ -1107,6 +1109,14 @@ public class NekoConfig {
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
         editor.putFloat("advancedGlassGlare", advancedGlassGlare);
+        editor.apply();
+    }
+
+    public static void setAdvancedGlassTintPercent(int value) {
+        advancedGlassTintPercent = Math.max(0, Math.min(100, value));
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putInt("advancedGlassTintPercent", advancedGlassTintPercent);
         editor.apply();
     }
 

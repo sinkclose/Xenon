@@ -141,9 +141,41 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
             c.drawColor(backgroundColor);
         } else {
             c.drawRenderNode(renderNodeFill);
-            if (liquidGlassEffect == null && Color.alpha(backgroundColor) != 0) {
-                c.drawColor(backgroundColor);
+            // Three cases for the tint overlay layered on top of the
+            // (refracted/blurred) source:
+            //
+            //   - liquidGlassEffect == null: no shader is involved at all.
+            //     Preserve the legacy behaviour and overlay the precomputed
+            //     backgroundColor as-is.
+            //
+            //   - liquidGlassEffect + base shader: the base AGSL consumes
+            //     foreground_color_premultiplied and tints internally inside
+            //     the shader, so we MUST NOT overlay (would double-tint).
+            //
+            //   - liquidGlassEffect + advanced shader: the advanced AGSL has
+            //     no color uniform — it only does refraction + chromatic
+            //     dispersion. Without an external overlay the surface stays
+            //     untinted, so we draw a SOFT overlay scaled by the
+            //     advancedGlassTintPercent slider. At slider = 0 nothing is
+            //     drawn, which matches the appearance that existed before
+            //     the tint slider was introduced. At slider = 100 the
+            //     overlay alpha is halved relative to the precomputed
+            //     backgroundColor so the refraction stays clearly visible
+            //     and the look mirrors the subtle premultiplied tint of the
+            //     base shader rather than producing an aggressive flat wash.
+            if (liquidGlassEffect == null) {
+                if (Color.alpha(backgroundColor) != 0) {
+                    c.drawColor(backgroundColor);
+                }
+            } else if (zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass) {
+                final int percent = zxc.iconic.xenon.NekoConfig.advancedGlassTintPercent;
+                if (percent > 0 && Color.alpha(backgroundColor) != 0) {
+                    final float strength = Math.min(100, Math.max(0, percent)) / 100f * 0.5f;
+                    c.drawColor(Theme.multAlpha(backgroundColor, strength));
+                }
             }
+            // Base shader path (liquidGlassEffect != null && !advanced):
+            // shader applies the tint internally — no overlay needed.
         }
         if (strokeColorTop != 0) {
             drawStroke(c, 0, 0, boundProps.boundsWithPadding.width(),

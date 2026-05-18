@@ -43,6 +43,7 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
     private final int liquidGlassIntensityRow = rowId++;
     private final int liquidGlassThicknessRow = rowId++;
     private final int useAdvancedLiquidGlassRow = rowId++;
+    private final int advancedGlassTintPercentRow = rowId++;
     private final int useCamera2ApiRow = rowId++;
 
     private final int downloadSpeedBoostRow = rowId++;
@@ -70,6 +71,23 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
             items.add(UItem.asCheck(useAdvancedLiquidGlassRow, LocaleController.getString(R.string.UseAdvancedLiquidGlass), LocaleController.getString(R.string.UseAdvancedLiquidGlassDesc)).slug("useAdvancedLiquidGlass").setChecked(NekoConfig.useAdvancedLiquidGlass));
             items.add(TextSettingsCellFactory.of(liquidGlassIntensityRow, LocaleController.getString(R.string.LiquidGlassIntensity), String.format("%.2f", NekoConfig.liquidGlassIntensity)).slug("liquidGlassIntensity").setEnabled(!NekoConfig.useAdvancedLiquidGlass));
             items.add(TextSettingsCellFactory.of(liquidGlassThicknessRow, LocaleController.getString(R.string.LiquidGlassThickness), String.valueOf(NekoConfig.liquidGlassThickness)).slug("liquidGlassThickness").setEnabled(!NekoConfig.useAdvancedLiquidGlass));
+            // Tint slider only appears when advanced glass is active. Using
+            // PowerSaverSlider-style AltSeekbar instead of a popup picker so
+            // the user gets continuous live feedback — every drag tick rounds
+            // to an int, persists it, and invalidates visible blur sources.
+            if (NekoConfig.useAdvancedLiquidGlass) {
+                SeekbarConfig tintConfig = new SeekbarConfig(
+                        LocaleController.getString(R.string.AdvancedGlassTintPercent),
+                        "0", "100", 0, 100,
+                        progress -> {
+                            int rounded = Math.max(0, Math.min(100, Math.round(progress)));
+                            if (rounded != NekoConfig.advancedGlassTintPercent) {
+                                NekoConfig.setAdvancedGlassTintPercent(rounded);
+                                blur3_InvalidateBlur();
+                            }
+                        });
+                items.add(SeekbarCellFactory.of(advancedGlassTintPercentRow, tintConfig, NekoConfig.advancedGlassTintPercent).slug("advancedGlassTintPercent"));
+            }
             items.add(UItem.asShadow(null));
         }
 

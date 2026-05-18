@@ -14,6 +14,7 @@ import android.text.Spanned;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -420,7 +421,7 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
         iBlur3Positions.add(iBlur3PositionActionBar);
     }
 
-    private void blur3_InvalidateBlur() {
+    protected void blur3_InvalidateBlur() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || scrollableViewNoiseSuppressor == null) {
             return;
         }
@@ -530,6 +531,93 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
             item.id = id;
             item.text = title;
             return item;
+        }
+    }
+
+    /**
+     * Reusable integer slider row backed by {@link AltSeekbar}, styled to match
+     * the system PowerSaverSlider used in Lite Mode. Use {@link SeekbarCellFactory#of}
+     * to build a {@link UItem} for it. The cell holds a single AltSeekbar and
+     * only updates its value on rebind, so theme/list refreshes don't tear down
+     * the underlying SeekBarView.
+     */
+    public static class SeekbarConfig {
+        public final String title;
+        public final String left;
+        public final String right;
+        public final int min;
+        public final int max;
+        public final AltSeekbar.OnDrag onDrag;
+
+        public SeekbarConfig(String title, String left, String right, int min, int max, AltSeekbar.OnDrag onDrag) {
+            this.title = title;
+            this.left = left;
+            this.right = right;
+            this.min = min;
+            this.max = max;
+            this.onDrag = onDrag;
+        }
+    }
+
+    protected static class SeekbarCellFactory extends UItem.UItemFactory<SeekbarCell> {
+        static {
+            setup(new SeekbarCellFactory());
+        }
+
+        private Theme.ResourcesProvider resourcesProvider;
+
+        @Override
+        public SeekbarCell createView(Context context, RecyclerListView listView, int currentAccount, int classGuid, Theme.ResourcesProvider resourcesProvider) {
+            this.resourcesProvider = resourcesProvider;
+            return new SeekbarCell(context, resourcesProvider);
+        }
+
+        @Override
+        public void bindView(View view, UItem item, boolean divider, UniversalAdapter adapter, UniversalRecyclerView listView) {
+            ((SeekbarCell) view).bind((SeekbarConfig) item.object, item.intValue);
+        }
+
+        public static UItem of(int id, SeekbarConfig config, int currentValue) {
+            var item = UItem.ofFactory(SeekbarCellFactory.class);
+            item.id = id;
+            // text is required by NekoSettingsActivity.createSearchArray() —
+            // it indexes every UItem with a non-empty slug by item.text.toString()
+            // and would NPE on a null CharSequence here.
+            item.text = config.title;
+            item.object = config;
+            item.intValue = currentValue;
+            return item;
+        }
+
+        @Override
+        public boolean isClickable() {
+            return false;
+        }
+    }
+
+    protected static class SeekbarCell extends FrameLayout {
+        private final Theme.ResourcesProvider resourcesProvider;
+        private AltSeekbar seekbar;
+
+        public SeekbarCell(Context context, Theme.ResourcesProvider resourcesProvider) {
+            super(context);
+            this.resourcesProvider = resourcesProvider;
+        }
+
+        public void bind(SeekbarConfig config, int currentValue) {
+            // Build the seekbar lazily on first bind. Subsequent rebinds (e.g.
+            // adapter.update from fillItems) intentionally do NOT rebuild it —
+            // each fillItems pass produces a fresh SeekbarConfig with a fresh
+            // OnDrag lambda, but those lambdas typically just close over the
+            // same NekoConfig static field, so reusing the original one keeps
+            // the in-progress drag state alive and avoids tearing down the
+            // underlying SeekBarView.
+            if (seekbar == null) {
+                seekbar = new AltSeekbar(getContext(), config.onDrag, config.min, config.max,
+                        config.title, config.left, config.right, resourcesProvider);
+                addView(seekbar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+            }
+            seekbar.setValue(currentValue);
         }
     }
 }

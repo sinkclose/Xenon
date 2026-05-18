@@ -93,6 +93,7 @@
     <string name="UseAdvancedLiquidGlassDesc">Хроматическая дисперсия, свечение краёв Френеля, направленные блики. Требует перезапуск.</string>
     <string name="LiquidGlassIntensity">Интенсивность преломления</string>
     <string name="LiquidGlassThickness">Толщина стекла</string>
+    <string name="AdvancedGlassTintPercent">Сила затемнения стекла</string>
     <string name="MainTabsHide">Скрыть табы</string>
     <string name="MainTabsHideHint">Когда скрыты, вы всё ещё можете переключаться между экранами свайпами. Жесты продолжат работать.</string>
     <string name="MainTabsShow">Показывать табы навигации</string>

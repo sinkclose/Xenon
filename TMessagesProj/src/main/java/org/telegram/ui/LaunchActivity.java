@@ -5888,9 +5888,27 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     }
 
     private boolean firstAppUpdateCheck = true;
+    /**
+     * Process-scoped guard: only one automatic update check is performed per
+     * cold boot of the app. Subsequent automatic triggers (e.g. {@link #onResume()}
+     * after the user backgrounds and returns to the app) are skipped, so the
+     * app only hits the GitHub releases endpoint once per process lifetime.
+     * Force-mode checks (manual "Check for updates" button) always proceed.
+     */
+    private static boolean autoUpdateCheckPerformed = false;
     public void checkAppUpdate(boolean force, Browser.Progress progress) {
         if (!force && !BuildVars.CHECK_UPDATES) {
             return;
+        }
+        // Cold-boot gate: only allow one automatic update check per process lifetime.
+        // The flag is reset only when the process is killed (e.g. swiped from
+        // recents / restarted by the OS), which matches the user-facing notion
+        // of a "cold boot". Forced checks bypass this guard.
+        if (!force && autoUpdateCheckPerformed) {
+            return;
+        }
+        if (!force) {
+            autoUpdateCheckPerformed = true;
         }
         if (ApplicationLoader.applicationLoaderInstance.isCustomUpdate()) {
             final BetaUpdate prevUpdate = ApplicationLoader.applicationLoaderInstance.getUpdate();

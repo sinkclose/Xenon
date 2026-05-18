@@ -13,7 +13,7 @@ public class BlurredBackgroundColorProviderThemed implements BlurredBackgroundCo
     private float alpha;
 
     public BlurredBackgroundColorProviderThemed(Theme.ResourcesProvider resourcesProvider, int backgroundColorId) {
-        this(resourcesProvider, backgroundColorId, LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.85f : 0.76f);
+        this(resourcesProvider, backgroundColorId, org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl.glassTintAlpha(LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.85f : 0.76f));
     }
 
     public BlurredBackgroundColorProviderThemed(Theme.ResourcesProvider resourcesProvider, int backgroundColorId, float alpha) {
@@ -38,7 +38,7 @@ public class BlurredBackgroundColorProviderThemed implements BlurredBackgroundCo
 
     public void updateColors() {
         final int color = Theme.getColor(backgroundColorId, resourcesProvider);
-        backgroundColor = Theme.multAlpha(color, alpha);
+        backgroundColor = org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl.tintWithAccent(Theme.multAlpha(color, alpha), resourcesProvider);
 
         if (isDark()) {
             strokeColorTop = 0x28FFFFFF;

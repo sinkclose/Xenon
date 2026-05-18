@@ -63,6 +63,9 @@ public class MainTabsPreviewCell extends FrameLayout {
             public boolean onMove(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder, @NonNull RecyclerView.ViewHolder target) {
                 int fromPos = viewHolder.getAdapterPosition();
                 int toPos = target.getAdapterPosition();
+                if (fromPos == RecyclerView.NO_POSITION || toPos == RecyclerView.NO_POSITION) {
+                    return false;
+                }
                 Collections.swap(tabs, fromPos, toPos);
                 adapter.notifyItemMoved(fromPos, toPos);
                 if (onChanged != null) {
@@ -125,34 +128,70 @@ public class MainTabsPreviewCell extends FrameLayout {
             return editMode;
         }
 
+        /**
+         * Each tab type appears at most once in the list, so giving every
+         * type its own view type prevents RecyclerView from rebinding a
+         * CHATS holder onto a SETTINGS slot (which would force us to
+         * rebuild the heavy {@link GlassTabView} + RLottie on every bind).
+         * With unique view types, RecyclerView keeps each tab's view alive
+         * and only the data (alpha / click listener) is updated on rebind.
+         */
+        @Override
+        public int getItemViewType(int position) {
+            if (tabs == null || position >= tabs.size()) {
+                return 0;
+            }
+            return tabs.get(position).type.ordinal();
+        }
+
         @NonNull
         @Override
         public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            // Build the GlassTabView for this specific tab type ONCE here,
+            // not in onBindViewHolder. createTabView() spins up a Lottie
+            // drawable and several animators which is far too expensive to
+            // repeat on every bind.
+            MainTabsManager.TabType[] types = MainTabsManager.TabType.values();
+            MainTabsManager.TabType type = types[Math.max(0, Math.min(viewType, types.length - 1))];
+
             FrameLayout frameLayout = new FrameLayout(context);
-            RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT);
-            frameLayout.setLayoutParams(lp);
+            GlassTabView tabView = MainTabsManager.createTabView(context, resourcesProvider, currentAccount, type);
+            tabView.setShowTitle(showTitle, false);
+            frameLayout.addView(tabView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.CENTER));
+
+            int width = computeItemWidth();
+            frameLayout.setLayoutParams(new RecyclerView.LayoutParams(width, ViewGroup.LayoutParams.MATCH_PARENT));
+
             return new RecyclerListView.Holder(frameLayout);
         }
 
         @Override
         public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
             FrameLayout frameLayout = (FrameLayout) holder.itemView;
-            frameLayout.removeAllViews();
-            
-            int totalWidth = MainTabsPreviewCell.this.getMeasuredWidth();
-            if (totalWidth == 0) totalWidth = Resources.getSystem().getDisplayMetrics().widthPixels - AndroidUtilities.dp(40);
-            int width = totalWidth / Math.max(1, tabs.size());
-            
-            frameLayout.setLayoutParams(new RecyclerView.LayoutParams(width, ViewGroup.LayoutParams.MATCH_PARENT));
+            View child = frameLayout.getChildCount() > 0 ? frameLayout.getChildAt(0) : null;
+            if (!(child instanceof GlassTabView tabView)) {
+                return;
+            }
+
+            // Refresh width in case the host got measured between create and
+            // bind, or the number of tabs changed (reset-to-default flow).
+            int width = computeItemWidth();
+            ViewGroup.LayoutParams existing = frameLayout.getLayoutParams();
+            if (existing instanceof RecyclerView.LayoutParams lp) {
+                if (lp.width != width) {
+                    lp.width = width;
+                    frameLayout.setLayoutParams(lp);
+                }
+            } else {
+                frameLayout.setLayoutParams(new RecyclerView.LayoutParams(width, ViewGroup.LayoutParams.MATCH_PARENT));
+            }
 
             MainTabsManager.Tab tab = tabs.get(position);
-            GlassTabView tabView = MainTabsManager.createTabView(context, resourcesProvider, currentAccount, tab.type);
-            tabView.setShowTitle(showTitle, false);
-            
+
             // CHATS и PROFILE нельзя отключить
             boolean canDisable = tab.type != MainTabsManager.TabType.CHATS && tab.type != MainTabsManager.TabType.PROFILE;
             tabView.setAlpha(tab.enabled ? 1.0f : 0.45f);
-            
+
             tabView.setOnClickListener(v -> {
                 if (editMode && canDisable) {
                     tab.enabled = !tab.enabled;
@@ -162,13 +201,20 @@ public class MainTabsPreviewCell extends FrameLayout {
                     }
                 }
             });
-            
-            frameLayout.addView(tabView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.CENTER));
         }
 
         @Override
         public int getItemCount() {
             return tabs == null ? 0 : tabs.size();
+        }
+
+        private int computeItemWidth() {
+            int totalWidth = MainTabsPreviewCell.this.getMeasuredWidth();
+            if (totalWidth == 0) {
+                totalWidth = Resources.getSystem().getDisplayMetrics().widthPixels - AndroidUtilities.dp(40);
+            }
+            int count = tabs == null ? 0 : tabs.size();
+            return totalWidth / Math.max(1, count);
         }
     }
 }
