@@ -27,6 +27,7 @@ import android.graphics.PixelFormat;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -138,11 +139,15 @@ import org.telegram.ui.Components.Forum.ForumUtilities;
 import org.telegram.ui.Components.Premium.LimitReachedBottomSheet;
 import org.telegram.ui.Components.Reactions.ReactionsLayoutInBubble;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
+import org.telegram.ui.Components.blur3.DownscaleScrollableNoiseSuppressor;
+import org.telegram.ui.Components.blur3.RenderNodeWithHash;
 import org.telegram.ui.Components.blur3.ViewGroupPartRenderer;
 import org.telegram.ui.Components.blur3.capture.IBlur3Capture;
+import org.telegram.ui.Components.blur3.capture.IBlur3Hash;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
 import org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl;
 import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceColor;
+import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode;
 import org.telegram.ui.Components.poll.PollAttachedMediaPack;
 import org.telegram.ui.ContentPreviewViewer;
 import org.telegram.ui.DialogsActivity;
@@ -169,6 +174,7 @@ import org.telegram.ui.TopicsFragment;
 
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.List;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -1597,6 +1603,9 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
     }
 
     private final @NonNull BlurredBackgroundSourceColor iBlur3SourceColor;
+    private @Nullable DownscaleScrollableNoiseSuppressor scrollableViewNoiseSuppressor;
+    private @Nullable BlurredBackgroundSourceRenderNode iBlur3SourceGlass;
+    private @NonNull final List<RectF> iBlur3Positions = new ArrayList<>();
 
     public SharedMediaLayout(Context context, long did, SharedMediaPreloader preloader, int commonGroupsCount, ArrayList<Integer> sortedUsers, TLRPC.ChatFull chatInfo, TLRPC.UserFull userInfo, int initialTab, int initialStoryAlbumId, BaseFragment parent, Delegate delegate, int viewType, Theme.ResourcesProvider resourcesProvider) {
         this(context, did, preloader, commonGroupsCount, sortedUsers, chatInfo, userInfo, initialTab, initialStoryAlbumId, parent, delegate, viewType, resourcesProvider, null);
@@ -1611,7 +1620,27 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
         iBlur3SourceColor.setColor(getThemedColor(Theme.key_windowBackgroundWhite));
 
         if (iBlur3FactoryLiquidGlass == null) {
-            iBlur3FactoryLiquidGlass = new BlurredBackgroundDrawableViewFactory(iBlur3SourceColor);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                scrollableViewNoiseSuppressor = new DownscaleScrollableNoiseSuppressor();
+                iBlur3SourceGlass = new BlurredBackgroundSourceRenderNode(null);
+                iBlur3SourceGlass.setupRenderer(new RenderNodeWithHash.Renderer() {
+                    @Override
+                    public void renderNodeCalculateHash(IBlur3Hash hash) {
+                        hash.add(getThemedColor(Theme.key_windowBackgroundWhite));
+                        hash.add(SharedConfig.chatBlurEnabled());
+                    }
+                    @Override
+                    public void renderNodeUpdateDisplayList(Canvas canvas) {
+                        canvas.drawColor(getThemedColor(Theme.key_windowBackgroundWhite));
+                        if (SharedConfig.chatBlurEnabled() && scrollableViewNoiseSuppressor != null) {
+                            scrollableViewNoiseSuppressor.draw(canvas, DownscaleScrollableNoiseSuppressor.DRAW_GLASS);
+                        }
+                    }
+                });
+                iBlur3FactoryLiquidGlass = new BlurredBackgroundDrawableViewFactory(iBlur3SourceGlass);
+            } else {
+                iBlur3FactoryLiquidGlass = new BlurredBackgroundDrawableViewFactory(iBlur3SourceColor);
+            }
         }
 
         this.viewType = viewType;
@@ -3130,6 +3159,9 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                 }
             };
             mediaPages[a].listView.setFastScrollEnabled(RecyclerListView.FastScroll.DATE_TYPE);
+            if (iBlur3FactoryLiquidGlass != null) {
+                mediaPages[a].listView.getFastScroll().applyBlurDrawables(iBlur3FactoryLiquidGlass, BlurredBackgroundProviderImpl.topPanel(resourcesProvider));
+            }
             mediaPages[a].listView.setScrollingTouchSlop(RecyclerView.TOUCH_SLOP_PAGING);
             mediaPages[a].listView.setPinnedSectionOffsetY(-dp(2));
             mediaPages[a].listView.setPadding(0, dp(48 + 6), 0, 0);
@@ -4405,6 +4437,17 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
 
     @Override
     protected void dispatchDraw(Canvas canvas) {
+        if (Build.VERSION.SDK_INT >= 31 && scrollableViewNoiseSuppressor != null && iBlur3Capture != null && iBlur3SourceGlass != null) {
+            if (mediaPages.length > 0 && mediaPages[0].iBlur3Capture == null) {
+                initBlurCapture(this);
+            }
+            iBlur3Positions.clear();
+            final int count = iBlur3SourceGlass.getVisiblePositions(iBlur3Positions, 0, 0);
+            scrollableViewNoiseSuppressor.setupRenderNodes(iBlur3Positions, count);
+            scrollableViewNoiseSuppressor.invalidateResultRenderNodes(iBlur3Capture, getMeasuredWidth(), getMeasuredHeight());
+            iBlur3SourceGlass.setSize(getMeasuredWidth(), getMeasuredHeight());
+            iBlur3SourceGlass.updateDisplayListIfNeeded();
+        }
         if (scrollSlidingTextTabStrip != null) {
             canvas.save();
             canvas.translate(scrollSlidingTextTabStrip.getX(), scrollSlidingTextTabStrip.getY());
