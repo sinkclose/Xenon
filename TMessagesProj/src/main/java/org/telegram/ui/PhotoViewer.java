@@ -6459,7 +6459,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         }
 
         miniProgressView = new ImageView(activityContext);
-        miniProgressView.setImageDrawable(new CircularProgressDrawable(dp(54), dp(2.25f), getThemedColor(Theme.key_progressCircle)));
+        miniProgressView.setImageDrawable(new CircularProgressDrawable(dp(44), dp(3f), getThemedColor(Theme.key_progressCircle)));
         miniProgressView.setBackgroundResource(R.drawable.circle_big);
         miniProgressView.setVisibility(View.INVISIBLE);
         miniProgressView.setAlpha(0.0f);
@@ -6468,7 +6468,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         createVideoControlsInterface();
 
         progressView = new ImageView(parentActivity);
-        progressView.setImageDrawable(new CircularProgressDrawable(dp(44), dp(2.25f), getThemedColor(Theme.key_progressCircle)));
+        progressView.setImageDrawable(new CircularProgressDrawable(dp(44), dp(3f), getThemedColor(Theme.key_progressCircle)));
         progressView.setBackgroundResource(R.drawable.circle_big);
         progressView.setVisibility(View.INVISIBLE);
         containerView.addView(progressView, LayoutHelper.createFrame(54, 54, Gravity.CENTER));
