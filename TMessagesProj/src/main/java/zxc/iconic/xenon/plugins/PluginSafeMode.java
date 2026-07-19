@@ -96,6 +96,14 @@ public final class PluginSafeMode {
         Context ctx = ApplicationLoader.applicationContext;
         if (ctx == null) return;
 
+        // Only attribute the crash to plugins if they were actually active
+        // (engine enabled AND at least one .xplugin file on disk). A crash in
+        // pure Telegram code (e.g. an OOM) should never show the "Crashed!"
+        // plugin sheet — that would be both misleading and alarming.
+        if (!arePluginsActive()) {
+            return;
+        }
+
         String trace = buildCrashTrace(thread, throwable);
         writeCrashLog(trace);
 
@@ -286,10 +294,27 @@ public final class PluginSafeMode {
         previousBootIncomplete = prefs.getBoolean(KEY_BOOT_FLAG, false);
         previousBootTime = prefs.getLong(KEY_BOOT_TIME, 0);
         bootHandledThisLaunch = false;
+
+        boolean pluginsActive = arePluginsActive();
+
         prefs.edit()
                 .putBoolean(KEY_BOOT_FLAG, true)
                 .putLong(KEY_BOOT_TIME, System.currentTimeMillis())
+                .putBoolean("pluginsActiveLastTime", pluginsActive)
                 .apply();
+    }
+
+    private static boolean arePluginsActive() {
+        try {
+            if (!NekoConfig.pluginsEnabled) {
+                return false;
+            }
+            File dir = PluginManager.getPluginsDir();
+            File[] files = dir.listFiles((d, name) -> name.endsWith(PluginManager.PLUGIN_EXT));
+            return files != null && files.length > 0;
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     /**
@@ -349,6 +374,19 @@ public final class PluginSafeMode {
         if (!crashed && !hung) {
             // Healthy previous launch — nothing to do. This launch is already
             // tracked (markBootStarted ran in ApplicationLoader).
+            return;
+        }
+
+        // If plugins were not active (either disabled or none installed) during the last boot,
+        // this crash or hang was not caused by plugins. Clear the flags and return silently.
+        boolean pluginsActiveLastTime = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getBoolean("pluginsActiveLastTime", false);
+        if (!pluginsActiveLastTime) {
+            ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .edit()
+                    .putBoolean(KEY_CRASH_FLAG, false)
+                    .putBoolean(KEY_BOOT_FLAG, false)
+                    .commit();
             return;
         }
 
