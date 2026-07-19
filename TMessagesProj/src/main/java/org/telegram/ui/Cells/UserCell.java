@@ -64,7 +64,7 @@ import org.telegram.ui.Stories.StoriesUtilities;
 
 import zxc.iconic.xenon.helpers.CustomBadgeController;
 
-public class UserCell extends FrameLayout implements NotificationCenter.NotificationCenterDelegate {
+public class UserCell extends FrameLayout implements NotificationCenter.NotificationCenterDelegate, Theme.Colorable {
 
     public BackupImageView avatarImageView;
     protected SimpleTextView nameTextView;

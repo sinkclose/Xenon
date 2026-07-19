@@ -48,8 +48,8 @@ import org.telegram.ui.Components.UniversalRecyclerView;
 import java.util.ArrayList;
 import java.util.List;
 
-import tw.nekomimi.nekogram.helpers.EntitiesHelper;
-import tw.nekomimi.nekogram.settings.BaseNekoSettingsActivity;
+import zxc.iconic.xenon.helpers.EntitiesHelper;
+import zxc.iconic.xenon.settings.BaseNekoSettingsActivity;
 
 public class JsonActivity extends BaseNekoSettingsActivity {
 

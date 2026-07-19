@@ -6050,7 +6050,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             avatarGooey.setAlpha(1f - v);
             avatarGooey.setBlurIntensity(0f);
             avatarGooey.setGooeyEnabled(false);
-        } else if (!NekoConfig.gooeyAvatarAnimation) {
+        } else if (NekoConfig.disableGooeyAvatarAnimation) {
             avatarGooey.setAlpha(MathUtils.clamp(1f - (pullUpProgress - 0.5f) / 0.5f, 0f, 1f));
             avatarGooey.setBlurIntensity(0f);
             avatarGooey.setGooeyEnabled(false);

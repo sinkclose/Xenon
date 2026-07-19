@@ -21859,9 +21859,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     java.util.Set<Integer> savedIds = ctrl.getAllSavedMessageIds(dialog_id, currentAccount);
                     SparseArray<MessageObject> dict = messagesDict[loadIndex];
                     for (int i = 0; i < dict.size(); i++) {
-                        MessageObject obj = dict.valueAt(i);
-                        if (savedIds.contains(obj.getId())) {
-                            obj.messageOwner.ayuDeleted = true;
+                        MessageObject msgObj = dict.valueAt(i);
+                        if (savedIds.contains(msgObj.getId())) {
+                            msgObj.messageOwner.ayuDeleted = true;
                         }
                     }
                 }
