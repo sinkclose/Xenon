@@ -2914,3 +2914,4 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
         return BulletinFactory.of(topBulletinContainer, resourcesProvider);
     }
 }
+

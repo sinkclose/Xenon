@@ -322,6 +322,13 @@
     <string name="TabsPositionTop">上部</string>
     <string name="TabsPositionBottom">下部</string>
     <string name="StrokeOnViews">キラキラエフェクト</string>
+    <string name="CameraInVideoMessages">ビデオメッセージの撮影に使用するカメラ</string>
+    <string name="AskCamera">毎回尋ねる</string>
+    <string name="FrontCamera">前面カメラ</string>
+    <string name="RearCamera">背面カメラ</string>
+    <string name="GooeyAvatarAnimation">「とろけるような」アバターアニメーション</string>
+    <string name="JsonCopyKey">キーをコピー</string>
+    <string name="JsonCopyValue">値をコピー</string>
     <!-- Accessibility -->
     <string name="AccessibilitySettings">ユーザー補助の設定</string>
 </resources>

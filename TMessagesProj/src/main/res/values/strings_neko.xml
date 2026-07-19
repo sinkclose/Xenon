@@ -399,6 +399,9 @@
     <string name="AskCamera">Ask every time</string>
     <string name="FrontCamera">Front Camera</string>
     <string name="RearCamera">Rear Camera</string>
+    <string name="GooeyAvatarAnimation">\"Gooey\" avatar animation</string>
+    <string name="JsonCopyKey">Copy Key</string>
+    <string name="JsonCopyValue">Copy Value</string>
 
     <!-- Accessibility -->
     <string name="AccessibilitySettings">Accessibility settings</string>

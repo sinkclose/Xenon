@@ -141,7 +141,7 @@ public class BottomSheetTabsOverlay extends View {
 
     @NonNull
     private WindowInsetsCompat onApplyWindowInsets(@NonNull View ignoredV, @NonNull WindowInsetsCompat insets) {
-        navigationBarInset = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom;
+        navigationBarInset = insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom;
         invalidate();
 
         return WindowInsetsCompat.CONSUMED;

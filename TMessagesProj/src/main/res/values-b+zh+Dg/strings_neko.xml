@@ -325,6 +325,9 @@
     <string name="AskCamera">每次询问</string>
     <string name="FrontCamera">前置摄像头</string>
     <string name="RearCamera">后置摄像头</string>
+    <string name="GooeyAvatarAnimation">头像吸附动画</string>
+    <string name="JsonCopyKey">复制键</string>
+    <string name="JsonCopyValue">复制值</string>
     <!-- Accessibility -->
     <string name="AccessibilitySettings">无障碍设置</string>
 </resources>

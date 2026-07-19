@@ -25,6 +25,8 @@
     <item name="svg_tag" type="id"/>
     <item name="width_tag" type="id"/>
     <item name="color_key_tag" type="id"/>
+    <item name="bulletin_delegate_tag" type="id"/>
+    <item name="sheet_attached_to_fragment_tag" type="id"/>
     <item name="current_animation" type="id"/>
     <item name="acc_action_small_button" type="id"/>
     <item name="acc_action_msg_options" type="id"/>
@@ -49,6 +51,8 @@
     <item name="acc_action_copy" type="id"/>
     <item name="acc_action_forward" type="id"/>
     <item name="acc_action_save_to_gallery" type="id"/>
+    <item name="acc_action_copy_code" type="id"/>
+    <item name="acc_action_summarize" type="id"/>
     <item name="shake_animation" type="id"/>
 
     <item name="timeout_callback" type="id"/>

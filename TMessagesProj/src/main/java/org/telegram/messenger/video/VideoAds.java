@@ -110,6 +110,11 @@ public class VideoAds {
 
 //    private static LruCache<VideoAdsLocation, VideoAds> cached = new LruCache<>(3);
     private static HashMap<VideoAdsLocation, VideoAds> cached = new HashMap<>();
+
+    public static void dropCache() {
+        cached.clear();
+    }
+
     public static VideoAds make(
         int currentAccount,
         long dialogId,
@@ -123,10 +128,6 @@ public class VideoAds {
         }
         ads.init(bulletinFactory);
         return ads;
-    }
-
-    public static void dropCache() {
-        cached.clear();
     }
 
     private VideoAds(

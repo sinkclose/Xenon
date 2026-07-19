@@ -300,6 +300,8 @@ public class MessageHelper extends BaseController {
             messageObject = selectedObject;
         } else if (!selectedObject.isVoiceTranscriptionOpen() && !TextUtils.isEmpty(selectedObject.messageOwner.message) && !isLinkOrEmojiOnlyMessage(selectedObject)) {
             messageObject = selectedObject;
+        } else if (selectedObject.type == MessageObject.TYPE_ARTICLE) {
+            messageObject = selectedObject;
         }
         if (messageObject != null && messageObject.translating) {
             return null;

@@ -158,7 +158,8 @@ public class NinePatchBuilder {
         ).array();
 
         final Rect padding = new Rect(padLeft, padTop, padRight, padBottom);
-        return new NinePatchDrawable(ApplicationLoader.applicationContext.getResources(), bitmap, chunk, padding, null);
+        return new NinePatchDrawable(ApplicationLoader.applicationContext.getResources(),
+            bitmap, chunk, padding, null);
     }
 
     /**

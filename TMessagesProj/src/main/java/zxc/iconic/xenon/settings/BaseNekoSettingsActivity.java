@@ -79,11 +79,9 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             scrollableViewNoiseSuppressor = new DownscaleScrollableNoiseSuppressor();
             iBlur3SourceGlassFrosted = new BlurredBackgroundSourceRenderNode(null);
-            iBlur3SourceGlass = new BlurredBackgroundSourceRenderNode(null);
         } else {
             scrollableViewNoiseSuppressor = null;
             iBlur3SourceGlassFrosted = null;
-            iBlur3SourceGlass = null;
         }
     }
 
@@ -98,26 +96,13 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
                     final int width = getMeasuredWidth();
                     final int height = getMeasuredHeight();
                     if (iBlur3SourceGlassFrosted != null && !iBlur3SourceGlassFrosted.inRecording()) {
-                        //if (iBlur3SourceGlassFrosted.needUpdateDisplayList(width, height) || iBlur3Invalidated) {
                         final Canvas c = iBlur3SourceGlassFrosted.beginRecording(width, height);
                         c.drawColor(getThemedColor(Theme.key_windowBackgroundWhite));
                         if (SharedConfig.chatBlurEnabled()) {
                             scrollableViewNoiseSuppressor.draw(c, DownscaleScrollableNoiseSuppressor.DRAW_FROSTED_GLASS);
                         }
                         iBlur3SourceGlassFrosted.endRecording();
-                        //}
                     }
-                    if (iBlur3SourceGlass != null && !iBlur3SourceGlass.inRecording()) {
-                        //if (iBlur3SourceGlass.needUpdateDisplayList(width, height) || iBlur3Invalidated) {
-                        final Canvas c = iBlur3SourceGlass.beginRecording(width, height);
-                        c.drawColor(getThemedColor(Theme.key_windowBackgroundWhite));
-                        if (SharedConfig.chatBlurEnabled()) {
-                            scrollableViewNoiseSuppressor.draw(c, DownscaleScrollableNoiseSuppressor.DRAW_GLASS);
-                        }
-                        iBlur3SourceGlass.endRecording();
-                        //}
-                    }
-                    iBlur3Invalidated = false;
                 }
                 super.dispatchDraw(canvas);
             }
@@ -423,10 +408,8 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
 
     private final @Nullable DownscaleScrollableNoiseSuppressor scrollableViewNoiseSuppressor;
     private final @Nullable BlurredBackgroundSourceRenderNode iBlur3SourceGlassFrosted;
-    private final @Nullable BlurredBackgroundSourceRenderNode iBlur3SourceGlass;
 
     private IBlur3Capture iBlur3Capture;
-    private boolean iBlur3Invalidated;
 
     private final ArrayList<RectF> iBlur3Positions = new ArrayList<>();
     private final RectF iBlur3PositionActionBar = new RectF();

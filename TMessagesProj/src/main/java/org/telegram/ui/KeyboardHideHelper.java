@@ -78,7 +78,7 @@ public class KeyboardHideHelper {
                         view.getRootWindowInsets().getInsets(WindowInsetsCompat.Type.ime()).bottom :
                         enterView.getEmojiPadding()
                 );
-                bottomNavBarSize = view.getRootWindowInsets().getInsets(WindowInsetsCompat.Type.navigationBars()).bottom;
+                bottomNavBarSize = view.getRootWindowInsets().getInsets(WindowInsetsCompat.Type.systemBars()).bottom;
                 view.getWindowInsetsController().controlWindowInsetsAnimation(
                     WindowInsetsCompat.Type.ime(),
                     -1,

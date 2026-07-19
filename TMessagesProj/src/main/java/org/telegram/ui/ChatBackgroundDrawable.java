@@ -45,11 +45,6 @@ public class ChatBackgroundDrawable extends Drawable {
         public void invalidate() {
             if (parent != null) {
                 parent.invalidate();
-                if (parent instanceof org.telegram.ui.Components.SizeNotifierFrameLayout) {
-                    ((org.telegram.ui.Components.SizeNotifierFrameLayout) parent).invalidateDrawable(ChatBackgroundDrawable.this);
-                } else if (parent.getParent() instanceof org.telegram.ui.Components.SizeNotifierFrameLayout) {
-                    ((org.telegram.ui.Components.SizeNotifierFrameLayout) parent.getParent()).invalidateDrawable(ChatBackgroundDrawable.this);
-                }
             }
         }
     };
@@ -261,7 +256,7 @@ public class ChatBackgroundDrawable extends Drawable {
     }
 
     public void onDetachedFromWindow(View view) {
-        if (!attachedViews.contains(view)) {
+        if (attachedViews.contains(view)) {
             attachedViews.remove(view);
         }
         if (isAttached() && !attached) {
@@ -280,22 +275,14 @@ public class ChatBackgroundDrawable extends Drawable {
         if (motionBackgroundDrawable != null) {
             return motionBackgroundDrawable;
         }
-        if (prioritizeThumb) {
-            if (imageReceiver.getStaticThumb() != null) {
-                return imageReceiver.getStaticThumb();
-            } else if (imageReceiver.getThumb() != null) {
-                return imageReceiver.getThumb();
-            } else {
-                return imageReceiver.getDrawable();
-            }
+        if (prioritizeThumb && imageReceiver.getStaticThumb() != null) {
+            return imageReceiver.getStaticThumb();
+        } else if (imageReceiver.getThumb() != null) {
+            return imageReceiver.getThumb();
+        } else if (imageReceiver.getDrawable() != null) {
+            return imageReceiver.getDrawable();
         } else {
-            if (imageReceiver.getDrawable() != null) {
-                return imageReceiver.getDrawable();
-            } else if (imageReceiver.getThumb() != null) {
-                return imageReceiver.getThumb();
-            } else {
-                return imageReceiver.getStaticThumb();
-            }
+            return imageReceiver.getStaticThumb();
         }
     }
 

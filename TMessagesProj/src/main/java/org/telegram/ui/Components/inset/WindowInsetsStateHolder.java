@@ -155,7 +155,7 @@ public class WindowInsetsStateHolder implements WindowInsetsProvider, WindowInse
     @Override
     public int getCurrentNavigationBarInset() {
         return lastInsets != null ?
-            lastInsets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom : 0;
+            lastInsets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom : 0;
     }
 
     @Override

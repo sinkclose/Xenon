@@ -100,7 +100,6 @@ import java.util.List;
 import java.util.Locale;
 
 import zxc.iconic.xenon.helpers.WebAppHelper;
-
 public class BotWebViewAttachedSheet implements NotificationCenter.NotificationCenterDelegate, BaseFragment.AttachedSheet, BottomSheetTabsOverlay.Sheet {
     public final static int
             TYPE_WEB_VIEW_BUTTON = 0,
@@ -957,7 +956,7 @@ public class BotWebViewAttachedSheet implements NotificationCenter.NotificationC
         this.currentWebApp = props.app;
 
         TLRPC.User userbot = MessagesController.getInstance(currentAccount).getUser(botId);
-        CharSequence title = WebAppHelper.isInternalBot(props) ? WebAppHelper.getInternalBotName(props) : UserObject.getUserName(userbot);
+        CharSequence title = UserObject.getUserName(userbot);
         try {
             TextPaint tp = new TextPaint();
             tp.setTextSize(dp(20));
@@ -1031,17 +1030,12 @@ public class BotWebViewAttachedSheet implements NotificationCenter.NotificationC
             otherItem.addSubItem(R.id.menu_delete_bot, R.drawable.msg_delete, LocaleController.getString(R.string.BotWebViewDeleteBot));
         }
         hasPrivacy(currentAccount, botId, has -> {
-            if (has && !WebAppHelper.isInternalBot(props)) {
+            if (has) {
                 otherItem.showSubItem(R.id.menu_privacy);
             } else {
                 otherItem.hideSubItem(R.id.menu_privacy);
             }
         });
-        if (WebAppHelper.isInternalBot(props)) {
-            otherItem.hideSubItem(R.id.menu_open_bot);
-            otherItem.hideSubItem(R.id.menu_share_bot);
-            otherItem.hideSubItem(R.id.menu_tos_bot);
-        }
 
         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
             @Override
@@ -1908,7 +1902,7 @@ public class BotWebViewAttachedSheet implements NotificationCenter.NotificationC
         if (userFull == null) return false;
         if (userFull.bot_info == null) return false;
         if (userFull.bot_info.privacy_policy_url != null) return true;
-        for (TLRPC.TL_botCommand command : userFull.bot_info.commands) {
+        for (TLRPC.BotCommand command : userFull.bot_info.commands) {
             if ("privacy".equals(command.command)) {
                 return true;
             }

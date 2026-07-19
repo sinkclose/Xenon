@@ -17,7 +17,7 @@ public interface WindowInsetsProvider {
 
     Insets getInsets(int type);
     default int getCurrentNavigationBarInset() {
-        return getInsets(WindowInsetsCompat.Type.navigationBars()).bottom;
+        return getInsets(WindowInsetsCompat.Type.systemBars()).bottom;
     }
 
     boolean inAppViewIsVisible();

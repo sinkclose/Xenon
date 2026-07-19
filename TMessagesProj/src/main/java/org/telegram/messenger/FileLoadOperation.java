@@ -1452,6 +1452,9 @@ public class FileLoadOperation {
                     ConnectionsManager.getInstance(currentAccount).discardConnection(datacenterId, connectionType);
                 }
             }
+            if (fullyCancelled != null && waitingForCancelledCount[0] == 0) {
+                fullyCancelled.run();
+            }
         }
     }
 

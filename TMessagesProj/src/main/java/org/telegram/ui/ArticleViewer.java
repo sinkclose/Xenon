@@ -126,6 +126,7 @@ import org.telegram.messenger.CodeHighlighting;
 import org.telegram.messenger.DownloadController;
 import org.telegram.messenger.Emoji;
 import org.telegram.messenger.FileLoader;
+import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.FileStreamLoadOperation;
 import org.telegram.messenger.ImageLoader;
@@ -2741,6 +2742,36 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
             for (int a = 0; a < tableTextPaints.size(); a++) {
                 updateFontEntry(tableTextPaints.keyAt(a), tableTextPaints.valueAt(a), typefaceNormal, typefaceBoldItalic, typefaceBold, typefaceItalic);
             }
+            for (int a = 0; a < titleTextPaints.size(); a++) {
+                updateFontEntry(titleTextPaints.keyAt(a), titleTextPaints.valueAt(a), typefaceBold, typefaceBoldItalic, typefaceBold, typefaceBoldItalic);
+            }
+            for (int a = 0; a < subtitleTextPaints.size(); a++) {
+                updateFontEntry(subtitleTextPaints.keyAt(a), subtitleTextPaints.valueAt(a), typefaceBold, typefaceBoldItalic, typefaceBold, typefaceBoldItalic);
+            }
+            for (int a = 0; a < headerTextPaints.size(); a++) {
+                updateFontEntry(headerTextPaints.keyAt(a), headerTextPaints.valueAt(a), typefaceBold, typefaceBoldItalic, typefaceBold, typefaceBoldItalic);
+            }
+            for (int a = 0; a < subheaderTextPaints.size(); a++) {
+                updateFontEntry(subheaderTextPaints.keyAt(a), subheaderTextPaints.valueAt(a), typefaceBold, typefaceBoldItalic, typefaceBold, typefaceBoldItalic);
+            }
+            for (int a = 0; a < heading1TextPaints.size(); a++) {
+                updateFontEntry(heading1TextPaints.keyAt(a), heading1TextPaints.valueAt(a), typefaceBold, typefaceBoldItalic, typefaceBold, typefaceBoldItalic);
+            }
+            for (int a = 0; a < heading2TextPaints.size(); a++) {
+                updateFontEntry(heading2TextPaints.keyAt(a), heading2TextPaints.valueAt(a), typefaceBold, typefaceBoldItalic, typefaceBold, typefaceBoldItalic);
+            }
+            for (int a = 0; a < heading3TextPaints.size(); a++) {
+                updateFontEntry(heading3TextPaints.keyAt(a), heading3TextPaints.valueAt(a), typefaceBold, typefaceBoldItalic, typefaceBold, typefaceBoldItalic);
+            }
+            for (int a = 0; a < heading4TextPaints.size(); a++) {
+                updateFontEntry(heading4TextPaints.keyAt(a), heading4TextPaints.valueAt(a), typefaceBold, typefaceBoldItalic, typefaceBold, typefaceBoldItalic);
+            }
+            for (int a = 0; a < heading5TextPaints.size(); a++) {
+                updateFontEntry(heading5TextPaints.keyAt(a), heading5TextPaints.valueAt(a), typefaceBold, typefaceBoldItalic, typefaceBold, typefaceBoldItalic);
+            }
+            for (int a = 0; a < heading6TextPaints.size(); a++) {
+                updateFontEntry(heading6TextPaints.keyAt(a), heading6TextPaints.valueAt(a), typefaceBold, typefaceBoldItalic, typefaceBold, typefaceBoldItalic);
+            }
         }
 
         private void updateFontEntry(int flags, TextPaint paint, Typeface typefaceNormal, Typeface typefaceBoldItalic, Typeface typefaceBold, Typeface typefaceItalic) {
@@ -3392,7 +3423,7 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
                     paint.setTypeface(AndroidUtilities.bold());
                 } else if (parent.selectedFont == 1 || parentBlock instanceof TL_iv.pageBlockTitle || parentBlock instanceof TL_iv.pageBlockKicker || parentBlock instanceof TL_iv.pageBlockHeader || parentBlock instanceof TL_iv.pageBlockSubtitle || parentBlock instanceof TL_iv.pageBlockSubheader || isHeadingBlock(parentBlock)) {
                     if (parentBlock instanceof TL_iv.pageBlockTitle || parentBlock instanceof TL_iv.pageBlockHeader || parentBlock instanceof TL_iv.pageBlockSubtitle || parentBlock instanceof TL_iv.pageBlockSubheader || isHeadingBlock(parentBlock)) {
-                        paint.setTypeface(AndroidUtilities.getTypeface("fonts/mw_bold.ttf"));
+                        paint.setTypeface(parent.selectedFont == 1 ? Typeface.create("serif", Typeface.BOLD) : AndroidUtilities.bold());
                     } else {
                         if ((flags & TEXT_FLAG_MEDIUM) != 0 && (flags & TEXT_FLAG_ITALIC) != 0) {
                             paint.setTypeface(Typeface.create("serif", Typeface.BOLD_ITALIC));
@@ -6132,7 +6163,7 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
                 AndroidUtilities.runOnUIThread(() -> {
                     MessagesController.getInstance(currentAccount).putUsers(resultWebView.users, false);
                     BotGuardHelper.getInstance(currentAccount).openGuardBotWebApp(-channel.id,
-                        resultWebView.bot_id, resultWebView.webview);
+                        resultWebView.bot_id, resultWebView.query_id);
                 });
                 hasJoinMessage = true; // do not generate join message
             }
@@ -6302,6 +6333,16 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
         public static boolean isVideo(TL_iv.RichMessage richMessage, TL_iv.PageBlock block) {
             if (block instanceof TL_iv.pageBlockVideo) {
                 TLRPC.Document document = getDocumentWithId(richMessage, ((TL_iv.pageBlockVideo) block).video_id);
+                if (BuildVars.LOGS_ENABLED) {
+                    StringBuilder attrs = new StringBuilder();
+                    if (document != null) {
+                        for (TLRPC.DocumentAttribute a : document.attributes) attrs.append(a.getClass().getSimpleName()).append(",");
+                    }
+                    FileLog.d("[richmedia] WebPageUtils.isVideo video_id=" + ((TL_iv.pageBlockVideo) block).video_id
+                        + (document == null
+                            ? " doc=NOT_FOUND documents.size=" + richMessage.documents.size()
+                            : " doc=" + document.id + " mime=" + document.mime_type + " attrs=[" + attrs + "] isVideoDocument=" + MessageObject.isVideoDocument(document) + " isGifDocument=" + MessageObject.isGifDocument(document)));
+                }
                 if (document != null) {
                     return MessageObject.isVideoDocument(document);
                 }
@@ -6357,16 +6398,29 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
                 if (photo != null) {
                     TLRPC.PhotoSize sizeFull = FileLoader.getClosestPhotoSizeWithSize(photo.sizes, AndroidUtilities.getPhotoSize());
                     if (sizeFull != null) {
-                        return FileLoader.getInstance(UserConfig.selectedAccount).getPathToAttach(sizeFull, true);
+                        return getExistingPathToAttach(sizeFull);
                     }
                 }
             } else if (block instanceof TL_iv.pageBlockVideo) {
                 TLRPC.Document document = getDocumentWithId(page, ((TL_iv.pageBlockVideo) block).video_id);
                 if (document != null) {
-                    return FileLoader.getInstance(UserConfig.selectedAccount).getPathToAttach(document, true);
+                    return getExistingPathToAttach(document);
                 }
             }
             return null;
+        }
+
+        private static File getExistingPathToAttach(TLObject attach) {
+            final FileLoader fileLoader = FileLoader.getInstance(UserConfig.selectedAccount);
+            final File nonCache = fileLoader.getPathToAttach(attach, false);
+            if (nonCache != null && nonCache.exists()) {
+                return nonCache;
+            }
+            final File cache = fileLoader.getPathToAttach(attach, true);
+            if (cache != null && cache.exists()) {
+                return cache;
+            }
+            return nonCache != null ? nonCache : cache;
         }
 
         public static File getMediaFile(TL_iv.RichMessage page, TL_iv.PageBlock block) {
@@ -6375,13 +6429,13 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
                 if (photo != null) {
                     TLRPC.PhotoSize sizeFull = FileLoader.getClosestPhotoSizeWithSize(photo.sizes, AndroidUtilities.getPhotoSize());
                     if (sizeFull != null) {
-                        return FileLoader.getInstance(UserConfig.selectedAccount).getPathToAttach(sizeFull, true);
+                        return getExistingPathToAttach(sizeFull);
                     }
                 }
             } else if (block instanceof TL_iv.pageBlockVideo) {
                 TLRPC.Document document = getDocumentWithId(page, ((TL_iv.pageBlockVideo) block).video_id);
                 if (document != null) {
-                    return FileLoader.getInstance(UserConfig.selectedAccount).getPathToAttach(document, true);
+                    return getExistingPathToAttach(document);
                 }
             }
             return null;

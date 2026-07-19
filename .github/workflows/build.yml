@@ -26,7 +26,7 @@ jobs:
       CCACHE_NOHASHDIR: "true"
       CCACHE_MAXSIZE: "10G"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Ensure Xray core AAR
         run: |
@@ -59,7 +59,7 @@ jobs:
           distribution: 'temurin'
 
       - name: Set up ccache
-        uses: hendrikmuhs/ccache-action@v1.2
+        uses: hendrikmuhs/ccache-action@v1.2.23
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
@@ -69,7 +69,7 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
-          packages: "build-tools;36.1.0 ndk;27.3.13750724 platforms;android-36"
+          packages: "build-tools;37.0.0 ndk;27.3.13750724 platforms;android-37.0"
 
       - name: Configure Gradle
         run: |

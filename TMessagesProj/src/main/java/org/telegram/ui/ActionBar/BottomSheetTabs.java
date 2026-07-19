@@ -1017,9 +1017,6 @@ public class BottomSheetTabs extends FrameLayout {
                 return title;
             }
             if (props == null) return "";
-            if (WebAppHelper.isInternalBot(props)) {
-                return WebAppHelper.getInternalBotName(props);
-            }
             TLRPC.User user = MessagesController.getInstance(props.currentAccount).getUser(props.botId);
             return UserObject.getUserName(user);
         }

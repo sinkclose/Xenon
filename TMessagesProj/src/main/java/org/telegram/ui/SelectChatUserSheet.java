@@ -536,7 +536,7 @@ public class SelectChatUserSheet extends BottomSheetWithRecyclerListView {
             NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.chatInfoDidLoad);
         }
         public void detach() {
-            if (attached) return;
+            if (!attached) return;
             attached = false;
             NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.chatInfoDidLoad);
 
@@ -717,7 +717,7 @@ public class SelectChatUserSheet extends BottomSheetWithRecyclerListView {
                     }
                     final BaseFragment lastFragment = LaunchActivity.getSafeLastFragment();
                     if (lastFragment == null) return;
-                    AlertsCreator.showAddUserAlert(error, lastFragment, ChatObject.isChannelAndNotMegaGroup(chat), req);
+                    AlertsCreator.showAddUserAlert(error, lastFragment, ChatObject.isChannelAndNotMegaGroup(chat), ChatObject.isCommunity(chat), req);
                 }
             } else {
                 if (srp != null) {

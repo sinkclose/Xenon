@@ -181,6 +181,16 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         }
 
         iBlur3SourceColor = new BlurredBackgroundSourceColor();
+
+        Bulletin.Delegate delegate = new Bulletin.Delegate() {
+            @Override
+            public int getBottomOffset(int tag) {
+                return navigationBarHeight + dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN);
+            }
+        };
+
+        Bulletin.addDelegate(this, delegate);
+        Bulletin.addDelegate(contentView, delegate);
     }
 
     @Override
@@ -238,16 +248,6 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         checkContactsTabBadge();
         checkUnreadCount(true);
 
-        Bulletin.Delegate delegate = new Bulletin.Delegate() {
-            @Override
-            public int getBottomOffset(int tag) {
-                return navigationBarHeight + dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN);
-            }
-        };
-
-        Bulletin.addDelegate(this, delegate);
-        Bulletin.addDelegate(contentView, delegate);
-
         showAccountChangeHint();
     }
 
@@ -270,8 +270,6 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     @Override
     public void onPause() {
         super.onPause();
-        Bulletin.removeDelegate(this);
-        Bulletin.removeDelegate(contentView);
         if (accountSwitchHint != null) {
             accountSwitchHint.hide();
         }
@@ -695,7 +693,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     @NonNull
     @Override
     protected WindowInsetsCompat onApplyWindowInsets(@NonNull View v, @NonNull WindowInsetsCompat insets) {
-        int bottomInset = insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom;
+        int bottomInset = zxc.iconic.xenon.helpers.NonIslandHelper.bottomBar() ? 0 : insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom;
         navigationBarHeight = bottomInset;
         final boolean isUpdateLayoutVisible = updateLayoutWrapper.isUpdateLayoutVisible();
         final int updateLayoutHeight = isUpdateLayoutVisible ? dp(UpdateLayoutWrapper.HEIGHT) : 0;
@@ -723,14 +721,18 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         }
 
         if (zxc.iconic.xenon.helpers.NonIslandHelper.bottomBar()) {
-            tabsViewWrapper.setPadding(0, 0, 0, navigationBarHeight);
-            final int tabsFullHeight = dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN);
+            // In non-island mode the wrapper has no bottom padding so the blur drawable
+            // extends under the system navigation bar. The tabsView itself gets a
+            // bottom padding equal to the navigation-bar height so the buttons
+            // stay above it, and we grow its LayoutParams height accordingly.
+            tabsViewWrapper.setPadding(0, 0, 0, 0);
+            final int tabsFullHeight = dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN) + navigationBarHeight;
             ViewGroup.LayoutParams tabsLp = tabsView.getLayoutParams();
             if (tabsLp != null && tabsLp.height != tabsFullHeight) {
                 tabsLp.height = tabsFullHeight;
                 tabsView.setLayoutParams(tabsLp);
             }
-            tabsView.setPadding(0, 0, 0, 0);
+            tabsView.setPadding(0, 0, 0, navigationBarHeight);
         } else {
             tabsViewWrapper.setPadding(0, 0, 0, navigationBarHeight);
         }
@@ -826,6 +828,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.appUpdateAvailable);
         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.appUpdateLoading);
         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.needSetDayNightTheme);
+
 
         super.onFragmentDestroy();
     }

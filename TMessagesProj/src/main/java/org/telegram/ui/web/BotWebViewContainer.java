@@ -3462,7 +3462,6 @@ public abstract class BotWebViewContainer extends FrameLayout implements Notific
     }
 
     public interface Delegate {
-        default void onGetTextToCopy(String json) {};
         /**
          * Called when WebView requests to close itself
          */

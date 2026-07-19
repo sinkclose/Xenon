@@ -38,7 +38,6 @@ import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowInsets;
@@ -84,9 +83,7 @@ import org.telegram.ui.ViewPagerActivity;
 
 import java.lang.annotation.Retention;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.WeakHashMap;
 
 public class Bulletin {
 
@@ -161,9 +158,6 @@ public class Bulletin {
             bulletin.hide(animated && isTransitionsEnabled(), 0);
         }
     }
-
-    private static final WeakHashMap<FrameLayout, Delegate> delegates = new WeakHashMap<>();
-    private static final WeakHashMap<BaseFragment, Delegate> fragmentDelegates = new WeakHashMap<>();
 
     @SuppressLint("StaticFieldLeak")
     private static Bulletin visibleBulletin;
@@ -689,31 +683,45 @@ public class Bulletin {
     }
 
     //region Offset Providers
-    public static void addDelegate(@NonNull BaseFragment fragment, @NonNull Delegate delegate) {
-        fragmentDelegates.put(fragment, delegate);
+    public static void addDelegate(BaseFragment fragment, @NonNull Delegate delegate) {
+        if (fragment != null) {
+            fragment.setBulletinDelegate(delegate);
+        }
     }
 
-    public static void addDelegate(@NonNull FrameLayout containerLayout, @NonNull Delegate delegate) {
-        delegates.put(containerLayout, delegate);
+    public static void addDelegate(FrameLayout containerLayout, @NonNull Delegate delegate) {
+        if (containerLayout != null) {
+            containerLayout.setTag(R.id.bulletin_delegate_tag, delegate);
+        }
     }
 
     private static Delegate findDelegate(BaseFragment probableFragment, FrameLayout probableContainer) {
-        Delegate delegate;
-        if ((delegate = fragmentDelegates.get(probableFragment)) != null) {
-            return delegate;
+        if (probableFragment != null) {
+            Delegate delegate = probableFragment.getBulletinDelegate();
+            if (delegate != null) {
+                return delegate;
+            }
         }
-        if ((delegate = delegates.get(probableContainer)) != null) {
-            return delegate;
+
+        if (probableContainer != null) {
+            Object tag = probableContainer.getTag(R.id.bulletin_delegate_tag);
+            if (tag instanceof Delegate) {
+                return (Delegate) tag;
+            }
         }
         return null;
     }
 
-    public static void removeDelegate(@NonNull BaseFragment fragment) {
-        fragmentDelegates.remove(fragment);
+    public static void removeDelegate(BaseFragment fragment) {
+        if (fragment != null) {
+            fragment.setBulletinDelegate(null);
+        }
     }
 
-    public static void removeDelegate(@NonNull FrameLayout containerLayout) {
-        delegates.remove(containerLayout);
+    public static void removeDelegate(FrameLayout containerLayout) {
+        if (containerLayout != null) {
+            containerLayout.setTag(R.id.bulletin_delegate_tag, null);
+        }
     }
 
     public interface Delegate {

@@ -43,6 +43,7 @@ import zxc.iconic.xenon.helpers.MessageHelper;
 import zxc.iconic.xenon.helpers.UserHelper;
 import zxc.iconic.xenon.helpers.WebAppHelper;
 import zxc.iconic.xenon.settings.BaseNekoSettingsActivity;
+import tw.nekomimi.nekogram.tlv.TlViewer;
 
 public class MessageDetailsActivity extends BaseNekoSettingsActivity implements NotificationCenter.NotificationCenterDelegate {
 
@@ -476,7 +477,7 @@ public class MessageDetailsActivity extends BaseNekoSettingsActivity implements 
 
             showDialog(dialog);
         } else if (id == exportRow) {
-            WebAppHelper.openTLViewer(this,
+            TlViewer.openTlViewer(this,
                     messageObject.currentEvent != null ? messageObject.currentEvent : messageObject.messageOwner);
         }
     }
