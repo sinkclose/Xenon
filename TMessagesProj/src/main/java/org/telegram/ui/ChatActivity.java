@@ -21900,7 +21900,6 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     highlightMessageId = messageId;
                     highlightTaskId = taskId;
                     highlightPollOptionId = pollOptionId;
->>>>>>> nekogram/main
                 }
                 if (showScrollToMessageError && messageId != startLoadFromMessageId) {
                     BulletinFactory.of(this).createErrorBulletin(LocaleController.getString(R.string.MessageNotFound), themeDelegate).show();
