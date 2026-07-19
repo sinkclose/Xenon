@@ -6,6 +6,7 @@ import java.util.zip.ZipFile
 
 plugins {
     id 'com.android.library'
+    id 'org.lsposed.lsparanoid'
 }
 
 def libv2rayFile = file("$projectDir/libs/libv2ray.aar")

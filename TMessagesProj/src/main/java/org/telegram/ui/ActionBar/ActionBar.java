@@ -857,6 +857,9 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             actionModeExtraView = extraView;
             actionModeShowingView = showingView;
             actionModeHidingViews = hidingViews;
+            if (occupyStatusBar && actionModeTop != null && !SharedConfig.noStatusBar) {
+                animators.add(ObjectAnimator.ofFloat(actionModeTop, View.ALPHA, 0.0f, 1.0f));
+            }
             if (actionModeExtraView != null) {
                 animators.add(ObjectAnimator.ofFloat(actionModeExtraView, View.TRANSLATION_Y, 0));
             }
@@ -873,13 +876,15 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
                     animators.add(ObjectAnimator.ofFloat(menu, View.ALPHA, 0));
                 }
             }
-            final int color = actionModeColor == 0 ? actionBarColor : actionModeColor;
-            if (color == 0 || glassMode) {
-                NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.needCheckSystemBarColors);
-            } else if (ColorUtils.calculateLuminance(color) < 0.7f) {
-                AndroidUtilities.setLightStatusBar((Activity) getContext(), false);
-            } else {
-                AndroidUtilities.setLightStatusBar((Activity) getContext(), true);
+            if (SharedConfig.noStatusBar) {
+                final int color = actionModeColor == 0 ? actionBarColor : actionModeColor;
+                if (color == 0) {
+                    NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.needCheckSystemBarColors);
+                } else if (ColorUtils.calculateLuminance(color) < 0.7f) {
+                    AndroidUtilities.setLightStatusBar(((Activity) getContext()).getWindow(), false);
+                } else {
+                    AndroidUtilities.setLightStatusBar(((Activity) getContext()).getWindow(), true);
+                }
             }
             if (actionModeAnimation != null) {
                 actionModeAnimation.cancel();
@@ -900,6 +905,9 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
                 @Override
                 public void onAnimationStart(Animator animation) {
                     actionMode.setVisibility(VISIBLE);
+                    if (occupyStatusBar && actionModeTop != null && !SharedConfig.noStatusBar) {
+                        actionModeTop.setVisibility(VISIBLE);
+                    }
                 }
 
                 @Override
@@ -964,15 +972,23 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             }
             actionModeShowingView = showingView;
             actionModeHidingViews = hidingViews;
-            final int color = actionModeColor == 0 ? actionBarColor : actionModeColor;
-            if (color == 0 || glassMode) {
-                NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.needCheckSystemBarColors);
-            } else if (ColorUtils.calculateLuminance(color) < 0.7f) {
-                AndroidUtilities.setLightStatusBar((Activity) getContext(), false);
-            } else {
-                AndroidUtilities.setLightStatusBar((Activity) getContext(), true);
+            if (occupyStatusBar && actionModeTop != null && !SharedConfig.noStatusBar) {
+                actionModeTop.setAlpha(1.0f);
+            }
+            if (SharedConfig.noStatusBar) {
+                final int color = actionModeColor == 0 ? actionBarColor : actionModeColor;
+                if (color == 0) {
+                    NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.needCheckSystemBarColors);
+                } else if (ColorUtils.calculateLuminance(color) < 0.7f) {
+                    AndroidUtilities.setLightStatusBar(((Activity) getContext()).getWindow(), false);
+                } else {
+                    AndroidUtilities.setLightStatusBar(((Activity) getContext()).getWindow(), true);
+                }
             }
             actionMode.setVisibility(VISIBLE);
+            if (occupyStatusBar && actionModeTop != null && !SharedConfig.noStatusBar) {
+                actionModeTop.setVisibility(VISIBLE);
+            }
             if (titleTextView[0] != null) {
                 titleTextView[0].setVisibility(INVISIBLE);
             }
@@ -1025,6 +1041,9 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         if (actionModeShowingView != null) {
             animators.add(ObjectAnimator.ofFloat(actionModeShowingView, View.ALPHA, 0.0f));
         }
+        if (occupyStatusBar && actionModeTop != null && !SharedConfig.noStatusBar) {
+            animators.add(ObjectAnimator.ofFloat(actionModeTop, View.ALPHA, 0.0f));
+        }
         if (actionModeExtraView != null) {
             animators.add(ObjectAnimator.ofFloat(actionModeExtraView, View.TRANSLATION_Y, actionModeExtraView.getMeasuredHeight()));
         }
@@ -1039,12 +1058,16 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         if (menu != null) {
             animators.add(ObjectAnimator.ofFloat(menu, View.ALPHA, 1));
         }
-        if (actionBarColor == 0 || glassMode) {
-            NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.needCheckSystemBarColors);
-        } else if (ColorUtils.calculateLuminance(actionBarColor) < 0.7f) {
-            AndroidUtilities.setLightStatusBar((Activity) getContext(), false);
-        } else {
-            AndroidUtilities.setLightStatusBar((Activity) getContext(), true);
+        if (SharedConfig.noStatusBar) {
+            if (actionBarColor == 0) {
+                NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.needCheckSystemBarColors);
+            } else {
+                if (ColorUtils.calculateLuminance(actionBarColor) < 0.7f) {
+                    AndroidUtilities.setLightStatusBar(((Activity) getContext()).getWindow(), false);
+                } else {
+                    AndroidUtilities.setLightStatusBar(((Activity) getContext()).getWindow(), true);
+                }
+            }
         }
         if (actionModeAnimation != null) {
             actionModeAnimation.cancel();
@@ -1067,6 +1090,9 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
                 if (actionModeAnimation != null && actionModeAnimation.equals(animation)) {
                     actionModeAnimation = null;
                     actionMode.setVisibility(INVISIBLE);
+                    if (occupyStatusBar && actionModeTop != null && !SharedConfig.noStatusBar) {
+                        actionModeTop.setVisibility(INVISIBLE);
+                    }
                     if (actionModeExtraView != null) {
                         actionModeExtraView.setVisibility(INVISIBLE);
                     }
@@ -1947,14 +1973,14 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         super.onAttachedToWindow();
         attached = true;
         updateAttachState();
-        if (actionModeVisible) {
+        if (SharedConfig.noStatusBar && actionModeVisible) {
             final int color = actionModeColor == 0 ? actionBarColor : actionModeColor;
-            if (color == 0 || glassMode) {
+            if (color == 0) {
                 NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.needCheckSystemBarColors);
             } else if (ColorUtils.calculateLuminance(color) < 0.7f) {
-                AndroidUtilities.setLightStatusBar((Activity) getContext(), false);
+                AndroidUtilities.setLightStatusBar(((Activity) getContext()).getWindow(), false);
             } else {
-                AndroidUtilities.setLightStatusBar((Activity) getContext(), true);
+                AndroidUtilities.setLightStatusBar(((Activity) getContext()).getWindow(), true);
             }
         }
         if (lastRightDrawable instanceof AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable) {
@@ -1967,14 +1993,14 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         super.onDetachedFromWindow();
         attached = false;
         updateAttachState();
-        if (actionModeVisible) {
-            if (actionBarColor == 0 || actionModeColor == 0 || glassMode) {
+        if (SharedConfig.noStatusBar && actionModeVisible) {
+            if (actionBarColor == 0 || actionModeColor == 0) {
                 NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.needCheckSystemBarColors);
             } else {
                 if (ColorUtils.calculateLuminance(actionBarColor) < 0.7f) {
-                    AndroidUtilities.setLightStatusBar((Activity) getContext(), false);
+                    AndroidUtilities.setLightStatusBar(((Activity) getContext()).getWindow(), false);
                 } else {
-                    AndroidUtilities.setLightStatusBar((Activity) getContext(), true);
+                    AndroidUtilities.setLightStatusBar(((Activity) getContext()).getWindow(), true);
                 }
             }
         }

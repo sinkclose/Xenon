@@ -964,6 +964,11 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                     currFragment.setNavigationBarColor(ColorUtils.blendARGB(currNavigationBarColor, prevNavigationBarColor, ratio));
                 }
             }
+            if (currFragment != null && !currFragment.inPreviewMode && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !SharedConfig.noStatusBar) {
+                int oldStatusBarColor = prevFragment.hasForceLightStatusBar() ? Color.TRANSPARENT : prevFragment.isLightStatusBar() ? AndroidUtilities.LIGHT_STATUS_BAR_OVERLAY : AndroidUtilities.DARK_STATUS_BAR_OVERLAY;
+                int newStatusBarColor = currFragment.hasForceLightStatusBar() ? Color.TRANSPARENT : currFragment.isLightStatusBar() ? AndroidUtilities.LIGHT_STATUS_BAR_OVERLAY : AndroidUtilities.DARK_STATUS_BAR_OVERLAY;
+                parentActivity.getWindow().setStatusBarColor(ColorUtils.blendARGB(newStatusBarColor, oldStatusBarColor, ratio));
+            }
         }
     }
 
@@ -2725,7 +2730,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
         fragment.setInMenuMode(false);
 
         try {
-            AndroidUtilities.setLightStatusBar(parentActivity, fragment.isLightStatusBar());
+            AndroidUtilities.setLightStatusBar(parentActivity.getWindow(), fragment.isLightStatusBar(), fragment.hasForceLightStatusBar());
         } catch (Exception ignore) {}
     }
 
@@ -2765,7 +2770,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
         }
 
         if (previousFragment != null) {
-            AndroidUtilities.setLightStatusBar(parentActivity, previousFragment.isLightStatusBar());
+            AndroidUtilities.setLightStatusBar(parentActivity.getWindow(), previousFragment.isLightStatusBar(), previousFragment.hasForceLightStatusBar());
             LayoutContainer temp = containerView;
             containerView = containerViewBack;
             containerViewBack = temp;

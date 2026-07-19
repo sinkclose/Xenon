@@ -576,6 +576,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         });
         setupActionBarLayout();
         drawerLayoutContainer.setParentActionBarLayout(actionBarLayout);
+        drawerLayoutContainer.setBehindKeyboardColor(Theme.getColor(Theme.key_windowBackgroundWhite));
         actionBarLayout.setDrawerLayoutContainer(drawerLayoutContainer);
         actionBarLayout.setFragmentStack(mainFragmentsStack);
         actionBarLayout.setFragmentStackChangedListener(() -> {
@@ -1224,7 +1225,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                     int color = Theme.getColor(Theme.key_actionBarDefault, null, true);
                     enable = ColorUtils.calculateLuminance(color) > 0.7f;
                 }
-                AndroidUtilities.setLightStatusBar(this, enable);
+                AndroidUtilities.setLightStatusBar(getWindow(), enable, forceLightStatusBar);
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && checkNavigationBar && (!useCurrentFragment || currentFragment == null || !currentFragment.isInPreviewMode())) {
                 int color = currentFragment != null && useCurrentFragment ? currentFragment.getNavigationBarColor() : Theme.getColor(Theme.key_windowBackgroundGray, null, true);
@@ -1259,7 +1260,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 AndroidUtilities.setLightNavigationBar(this, mode == 0 && AndroidUtilities.computePerceivedBrightness(color) >= .721f || mode == 1);
             }
         }
-        if (checkStatusBar) {
+        if ((SharedConfig.noStatusBar || forceLightStatusBar) && checkStatusBar) {
             getWindow().setStatusBarColor(0);
         }
     }
@@ -7579,6 +7580,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 checkNavigationBarColor = (boolean) args[1];
             }
             checkSystemBarColors(args.length > 2 && (boolean) args[2], true, checkNavigationBarColor && !isNavigationBarColorFrozen && !actionBarLayout.isTransitionAnimationInProgress());
+            drawerLayoutContainer.setBehindKeyboardColor(Theme.getColor(Theme.key_windowBackgroundWhite));
         } else if (id == NotificationCenter.needSetDayNightTheme) {
             boolean instant = false;
             if (args[2] != null) {

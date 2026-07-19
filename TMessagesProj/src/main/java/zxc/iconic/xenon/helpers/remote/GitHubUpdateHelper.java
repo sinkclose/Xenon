@@ -10,6 +10,8 @@ import com.google.gson.annotations.SerializedName;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BuildConfig;
 import org.telegram.messenger.FileLog;
+import org.telegram.messenger.SharedConfig;
+import zxc.iconic.xenon.NekoConfig;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -51,6 +53,30 @@ public class GitHubUpdateHelper {
     private static final Gson GSON = new Gson();
 
     private GitHubUpdateHelper() {
+    }
+
+    public static HttpURLConnection openConnection(String urlStr) throws Exception {
+        URL url = new URL(urlStr);
+        java.net.Proxy proxy = java.net.Proxy.NO_PROXY;
+        if (NekoConfig.xrayAppProxyEnabled) {
+            proxy = new java.net.Proxy(java.net.Proxy.Type.SOCKS, new java.net.InetSocketAddress("127.0.0.1", NekoConfig.xrayAppProxyLocalPort));
+        } else if (SharedConfig.isProxyEnabled()) {
+            SharedConfig.ProxyInfo info = SharedConfig.currentProxy;
+            if (info != null && (info.secret == null || info.secret.isEmpty())) {
+                proxy = new java.net.Proxy(java.net.Proxy.Type.SOCKS, new java.net.InetSocketAddress(info.address, info.port));
+                if (!TextUtils.isEmpty(info.username)) {
+                    final String user = info.username;
+                    final String pass = info.password != null ? info.password : "";
+                    java.net.Authenticator.setDefault(new java.net.Authenticator() {
+                        @Override
+                        protected java.net.PasswordAuthentication getPasswordAuthentication() {
+                            return new java.net.PasswordAuthentication(user, pass.toCharArray());
+                        }
+                    });
+                }
+            }
+        }
+        return (HttpURLConnection) url.openConnection(proxy);
     }
 
     /**
@@ -233,8 +259,7 @@ public class GitHubUpdateHelper {
     private static GitHubRelease fetchLatestRelease() throws Exception {
         HttpURLConnection connection = null;
         try {
-            URL url = new URL(GITHUB_API_URL);
-            connection = (HttpURLConnection) url.openConnection();
+            connection = openConnection(GITHUB_API_URL);
             connection.setRequestMethod("GET");
             connection.setRequestProperty("Accept", "application/vnd.github+json");
             connection.setRequestProperty("User-Agent", "Xenon-Updater/" + BuildConfig.VERSION_NAME);
@@ -281,8 +306,7 @@ public class GitHubUpdateHelper {
     private static GitHubRelease fetchLatestPrefixedRelease(String prefix) throws Exception {
         HttpURLConnection connection = null;
         try {
-            URL url = new URL(GITHUB_API_RELEASES_URL);
-            connection = (HttpURLConnection) url.openConnection();
+            connection = openConnection(GITHUB_API_RELEASES_URL);
             connection.setRequestMethod("GET");
             connection.setRequestProperty("Accept", "application/vnd.github+json");
             connection.setRequestProperty("User-Agent", "Xenon-Updater/" + BuildConfig.VERSION_NAME);

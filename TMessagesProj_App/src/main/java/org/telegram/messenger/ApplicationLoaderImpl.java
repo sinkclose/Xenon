@@ -144,7 +144,7 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
                 });
                 if (whenDone != null) whenDone.run();
             }
-        });
+        }, false);
     }
 
     @Override
