@@ -13853,6 +13853,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 args.putLong("user_id", UserConfig.getInstance(currentAccount).getClientUserId());
                 presentFragment(new ChatActivity(args));
             });
+            io.add(R.drawable.msg2_folder, getString(R.string.Feed), () -> {
+                presentFragment(new FeedActivity());
+            });
             Drawable ghostDrawable = activity.getResources().getDrawable(R.drawable.ghost).mutate();
             ghostDrawable.setColorFilter(new PorterDuffColorFilter(0xffffffff, PorterDuff.Mode.SRC_IN));
             ghostDrawable.setBounds(0, 0, AndroidUtilities.dp(24), AndroidUtilities.dp(24));

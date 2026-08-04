@@ -43,6 +43,7 @@ public class HashtagSearchController {
     private final SearchResult myMessagesSearch;
     private final SearchResult channelPostsSearch;
     private final SearchResult localPostsSearch;
+    private final SearchResult feedSearch;
     private final SharedPreferences historyPreferences;
 
     public final ArrayList<String> history = new ArrayList<>();
@@ -53,6 +54,7 @@ public class HashtagSearchController {
         myMessagesSearch = new SearchResult(currentAccount);
         channelPostsSearch = new SearchResult(currentAccount);
         localPostsSearch = new SearchResult(currentAccount);
+        feedSearch = new SearchResult(currentAccount);
 
         historyPreferences = ApplicationLoader.applicationContext.getSharedPreferences("hashtag_search_history" + currentAccount, Activity.MODE_PRIVATE);
         loadHistoryFromPref();
@@ -121,6 +123,8 @@ public class HashtagSearchController {
             return channelPostsSearch;
         } else if (searchType == ChatActivity.SEARCH_CHANNEL_POSTS) {
             return localPostsSearch;
+        } else if (searchType == ChatActivity.SEARCH_FEED) {
+            return feedSearch;
         }
         throw new RuntimeException("Unknown search type");
     }

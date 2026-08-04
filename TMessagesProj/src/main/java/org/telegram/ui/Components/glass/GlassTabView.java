@@ -580,8 +580,7 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
         ARTICLE(R.raw.tab_article, R.raw.tab_article_reverse),
 
         BOOSTS(R.raw.boosts, 25, 49),
-        MONETIZATION(R.raw.monetize, 19, 45),
-        FEED(TabAnimationType.STATIC, R.drawable.msg_home);
+        MONETIZATION(R.raw.monetize, 19, 45);
 
         public final @RawRes int iconToFilled;
         public final @RawRes int iconToOutline;

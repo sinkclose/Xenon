@@ -98,11 +98,12 @@ public final class MainTabsManager {
                 return GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.CALLS, R.string.Calls);
             case SETTINGS:
                 return GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.SETTINGS, R.string.Settings);
-            case FEED:
-                return GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.FEED, R.string.MainTabsFeed);
             case PROFILE:
-            default:
                 return GlassTabView.createAvatar(context, resourceProvider, currentAccount, R.string.MainTabsProfile);
+            case FEED:
+                return GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.ARTICLE, R.string.Feed);
+            default:
+                return GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.CHATS, R.string.MainTabsChats);
         }
     }
 

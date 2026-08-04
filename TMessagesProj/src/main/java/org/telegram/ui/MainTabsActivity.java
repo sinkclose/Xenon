@@ -604,17 +604,19 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
                 args.putBoolean("hasMainTabs", hasMainTabs);
                 return new SettingsActivity(args);
             }
-            case FEED: {
-                Bundle args = new Bundle();
-                args.putBoolean("hasMainTabs", hasMainTabs);
-                return new FeedActivity(args);
-            }
             case PROFILE: {
                 Bundle args = new Bundle();
                 args.putLong("user_id", UserConfig.getInstance(currentAccount).getClientUserId());
                 args.putBoolean("my_profile", true);
                 args.putBoolean("hasMainTabs", hasMainTabs);
                 return new ProfileActivity(args);
+            }
+            case FEED: {
+                Bundle args = new Bundle();
+                args.putBoolean("hasMainTabs", hasMainTabs);
+                FeedActivity feedActivity = new FeedActivity(args);
+                feedActivity.setMainTabsActivityController(new MainTabsActivityControllerImpl());
+                return feedActivity;
             }
             case CHATS:
             default: {

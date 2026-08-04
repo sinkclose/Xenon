@@ -705,6 +705,7 @@ public class ChatActivity extends BaseFragment implements
     public static final int SEARCH_MY_MESSAGES = 1;
     public static final int SEARCH_PUBLIC_POSTS = 2;
     public static final int SEARCH_CHANNEL_POSTS = 3;
+    public static final int SEARCH_FEED = 4;
     private int searchType;
 
     public TL_account.TL_businessChatLink businessLink = null;
@@ -951,6 +952,7 @@ public class ChatActivity extends BaseFragment implements
     private boolean historyPreloaded;
     private int migrated_to;
     private boolean firstMessagesLoaded;
+    private boolean firstMessagesLoadedScrolled;
     private boolean clearOnLoad;
     private boolean clearOnLoadButIsNewTopic;
     private int clearOnLoadAndScrollMessageId = -1, clearOnLoadAndScrollOffset;
@@ -2742,6 +2744,7 @@ public class ChatActivity extends BaseFragment implements
     };
 
     public boolean isInsideContainer;
+    public boolean hasMainTabs;
     public boolean reversed;
     private long wallpaperRandomSeed;
 
@@ -2806,6 +2809,7 @@ public class ChatActivity extends BaseFragment implements
         dialogFolderId = arguments.getInt("dialog_folder_id", 0);
         dialogFilterId = arguments.getInt("dialog_filter_id", 0);
         chatMode = arguments.getInt("chatMode", 0);
+        hasMainTabs = arguments.getBoolean("hasMainTabs", false);
         quickReplyShortcut = arguments.getString("quick_reply", null);
         voiceChatHash = arguments.getString("voicechat", null);
         openVideoChat = arguments.getBoolean("videochat", false);
@@ -2983,9 +2987,9 @@ public class ChatActivity extends BaseFragment implements
             forceEmptyHistory();
         } else if (chatMode == MODE_SEARCH) {
             searchType = arguments.getInt("searchType", 0);
-            searchingHashtag = arguments.getString("searchHashtag", null);
+            searchingHashtag = arguments.getString("searchAshtag", null);
             searchingQuery = searchingHashtag;
-            if (searchType == 0 || searchingHashtag == null) {
+            if (searchType == 0 || (searchingHashtag == null && searchType != SEARCH_FEED)) {
                 return false;
             }
         } else {
@@ -3333,8 +3337,11 @@ public class ChatActivity extends BaseFragment implements
             clearChatData(true);
             startMessageAppearTransitionMs = 0;
             firstMessagesLoaded = false;
-            HashtagSearchController.getInstance(currentAccount).clearSearchResults(searchType);
-            messagesSearchAdapter.notifyDataSetChanged();
+            if (searchType == SEARCH_FEED) {
+                org.telegram.messenger.feed.FeedController.getInstance(currentAccount).clear();
+            } else {
+                HashtagSearchController.getInstance(currentAccount).clearSearchResults(searchType);
+            }
             messagesSearchListView.requestLayout();
             if (messagesSearchListView.getLayoutManager() != null) {
                 messagesSearchListView.getLayoutManager().scrollToPosition(0);
@@ -3394,7 +3401,11 @@ public class ChatActivity extends BaseFragment implements
         final Runnable load = () -> {
             waitingForLoad.add(lastLoadIndex);
             if (chatMode == MODE_SEARCH) {
-                HashtagSearchController.getInstance(currentAccount).searchHashtag(searchingHashtag, classGuid, searchType, lastLoadIndex++);
+                if (searchType == SEARCH_FEED) {
+                    org.telegram.messenger.feed.FeedController.getInstance(currentAccount).loadInitial(classGuid, lastLoadIndex++);
+                } else {
+                    HashtagSearchController.getInstance(currentAccount).searchHashtag(searchingHashtag, classGuid, searchType, lastLoadIndex++);
+                }
             } else if (startLoadFromDate != 0) {
                 getMessagesController().loadMessages(dialog_id, mergeDialogId, false, 30, 0, startLoadFromDate, true, 0, classGuid, 4, 0, chatMode, threadMessageId, replyMaxReadId, lastLoadIndex++, isTopic);
             } else if (startLoadFromMessageId != 0 && (!isThreadChat() || startLoadFromMessageId == highlightMessageId || isTopic)) {
@@ -3493,6 +3504,10 @@ public class ChatActivity extends BaseFragment implements
     @Override
     public void onFragmentDestroy() {
         super.onFragmentDestroy();
+        if (feedIntegration != null) {
+            feedIntegration.destroy();
+            feedIntegration = null;
+        }
         if (messageMetricsView != null) {
             messageMetricsView.finish();
         }
@@ -7879,7 +7894,11 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                         if (!loading && !endReached[0]) {
                             loading = true;
                             waitingForLoad.add(lastLoadIndex);
-                            HashtagSearchController.getInstance(currentAccount).searchHashtag(searchingHashtag, classGuid, searchType, lastLoadIndex++);
+                            if (searchType == SEARCH_FEED) {
+                                org.telegram.messenger.feed.FeedController.getInstance(currentAccount).loadOlder(classGuid, lastLoadIndex++);
+                            } else {
+                                HashtagSearchController.getInstance(currentAccount).searchHashtag(searchingHashtag, classGuid, searchType, lastLoadIndex++);
+                            }
                         }
                     } else {
                         getMediaDataController().loadMoreSearchMessages(true);
@@ -9250,8 +9269,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         checkUi_topPanelLayoutWidth();
 
         if (chatMode == MODE_SEARCH) {
-            animatorSearchResultAsListVisibility.setValue(true, false);
-            searchExpandList.setText(LocaleController.getString(R.string.SearchAsChat), false);
+            boolean asList = !isFeedSearch();
+            animatorSearchResultAsListVisibility.setValue(asList, false);
+            searchExpandList.setText(LocaleController.getString(asList ? R.string.SearchAsChat : R.string.SearchAsList), false);
             updateSearchListEmptyView();
         }
 
@@ -14209,7 +14229,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 if (!endReached[0]) {
                     loading = true;
                     waitingForLoad.add(lastLoadIndex);
-                    HashtagSearchController.getInstance(currentAccount).searchHashtag(searchingHashtag, classGuid, searchType, lastLoadIndex++);
+                    if (searchType == SEARCH_FEED) {
+                        org.telegram.messenger.feed.FeedController.getInstance(currentAccount).loadOlder(classGuid, lastLoadIndex++);
+                    } else {
+                        HashtagSearchController.getInstance(currentAccount).searchHashtag(searchingHashtag, classGuid, searchType, lastLoadIndex++);
+                    }
                 }
             }
 
@@ -16229,6 +16253,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
     public void invalidateMessagesVisiblePart() {
         invalidateMessagesVisiblePart = true;
+        if (isFeedSearch() && feedIntegration != null) {
+            feedIntegration().onVisiblePartInvalidated();
+        }
         if (fragmentView != null) {
             fragmentView.invalidate();
         }
@@ -25034,10 +25061,19 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             if (jumpToMessageId != 0) {
                 scrollToMessageId(jumpToMessageId, 0, true, 0, true, 0);
             } else {
+                if (messagesSearchAdapter == null) {
+                    return;
+                }
                 if (messagesSearchAdapter.loadedCount <= 0 && messagesSearchListView.getLayoutManager() != null) {
                     messagesSearchListView.getLayoutManager().scrollToPosition(0);
                 }
                 messagesSearchAdapter.notifyDataSetChanged();
+                // Feed: scroll to the bottom (newest post) on initial load, like a channel.
+                if (isFeedSearch() && !firstMessagesLoadedScrolled && messagesSearchAdapter.loadedCount > 0
+                        && messagesSearchListView.getLayoutManager() != null) {
+                    firstMessagesLoadedScrolled = true;
+                    messagesSearchListView.getLayoutManager().scrollToPosition(messagesSearchAdapter.getItemCount() - 1);
+                }
             }
             if (hashtagSearchEmptyView != null) {
                 hashtagSearchEmptyView.showProgress(false);
@@ -30331,6 +30367,10 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         zxc.iconic.xenon.plugins.PluginManager.setCurrentDialogId(dialog_id);
         checkShowBlur(false);
         activityResumeTime = System.currentTimeMillis();
+        if (isFeedSearch()) {
+            if (feedIntegration != null) feedIntegration().onHostResumed();
+            updateFeedTabBackButton();
+        }
         if (openImport && getSendMessagesHelper().getImportingHistory(dialog_id) != null) {
             ImportingAlert alert = new ImportingAlert(getParentActivity(), null, this, themeDelegate);
             alert.setOnHideListener(dialog -> {
@@ -30538,6 +30578,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     public void onPause() {
         super.onPause();
         scrolling = false;
+        if (isFeedSearch()) {
+            saveFeedScrollPosition();
+        }
         if (scrimPopupWindow != null) {
             scrimPopupWindow.setPauseNotifications(false);
             closeMenu();
@@ -36434,6 +36477,309 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
     public int getChatMode() {
         return chatMode;
+    }
+
+    public boolean isFeedSearch() {
+        return chatMode == MODE_SEARCH && searchType == SEARCH_FEED;
+    }
+
+    private void updateFeedTabBackButton() {
+        org.telegram.ui.ActionBar.ActionBar actionBar;
+        android.widget.ImageView backButton;
+        if (!hasMainTabs || !isFeedSearch() || (actionBar = this.actionBar) == null || (backButton = actionBar.backButtonImageView) == null) {
+            return;
+        }
+        backButton.setVisibility(actionBar.isActionModeShowed() ? android.view.View.VISIBLE : android.view.View.GONE);
+    }
+
+    private org.telegram.messenger.feed.FeedChatIntegration feedIntegration;
+
+    public org.telegram.messenger.feed.FeedChatIntegration feedIntegration() {
+        if (feedIntegration == null) {
+            feedIntegration = new org.telegram.messenger.feed.FeedChatIntegration(currentAccount, new org.telegram.messenger.feed.FeedChatIntegration.Host() {
+                @Override public java.util.ArrayList<org.telegram.messenger.MessageObject> getMessages() {
+                    return ChatActivity.this.messages;
+                }
+                @Override public boolean isListReady() {
+                    return isFeedSearch() && chatAdapter != null;
+                }
+                @Override public void notifyMessageRemoved(int i) {
+                    if (chatAdapter != null) chatAdapter.notifyItemRemoved(chatAdapter.messagesStartRow + i);
+                }
+                @Override public void notifyMessageInserted(int i) {
+                    if (chatAdapter != null) chatAdapter.notifyItemInserted(chatAdapter.messagesStartRow + i);
+                }
+                @Override public void notifyAllMessagesChanged() {
+                    if (chatAdapter != null) chatAdapter.notifyDataSetChanged();
+                }
+                @Override public void scrollToMessage(int i, int i2) {
+                    if (chatLayoutManager == null || chatAdapter == null) return;
+                    chatLayoutManager.scrollToPositionWithOffset(chatAdapter.messagesStartRow + i, i2, false);
+                }
+                @Override public void scrollToMessageAnimated(int i, int i2) {
+                    if (chatLayoutManager == null || chatAdapter == null || chatListView == null || chatScrollHelper == null || chatListView.isFastScrollAnimationRunning() || i < 0 || i >= messages.size()) return;
+                    chatAdapter.updateRowsSafe();
+                    chatScrollHelper.setScrollDirection(0);
+                    chatScrollHelperCallback.scrollTo = messages.get(i);
+                    chatScrollHelperCallback.lastBottom = false;
+                    chatScrollHelperCallback.lastItemOffset = i2;
+                    chatScrollHelperCallback.lastPadding = (int) chatListViewPaddingTop;
+                    int pos = chatAdapter.messagesStartRow + i;
+                    chatScrollHelperCallback.position = pos;
+                    chatScrollHelperCallback.offset = i2;
+                    chatScrollHelperCallback.bottom = false;
+                    chatScrollHelper.scrollToPosition(pos, i2, false, true);
+                }
+                @Override public int getLastVisibleMessageIndex() {
+                    if (chatLayoutManager == null || chatAdapter == null) return Integer.MIN_VALUE;
+                    int p = chatLayoutManager.findLastVisibleItemPosition();
+                    return p == -1 ? Integer.MIN_VALUE : p - chatAdapter.messagesStartRow;
+                }
+                @Override public int getNewestVisibleMessageIndex() {
+                    if (chatLayoutManager == null || chatAdapter == null) return Integer.MIN_VALUE;
+                    int f = chatLayoutManager.findFirstVisibleItemPosition();
+                    int l = chatLayoutManager.findLastVisibleItemPosition();
+                    if (f == -1 || l == -1) return Integer.MIN_VALUE;
+                    return Math.min(f, l) - chatAdapter.messagesStartRow;
+                }
+                @Override public boolean canScrollToNewer() {
+                    return chatListView != null && chatListView.canScrollVertically(1);
+                }
+                @Override public int getDistanceToNewerPx() {
+                    if (chatListView == null) return Integer.MAX_VALUE;
+                    if (chatListView.canScrollVertically(1)) {
+                        return chatListView.computeVerticalScrollRange() - chatListView.computeVerticalScrollExtent() - chatListView.computeVerticalScrollOffset();
+                    }
+                    return 0;
+                }
+                @Override public boolean isListScrollIdle() {
+                    return chatListView != null && chatListView.getScrollState() == 0;
+                }
+                @Override public boolean isScrollAnimationRunning() {
+                    return chatListView != null && chatListView.isFastScrollAnimationRunning();
+                }
+                @Override public void setPagedownCount(int i) {
+                    if (sideControlsButtonsLayout != null) sideControlsButtonsLayout.setButtonCount(1, i, true);
+                }
+                @Override public void setPagedownButtonVisible(boolean z) {
+                    if (z != canShowPagedownButton) {
+                        canShowPagedownButton = z;
+                        updatePagedownButtonVisibility(true);
+                    }
+                }
+                @Override public boolean isPagedownButtonVisible() {
+                    return sideControlsButtonsLayout != null && sideControlsButtonsLayout.isButtonVisible(1);
+                }
+                @Override public void invalidateVisiblePart() {
+                    invalidateMessagesVisiblePart();
+                }
+                @Override public int nextStableId() {
+                    int i = lastStableId;
+                    lastStableId = i + 1;
+                    return i;
+                }
+                @Override public boolean isFirstLoadComplete() {
+                    return firstMessagesLoaded;
+                }
+                @Override public void reloadFeed() {
+                    ChatActivity.this.reloadFeed();
+                }
+                @Override public void requestOlderFeedPage() {
+                    org.telegram.messenger.feed.FeedController fc = org.telegram.messenger.feed.FeedController.getInstance(currentAccount);
+                    if (loading || fc.getStore().isEndReached()) return;
+                    int idx = lastLoadIndex;
+                    loading = true;
+                    waitingForLoad.add(idx);
+                    fc.loadOlder(classGuid, idx);
+                    lastLoadIndex++;
+                }
+                @Override public org.telegram.messenger.feed.FeedChatIntegration.ScrollAnchor captureScrollAnchor() {
+                    if (chatListView == null || chatAdapter == null) return null;
+                    for (int i = 0; i < chatListView.getChildCount(); i++) {
+                        View child = chatListView.getChildAt(i);
+                        org.telegram.messenger.MessageObject mo;
+                        if (child instanceof ChatMessageCell) mo = ((ChatMessageCell) child).getMessageObject();
+                        else if (child instanceof ChatActionCell) mo = ((ChatActionCell) child).getMessageObject();
+                        else mo = null;
+                        if (org.telegram.messenger.feed.FeedMessageUtils.isPostRow(mo)) {
+                            return new org.telegram.messenger.feed.FeedChatIntegration.ScrollAnchor(mo, getScrollingOffsetForView(child));
+                        }
+                    }
+                    return null;
+                }
+                @Override public void restoreScrollAnchor(org.telegram.messenger.feed.FeedChatIntegration.ScrollAnchor anchor) {
+                    if (anchor == null || chatLayoutManager == null || chatAdapter == null) return;
+                    int idx = messages.indexOf(anchor.row);
+                    if (idx < 0) return;
+                    chatLayoutManager.scrollToPositionWithOffset(chatAdapter.messagesStartRow + idx, anchor.offsetTop);
+                }
+                @Override public void materializeRow(org.telegram.messenger.MessageObject msg) {
+                    if (messagesDict[0].indexOfKey(msg.getId()) >= 0) return;
+                    if (msg.stableId == 0) {
+                        int i = lastStableId;
+                        lastStableId = i + 1;
+                        msg.stableId = i;
+                    }
+                    messagesDict[0].put(msg.getId(), msg);
+                    java.util.ArrayList<org.telegram.messenger.MessageObject> byDay = messagesByDays.get(msg.dateKey);
+                    if (byDay == null) {
+                        byDay = new java.util.ArrayList<>();
+                        messagesByDays.put(msg.dateKey, byDay);
+                        messagesByDaysSorted.put(msg.dateKeyInt, byDay);
+                    }
+                    byDay.add(msg);
+                    if (msg.hasValidGroupId()) {
+                        org.telegram.messenger.MessageObject.GroupedMessages g = groupedMessagesMap.get(msg.getGroupId());
+                        if (g == null) {
+                            g = new org.telegram.messenger.MessageObject.GroupedMessages();
+                            g.groupId = msg.getGroupId();
+                            groupedMessagesMap.put(g.groupId, g);
+                        }
+                        if (!g.messages.contains(msg)) {
+                            g.messages.add(0, msg);
+                            g.calculate();
+                        }
+                    }
+                    getMessagesController().getTranslateController().checkTranslation(msg, false);
+                }
+                @Override public void deleteRows(java.util.ArrayList<Integer> ids) {
+                    processFeedDeletedMessages(ids, 0L, false, false);
+                }
+                @Override public int stableIdForDateHeader(int i) {
+                    return getStableIdForDateObject(i);
+                }
+                @Override public void onFeedListChanged() {
+                    if (chatAdapter != null) chatAdapter.updateRowsSafe();
+                    if (messagesSearchAdapter != null) messagesSearchAdapter.notifyDataSetChanged();
+                    updateSearchListEmptyView();
+                }
+                @Override public void showEmptyFeedState() {
+                    showMessagesSearchListView(true);
+                }
+                @Override public void showEmptyFeedProgress() {
+                    if (hashtagSearchEmptyView != null) hashtagSearchEmptyView.showProgress(true);
+                }
+                @Override public org.telegram.ui.ActionBar.BaseFragment getFragment() {
+                    return ChatActivity.this;
+                }
+            }, !hasMainTabs);
+        }
+        return feedIntegration;
+    }
+
+    public void reattachCurrentFeedVideoTexture() {
+        if (!isFeedSearch()) return;
+        // stub: reattach video texture for feed (omitted)
+    }
+
+    public void setFeedChannelsChangedCallback(Runnable r) {
+        if (r == null && feedIntegration == null) return;
+        feedIntegration().setChannelsChangedCallback(r);
+    }
+
+    public void setGlassSourceInvalidationCallback(Runnable r) {
+        // stub for glass source invalidation
+    }
+
+    public void setFeedViewportActive(boolean z) {
+        feedIntegration().setViewportActive(z);
+    }
+
+    public void saveFeedScrollPosition() {
+        if (!isFeedSearch() || hasMainTabs || feedIntegration == null) return;
+        feedIntegration.saveDrawerScrollPosition();
+    }
+
+    public void reloadFeed() {
+        if (!isFeedSearch()) return;
+        if (feedIntegration != null) feedIntegration.resetUiState();
+        if (messagesSearchAdapter == null) {
+            org.telegram.messenger.feed.FeedController.getInstance(currentAccount).clear();
+            firstMessagesLoaded = false;
+            return;
+        }
+        showMessagesSearchListView(false);
+        clearChatData(true);
+        startMessageAppearTransitionMs = 0L;
+        firstMessagesLoaded = false;
+        firstMessagesLoadedScrolled = false;
+        org.telegram.messenger.feed.FeedController.getInstance(currentAccount).clear();
+        messagesSearchAdapter.notifyDataSetChanged();
+        messagesSearchListView.requestLayout();
+        if (messagesSearchListView.getLayoutManager() != null) {
+            messagesSearchListView.getLayoutManager().scrollToPosition(0);
+        }
+        updateSearchListEmptyView();
+        if (hashtagSearchEmptyView != null) hashtagSearchEmptyView.showProgress(true);
+        firstLoadMessages();
+    }
+
+    public void loadNewerFeed(boolean preserveScroll) {
+        if (!isFeedSearch()) return;
+        org.telegram.messenger.feed.FeedController fc = org.telegram.messenger.feed.FeedController.getInstance(currentAccount);
+        if (fc.getMessages().isEmpty()) {
+            if (fc.isLoading()) return;
+            reloadFeed();
+            return;
+        }
+        int idx = lastLoadIndex;
+        waitingForLoad.add(idx);
+        if (fc.loadNewer(classGuid, idx)) {
+            if (preserveScroll) feedIntegration().onPreserveScrollLoadStarted(idx);
+            lastLoadIndex++;
+        } else {
+            waitingForLoad.remove(Integer.valueOf(idx));
+        }
+    }
+
+    public void markFeedAsRead() {
+        if (isFeedSearch()) feedIntegration().markAllRead();
+    }
+
+    public void refreshFeedUnreadDivider() {
+        if (!isFeedSearch()) return;
+        org.telegram.messenger.feed.FeedController.getInstance(currentAccount).refreshReadState(() -> {
+            if (isFeedSearch()) feedIntegration().onReadStateRefreshed();
+        });
+    }
+
+    public void onFeedChannelsChanged(boolean fullReload) {
+        if (!isFeedSearch()) return;
+        if (fullReload) reloadFeed();
+        else reconcileFeedList();
+    }
+
+    public void applyFeedConfigChange() {
+        if (!isFeedSearch()) return;
+        org.telegram.messenger.feed.FeedController.getInstance(currentAccount).applyConfigChange(willBeFull -> {
+            if (isFinished || !isFeedSearch()) return;
+            if (willBeFull) {
+                reloadFeed();
+            } else {
+                reconcileFeedList();
+            }
+        });
+    }
+
+    public void reconcileFeedList() {
+        if (!isFeedSearch() || chatAdapter == null) return;
+        feedIntegration().reconcileWithStore();
+    }
+
+    public void hideFeedChannelWithUndo(long dialogId, CharSequence name) {
+        feedIntegration().hideChannelWithUndo(dialogId, name);
+    }
+
+    private void processFeedDeletedMessages(java.util.ArrayList<Integer> ids, long dialogId, boolean hasDialog, boolean fullReload) {
+        if (ids == null || ids.isEmpty()) return;
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            org.telegram.messenger.MessageObject msg = messages.get(i);
+            if (msg == null) continue;
+            if (ids.contains(msg.getId()) || (hasDialog && msg.getDialogId() == dialogId)) {
+                messages.remove(i);
+                if (chatAdapter != null) chatAdapter.notifyItemRemoved(chatAdapter.messagesStartRow + i);
+            }
+        }
     }
 
     public boolean isInBotForumMode() {
