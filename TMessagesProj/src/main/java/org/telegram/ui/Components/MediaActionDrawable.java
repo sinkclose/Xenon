@@ -99,7 +99,7 @@ public class MediaActionDrawable extends Drawable {
     private float bgThicknessScale;
 
     private void drawWavyArc(Canvas canvas, RectF oval, float startAngle, float sweepAngle, Paint paint) {
-        if (!oval.equals(wavyLastOval) || wavyLastGeneration != NekoConfig.wavyGeneration || wavyLastAmplitudeSmooth != wavyAmplitudeSmooth) {
+        if (!oval.equals(wavyLastOval) || wavyLastGeneration != 0 || wavyLastAmplitudeSmooth != wavyAmplitudeSmooth) {
             wavyLastOval.set(oval);
             wavyProgressPath.rewind();
 
@@ -107,8 +107,8 @@ public class MediaActionDrawable extends Drawable {
             float cy = oval.centerY();
             float baseRadius = Math.min(oval.width(), oval.height()) / 2f;
 
-            float amplitude = baseRadius * NekoConfig.wavyAmplitudeFactor * wavyAmplitudeSmooth;
-            int waves = NekoConfig.wavyWaves;
+            float amplitude = baseRadius * 0.05f * wavyAmplitudeSmooth;
+            int waves = 11;
             int steps = 180;
 
             for (int i = 0; i <= steps; i++) {
@@ -126,7 +126,7 @@ public class MediaActionDrawable extends Drawable {
             }
             wavyProgressPath.close();
             wavyProgressPathMeasure.setPath(wavyProgressPath, false);
-            wavyLastGeneration = NekoConfig.wavyGeneration;
+            wavyLastGeneration = 0;
             wavyLastAmplitudeSmooth = wavyAmplitudeSmooth;
         }
 
@@ -1051,7 +1051,7 @@ public class MediaActionDrawable extends Drawable {
                 invalidateSelf();
             }
         } else {
-        wavePhaseAngle += (dt * NekoConfig.wavySpeed) / 1000f;
+        wavePhaseAngle += (dt * 50.0f) / 1000f;
         wavePhaseAngle %= 360f;
 
         float targetScale = (downloadProgress < 0.01f || (downloadProgress > 0.03f && downloadProgress < 0.85f)) ? 1f : 0f;

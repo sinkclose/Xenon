@@ -84,12 +84,6 @@ public class InlineBotHelper extends BaseController {
     }
 
     public static String findBotForText(String s) {
-        if (!NekoConfig.autoInlineBot) return null;
-        var text = s.trim();
-        if (text.contains(" ")) return null;
-        if (text.startsWith("https://x.com/") || text.startsWith("https://twitter.com/")) {
-            return "TwPicBot";
-        }
         return null;
     }
 }

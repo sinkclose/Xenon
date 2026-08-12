@@ -530,7 +530,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
     @Override
     protected int getStartPosition() {
-        if (NekoConfig.openSettingsBySwipe) {
+        if (false) {
             int settingsPosition = MainTabsManager.getPosition(MainTabsManager.TabType.SETTINGS);
             if (settingsPosition >= 0) {
                 return settingsPosition;
@@ -1150,6 +1150,6 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     }
 
     private boolean isTabsHidden() {
-        return NekoConfig.hideBottomNavigationBar || !NekoConfig.showMainTabs;
+        return false || !NekoConfig.showMainTabs;
     }
 }

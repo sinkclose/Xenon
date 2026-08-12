@@ -617,7 +617,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
     private static String aospInterpolatorLastBezier;
 
     private static PathInterpolator getAospInterpolator() {
-        String bezier = NekoConfig.aospBezier;
+        String bezier = "0.5,0,0,1";
         if (aospInterpolator == null || !bezier.equals(aospInterpolatorLastBezier)) {
             try {
                 String[] parts = bezier.split(",");
@@ -2026,7 +2026,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                     if (open ? fadeOpen : fadeClose) {
                         duration = NekoConfig.fadeDuration;
                     } else {
-                        duration = (open ? aospOpen : aospClose) ? NekoConfig.aospDuration : NekoConfig.alternativeTransitionSpeed;
+                        duration = (open ? aospOpen : aospClose) ? 400 : NekoConfig.alternativeTransitionSpeed;
                     }
                 }
                 animationProgress += dt / duration;
@@ -2104,8 +2104,8 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                         } else if (aospOpen) {
                             containerView.setTranslationX(getWidth() * 0.2f * (1.0f - interpolated));
                             containerViewBack.setTranslationX(-getWidth() * 0.2f * interpolated);
-                            float alphaStart = 50f / NekoConfig.aospDuration;
-                            float alphaEnd = (50f + NekoConfig.aospAlphaTime) / NekoConfig.aospDuration;
+                            float alphaStart = 50f / 400;
+                            float alphaEnd = (50f + 250) / 400;
                             float alphaP = MathUtils.clamp((interpolated - alphaStart) / (alphaEnd - alphaStart), 0f, 1f);
                             containerView.setAlpha(alphaP);
                             containerViewBack.setAlpha(1f - alphaP);
@@ -2136,8 +2136,8 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                         } else if (aospClose) {
                             containerViewBack.setTranslationX(getWidth() * 0.2f * interpolated);
                             containerView.setTranslationX(-getWidth() * 0.2f * (1.0f - interpolated));
-                            float alphaStart = 50f / NekoConfig.aospDuration;
-                            float alphaEnd = (50f + NekoConfig.aospAlphaTime) / NekoConfig.aospDuration;
+                            float alphaStart = 50f / 400;
+                            float alphaEnd = (50f + 250) / 400;
                             float alphaP = MathUtils.clamp((interpolated - alphaStart) / (alphaEnd - alphaStart), 0f, 1f);
                             containerViewBack.setAlpha(1f - alphaP);
                             containerView.setAlpha(alphaP);

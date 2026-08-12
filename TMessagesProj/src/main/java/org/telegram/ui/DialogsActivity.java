@@ -3002,8 +3002,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
 
         BirthdayController.getInstance(currentAccount).check();
-        additionNavigationBarHeight = hasMainTabs && !NekoConfig.hideBottomNavigationBar ? dp(MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
-        additionFloatingButtonOffset = hasMainTabs && !NekoConfig.hideBottomNavigationBar ? dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN) : 0;
+        additionNavigationBarHeight = hasMainTabs ? dp(MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
+        additionFloatingButtonOffset = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN) : 0;
 
         return true;
     }
@@ -3227,8 +3227,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
     @Override
     public View createView(final Context context) {
-        additionNavigationBarHeight = hasMainTabs && !NekoConfig.hideBottomNavigationBar ? dp(MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
-        additionFloatingButtonOffset = hasMainTabs && !NekoConfig.hideBottomNavigationBar ? dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN) : 0;
+        additionNavigationBarHeight = hasMainTabs ? dp(MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
+        additionFloatingButtonOffset = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN) : 0;
         searching = false;
         searchWas = false;
         wasDrawn = false;
@@ -13818,7 +13818,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 });
             });
             io.addGap();
-            if (NekoConfig.hideBottomNavigationBar) {
+            if (false) {
                 io.add(R.drawable.left_status_profile, getString(R.string.MyProfile), () -> {
                     Bundle args = new Bundle();
                     args.putLong("user_id", getUserConfig().getClientUserId());
@@ -13838,7 +13838,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 Bundle args = new Bundle();
                 presentFragment(new GroupCreateActivity(args));
             });
-            if (NekoConfig.hideBottomNavigationBar) {
+            if (false) {
                 io.add(R.drawable.msg_contacts, getString(R.string.Contacts), () -> {
                     Bundle args = new Bundle();
                     args.putBoolean("needPhonebook", true);
@@ -13899,12 +13899,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     }
                 }
             }
-            if (NekoConfig.hideBottomNavigationBar || getUserConfig().showCallsTab) {
+            if (getUserConfig().showCallsTab) {
                 io.add(R.drawable.msg_settings_old, getString(R.string.Settings), () -> {
                     presentFragment(new SettingsActivity());
                 });
             }
-            if (NekoConfig.hideBottomNavigationBar) {
+            if (false) {
                 PopupHelper.fillAccountSelectorMenu(io, currentAccount, getParentActivity(), resourceProvider);
             }
 
@@ -14342,7 +14342,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         iBlur3PositionActionBar.set(0, -additionalList, fragmentView.getMeasuredWidth(), lerp(actionBarHeight, actionBarHeightSearch, animatorSearchVisible.getFloatValue()) + additionalList );
 
         boolean hasBottomBlur = false;
-        if (hasMainTabs && !NekoConfig.hideBottomNavigationBar) {
+        if (hasMainTabs) {
             iBlur3PositionMainTabs.set(0, mainTabTop, fragmentView.getMeasuredWidth(), mainTabBottom);
             iBlur3PositionMainTabs.inset(0, LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0 : -dp(48));
 
@@ -14454,7 +14454,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             return 0;
         }
         float height = dp(FILTER_TABS_HEIGHT + 7);
-        if (!floatingButton && NekoConfig.hideBottomNavigationBar) {
+        if (!floatingButton && false) {
             height += dp(7);
         }
         height *= filterTabsView.getAlpha();
@@ -14468,7 +14468,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         float bottom = navigationBarHeight + additionNavigationBarHeight;
         if (commentView != null && chatInputViewsContainer != null) {
             bottom += lerp(0, dp(9) + chatInputViewsContainer.getInputBubbleHeight() + dp(2), chatInputViewsContainer.getAlpha());
-        } else if (!NekoConfig.hideBottomNavigationBar) {
+        } else {
             bottom -= dp(MAIN_TABS_MARGIN);
         }
         filterTabsView.setTranslationY(-bottom);
