@@ -253,6 +253,7 @@ import org.telegram.ui.Components.SearchViewPager;
 import org.telegram.ui.Components.ShareTopView;
 import org.telegram.ui.Components.SharedMediaLayout;
 import org.telegram.ui.Components.SimpleThemeDescription;
+import org.telegram.ui.Components.ProgressiveFadeBlurController;
 import org.telegram.ui.Components.SizeNotifierFrameLayout;
 import org.telegram.ui.Components.StickersAlert;
 import org.telegram.ui.Components.SwipeGestureSettingsView;
@@ -543,6 +544,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     float panTranslationY;
 
     private View blurredView;
+    private ProgressiveFadeBlurController progressiveFadeController;
+    private View capturePage;
+    private View capturePageExtra;
 
     private ItemOptions filterOptions;
 
@@ -940,6 +944,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
         @Override
         public void drawBlurRect(Canvas canvas, float y, Rect rectTmp, Paint blurScrimPaint, boolean top) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurOtherActivities) {
+                canvas.drawRect(rectTmp, blurScrimPaint);
+                return;
+            }
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || !SharedConfig.chatBlurEnabled() || iBlur3SourceGlassFrosted == null || !BlurredBackgroundProviderImpl.checkBlurEnabled(currentAccount, resourceProvider)) {
                 canvas.drawRect(rectTmp, blurScrimPaint);
                 return;
@@ -1097,6 +1105,19 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
             updateContextViewPosition();
             updateStoriesViewAlpha(storiesAlpha);
+            if (progressiveFadeController != null) {
+                progressiveFadeController.setTopOffset(top);
+                progressiveFadeController.setFadeZoneTop((int) (top + actionBar.getHeight() + dp(SEARCH_FIELD_HEIGHT) + dp(SEARCH_TABS_HEIGHT)));
+                View currentPage = viewPages[0];
+                View extraPage = viewPages.length > 1 && viewPages[1].getVisibility() == View.VISIBLE ? viewPages[1] : null;
+                if (capturePage != currentPage || capturePageExtra != extraPage) {
+                    capturePage = currentPage;
+                    capturePageExtra = extraPage;
+                    List<View> extra = extraPage != null ? Collections.singletonList(extraPage) : null;
+                    progressiveFadeController.setCaptureViews(capturePage, extra);
+                }
+                progressiveFadeController.invalidate();
+            }
             super.dispatchDraw(canvas);
             drawHeaderShadow(canvas, top + actionBarHeight);
 
@@ -3094,6 +3115,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     @Override
     public void onFragmentDestroy() {
         super.onFragmentDestroy();
+        if (progressiveFadeController != null) {
+            progressiveFadeController.stopContinuousUpdates();
+            progressiveFadeController = null;
+        }
         if (observersGroup != null) {
             observersGroup.removeAllObservers();
             observersGroup = null;
@@ -4776,7 +4801,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
 
         topBubblesFadeView = new DialogsActivityTopBubblesFadeView(context);
-        topBubblesFadeView.setColor(Theme.getColor(Theme.key_windowBackgroundGray));
+        topBubblesFadeView.setColor(Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurOtherActivities ? Color.TRANSPARENT : Theme.getColor(Theme.key_windowBackgroundGray));
         contentView.addView(topBubblesFadeView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 100, Gravity.TOP));
 
         searchViewPagerIndex = contentView.getChildCount();
@@ -5411,6 +5436,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             final FrameLayout.LayoutParams layoutParams = LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT);
             contentView.addView(actionBar, layoutParams);
         //}
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurOtherActivities) {
+            progressiveFadeController = new ProgressiveFadeBlurController(contentView, viewPages[0], contentView.indexOfChild(searchTabsAndFiltersLayout), () -> getThemedColor(Theme.key_windowBackgroundGray));
+            progressiveFadeController.setDimEnabled(false);
+            progressiveFadeController.setFlipped(true);
+            progressiveFadeController.setUpdateAtScreenRefreshRate(true);
+            progressiveFadeController.startContinuousUpdates();
+        }
         if (!onlySelect) {
             animatedStatusView = new AnimatedStatusView(context, 20, 60);
             contentView.addView(animatedStatusView, LayoutHelper.createFrame(20, 20, Gravity.LEFT | Gravity.TOP));
@@ -7573,6 +7605,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             searchAnimator = null;
         }
         searchIsShowed = show;
+        if (progressiveFadeController != null) {
+            progressiveFadeController.setFadeViewVisibility(show ? View.GONE : View.VISIBLE);
+        }
         blur3_InvalidateBlur();
         if (show) {
             boolean onlyDialogsAdapter;
@@ -12186,7 +12221,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 topPanelLayout.updateColors();
             }
             if (topBubblesFadeView != null) {
-                topBubblesFadeView.setColor(Theme.getColor(Theme.key_windowBackgroundGray));
+                topBubblesFadeView.setColor(Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurOtherActivities ? Color.TRANSPARENT : Theme.getColor(Theme.key_windowBackgroundGray));
             }
             if (fragmentContextView != null) {
                 fragmentContextView.updateColors();
@@ -14483,7 +14518,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             return;
         }
 
-        final float headerShadowAlphaBase = Math.max(animatorShadowVisible.getFloatValue(), getRightSlidingProgress()) * (1f - searchAnimationProgress) * (1f - searchAnimationProgress);
+        final float headerShadowAlphaBase = (1f - searchAnimationProgress) * (1f - searchAnimationProgress);
         if (headerShadowAlphaBase == 0) {
             return;
         }

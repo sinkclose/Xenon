@@ -1023,14 +1023,17 @@ public class SizeNotifierFrameLayout extends FrameLayout implements Theme.Colora
                 blurNodes[a].setPosition(0, 0, (int) (lastW / scale), (int) ((lastH + 2 * pad) / scale));
                 RecordingCanvas recordingCanvas = blurNodes[a].beginRecording();
                 drawingBlur = true;
-                recordingCanvas.scale(1f / scale, 1f / scale);
-                recordingCanvas.drawPaint(blurScrimPaint);
-                recordingCanvas.translate(0, pad);
-                if (!top) {
-                    recordingCanvas.translate(0, -(drawnBottomOffset = (lastDrawnBottomBlurOffset = getBottomOffset()) - lastH));
+                try {
+                    recordingCanvas.scale(1f / scale, 1f / scale);
+                    recordingCanvas.drawPaint(blurScrimPaint);
+                    recordingCanvas.translate(0, pad);
+                    if (!top) {
+                        recordingCanvas.translate(0, -(drawnBottomOffset = (lastDrawnBottomBlurOffset = getBottomOffset()) - lastH));
+                    }
+                    drawListWithCallbacks(recordingCanvas, top);
+                } finally {
+                    drawingBlur = false;
                 }
-                drawListWithCallbacks(recordingCanvas, top);
-                drawingBlur = false;
                 blurNodes[a].endRecording();
                 blurNodeInvalidatedThisFrame[a] = true;
                 blurNodeInvalidated[a] = false;

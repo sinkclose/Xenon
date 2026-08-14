@@ -240,7 +240,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                 boolean result = super.drawChild(canvas, child, drawingTime);
                 if (actionBarHeight != 0 && headerShadowDrawable != null) {
                     int wasAlpha = headerShadowDrawable.getAlpha();
-                    headerShadowDrawable.setBounds(0, actionBarY + actionBarHeight, getMeasuredWidth(), actionBarY + actionBarHeight + headerShadowDrawable.getIntrinsicHeight());
+                    headerShadowDrawable.setBounds(0, actionBarY + actionBarHeight, getMeasuredWidth(), actionBarY + actionBarHeight + dp(6));
                     headerShadowDrawable.setAlpha(actionBarShadowAlpha);
                     headerShadowDrawable.draw(canvas);
                     headerShadowDrawable.setAlpha(wasAlpha);
@@ -955,11 +955,11 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
     @Override
     public void drawHeaderShadow(Canvas canvas, int alpha, int y) {
         if (headerShadowDrawable != null && SharedConfig.drawActionBarShadow) {
-            alpha = alpha / 2;
             if (headerShadowDrawable.getAlpha() != alpha) {
                 headerShadowDrawable.setAlpha(alpha);
             }
-            headerShadowDrawable.setBounds(0, y, getMeasuredWidth(), y + headerShadowDrawable.getIntrinsicHeight());
+            final int shadowHeight = dp(6);
+            headerShadowDrawable.setBounds(0, y, getMeasuredWidth(), y + shadowHeight);
             headerShadowDrawable.draw(canvas);
         }
     }

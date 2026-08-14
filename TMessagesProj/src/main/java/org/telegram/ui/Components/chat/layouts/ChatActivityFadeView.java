@@ -21,6 +21,7 @@ public class ChatActivityFadeView extends View implements Theme.Colorable {
     private Drawable fadeDrawableTop;
     private Drawable fadeDrawableBottom;
     private int fadeZoneTop, fadeZoneBottom;
+    private int topOffset;
 
     public ChatActivityFadeView(Context context) {
         super(context);
@@ -64,6 +65,12 @@ public class ChatActivityFadeView extends View implements Theme.Colorable {
         }
     }
 
+    public void setFadeHeightTopInverted(int height, boolean opacity) {
+        if (fadeDrawableTop instanceof BlurredBackgroundWithFadeDrawable) {
+            ((BlurredBackgroundWithFadeDrawable) fadeDrawableTop).setFadeHeight(height, opacity);
+        }
+    }
+
     public void setFadeHeightTop(int height) {
         if (fadeDrawableTop instanceof BlurredBackgroundWithFadeDrawable) {
             ((BlurredBackgroundWithFadeDrawable) fadeDrawableTop).setFadeHeight(-height, true);
@@ -96,6 +103,18 @@ public class ChatActivityFadeView extends View implements Theme.Colorable {
         }
     }
 
+    public void setTopOffset(int offset) {
+        if (topOffset != offset) {
+            topOffset = offset;
+            checkBounds();
+            invalidate();
+        }
+    }
+
+    public int getFadeZoneTop() {
+        return fadeZoneTop;
+    }
+
     public void setFadeZoneBottom(int height) {
         if (fadeZoneBottom != height) {
             fadeZoneBottom = height;
@@ -104,15 +123,34 @@ public class ChatActivityFadeView extends View implements Theme.Colorable {
         }
     }
 
+    public int getFadeZoneBottom() {
+        return fadeZoneBottom;
+    }
+
     public void setFadeTopAlpha(int alpha) {
         if (fadeDrawableTop.getAlpha() != alpha) {
             fadeDrawableTop.setAlpha(alpha);
             invalidate();
         }
     }
+
+    public void setDimFadeZoneTop(int height) {
+        if (fadeDrawableTop instanceof BlurredBackgroundWithFadeDrawable) {
+            ((BlurredBackgroundWithFadeDrawable) fadeDrawableTop).setDimFadeZoneTop(height);
+        }
+    }
+
+    public void setDimColor(int color) {
+        if (fadeDrawableTop instanceof BlurredBackgroundWithFadeDrawable) {
+            ((BlurredBackgroundWithFadeDrawable) fadeDrawableTop).setDimColor(color);
+        }
+        if (fadeDrawableBottom instanceof BlurredBackgroundWithFadeDrawable) {
+            ((BlurredBackgroundWithFadeDrawable) fadeDrawableBottom).setDimColor(color);
+        }
+    }
     
     private void checkBounds() {
-        fadeDrawableTop.setBounds(0, 0, getMeasuredWidth(), fadeZoneTop);
+        fadeDrawableTop.setBounds(0, topOffset, getMeasuredWidth(), Math.max(topOffset, fadeZoneTop));
         fadeDrawableBottom.setBounds(0, getMeasuredHeight() - fadeZoneBottom, getMeasuredWidth(), getMeasuredHeight());
     }
 

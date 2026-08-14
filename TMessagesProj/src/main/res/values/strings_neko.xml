@@ -569,8 +569,12 @@
     <string name="BlurredFadePixelation">Pixelation intensity</string>
     <string name="BlurredFadeDimming">Dimming</string>
     <string name="BlurredFadeDimStrength">Dim strength</string>
-    <string name="ProgressiveFadeBlur">Progressive fade blur (wip)</string>
+    <string name="ProgressiveFadeBlur">Progressive fade blur</string>
+    <string name="ProgressiveFadeBlurSamples">Progressive blur samples</string>
     <string name="ProgressiveFadeBlurMaxRadius">Progressive blur max radius</string>
+    <string name="ProgressiveFadeBlurRefreshRate">Progressive blur refresh rate</string>
+    <string name="ProgressiveFadeBlurOtherActivities">Apply fade view to other activities</string>
+    <string name="ProgressiveFadeBlurOtherActivitiesInfo">Applies the fade view to settings and the chats list</string>
     <string name="DisableScrimBlur">Disable scrim blur</string>
     <string name="DisableScrimBlurInfo">Removes blur from the bottom sheet background</string>
     <string name="DisableGlassGlare">Disable glass glare</string>

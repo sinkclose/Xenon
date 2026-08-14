@@ -90,6 +90,7 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
     private final int channelRow = rowId++;
     private final int sourceCodeRow = rowId++;
 
+    private final int commitRow = rowId++;
     private final int sponsorRow = 100;
 
     private ActionBarMenuItem syncItem;
@@ -173,6 +174,11 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
     }
 
     @Override
+    protected boolean progressiveBlurEnabled() {
+        return false;
+    }
+
+    @Override
     protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
         if (isSearchFieldVisible()) {
             items.add(UItem.asSpace(ActionBar.getCurrentActionBarHeight()));
@@ -213,6 +219,7 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
             }
             items.add(UItem.asShadow(null));
         }
+        items.add(TextDetailSettingsCellFactory.of(commitRow, "Build commit", BuildConfig.GIT_COMMIT_SHORT));
     }
 
     @Override

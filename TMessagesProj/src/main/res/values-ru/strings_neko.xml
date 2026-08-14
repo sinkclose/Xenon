@@ -545,8 +545,12 @@
     <string name="BlurredFadePixelation">Интенсивность пикселяции</string>
     <string name="BlurredFadeDimming">Затемнение</string>
     <string name="BlurredFadeDimStrength">Сила затемнения</string>
-    <string name="ProgressiveFadeBlur">Прогрессивный блюр (WIP)</string>
-    <string name="ProgressiveFadeBlurMaxRadius">Макс. радиус прогрессивного блюра</string>
+   <string name="ProgressiveFadeBlur">Прогрессивный блюр</string>
+   <string name="ProgressiveFadeBlurSamples">Семплы прогрессивного блюра</string>
+   <string name="ProgressiveFadeBlurMaxRadius">Макс. радиус прогрессивного блюра</string>
+   <string name="ProgressiveFadeBlurRefreshRate">Частота обновления прогрессивного блюра</string>
+    <string name="ProgressiveFadeBlurOtherActivities">Применять fade view в других экранах</string>
+    <string name="ProgressiveFadeBlurOtherActivitiesInfo">Применяет fade view к настройкам и списку чатов</string>
     <string name="DisableScrimBlur">Отключить размытие фона</string>
     <string name="DisableScrimBlurInfo">Убирает размытие фона у bottom sheet</string>
     <string name="DisableGlassGlare">Отключить блики стекла</string>
