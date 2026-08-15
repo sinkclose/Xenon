@@ -108,20 +108,24 @@ jobs:
         run: |
           ./gradlew :TMessagesProj_App:assembleDebug \
             -PgitCommitHash=$(git rev-parse HEAD) \
-            -PgitCommitShort=$(git rev-parse --short=7 HEAD)
+            -PgitCommitShort=$(git rev-parse --short=7 HEAD) \
+            -PgitCommitDate=$(git log -1 --format=%cI)
 
       - name: Build with Gradle
         if: github.event_name != 'pull_request'
         run: |
           GIT_HASH=$(git rev-parse HEAD)
           GIT_SHORT=$(git rev-parse --short=7 HEAD)
+          GIT_DATE=$(git log -1 --format=%cI)
           echo "Embedding commit: $GIT_SHORT ($GIT_HASH)"
           ./gradlew :TMessagesProj_App:assembleRelease \
             -PgitCommitHash=$GIT_HASH \
-            -PgitCommitShort=$GIT_SHORT
+            -PgitCommitShort=$GIT_SHORT \
+            -PgitCommitDate=$GIT_DATE
           ./gradlew :TMessagesProj_App:bundleRelease \
             -PgitCommitHash=$GIT_HASH \
-            -PgitCommitShort=$GIT_SHORT
+            -PgitCommitShort=$GIT_SHORT \
+            -PgitCommitDate=$GIT_DATE
 
       - name: Attest
         if: github.event_name != 'pull_request'

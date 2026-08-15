@@ -11,8 +11,7 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BuildConfig;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.SharedConfig;
-import zxc.iconic.xenon.NekoConfig;
-import zxc.iconic.xenon.proxy.XrayLocalSocksAuth;
+import zxc.iconic.xenon.proxy.XrayTelegramProxyBridge;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -31,9 +30,10 @@ import java.util.List;
  *   <li>assets   = APK files (Xenon-{version}-{code}-{abi}.apk)</li>
  * </ul>
  *
- * <p>Version comparison: the version code is extracted from the arm64 APK
- * asset filename ({@code Xenon-{versionName}-{versionCode}-arm64-v8a.apk})
- * and compared against the installed {@code BuildConfig.VERSION_CODE}.
+ * <p>Version comparison: a release is considered an update only if it was
+ * built from a <b>newer</b> commit than the installed build. Ordering is
+ * established by the commit timestamp, which the CI writes both into the
+ * release body ("Build Date") and into {@code BuildConfig.GIT_COMMIT_DATE}.
  * The release body text is used as the changelog.
  */
 public class GitHubUpdateHelper {
@@ -59,34 +59,80 @@ public class GitHubUpdateHelper {
     public static HttpURLConnection openConnection(String urlStr) throws Exception {
         URL url = new URL(urlStr);
         java.net.Proxy proxy = java.net.Proxy.NO_PROXY;
-        if (NekoConfig.xrayAppProxyEnabled) {
-            proxy = new java.net.Proxy(java.net.Proxy.Type.SOCKS, new java.net.InetSocketAddress("127.0.0.1", NekoConfig.xrayAppProxyLocalPort));
-            XrayLocalSocksAuth.Credentials creds = XrayLocalSocksAuth.getOrCreateCredentials();
-            final String user = creds.username;
-            final String pass = creds.password;
+        SharedConfig.ProxyInfo info = SharedConfig.isProxyEnabled() ? SharedConfig.currentProxy : null;
+        if (info != null && !XrayTelegramProxyBridge.isLocalProxyAddress(info.address)
+                && (info.secret == null || info.secret.isEmpty())) {
+            proxy = socksProxy(info.address, info.port, info.username, info.password);
+        }
+        return (HttpURLConnection) url.openConnection(proxy);
+    }
+
+    private static java.net.Proxy socksProxy(String address, int port, String username, String password) {
+        java.net.Proxy proxy = new java.net.Proxy(java.net.Proxy.Type.SOCKS,
+                new java.net.InetSocketAddress(address, port));
+        if (!TextUtils.isEmpty(username)) {
+            final String user = username;
+            final String pass = password != null ? password : "";
             java.net.Authenticator.setDefault(new java.net.Authenticator() {
                 @Override
                 protected java.net.PasswordAuthentication getPasswordAuthentication() {
                     return new java.net.PasswordAuthentication(user, pass.toCharArray());
                 }
             });
-        } else if (SharedConfig.isProxyEnabled()) {
-            SharedConfig.ProxyInfo info = SharedConfig.currentProxy;
-            if (info != null && (info.secret == null || info.secret.isEmpty())) {
-                proxy = new java.net.Proxy(java.net.Proxy.Type.SOCKS, new java.net.InetSocketAddress(info.address, info.port));
-                if (!TextUtils.isEmpty(info.username)) {
-                    final String user = info.username;
-                    final String pass = info.password != null ? info.password : "";
-                    java.net.Authenticator.setDefault(new java.net.Authenticator() {
-                        @Override
-                        protected java.net.PasswordAuthentication getPasswordAuthentication() {
-                            return new java.net.PasswordAuthentication(user, pass.toCharArray());
-                        }
-                    });
+        }
+        return proxy;
+    }
+
+    /**
+     * Whether the release is actually <b>newer</b> than the installed build.
+     * Same tag means the same build. Otherwise the build date (commit
+     * timestamp) decides the ordering; when it is unavailable, a different
+     * tag is treated as an update.
+     */
+    private static boolean isNewerRelease(GitHubRelease release) {
+        String currentCommit = BuildConfig.GIT_COMMIT_SHORT;
+        if (!TextUtils.isEmpty(currentCommit) && !"unknown".equals(currentCommit)
+                && currentCommit.equals(release.tagName)) {
+            return false;
+        }
+        long installedDate = parseDateMillis(BuildConfig.GIT_COMMIT_DATE);
+        long releaseDate = parseBodyBuildDateMillis(release.body);
+        if (installedDate > 0 && releaseDate > 0) {
+            return releaseDate > installedDate;
+        }
+        return true;
+    }
+
+    private static long parseBodyBuildDateMillis(String body) {
+        if (TextUtils.isEmpty(body)) {
+            return 0;
+        }
+        try {
+            for (String line : body.split("\n")) {
+                int idx = line.indexOf("Build Date:");
+                if (idx >= 0) {
+                    String date = line.substring(idx + "Build Date:".length())
+                            .replace("*", "").trim();
+                    long millis = parseDateMillis(date);
+                    if (millis > 0) {
+                        return millis;
+                    }
                 }
             }
+        } catch (Throwable ignored) {
         }
-        return (HttpURLConnection) url.openConnection(proxy);
+        return 0;
+    }
+
+    private static long parseDateMillis(String value) {
+        if (TextUtils.isEmpty(value)) {
+            return 0;
+        }
+        try {
+            return java.time.OffsetDateTime.parse(value.trim()).toInstant().toEpochMilli();
+        } catch (Throwable ignored) {
+            return 0;
+        }
     }
 
     /**
@@ -112,8 +158,8 @@ public class GitHubUpdateHelper {
     }
 
     /**
-     * Fetches the latest GitHub release and compares its tag (short commit hash)
-     * against the current build's {@code BuildConfig.GIT_COMMIT_SHORT}.
+     * Fetches the latest GitHub release and reports it as an update only when
+     * it is actually newer than the installed build (see {@link #isNewerRelease}).
      * Results are delivered on the UI thread.
      *
      * @param callback result callback (never null)
@@ -141,12 +187,13 @@ public class GitHubUpdateHelper {
                 }
 
                 if (!force) {
-                    // Compare version codes extracted from APK filename.
-                    // Format: Xenon-{versionName}-{versionCode}-arm64-v8a.apk
-                    int remoteVersionCode = extractVersionCode(release);
-                    if (remoteVersionCode > 0 && remoteVersionCode <= BuildConfig.VERSION_CODE) {
-                        FileLog.d(TAG + ": remote verCode=" + remoteVersionCode
-                                + " <= local verCode=" + BuildConfig.VERSION_CODE + ", no update");
+                    // Tags alone can't establish ordering: a local/beta build
+                    // (or an older release) has a different commit hash than
+                    // the latest release. Use build dates instead — the CI
+                    // writes the commit timestamp into the release body
+                    // ("Build Date: ...") and into BuildConfig.GIT_COMMIT_DATE.
+                    if (!isNewerRelease(release)) {
+                        FileLog.d(TAG + ": release is not newer than current build, no update");
                         AndroidUtilities.runOnUIThread(callback::onNoUpdate);
                         return;
                     }
@@ -162,39 +209,6 @@ public class GitHubUpdateHelper {
                         callback.onError(msg != null ? msg : "Unknown error"));
             }
         }, "XenonUpdateCheck").start();
-    }
-
-    /**
-     * Extracts the version code from the first arm64 APK asset's filename.
-     * Format: {@code Xenon-{versionName}-{versionCode}-arm64-v8a.apk}
-     * e.g. {@code Xenon-10.5.3-12345-arm64-v8a.apk} → {@code 12345}.
-     *
-     * @return the parsed version code, or {@code -1} if no arm64 APK asset
-     *         exists or parsing fails.
-     */
-    static int extractVersionCode(GitHubRelease release) {
-        if (release == null || release.assets == null) return -1;
-        for (GitHubAsset asset : release.assets) {
-            if (asset.name == null || !asset.name.endsWith(".apk")) continue;
-            String lower = asset.name.toLowerCase();
-            if (lower.contains("debug")) continue;
-            if (!lower.contains("arm64")) continue;
-            // Remove .apk extension
-            String base = asset.name.endsWith(".apk")
-                    ? asset.name.substring(0, asset.name.length() - 4) : asset.name;
-            // Split by dash: Xenon-10.5.3-12345-arm64-v8a
-            String[] parts = base.split("-");
-            // Version code is the third-from-last segment (before abi)
-            // parts: [Xenon, 10.5.3, 12345, arm64, v8a?]
-            // Look for a part that's all digits
-            for (String part : parts) {
-                try {
-                    return Integer.parseInt(part);
-                } catch (NumberFormatException ignored) {
-                }
-            }
-        }
-        return -1;
     }
 
     /**

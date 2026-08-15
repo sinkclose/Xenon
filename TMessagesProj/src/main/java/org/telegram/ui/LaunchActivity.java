@@ -6127,20 +6127,22 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
             @Override
             public void run() {
                 if (ApplicationLoader.applicationLoaderInstance.isDownloadingUpdate() && progBulletin[0] != null) {
-                    try {
-                        float prog = ApplicationLoader.applicationLoaderInstance.getDownloadingUpdateProgress();
-                        long total = ApplicationLoader.applicationLoaderInstance.getDownloadTotalSize();
-                        long downloaded = ApplicationLoader.applicationLoaderInstance.getDownloadBytesDownloaded();
-                        String text;
-                        if (total > 0) {
-                            String d = android.text.format.Formatter.formatShortFileSize(LaunchActivity.this, downloaded);
-                            String t = android.text.format.Formatter.formatShortFileSize(LaunchActivity.this, total);
-                            text = "Downloading update... " + d + " / " + t;
-                        } else {
-                            text = "Downloading update... " + (int)(prog * 100) + "%";
-                        }
-                        ((Bulletin.LottieLayout) progBulletin[0].getLayout()).textView.setText(text);
-                    } catch (Throwable ignored) {}
+                    if (!ApplicationLoader.applicationLoaderInstance.isRetryingUpdate()) {
+                        try {
+                            float prog = ApplicationLoader.applicationLoaderInstance.getDownloadingUpdateProgress();
+                            long total = ApplicationLoader.applicationLoaderInstance.getDownloadTotalSize();
+                            long downloaded = ApplicationLoader.applicationLoaderInstance.getDownloadBytesDownloaded();
+                            String text;
+                            if (total > 0) {
+                                String d = android.text.format.Formatter.formatShortFileSize(LaunchActivity.this, downloaded);
+                                String t = android.text.format.Formatter.formatShortFileSize(LaunchActivity.this, total);
+                                text = "Downloading update... " + d + " / " + t;
+                            } else {
+                                text = "Downloading update... " + (int)(prog * 100) + "%";
+                            }
+                            ((Bulletin.LottieLayout) progBulletin[0].getLayout()).textView.setText(text);
+                        } catch (Throwable ignored) {}
+                    }
                     AndroidUtilities.runOnUIThread(this, 500);
                 }
             }

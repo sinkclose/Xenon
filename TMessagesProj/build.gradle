@@ -193,8 +193,20 @@ def resolvedGitShort = project.findProperty('gitCommitShort') ?: {
     }
 }()
 
+def resolvedGitCommitDate = project.findProperty('gitCommitDate') ?: {
+    try {
+        def process = ['git', 'log', '-1', '--format=%cI'].execute(null, rootProject.rootDir)
+        def result = process.text.trim()
+        process.waitFor()
+        return result.isEmpty() ? "unknown" : result
+    } catch (ignored) {
+        return "unknown"
+    }
+}()
+
 logger.lifecycle("Git commit hash: ${resolvedGitHash}")
 logger.lifecycle("Git commit short: ${resolvedGitShort}")
+logger.lifecycle("Git commit date: ${resolvedGitCommitDate}")
 
 android {
     buildFeatures {
@@ -247,6 +259,7 @@ android {
             buildConfigField("boolean", "DEBUG_PRIVATE_VERSION", "false")
             buildConfigField("String", "GIT_COMMIT_HASH", "\"${resolvedGitHash}\"")
             buildConfigField("String", "GIT_COMMIT_SHORT", "\"${resolvedGitShort}\"")
+            buildConfigField("String", "GIT_COMMIT_DATE", "\"${resolvedGitCommitDate}\"")
             buildConfigField("long","HELPER_BOT_ID", "${getLongProperty("helperBotId", 0)}")
             buildConfigField("String","HELPER_BOT_USERNAME", "\"${localProperties.get("helperBotUsername")}\"")
 
@@ -262,6 +275,7 @@ android {
             buildConfigField("boolean", "DEBUG_PRIVATE_VERSION", "false")
             buildConfigField("String", "GIT_COMMIT_HASH", "\"${resolvedGitHash}\"")
             buildConfigField("String", "GIT_COMMIT_SHORT", "\"${resolvedGitShort}\"")
+            buildConfigField("String", "GIT_COMMIT_DATE", "\"${resolvedGitCommitDate}\"")
             buildConfigField("long","HELPER_BOT_ID", "${getLongProperty("helperBotId", 0)}")
             buildConfigField("String","HELPER_BOT_USERNAME", "\"${localProperties.get("helperBotUsername")}\"")
 
