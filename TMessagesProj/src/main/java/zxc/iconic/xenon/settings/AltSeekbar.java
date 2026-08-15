@@ -7,11 +7,14 @@ import android.graphics.drawable.Drawable;
 import android.text.InputType;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.core.graphics.ColorUtils;
+
+import com.google.android.material.slider.Slider;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
@@ -23,6 +26,8 @@ import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.EditTextBoldCursor;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.SeekBarView;
+
+import zxc.iconic.xenon.NekoConfig;
 
 /**
  * Reusable integer slider cell styled like the system PowerSaverSlider:
@@ -43,17 +48,24 @@ public class AltSeekbar extends FrameLayout {
     private final AnimatedTextView headerValue;
     private final TextView leftTextView;
     private final TextView rightTextView;
-    private final SeekBarView seekBarView;
+    private SeekBarView seekBarView;
+    private Slider slider;
     private final Theme.ResourcesProvider resourcesProvider;
     private final OnDrag onDrag;
+    private java.util.function.Function<Integer, String> valueFormatter;
 
     private final int min, max;
     private int step = 1;
     private float currentValue;
     private int roundedValue;
     private int defaultValue;
+    private int subtitleOffset = 0;
 
     public AltSeekbar(Context context, OnDrag onDrag, int min, int max, String title, String left, String right, Theme.ResourcesProvider resourcesProvider) {
+        this(context, onDrag, min, max, title, left, right, resourcesProvider, null);
+    }
+
+    public AltSeekbar(Context context, OnDrag onDrag, int min, int max, String title, String left, String right, Theme.ResourcesProvider resourcesProvider, String subtitle) {
         super(context);
         this.resourcesProvider = resourcesProvider;
         this.onDrag = onDrag;
@@ -61,6 +73,9 @@ public class AltSeekbar extends FrameLayout {
         this.max = max;
         this.min = min;
         defaultValue = min;
+
+        int offset = subtitle != null ? 20 : 0;
+        this.subtitleOffset = offset;
 
         LinearLayout headerLayout = new LinearLayout(context);
         headerLayout.setGravity(LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT);
@@ -95,18 +110,14 @@ public class AltSeekbar extends FrameLayout {
 
         addView(headerLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP | Gravity.FILL_HORIZONTAL, 21, 17, 21, 0));
 
-        seekBarView = new SeekBarView(context, true, resourcesProvider);
-        seekBarView.setReportChanges(true);
-        seekBarView.setDelegate((stop, progress) -> {
-            currentValue = min + (max - min) * progress;
-            onDrag.run(currentValue);
-            int newRounded = step > 1 ? Math.round(currentValue / step) * step : Math.round(currentValue);
-            if (newRounded != roundedValue) {
-                roundedValue = newRounded;
-                updateText();
-            }
-        });
-        addView(seekBarView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 38 + 6, Gravity.TOP, 6, 68, 6, 0));
+if (subtitle != null) {
+            TextView subtitleView = new TextView(context);
+            subtitleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+            subtitleView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider));
+            subtitleView.setGravity(LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT);
+            subtitleView.setText(subtitle);
+            addView(subtitleView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP | Gravity.FILL_HORIZONTAL, 21, 40, 21, 0));
+        }
 
         FrameLayout valuesView = new FrameLayout(context);
 
@@ -124,10 +135,54 @@ public class AltSeekbar extends FrameLayout {
         rightTextView.setText(right);
         valuesView.addView(rightTextView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.RIGHT | Gravity.CENTER_VERTICAL));
 
-        addView(valuesView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP | Gravity.FILL_HORIZONTAL, 21, 52, 21, 0));
+        addView(valuesView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP | Gravity.FILL_HORIZONTAL, 21, 52 + subtitleOffset, 21, 0));
+
+        initSlider();
 
         roundedValue = min;
         updateText();
+    }
+
+    private void initSlider() {
+        if (NekoConfig.materialSliders) {
+            Slider materialSlider = MaterialSliderUiHelper.create(getContext());
+            this.slider = materialSlider;
+            MaterialSliderUiHelper.applyContinuousStyle(materialSlider);
+            MaterialSliderUiHelper.applyThemeColors(materialSlider);
+            materialSlider.setValueFrom(min);
+            materialSlider.setValueTo(max);
+            if (step > 1) {
+                materialSlider.setStepSize(step);
+            }
+            materialSlider.addOnChangeListener((slider, value, fromUser) -> {
+                currentValue = value;
+                if (fromUser) {
+                    onDrag.run(value);
+                }
+                int newRounded = step > 1 ? Math.round(value / step) * step : Math.round(value);
+                if (newRounded != roundedValue) {
+                    roundedValue = newRounded;
+                    updateText();
+                    performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
+                }
+            });
+            addView(materialSlider, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 44, Gravity.TOP, 6, 68 + subtitleOffset, 6, 0));
+        } else {
+            SeekBarView bar = new SeekBarView(getContext(), true, resourcesProvider);
+            this.seekBarView = bar;
+            bar.setReportChanges(true);
+            bar.setDelegate((stop, progress) -> {
+                currentValue = min + (max - min) * progress;
+                onDrag.run(currentValue);
+                int newRounded = step > 1 ? Math.round(currentValue / step) * step : Math.round(currentValue);
+                if (newRounded != roundedValue) {
+                    roundedValue = newRounded;
+                    updateText();
+                    performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
+                }
+            });
+            addView(bar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 38 + 6, Gravity.TOP, 6, 68 + subtitleOffset, 6, 0));
+        }
     }
 
     public void setDefaultValue(int value) {
@@ -198,12 +253,20 @@ public class AltSeekbar extends FrameLayout {
 
     public void setValue(float value) {
         currentValue = value;
-        seekBarView.setProgress((value - min) / (float) (max - min));
+        if (slider != null) {
+            slider.setValue(value);
+        } else if (seekBarView != null) {
+            seekBarView.setProgress((value - min) / (float) (max - min));
+        }
         int newRounded = step > 1 ? Math.round(currentValue / step) * step : Math.round(currentValue);
         if (newRounded != roundedValue) {
             roundedValue = newRounded;
             updateText();
         }
+    }
+
+    public void setValueFormatter(java.util.function.Function<Integer, String> formatter) {
+        this.valueFormatter = formatter;
     }
 
     private void updateText() {
@@ -216,7 +279,7 @@ public class AltSeekbar extends FrameLayout {
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(
                 MeasureSpec.makeMeasureSpec(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.EXACTLY),
-                MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(112), MeasureSpec.EXACTLY)
+                MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(112 + subtitleOffset), MeasureSpec.EXACTLY)
         );
     }
 
@@ -226,9 +289,24 @@ public class AltSeekbar extends FrameLayout {
             text = leftTextView.getText();
         } else if (roundedValue == max) {
             text = rightTextView.getText();
+        } else if (valueFormatter != null) {
+            text = valueFormatter.apply(roundedValue);
         } else {
             text = String.valueOf(roundedValue);
         }
         return text.toString().toUpperCase();
+    }
+
+    public void updateStyle() {
+        if (slider != null) {
+            removeView(slider);
+            slider = null;
+        }
+        if (seekBarView != null) {
+            removeView(seekBarView);
+            seekBarView = null;
+        }
+        initSlider();
+        setValue(currentValue);
     }
 }

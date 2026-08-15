@@ -42,8 +42,6 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
     private final int telegaDetectorRow = rowId++;
     private final int optimizedPushServiceRow = rowId++;
 
-    private final int liquidGlassRow = rowId++;
-    private final int forceBlurLiquidGlassRow = rowId++;
     private final int useCamera2ApiRow = rowId++;
 
     private final int downloadSpeedBoostRow = rowId++;
@@ -70,13 +68,6 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
         items.add(UItem.asCheck(telegaDetectorRow, LocaleController.getString(R.string.TelegaDetectorEnabled), LocaleController.getString(R.string.TelegaDetectorHint)).slug("telegaDetector").setChecked(NekoConfig.telegaDetectorEnabled));
         items.add(UItem.asCheck(optimizedPushServiceRow, LocaleController.getString(R.string.OptimizedPushService), LocaleController.getString(R.string.OptimizedPushServiceDesc)).slug("optimizedPushService").setChecked(NekoConfig.optimizedPushService));
         items.add(UItem.asShadow(null));
-
-        if (android.os.Build.VERSION.SDK_INT >= 33) {
-            items.add(UItem.asHeader(LocaleController.getString(R.string.LiquidGlassSettings)));
-            items.add(UItem.asCheck(forceBlurLiquidGlassRow, LocaleController.getString(R.string.ForceBlurLiquidGlass)).setChecked(NekoConfig.forceBlurLiquidGlass).slug("forceBlurLiquidGlass"));
-            items.add(TextSettingsCellFactory.of(liquidGlassRow, LocaleController.getString(R.string.LiquidGlassTitle), LocaleController.getString(R.string.LiquidGlassSettingsDesc)).slug("liquidGlass"));
-            items.add(UItem.asShadow(null));
-        }
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.Tweaks)));
         items.add(UItem.asCheck(useCamera2ApiRow, LocaleController.getString(R.string.UseCamera2Api), LocaleController.getString(R.string.UseCamera2ApiDesc)).slug("useCamera2Api").setChecked(NekoConfig.useCamera2Api));
@@ -146,11 +137,6 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
             NekoConfig.toggleOptimizedPushService();
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.optimizedPushService);
-            }
-        } else if (id == forceBlurLiquidGlassRow) {
-            NekoConfig.toggleForceBlurLiquidGlass();
-            if (view instanceof TextCheckCell) {
-                ((TextCheckCell) view).setChecked(NekoConfig.forceBlurLiquidGlass);
             }
         } else if (id == useCamera2ApiRow) {
             NekoConfig.toggleUseCamera2Api();
@@ -323,8 +309,6 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.keepFormatting);
             }
-        } else if (id == liquidGlassRow) {
-            presentFragment(new NekoLiquidGlassSettingsActivity());
         }
     }
 

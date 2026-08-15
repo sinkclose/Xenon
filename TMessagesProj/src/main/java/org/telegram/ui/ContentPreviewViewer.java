@@ -45,6 +45,7 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -946,6 +947,9 @@ public class ContentPreviewViewer {
                     items.add(LocaleController.getString(R.string.CopyEmojiPreview));
                     icons.add(R.drawable.msg_copy);
                     actions.add(3);
+                    items.add(LocaleController.getString(R.string.CopyID));
+                    icons.add(R.drawable.msg_copy);
+                    actions.add(6);
                 }
                 if (delegate.needRemoveFromRecent(currentDocument)) {
                     items.add(LocaleController.getString(R.string.RemoveFromRecent));
@@ -987,6 +991,9 @@ public class ContentPreviewViewer {
                         delegate.removeFromRecent(currentDocument);
                     } else if (action == 5) {
                         MediaDataController.getInstance(currentAccount).addRecentSticker(MediaDataController.TYPE_FAVE, parentObject, currentDocument, (int) (System.currentTimeMillis() / 1000), inFavs);
+                    } else if (action == 6) {
+                        AndroidUtilities.addToClipboard(String.valueOf(currentDocument.id));
+                        Toast.makeText(parentActivity, LocaleController.getString(R.string.TextCopied), Toast.LENGTH_SHORT).show();
                     }
                     dismissPopupWindow();
                 };

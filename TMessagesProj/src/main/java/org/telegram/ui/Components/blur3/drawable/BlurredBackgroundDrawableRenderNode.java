@@ -167,20 +167,23 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
             //     backgroundColor so the refraction stays clearly visible
             //     and the look mirrors the subtle premultiplied tint of the
             //     base shader rather than producing an aggressive flat wash.
-            if (liquidGlassEffect == null) {
-                if (Color.alpha(backgroundColor) != 0) {
-                    c.drawColor(backgroundColor);
-                }
-            } else if (zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass) {
-                // tintPercent = tint/transparency control. advancedGlassAlpha controls
-                // overall glass node opacity via renderNode.setAlpha() in setAlpha().
+            if (zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass) {
+                // Advanced glass has no color uniform — it only does refraction +
+                // chromatic dispersion. Draw a SOFT overlay scaled by the
+                // advancedGlassTintPercent slider so the surface gets a tint.
                 final int percent = zxc.iconic.xenon.NekoConfig.advancedGlassTintPercent;
                 if (percent > 0 && Color.alpha(backgroundColor) != 0) {
                     final float strength = Math.min(100, Math.max(0, percent)) / 100f * 0.60f;
                     c.drawColor(Theme.multAlpha(backgroundColor, strength));
                 }
+            } else if (liquidGlassEffect == null || !org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS)) {
+                // No base AGSL tinting (no effect, or blur mode where the refraction
+                // shader is off): overlay the precomputed (tinted) backgroundColor.
+                if (Color.alpha(backgroundColor) != 0) {
+                    c.drawColor(backgroundColor);
+                }
             }
-            // Base shader path (liquidGlassEffect != null && !advanced):
+            // Base shader path (liquidGlassEffect != null && liquid glass && !advanced):
             // shader applies the tint internally — no overlay needed.
         }
         if (strokeColorTop != 0) {

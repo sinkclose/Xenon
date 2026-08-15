@@ -801,6 +801,9 @@ public class ApplicationLoader extends Application {
     public boolean isDownloadingUpdate() {
         return false;
     }
+    public boolean isRetryingUpdate() {
+        return false;
+    }
     public float getDownloadingUpdateProgress() {
         return 0.0f;
     }

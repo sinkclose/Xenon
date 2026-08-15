@@ -384,20 +384,22 @@ public class NekoGeneralSettingsActivity extends BaseNekoSettingsActivity {
                             @Override
                             public void run() {
                                 if (impl.isDownloadingUpdate() && progBulletin[0] != null) {
-                                    try {
-                                        float prog = impl.getDownloadingUpdateProgress();
-                                        long total = impl.getDownloadTotalSize();
-                                        long downloaded = impl.getDownloadBytesDownloaded();
-                                        String text;
-                                        if (total > 0) {
-                                            String d = android.text.format.Formatter.formatShortFileSize(activity, downloaded);
-                                            String t = android.text.format.Formatter.formatShortFileSize(activity, total);
-                                            text = LocaleController.getString(R.string.DownloadingUpdate) + " " + d + " / " + t;
-                                        } else {
-                                            text = LocaleController.getString(R.string.DownloadingUpdate) + " " + (int)(prog * 100) + "%";
-                                        }
-                                        ((Bulletin.LottieLayout) progBulletin[0].getLayout()).textView.setText(text);
-                                    } catch (Throwable ignored) {}
+                                    if (!impl.isRetryingUpdate()) {
+                                        try {
+                                            float prog = impl.getDownloadingUpdateProgress();
+                                            long total = impl.getDownloadTotalSize();
+                                            long downloaded = impl.getDownloadBytesDownloaded();
+                                            String text;
+                                            if (total > 0) {
+                                                String d = android.text.format.Formatter.formatShortFileSize(activity, downloaded);
+                                                String t = android.text.format.Formatter.formatShortFileSize(activity, total);
+                                                text = LocaleController.getString(R.string.DownloadingUpdate) + " " + d + " / " + t;
+                                            } else {
+                                                text = LocaleController.getString(R.string.DownloadingUpdate) + " " + (int)(prog * 100) + "%";
+                                            }
+                                            ((Bulletin.LottieLayout) progBulletin[0].getLayout()).textView.setText(text);
+                                        } catch (Throwable ignored) {}
+                                    }
                                     AndroidUtilities.runOnUIThread(this, 500);
                                 }
                             }

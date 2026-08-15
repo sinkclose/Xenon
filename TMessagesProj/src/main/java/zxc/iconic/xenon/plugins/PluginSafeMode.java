@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Build;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -26,28 +27,37 @@ import java.util.Date;
 import java.util.Locale;
 
 /**
- * Crash-aware "Safe Mode" for the plugin engine.
+ * Crash-aware "Safe Mode" — catches <b>any</b> uncaught exception and restarts
+ * the app instead of letting it die.
  *
  * <p>Two responsibilities:
  * <ol>
- *   <li><b>Capture:</b> installs a global {@link Thread.UncaughtExceptionHandler}
- *       that wraps the previous one. When any thread crashes, it records the
- *       stack trace to the crash-log file and flips {@code pluginCrash} on, so
- *       the next launch knows plugins were (likely) the cause.</li>
- *   <li><b>Recover:</b> on the next app start, if a crash was recorded, disables
- *       plugins and shows a {@link BottomSheet} explaining what happened, with a
- *       button to copy the crash log.</li>
+ *   <li><b>Capture + restart:</b> installs a global {@link Thread.UncaughtExceptionHandler}
+ *       that catches <i>any</i> uncaught exception (not just plugin-caused ones),
+ *       records the stack trace to the crash-log file, flips {@code appCrash} on,
+ *       then <b>relaunches the app</b> into the launcher activity and kills the
+ *       crashing process — so the user sees a restart, not the system "keeps
+ *       stopping" dialog. A loop guard prevents infinite restarts.</li>
+ *   <li><b>Recover:</b> on the next app start, if a crash (or a hang/ANR that the
+ *       Java handler couldn't catch) was recorded, shows a {@link BottomSheet}
+ *       with the crash log, a "Copy crash log" button, and "Close". Plugins are
+ *       disabled only if they were active — a crash in pure Telegram code is
+ *       not blamed on plugins.</li>
  * </ol>
  *
  * <p>The handler is deliberately minimal and defensive: writing files or shared
- * prefs from a crashing process is best-effort. The previous handler is always
- * invoked so the OS still gets the chance to terminate the process normally.
+ * prefs from a crashing process is best-effort. When the app is relaunched the
+ * previous handler is intentionally not invoked, so the system crash dialog is
+ * suppressed; only the best-effort relaunch fallback (no context, can't start
+ * activity, or loop guard) chains to the previous handler.
  */
 public final class PluginSafeMode {
 
     private static final String PREFS = "xenon_plugins_safemode";
     private static final String KEY_CRASH_FLAG = "pluginCrash";
     private static final String KEY_CRASH_TIME = "pluginCrashTime";
+    private static final String KEY_APP_CRASH_FLAG = "appCrash";
+    private static final String KEY_APP_CRASH_TIME = "appCrashTime";
     private static final String KEY_BOOT_FLAG = "bootIn";        // boot-guard: was set on the last start
     private static final String KEY_BOOT_TIME = "bootInTime";    // when that start happened
     private static final String CRASH_LOG_NAME = "plugin_crash.txt";
@@ -74,55 +84,98 @@ public final class PluginSafeMode {
 
     /**
      * Install the crash handler. Call once very early in app startup (e.g.
-     * {@code ApplicationLoader.onCreate}). Chains onto whatever handler was
-     * already installed, so existing logging/termination behaviour is preserved.
+     * {@code ApplicationLoader.onCreate}). Catches <b>any</b> uncaught
+     * exception, records the trace, flags the crash for the next-launch
+     * recovery sheet, then <b>restarts the app</b> into the launcher activity
+     * and kills the crashing process — so the user sees a relaunch instead of
+     * the system "keeps stopping" dialog. A loop guard prevents infinite
+     * restarts if the relaunch itself crashes before the sheet clears the
+     * flag.
      */
     public static void install() {
         final Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
             try {
-                recordCrash(thread, throwable);
+                handleUncaught(thread, throwable, previous);
             } catch (Throwable ignore) {
                 // Never let the handler itself throw — that would swallow the
                 // original crash. Best-effort only.
-            }
-            if (previous != null) {
-                previous.uncaughtException(thread, throwable);
+                if (previous != null) {
+                    previous.uncaughtException(thread, throwable);
+                }
             }
         });
     }
 
-    private static void recordCrash(Thread thread, Throwable throwable) {
-        Context ctx = ApplicationLoader.applicationContext;
-        if (ctx == null) return;
+    private static void handleUncaught(Thread thread, Throwable throwable, Thread.UncaughtExceptionHandler previous) {
+        try {
+            FileLog.fatal(throwable, false);
+        } catch (Throwable ignore) {
+        }
 
-        // Only attribute the crash to plugins if they were actually active
-        // (engine enabled AND at least one .xplugin file on disk). A crash in
-        // pure Telegram code (e.g. an OOM) should never show the "Crashed!"
-        // plugin sheet — that would be both misleading and alarming.
-        if (!arePluginsActive()) {
+        Context ctx = ApplicationLoader.applicationContext;
+        if (ctx == null) {
+            // No context — can't restart. Fall through to the default handler so
+            // the process still terminates normally.
+            if (previous != null) {
+                previous.uncaughtException(thread, throwable);
+            }
             return;
         }
 
-        String trace = buildCrashTrace(thread, throwable);
-        writeCrashLog(trace);
+        android.content.SharedPreferences prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        boolean alreadyCrashing = prefs.getBoolean(KEY_APP_CRASH_FLAG, false);
 
-        // Use commit() (synchronous) so the crash flag is guaranteed to be
-        // persisted before the process terminates. apply() is asynchronous and
-        // may not finish writing to disk if the process is killed immediately
-        // after the uncaught handler returns, which would cause the next launch
-        // to miss the crash flag and fall back to the "hang" detection path
-        // (showing "Failed to start" instead of "Crashed!").
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .edit()
-                .putBoolean(KEY_CRASH_FLAG, true)
-                .putLong(KEY_CRASH_TIME, System.currentTimeMillis())
-                .commit();
+        // Always record the trace (generic header; plugin info added if active).
+        writeCrashLog(buildCrashTrace(thread, throwable));
+
+        if (alreadyCrashing) {
+            // We crashed again before the recovery sheet could clear the flag —
+            // don't restart (avoid a crash loop). Let the OS terminate.
+            if (previous != null) {
+                previous.uncaughtException(thread, throwable);
+            }
+            return;
+        }
+
+        boolean pluginsActive = arePluginsActive();
+
+        // Mark the crash. appCrashFlag is universal; pluginCrash is set only
+        // when plugins were active so the recovery sheet can disable + attribute
+        // them.
+        android.content.SharedPreferences.Editor ed = prefs.edit();
+        ed.putBoolean(KEY_APP_CRASH_FLAG, true);
+        ed.putLong(KEY_APP_CRASH_TIME, System.currentTimeMillis());
+        ed.putBoolean("pluginsActiveLastTime", pluginsActive);
+        if (pluginsActive) {
+            ed.putBoolean(KEY_CRASH_FLAG, true);
+            ed.putLong(KEY_CRASH_TIME, System.currentTimeMillis());
+        }
+        ed.commit();
+
+        // Restart the app into the launcher activity, then kill this process.
+        // We deliberately do NOT chain to the previous handler, so the system's
+        // "keeps stopping" dialog is suppressed — the app just relaunches.
+        try {
+            Intent i = ctx.getPackageManager().getLaunchIntentForPackage(ctx.getPackageName());
+            if (i != null) {
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                ctx.startActivity(i);
+            }
+        } catch (Throwable ignore) {
+            // If we can't restart, fall through to the default handler.
+            if (previous != null) {
+                previous.uncaughtException(thread, throwable);
+            }
+            return;
+        }
+        android.os.Process.killProcess(android.os.Process.myPid());
+        System.exit(1);
     }
 
     private static String buildCrashTrace(Thread thread, Throwable throwable) {
         StringBuilder sb = new StringBuilder();
-        sb.append("Xenon plugin crash report\n");
+        sb.append("Xenon crash report\n");
         sb.append("Time: ").append(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
                 .format(new Date())).append("\n");
         sb.append("Thread: ").append(thread != null ? thread.getName() : "unknown").append("\n");
@@ -130,6 +183,7 @@ public final class PluginSafeMode {
         sb.append("Android: ").append(Build.VERSION.RELEASE)
                 .append(" (").append(Build.MODEL).append(")\n");
         sb.append("Plugins enabled: ").append(NekoConfig.pluginsEnabled).append("\n");
+        sb.append("Plugins active: ").append(arePluginsActive()).append("\n");
         sb.append("\n--- Stack trace ---\n");
         if (throwable != null) {
             sb.append(LogExceptionToString(throwable));
@@ -263,7 +317,7 @@ public final class PluginSafeMode {
                     + "Plugins disabled by user (safe mode).\n");
             if (activity != null) {
                 org.telegram.messenger.AndroidUtilities.runOnUIThread(
-                        () -> showCrashSheet(activity, System.currentTimeMillis(), "safe"), 500);
+                        () -> showCrashSheet(activity, System.currentTimeMillis(), "safe", true), 500);
             }
         } catch (Throwable t) {
             FileLog.e(t);
@@ -363,8 +417,12 @@ public final class PluginSafeMode {
         }
         bootHandledThisLaunch = true;
 
-        boolean crashed = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .getBoolean(KEY_CRASH_FLAG, false);
+        android.content.SharedPreferences prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        // appCrashFlag is set by the handler for ANY uncaught exception;
+        // pluginCrash is the legacy plugin-attributed flag. Either means we
+        // crashed last launch.
+        boolean crashed = prefs.getBoolean(KEY_APP_CRASH_FLAG, false)
+                || prefs.getBoolean(KEY_CRASH_FLAG, false);
         // IMPORTANT: read the PREVIOUS launch's boot state from the captured
         // field, not from prefs. prefs[KEY_BOOT_FLAG] was already overwritten
         // to true by markBootStarted() at the start of THIS launch — reading it
@@ -377,43 +435,39 @@ public final class PluginSafeMode {
             return;
         }
 
-        // If plugins were not active (either disabled or none installed) during the last boot,
-        // this crash or hang was not caused by plugins. Clear the flags and return silently.
-        boolean pluginsActiveLastTime = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .getBoolean("pluginsActiveLastTime", false);
-        if (!pluginsActiveLastTime) {
-            ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                    .edit()
-                    .putBoolean(KEY_CRASH_FLAG, false)
-                    .putBoolean(KEY_BOOT_FLAG, false)
-                    .commit();
-            return;
-        }
+        // Whether plugins were active during the failed launch — used to decide
+        // if we should disable plugins and whether the sheet should mention them.
+        boolean pluginsActiveLastTime = prefs.getBoolean("pluginsActiveLastTime", false);
 
         // Prefer the explicit crash time; fall back to the boot time for hangs.
-        long when = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .getLong(KEY_CRASH_TIME, 0);
+        long when = prefs.getLong(KEY_APP_CRASH_TIME, 0);
+        if (when == 0) {
+            when = prefs.getLong(KEY_CRASH_TIME, 0);
+        }
         if (when == 0) {
             when = previousBootTime;
         }
 
         String reason = crashed ? "crash" : "hang";
 
-        // Disable plugins immediately so the next start is clean.
-        try {
-            NekoConfig.pluginsEnabled = false;
-            ctx.getSharedPreferences("nekoconfig", Context.MODE_PRIVATE)
-                    .edit().putBoolean("pluginsEnabled", false).commit();
-            PluginManager.getInstance().onEnabledChanged();
-        } catch (Throwable t) {
-            FileLog.e("checkAndHandleCrash: onEnabledChanged threw", t);
+        // Only disable plugins if they were actually active — a crash/hang in
+        // pure Telegram code shouldn't blame (and disable) plugins.
+        if (pluginsActiveLastTime) {
+            try {
+                NekoConfig.pluginsEnabled = false;
+                ctx.getSharedPreferences("nekoconfig", Context.MODE_PRIVATE)
+                        .edit().putBoolean("pluginsEnabled", false).commit();
+                PluginManager.getInstance().onEnabledChanged();
+            } catch (Throwable t) {
+                FileLog.e("checkAndHandleCrash: onEnabledChanged threw", t);
+            }
         }
 
         // Clear the flags so we don't show this sheet twice, and reset boot
         // tracking for THIS launch. Use commit() (synchronous) so the write
         // is guaranteed to persist even if the process dies immediately after.
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .edit()
+        prefs.edit()
+                .putBoolean(KEY_APP_CRASH_FLAG, false)
                 .putBoolean(KEY_CRASH_FLAG, false)
                 .putBoolean(KEY_BOOT_FLAG, false)
                 .commit();
@@ -421,7 +475,7 @@ public final class PluginSafeMode {
         if (hung && !crashed) {
             // No Java stack trace for a hang; leave a note in the log so the
             // "Copy crash log" button has something meaningful.
-            writeCrashLog("Xenon plugin safe-mode report\n"
+            writeCrashLog("Xenon crash report\n"
                     + "Reason: application did not finish booting (likely an ANR / hang / killed)\n"
                     + "Boot started at: " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
                         .format(new Date(when)) + "\n"
@@ -430,11 +484,12 @@ public final class PluginSafeMode {
 
         final long crashTime = when;
         final String crashReason = reason;
+        final boolean showPlugins = pluginsActiveLastTime;
         org.telegram.messenger.AndroidUtilities.runOnUIThread(
-                () -> showCrashSheet(activity, crashTime, crashReason), 800);
+                () -> showCrashSheet(activity, crashTime, crashReason, showPlugins), 800);
     }
 
-    private static void showCrashSheet(Activity activity, long crashTime, String reason) {
+    private static void showCrashSheet(Activity activity, long crashTime, String reason, boolean pluginsActive) {
         try {
             final String crashLog = readCrashLog();
             boolean isHang = "hang".equals(reason);
@@ -457,13 +512,23 @@ public final class PluginSafeMode {
             // Body
             TextView body = new TextView(activity);
             if (isHang) {
-                body.setText("The client failed to finish starting up last time — it most likely "
-                        + "hung or was killed. Plugins have been disabled to keep things stable. "
-                        + "If a plugin caused this, review or remove it before re-enabling them.");
+                if (pluginsActive) {
+                    body.setText("The client failed to finish starting up last time — it most likely "
+                            + "hung or was killed. Plugins have been disabled to keep things stable. "
+                            + "If a plugin caused this, review or remove it before re-enabling them.");
+                } else {
+                    body.setText("The client failed to finish starting up last time — it most likely "
+                            + "hung or was killed. You can copy the log below to report it.");
+                }
             } else {
-                body.setText("The client crashed on the previous launch. Plugins have been "
-                        + "disabled to keep things stable. If a plugin caused this, you can "
-                        + "review or remove it. Copy the crash log below if you want to report it.");
+                if (pluginsActive) {
+                    body.setText("The client crashed on the previous launch. Plugins have been "
+                            + "disabled to keep things stable. If a plugin caused this, you can "
+                            + "review or remove it. Copy the crash log below if you want to report it.");
+                } else {
+                    body.setText("The client crashed on the previous launch. You can copy the "
+                            + "crash log below to report it.");
+                }
             }
             body.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
             body.setLineSpacing(org.telegram.messenger.AndroidUtilities.dp(2), 1f);
@@ -484,12 +549,15 @@ public final class PluginSafeMode {
 
             final BottomSheet[] sheetRef = new BottomSheet[1];
 
-            // Buttons
-            layout.addView(makeButton(activity, "Open plugins", Theme.getColor(Theme.key_windowBackgroundWhiteBlueText), v -> {
-                if (sheetRef[0] != null) sheetRef[0].dismiss();
-                openPlugins(activity);
-            }));
-            layout.addView(divider(activity));
+            // Buttons — "Open plugins" only makes sense when plugins were active
+            // (and have just been disabled); otherwise just Copy + Close.
+            if (pluginsActive) {
+                layout.addView(makeButton(activity, "Open plugins", Theme.getColor(Theme.key_windowBackgroundWhiteBlueText), v -> {
+                    if (sheetRef[0] != null) sheetRef[0].dismiss();
+                    openPlugins(activity);
+                }));
+                layout.addView(divider(activity));
+            }
             layout.addView(makeButton(activity, "Copy crash log", Theme.getColor(Theme.key_windowBackgroundWhiteBlueText), v -> {
                 if (sheetRef[0] != null) sheetRef[0].dismiss();
                 copyToClipboard(crashLog);

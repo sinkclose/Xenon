@@ -245,7 +245,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                     if (iBlur3SourceGlassFrosted != null && !iBlur3SourceGlassFrosted.inRecording()) {
                         //if (iBlur3SourceGlassFrosted.needUpdateDisplayList(width, height) || iBlur3Invalidated) {
                         final Canvas c = iBlur3SourceGlassFrosted.beginRecording(width, height);
-                        c.drawColor(getThemedColor(Theme.key_windowBackgroundWhite));
+                        c.drawColor(getThemedColor(Theme.key_windowBackgroundGray));
                         if (SharedConfig.chatBlurEnabled()) {
                             scrollableViewNoiseSuppressor.draw(c, DownscaleScrollableNoiseSuppressor.DRAW_FROSTED_GLASS);
                         }
@@ -255,7 +255,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                     if (iBlur3SourceGlass != null && !iBlur3SourceGlass.inRecording()) {
                         //if (iBlur3SourceGlass.needUpdateDisplayList(width, height) || iBlur3Invalidated) {
                         final Canvas c = iBlur3SourceGlass.beginRecording(width, height);
-                        c.drawColor(getThemedColor(Theme.key_windowBackgroundWhite));
+                        c.drawColor(getThemedColor(Theme.key_windowBackgroundGray));
                         if (SharedConfig.chatBlurEnabled()) {
                             scrollableViewNoiseSuppressor.draw(c, DownscaleScrollableNoiseSuppressor.DRAW_GLASS);
                         }
@@ -266,7 +266,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                 }
                 super.dispatchDraw(canvas);
                 if (!hasMainTabs) {
-                    AndroidUtilities.drawNavigationBarProtection(canvas, this, getThemedColor(Theme.key_windowBackgroundWhite), navigationBarHeight);
+                    AndroidUtilities.drawNavigationBarProtection(canvas, this, getThemedColor(Theme.key_windowBackgroundGray), navigationBarHeight);
                 }
             }
 
@@ -567,7 +567,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         subtitleView.setTextColor(getThemedColor(Theme.key_windowBackgroundWhiteGrayText));
         searchItem.updateColor();
 
-        final int navigationBarColor = getThemedColor(Theme.key_windowBackgroundWhite);
+        final int navigationBarColor = getThemedColor(Theme.key_windowBackgroundGray);
         navigationBar.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[] { Theme.multAlpha(navigationBarColor, 0.0f), navigationBarColor }));
 
         actionBarBackground.invalidate();
@@ -700,6 +700,9 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             items.add(UItem.asShadow(null));
         }
 
+        items.add(SettingCell.Factory.of(50, 0xFFD1E4FF, 0xFF9EC5FF, R.drawable.filled_profile_settings, getString(R.string.NekoSettings)));
+        items.add(UItem.asShadow(null));
+
         items.add(SettingCell.Factory.of(1, IconBackgroundColors.BLUE.top, IconBackgroundColors.BLUE.bottom, R.drawable.settings_account, getString(R.string.SettingsAccount), getString(R.string.SettingsAccountInfo)));
         items.add(SettingCell.Factory.of(2, IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom, R.drawable.settings_chat, getString(R.string.SettingsChat), getString(R.string.SettingsChatInfo)));
         items.add(SettingCell.Factory.of(3, IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom, R.drawable.settings_privacy, getString(R.string.SettingsPrivacySecurity), getString(R.string.SettingsPrivacySecurityInfo)));
@@ -709,10 +712,6 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         items.add(SettingCell.Factory.of(8, IconBackgroundColors.CYAN.top, IconBackgroundColors.CYAN.bottom, R.drawable.settings_devices, getString(R.string.SettingsDevices), getString(R.string.SettingsDevicesInfo)));
         items.add(SettingCell.Factory.of(9, IconBackgroundColors.ORANGE_DEEP.top, IconBackgroundColors.ORANGE_DEEP.bottom, R.drawable.settings_power, getString(R.string.SettingsPowerSaving), getString(R.string.SettingsPowerSavingInfo)));
         items.add(SettingCell.Factory.of(10, IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom, R.drawable.settings_language, getString(R.string.SettingsLanguage), LocaleController.getCurrentLanguageName()));
-
-        items.add(UItem.asShadow(null));
-
-        items.add(SettingCell.Factory.of(50, 0xFFD1E4FF, 0xFF9EC5FF, R.drawable.filled_profile_settings, getString(R.string.NekoSettings)));
 
         items.add(UItem.asShadow(null));
 

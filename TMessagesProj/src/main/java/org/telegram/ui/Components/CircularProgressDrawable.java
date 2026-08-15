@@ -1,18 +1,22 @@
 package org.telegram.ui.Components;
 
+import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.ColorFilter;
 import android.graphics.Paint;
-import android.graphics.Path;
-import android.graphics.PathMeasure;
 import android.graphics.PixelFormat;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.os.SystemClock;
+import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.view.ContextThemeWrapper;
 import androidx.interpolator.view.animation.FastOutSlowInInterpolator;
+
+import com.google.android.material.loadingindicator.LoadingIndicatorDrawable;
+import com.google.android.material.loadingindicator.LoadingIndicatorSpec;
 
 import org.telegram.messenger.AndroidUtilities;
 
@@ -36,38 +40,9 @@ public class CircularProgressDrawable extends Drawable {
     }
 
     private long start = -1;
-    private long lastUpdateTime;
+    private final float[] segment = new float[2];
 
-    private float rotationOffset;
-    private float indeterminateArcLength = 10;
-    private long indeterminatePhaseStartTime;
-    private int indeterminatePhase;
-    private static final float INDETERMINATE_MIN_ARC = 10;
-    private static final float INDETERMINATE_MAX_ARC = 313;
-    private static final int INDET_GROW = 0;
-    private static final int INDET_MAX = 1;
-    private static final int INDET_SHRINK = 2;
-    private static final int INDET_PAUSE = 3;
-    private static final long INDET_GROW_DURATION = 2500;
-    private static final long INDET_MAX_DURATION = 417;
-    private static final long INDET_SHRINK_DURATION = 833;
-    private static final long INDET_PAUSE_DURATION = 2083;
-
-    private long kickPhaseStartTime;
-    private static final long KICK_INTERVAL = 1458;
-    private static final long KICK_DURATION = 250;
-    private static final float KICK_SPEED_MULTIPLIER = 3f;
-    private static final float BASE_ROTATION_SPEED = 360f / 2083f;
-
-    private long lastWavyUpdate;
-    private float wavePhaseAngle;
-    private float wavyAmplitudeSmooth = 1f;
-    private float wavyLastAmplitudeSmooth = 1f;
-    private final Path wavyProgressPath = new Path();
-    private final PathMeasure wavyProgressPathMeasure = new PathMeasure();
-    private final Path wavySegmentPath = new Path();
-    private RectF wavyLastOval = new RectF();
-    private int wavyLastGeneration;
+    private LoadingIndicatorDrawable loadingIndicatorDrawable;
 
     public static final FastOutSlowInInterpolator interpolator = new FastOutSlowInInterpolator();
 
@@ -88,170 +63,79 @@ public class CircularProgressDrawable extends Drawable {
 
     private float angleOffset;
     private final RectF bounds = new RectF();
+    private final RectF offBounds = new RectF();
+
+    private final Drawable.Callback loadingIndicatorCallback = new Drawable.Callback() {
+        @Override
+        public void invalidateDrawable(@NonNull Drawable who) {
+            invalidateSelf();
+        }
+        @Override
+        public void scheduleDrawable(@NonNull Drawable who, @NonNull Runnable what, long when) {
+            scheduleSelf(what, when);
+        }
+        @Override
+        public void unscheduleDrawable(@NonNull Drawable who, @NonNull Runnable what) {
+            unscheduleSelf(what);
+        }
+    };
 
     @Override
     public void draw(@NonNull Canvas canvas) {
-        long now = SystemClock.elapsedRealtime();
+        if (NekoConfig.wavyEnabled) {
+            LoadingIndicatorDrawable drawable = getOrCreateLoadingIndicatorDrawable();
+            if (drawable != null) {
+                drawable.setBounds(getBounds());
+                drawable.draw(canvas);
+                return;
+            }
+        }
         if (start < 0) {
-            start = now;
-            indeterminatePhaseStartTime = now;
-            kickPhaseStartTime = now;
-            lastWavyUpdate = now;
-            lastUpdateTime = now;
+            start = SystemClock.elapsedRealtime();
         }
-
-        long dt = now - lastUpdateTime;
-        if (dt > 17) dt = 17;
-        lastUpdateTime = now;
-
-        if (lastWavyUpdate != 0) {
-            long wavyDt = now - lastWavyUpdate;
-            if (wavyDt > 50) wavyDt = 50;
-            wavePhaseAngle += (wavyDt * NekoConfig.wavySpeed) / 1000f;
-            wavePhaseAngle %= 360f;
-            wavyAmplitudeSmooth += (1f - wavyAmplitudeSmooth) * Math.min(1f, wavyDt / 80f);
-        }
-        lastWavyUpdate = now;
-
-        long kickElapsed = now - kickPhaseStartTime;
-        if (kickElapsed >= KICK_INTERVAL) {
-            kickPhaseStartTime = now;
-            kickElapsed = 0;
-        }
-        float rotSpeed = BASE_ROTATION_SPEED;
-        if (kickElapsed < KICK_DURATION) {
-            rotSpeed *= KICK_SPEED_MULTIPLIER;
-        }
-        rotationOffset += rotSpeed * dt;
-        while (rotationOffset > 360) rotationOffset -= 360;
-
-        if (indeterminatePhaseStartTime == 0) {
-            indeterminatePhaseStartTime = now;
-            kickPhaseStartTime = now;
-        }
-        long elapsed = now - indeterminatePhaseStartTime;
-        switch (indeterminatePhase) {
-            case INDET_GROW: {
-                float t = Math.min(1f, (float) elapsed / INDET_GROW_DURATION);
-                float smooth = t * t * (3 - 2 * t);
-                indeterminateArcLength = INDETERMINATE_MIN_ARC + (INDETERMINATE_MAX_ARC - INDETERMINATE_MIN_ARC) * smooth;
-                if (t >= 1f) {
-                    indeterminatePhase = INDET_MAX;
-                    indeterminatePhaseStartTime = now;
-                }
-                break;
-            }
-            case INDET_MAX: {
-                indeterminateArcLength = INDETERMINATE_MAX_ARC;
-                if (elapsed >= INDET_MAX_DURATION) {
-                    indeterminatePhase = INDET_SHRINK;
-                    indeterminatePhaseStartTime = now;
-                }
-                break;
-            }
-            case INDET_SHRINK: {
-                float t = Math.min(1f, (float) elapsed / INDET_SHRINK_DURATION);
-                float smooth = t * t * (3 - 2 * t);
-                indeterminateArcLength = INDETERMINATE_MAX_ARC - (INDETERMINATE_MAX_ARC - INDETERMINATE_MIN_ARC) * smooth;
-                if (t >= 1f) {
-                    indeterminatePhase = INDET_PAUSE;
-                    indeterminatePhaseStartTime = now;
-                }
-                break;
-            }
-            case INDET_PAUSE: {
-                if (elapsed >= INDET_PAUSE_DURATION) {
-                    indeterminatePhase = INDET_GROW;
-                    indeterminatePhaseStartTime = now;
-                    kickPhaseStartTime = now;
-                }
-                break;
-            }
-        }
-
-        float rad = Math.max(4, indeterminateArcLength);
-        float inset = AndroidUtilities.dp(2.5f);
-        RectF insetOval = new RectF(bounds);
-        insetOval.inset(inset, inset);
-
-        if (Math.abs(rad) < 360) {
-            int alpha = paint.getAlpha();
-            paint.setAlpha(alpha * 40 / 100);
-            float gap = 22;
-            float bgSweep = 360 - rad - 2 * gap;
-            if (bgSweep > 0) {
-                canvas.drawArc(insetOval, angleOffset + rotationOffset + rad + gap, bgSweep, false, paint);
-            }
-            paint.setAlpha(alpha);
-        }
-        drawWavyArc(canvas, insetOval, angleOffset + rotationOffset, rad, paint);
+        getSegments((SystemClock.elapsedRealtime() - start) % 5400, segment);
+        offBounds.set(bounds);
+        offBounds.inset(AndroidUtilities.dp(1f), AndroidUtilities.dp(1f));
+        canvas.drawArc(offBounds, angleOffset + segment[0], segment[1] - segment[0], false, paint);
         invalidateSelf();
     }
 
-    private void drawWavyArc(Canvas canvas, RectF oval, float startAngle, float sweepAngle, Paint paint) {
-        if (!oval.equals(wavyLastOval) || wavyLastGeneration != NekoConfig.wavyGeneration || wavyLastAmplitudeSmooth != wavyAmplitudeSmooth) {
-            wavyLastOval.set(oval);
-            wavyProgressPath.rewind();
-
-            float cx = oval.centerX();
-            float cy = oval.centerY();
-            float baseRadius = Math.min(oval.width(), oval.height()) / 2f;
-
-            float amplitude = baseRadius * NekoConfig.wavyAmplitudeFactor * wavyAmplitudeSmooth;
-            int waves = NekoConfig.wavyWaves;
-            int steps = 180;
-
-            for (int i = 0; i <= steps; i++) {
-                float angle = (i * 360f) / steps;
-                float rad = (float) Math.toRadians(angle);
-                float r = baseRadius + amplitude * (float) Math.sin(waves * rad);
-                float x = cx + r * (float) Math.cos(rad);
-                float y = cy + r * (float) Math.sin(rad);
-
-                if (i == 0) {
-                    wavyProgressPath.moveTo(x, y);
-                } else {
-                    wavyProgressPath.lineTo(x, y);
-                }
-            }
-            wavyProgressPath.close();
-            wavyProgressPathMeasure.setPath(wavyProgressPath, false);
-            wavyLastGeneration = NekoConfig.wavyGeneration;
-            wavyLastAmplitudeSmooth = wavyAmplitudeSmooth;
+    private LoadingIndicatorDrawable getOrCreateLoadingIndicatorDrawable() {
+        if (loadingIndicatorDrawable != null) {
+            return loadingIndicatorDrawable;
         }
-
-        float length = wavyProgressPathMeasure.getLength();
-        float sweepDist = (Math.abs(sweepAngle) / 360f) * length;
-
-        float startDist = (wavePhaseAngle / 360f) * length;
-        startDist = (startDist % length + length) % length;
-        float stopDist = startDist + sweepDist;
-
-        wavySegmentPath.reset();
-
-        if (stopDist <= length) {
-            wavyProgressPathMeasure.getSegment(startDist, stopDist, wavySegmentPath, true);
-        } else {
-            wavyProgressPathMeasure.getSegment(startDist, length, wavySegmentPath, true);
-            wavyProgressPathMeasure.getSegment(0, stopDist - length, wavySegmentPath, false);
+        Drawable.Callback callback = getCallback();
+        Context context = null;
+        if (callback instanceof View) {
+            context = ((View) callback).getContext();
         }
-        wavySegmentPath.rLineTo(0, 0);
-
-        canvas.save();
-        canvas.rotate(startAngle - wavePhaseAngle, oval.centerX(), oval.centerY());
-        canvas.drawPath(wavySegmentPath, paint);
-        canvas.restore();
+        if (context == null) {
+            return null;
+        }
+        Context themedContext = new ContextThemeWrapper(context, com.google.android.material.R.style.Theme_Material3_DayNight);
+        LoadingIndicatorSpec spec = new LoadingIndicatorSpec(themedContext, null);
+        android.graphics.Rect b = getBounds();
+        com.google.android.material.loadingindicator.LoadingIndicatorSpecHelper.configure(
+                spec,
+                (int) (size * 0.9f),
+                b.width(),
+                b.height(),
+                new int[] { paint.getColor() },
+                android.graphics.Color.TRANSPARENT);
+        loadingIndicatorDrawable = LoadingIndicatorDrawable.create(themedContext, spec);
+        loadingIndicatorDrawable.setCallback(loadingIndicatorCallback);
+        loadingIndicatorDrawable.setBounds(b);
+        loadingIndicatorDrawable.setVisible(true, false);
+        return loadingIndicatorDrawable;
     }
 
     public void reset() {
         start = -1;
-        indeterminatePhaseStartTime = 0;
-        indeterminateArcLength = INDETERMINATE_MIN_ARC;
-        indeterminatePhase = INDET_GROW;
-        kickPhaseStartTime = 0;
-        rotationOffset = 0;
-        lastWavyUpdate = 0;
-        wavyAmplitudeSmooth = 1f;
+        if (loadingIndicatorDrawable != null) {
+            loadingIndicatorDrawable.setVisible(false, false);
+            loadingIndicatorDrawable.setCallback(null);
+            loadingIndicatorDrawable = null;
+        }
     }
 
     public void setAngleOffset(float angleOffset) {
@@ -273,6 +157,11 @@ public class CircularProgressDrawable extends Drawable {
 
     public void setColor(int color) {
         paint.setColor(color);
+        if (loadingIndicatorDrawable != null) {
+            loadingIndicatorDrawable.setVisible(false, false);
+            loadingIndicatorDrawable.setCallback(null);
+            loadingIndicatorDrawable = null;
+        }
     }
 
     public int getColor() {

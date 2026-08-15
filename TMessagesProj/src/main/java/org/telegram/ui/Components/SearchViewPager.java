@@ -1212,7 +1212,7 @@ public class SearchViewPager extends ViewPagerFixed implements FilteredSearchVie
         for (int i = 0; i < searchListView.getChildCount(); ++i) {
             View child = searchListView.getChildAt(i);
             if (child instanceof ProfileSearchCell || child instanceof DialogCell || child instanceof HashtagSearchCell) {
-                arrayList.add(new ThemeDescription(child, ThemeDescription.FLAG_BACKGROUND, null, null, null, null, Theme.key_windowBackgroundWhite));
+                arrayList.add(new ThemeDescription(child, ThemeDescription.FLAG_BACKGROUND, null, null, null, null, Theme.key_windowBackgroundGray));
             }
         }
 

@@ -769,8 +769,8 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         BackupAgent.requestBackup();
 
         //RestrictedLanguagesSelectActivity.checkRestrictedLanguages(false);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && NekoConfig.alternativeTransition && actionBarLayout != null) {
-            // Alternative transition opts predictive back into the Material 3 animation (ported from Inugram).
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && NekoConfig.predictiveBackAnimationStyle == NekoConfig.ANIMATION_STYLE_AOSP && NekoConfig.predictiveBackIntensity > 0 && actionBarLayout != null) {
+            // AOSP predictive back animation (ported from Inugram).
             if (onBackAnimationCallback == null) {
                 onBackAnimationCallback = zxc.iconic.xenon.helpers.Material3PredictiveBack.createCallback(
                     this,
@@ -783,6 +783,66 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                         if (!onBackPressed(true)) return;
                         onBackPressed();
                     }
+                );
+            }
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                (OnBackAnimationCallback) onBackAnimationCallback
+            );
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && NekoConfig.predictiveBackAnimationStyle == NekoConfig.ANIMATION_STYLE_IOS && NekoConfig.predictiveBackIntensity > 0 && actionBarLayout != null) {
+            if (onBackAnimationCallback == null) {
+                onBackAnimationCallback = zxc.iconic.xenon.helpers.IosPredictiveBack.createCallback(
+                    actionBarLayout,
+                    () -> {
+                        if (AndroidUtilities.isTablet()) {
+                            onBackPressed();
+                            return;
+                        }
+                        if (!onBackPressed(true)) return;
+                        onBackPressed();
+                    },
+                    false,
+                    false
+                );
+            }
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                (OnBackAnimationCallback) onBackAnimationCallback
+            );
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && NekoConfig.predictiveBackAnimationStyle == NekoConfig.ANIMATION_STYLE_AOSP_ALT && NekoConfig.predictiveBackIntensity > 0 && actionBarLayout != null) {
+            if (onBackAnimationCallback == null) {
+                onBackAnimationCallback = zxc.iconic.xenon.helpers.IosPredictiveBack.createCallback(
+                    actionBarLayout,
+                    () -> {
+                        if (AndroidUtilities.isTablet()) {
+                            onBackPressed();
+                            return;
+                        }
+                        if (!onBackPressed(true)) return;
+                        onBackPressed();
+                    },
+                    true,
+                    false
+                );
+            }
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                (OnBackAnimationCallback) onBackAnimationCallback
+            );
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && NekoConfig.predictiveBackAnimationStyle == NekoConfig.ANIMATION_STYLE_FADE && NekoConfig.predictiveBackIntensity > 0 && actionBarLayout != null) {
+            if (onBackAnimationCallback == null) {
+                onBackAnimationCallback = zxc.iconic.xenon.helpers.IosPredictiveBack.createCallback(
+                    actionBarLayout,
+                    () -> {
+                        if (AndroidUtilities.isTablet()) {
+                            onBackPressed();
+                            return;
+                        }
+                        if (!onBackPressed(true)) return;
+                        onBackPressed();
+                    },
+                    false,
+                    true
                 );
             }
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
@@ -853,10 +913,12 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                         }
 
                         final float fixedProgress = Math.max(0, progress - LAZY_START) / (1 - LAZY_START);
+                        final float intensity = Math.max(NekoConfig.predictiveBackIntensity / 10f, 0.001f);
+                        final float scaledProgress = Math.min(fixedProgress * intensity, 1f);
 
                         if (AndroidUtilities.isTablet()) return;
                         if (actionBarLayout != null) {
-                            actionBarLayout.onBackProgress(fixedProgress);
+                            actionBarLayout.onBackProgress(scaledProgress);
                         }
                     }
 
@@ -6065,20 +6127,22 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
             @Override
             public void run() {
                 if (ApplicationLoader.applicationLoaderInstance.isDownloadingUpdate() && progBulletin[0] != null) {
-                    try {
-                        float prog = ApplicationLoader.applicationLoaderInstance.getDownloadingUpdateProgress();
-                        long total = ApplicationLoader.applicationLoaderInstance.getDownloadTotalSize();
-                        long downloaded = ApplicationLoader.applicationLoaderInstance.getDownloadBytesDownloaded();
-                        String text;
-                        if (total > 0) {
-                            String d = android.text.format.Formatter.formatShortFileSize(LaunchActivity.this, downloaded);
-                            String t = android.text.format.Formatter.formatShortFileSize(LaunchActivity.this, total);
-                            text = "Downloading update... " + d + " / " + t;
-                        } else {
-                            text = "Downloading update... " + (int)(prog * 100) + "%";
-                        }
-                        ((Bulletin.LottieLayout) progBulletin[0].getLayout()).textView.setText(text);
-                    } catch (Throwable ignored) {}
+                    if (!ApplicationLoader.applicationLoaderInstance.isRetryingUpdate()) {
+                        try {
+                            float prog = ApplicationLoader.applicationLoaderInstance.getDownloadingUpdateProgress();
+                            long total = ApplicationLoader.applicationLoaderInstance.getDownloadTotalSize();
+                            long downloaded = ApplicationLoader.applicationLoaderInstance.getDownloadBytesDownloaded();
+                            String text;
+                            if (total > 0) {
+                                String d = android.text.format.Formatter.formatShortFileSize(LaunchActivity.this, downloaded);
+                                String t = android.text.format.Formatter.formatShortFileSize(LaunchActivity.this, total);
+                                text = "Downloading update... " + d + " / " + t;
+                            } else {
+                                text = "Downloading update... " + (int)(prog * 100) + "%";
+                            }
+                            ((Bulletin.LottieLayout) progBulletin[0].getLayout()).textView.setText(text);
+                        } catch (Throwable ignored) {}
+                    }
                     AndroidUtilities.runOnUIThread(this, 500);
                 }
             }

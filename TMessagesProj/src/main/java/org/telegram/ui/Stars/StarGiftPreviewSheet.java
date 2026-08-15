@@ -192,7 +192,7 @@ public class StarGiftPreviewSheet extends BottomSheetWithRecyclerListView {
             glassSourceRenderNode = new BlurredBackgroundSourceRenderNode(glassSourceFallback);
             glassSourceRenderNode.setOnDrawablesRelativePositionChangeListener(this::invalidateMergedVisibleBlurredPositionsAndSourcesPositions);
             glassFactory = new BlurredBackgroundDrawableViewFactory(glassSourceRenderNode);
-            glassFactory.setLiquidGlassEffectAllowed(LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS));
+            glassFactory.setLiquidGlassEffectAllowed(true);
         } else {
             scrollableViewNoiseSuppressor = null;
             glassSourceRenderNode = null;

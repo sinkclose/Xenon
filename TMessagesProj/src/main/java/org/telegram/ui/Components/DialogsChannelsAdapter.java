@@ -52,6 +52,7 @@ public class DialogsChannelsAdapter extends UniversalAdapter {
 
     public DialogsChannelsAdapter(RecyclerListView listView, Context context, int currentAccount, int folderId, Theme.ResourcesProvider resourcesProvider) {
         super(listView, context, currentAccount, 0, null, resourcesProvider);
+        setApplyBackground(false);
         super.fillItems = this::fillItems;
         this.context = context;
         this.currentAccount = currentAccount;

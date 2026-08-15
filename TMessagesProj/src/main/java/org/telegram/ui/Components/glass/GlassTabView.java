@@ -52,7 +52,8 @@ import org.telegram.ui.MainTabsLayout;
 import me.vkryl.android.AnimatorUtils;
 import me.vkryl.android.animator.BoolAnimator;
 import me.vkryl.android.animator.FactorAnimator;
-import zxc.iconic.xenon.helpers.NonIslandHelper;
+import zxc.iconic.xenon.helpers.MainTabsUiHelper;
+import zxc.iconic.xenon.helpers.MainTabsUiHelper;
 
 public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, FactorAnimator.Target {
     private final TextView textView;
@@ -66,14 +67,17 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
     private static final int ANIMATOR_ID_IS_SELECTED = 0;
     private static final int ANIMATOR_ID_COUNTER_VISIBLE = 1;
     private static final int ANIMATOR_ID_COUNTER_ERROR = 2;
+    private static final int ANIMATOR_ID_SELECTED_INDICATOR_ALPHA = 3;
 
     private final BoolAnimator isSelectedAnimator = new BoolAnimator(ANIMATOR_ID_IS_SELECTED, this, AnimatorUtils.DECELERATE_INTERPOLATOR, 320);
+    private final BoolAnimator selectedIndicatorAlphaAnimator = new BoolAnimator(ANIMATOR_ID_SELECTED_INDICATOR_ALPHA, this, AnimatorUtils.DECELERATE_INTERPOLATOR, 0);
     private final BoolAnimator isHasCounterAnimator = new BoolAnimator(ANIMATOR_ID_COUNTER_VISIBLE, this, CubicBezierInterpolator.EASE_OUT_QUINT, 380);
     private final BoolAnimator isHasCounterErrorAnimator = new BoolAnimator(ANIMATOR_ID_COUNTER_ERROR, this, CubicBezierInterpolator.EASE_OUT_QUINT, 380);
     private int colorSelected;
     private int colorSelectedText;
     private int colorDefault;
     private boolean usePremiumCounter;
+    private boolean useMainTabSelectedIndicator;
 
     private TabAnimation tabAnimation;
     private TLRPC.TL_attachMenuBot tabAnimationBot;
@@ -96,18 +100,8 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
 
         defaultTextPaint = new TextPaint(textView.getPaint());
 
-        if (zxc.iconic.xenon.helpers.NonIslandHelper.bottomBar()) {
-            // The non-island bar is DialogsActivity.MAIN_TABS_MARGIN (8dp) taller on each
-            // side than the island one (no inner padding is applied to MainTabsLayout here),
-            // so the icon+text block needs the same +8dp offset on both children to stay
-            // vertically centered instead of only shifting the icon and leaving the text
-            // pinned to its old (island) position, which used to look bottom-heavy/off-center.
-            addView(imageView, LayoutHelper.createFrame(44, 44, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 2, 0, 0));
-            addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 36.33f, 0, 0));
-        } else {
-            addView(imageView, LayoutHelper.createFrame(44, 44, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, -6, 0, 0));
-            addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 28.33f, 0, 0));
-        }
+        addView(imageView, LayoutHelper.createFrame(44, 44, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, -6, 0, 0));
+        addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 28.33f, 0, 0));
 
         counter = new AnimatedTextView.AnimatedTextDrawable();
         counter.setTypeface(AndroidUtilities.bold());
@@ -165,15 +159,25 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
     protected void dispatchDraw(@NonNull Canvas canvas) {
         final float viewWidth = hasVisualWidth ? visualWidth : getWidth();
         final float selectedFactor = hasGestureSelectedOverride ? gestureSelectedOverride : isSelectedAnimator.getFloatValue();
-        if (selectedFactor > 0 && !skipDrawSelector && !zxc.iconic.xenon.helpers.NonIslandHelper.bottomBar()) {
-            final float alpha = AnimatorUtils.DECELERATE_INTERPOLATOR.getInterpolation(selectedFactor);
-
-            paintCounterBackground.setColor(Theme.multAlpha(colorSelected, 0.09f * alpha));
-            tmpRectF.set(0, 0, viewWidth, getHeight());
+        if (selectedFactor > 0 && !skipDrawSelector) {
+            final float alpha;
+            if (useMainTabSelectedIndicator) {
+                alpha = selectedIndicatorAlphaAnimator.getFloatValue();
+            } else {
+                alpha = AnimatorUtils.DECELERATE_INTERPOLATOR.getInterpolation(selectedFactor);
+            }
+            if (useMainTabSelectedIndicator) {
+                MainTabsUiHelper.applyTabSelectedIndicatorColor(paintCounterBackground, colorSelected, alpha);
+                MainTabsUiHelper.setTabSelectedIndicatorBounds(tmpRectF, viewWidth, getHeight());
+            } else {
+                paintCounterBackground.setColor(Theme.multAlpha(colorSelected, 0.09f * alpha));
+                tmpRectF.set(0, 0, viewWidth, getHeight());
+            }
             final float r = Math.min(tmpRectF.width(), tmpRectF.height()) / 2f;
-            final float s = lerp(0.6f, 1, selectedFactor) * MathUtils.clamp(attachScale, 0, 1);
+            final float selectedBackgroundScaleX = MainTabsUiHelper.getSelectedBackgroundScaleX(useMainTabSelectedIndicator, selectedFactor) * MathUtils.clamp(attachScale, 0, 1);
+            final float selectedBackgroundScaleY = MainTabsUiHelper.getSelectedBackgroundScaleY(useMainTabSelectedIndicator, selectedFactor) * MathUtils.clamp(attachScale, 0, 1);
             canvas.save();
-            canvas.scale(s, s, tmpRectF.centerX(), tmpRectF.centerY());
+            canvas.scale(selectedBackgroundScaleX, selectedBackgroundScaleY, tmpRectF.centerX(), tmpRectF.centerY());
             canvas.drawRoundRect(tmpRectF, r, r, paintCounterBackground);
             canvas.restore();
         }
@@ -191,7 +195,7 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
 
             final float gap = dpf2(1.33f);
             final float cx = viewWidth / 2f + dpf2(11);
-            final float cy = dpf2(10);
+            final float cy = MainTabsUiHelper.getMainTabCounterCenterY(useMainTabSelectedIndicator);
             final float height = dpf2(16);
             final float width = Math.max(height, counter.getCurrentWidth() + dp(8));
             final float rOuter = dpf2(9.333f);
@@ -245,10 +249,18 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
     }
 
     public void setSelected(boolean selected, boolean animated) {
-        isSelectedAnimator.setValue(selected, animated && !zxc.iconic.xenon.helpers.NonIslandHelper.bottomBar());
+        if (useMainTabSelectedIndicator) {
+            MainTabsUiHelper.setMaterial3MainTabSelectedV2(isSelectedAnimator, selectedIndicatorAlphaAnimator, selected, animated);
+        } else {
+            isSelectedAnimator.setValue(selected, animated);
+        }
         checkPlayAnimation(animated);
 
-        textView.setTypeface(selected ? AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_EXTRA_BOLD) : AndroidUtilities.bold());
+        if (useMainTabSelectedIndicator || !selected) {
+            textView.setTypeface(AndroidUtilities.bold());
+        } else {
+            textView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_EXTRA_BOLD));
+        }
     }
 
     public boolean isTabSelected() {
@@ -444,6 +456,17 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
         tab.colorSelectedText = Theme.getColor(Theme.key_glass_tabSelectedText, resourcesProvider);
         tab.updateColors();
         return tab;
+    }
+
+    public void setMainTabStyle() {
+        if (MainTabsUiHelper.isMaterial3NavigationBar()) {
+            useMainTabSelectedIndicator = true;
+            imageView.setLayoutParams(LayoutHelper.createFrame(24, 24, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, MainTabsUiHelper.getMaterial3MainTabIconTopDp(), 0, 0));
+            if (backupImageView != null) {
+                backupImageView.setLayoutParams(LayoutHelper.createFrame(22, 22, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, MainTabsUiHelper.getMaterial3MainTabAvatarTopDp(), 0, 0));
+            }
+            MainTabsUiHelper.applyMaterial3MainTabStyle(textView);
+        }
     }
 
     public void updateUserAvatar(int currentAccount) {

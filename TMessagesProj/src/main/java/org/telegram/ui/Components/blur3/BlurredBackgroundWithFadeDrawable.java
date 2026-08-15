@@ -50,6 +50,35 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable {
 
     private int fadeHeight;
     private boolean opacity;
+    private boolean opaqueFade;
+    private int dimAlpha = 0;
+    private int dimColor = Color.BLACK;
+    private int dimFadeZoneTop = -1;
+    private final Paint dimGradientPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private Shader dimGradientShader;
+    private int dimGradientLast = -1;
+
+    public void setDimFadeZoneTop(int height) {
+        this.dimFadeZoneTop = height;
+    }
+
+    public void setDimColor(int color) {
+        if (this.dimColor != color) {
+            this.dimColor = color;
+            dimGradientShader = null;
+        }
+    }
+
+    public void setOpaqueFade(boolean opaqueFade) {
+        if (this.opaqueFade != opaqueFade) {
+            this.opaqueFade = opaqueFade;
+            setFadeHeight(fadeHeight, opacity);
+        }
+    }
+
+    public void setDimAlpha(int alpha) {
+        this.dimAlpha = Math.max(0, Math.min(255, alpha));
+    }
 
     public BlurredBackgroundWithFadeDrawable(BlurredBackgroundDrawable drawable) {
         this.drawable = drawable;
@@ -59,14 +88,11 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable {
     }
 
     public void setFadeHeight(int fadeHeight, boolean opacity) {
-        if (this.fadeHeight == fadeHeight && this.opacity == opacity) {
-            return;
-        }
-
         this.fadeHeight = fadeHeight;
         this.opacity = opacity;
-        maskFadeGradientPaint.setShader(shader = createGradient(Color.BLACK, opacity));
+        maskFadeGradientPaint.setShader(shader = opaqueFade ? createGradientOpaque(Color.BLACK) : createGradient(Color.BLACK, opacity));
         colorStaticPaint.setShader(null);
+        dimGradientShader = null;
 
         matrix.reset();
         matrix.setScale(1, fadeHeight);
@@ -184,6 +210,18 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable {
         canvas.translate(bounds.left, bounds.top + offset);
         canvas.drawRect(0, - offset, bounds.width(), bounds.height() - offset, maskFadeGradientPaint);
         canvas.restoreToCount(save);
+        if (dimAlpha > 0) {
+            final int color = ColorUtils.setAlphaComponent(dimColor, dimAlpha);
+            if (dimGradientShader == null || dimGradientLast != color) {
+                dimGradientLast = color;
+                dimGradientShader = opaqueFade ? createGradientOpaque(color) : createGradient(color, opacity);
+                dimGradientPaint.setShader(dimGradientShader);
+            }
+            matrixTmp.set(matrix);
+            matrixTmp.postTranslate(bounds.left, dimFadeZoneTop > 0 ? dimFadeZoneTop + fadeHeight : bounds.top + offset);
+            dimGradientShader.setLocalMatrix(matrixTmp);
+            canvas.drawRect(bounds, dimGradientPaint);
+        }
     }
 
     private int alpha = 255;
@@ -227,6 +265,17 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable {
             ColorUtils.setAlphaComponent(color, 0xE8 * alpha / 255),
             ColorUtils.setAlphaComponent(color, 0xFF * alpha / 255),
         }, null, Shader.TileMode.CLAMP);
+    }
+
+    private static LinearGradient createGradientOpaque(int color) {
+        final int alpha = Color.alpha(color);
+        return new LinearGradient(0, 0, 0, 1, new int[]{
+            ColorUtils.setAlphaComponent(color, 0),
+            ColorUtils.setAlphaComponent(color, 0x60 * alpha / 255),
+            ColorUtils.setAlphaComponent(color, 0xB0 * alpha / 255),
+            ColorUtils.setAlphaComponent(color, 0xFF * alpha / 255),
+            ColorUtils.setAlphaComponent(color, 0xFF * alpha / 255),
+        }, new float[]{0f, 0.25f, 0.5f, 0.65f, 1f}, Shader.TileMode.CLAMP);
     }
 
 

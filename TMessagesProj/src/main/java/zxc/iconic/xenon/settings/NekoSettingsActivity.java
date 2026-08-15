@@ -90,6 +90,7 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
     private final int channelRow = rowId++;
     private final int sourceCodeRow = rowId++;
 
+    private final int commitRow = rowId++;
     private final int sponsorRow = 100;
 
     private ActionBarMenuItem syncItem;
@@ -173,6 +174,11 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
     }
 
     @Override
+    protected boolean progressiveBlurEnabled() {
+        return false;
+    }
+
+    @Override
     protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
         if (isSearchFieldVisible()) {
             items.add(UItem.asSpace(ActionBar.getCurrentActionBarHeight()));
@@ -213,6 +219,7 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
             }
             items.add(UItem.asShadow(null));
         }
+        items.add(TextDetailSettingsCellFactory.of(commitRow, "Build commit", BuildConfig.GIT_COMMIT_SHORT));
     }
 
     @Override
@@ -314,20 +321,22 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
                             @Override
                             public void run() {
                                 if (impl.isDownloadingUpdate() && progBulletin[0] != null) {
-                                    try {
-                                        float prog = impl.getDownloadingUpdateProgress();
-                                        long total = impl.getDownloadTotalSize();
-                                        long downloaded = impl.getDownloadBytesDownloaded();
-                                        String text;
-                                        if (total > 0) {
-                                            String d = android.text.format.Formatter.formatShortFileSize(activity, downloaded);
-                                            String t = android.text.format.Formatter.formatShortFileSize(activity, total);
-                                            text = LocaleController.getString(R.string.DownloadingUpdate) + NekoConfig.getChannelLabel() + " " + d + " / " + t;
-                                        } else {
-                                            text = LocaleController.getString(R.string.DownloadingUpdate) + NekoConfig.getChannelLabel() + " " + (int)(prog * 100) + "%";
-                                        }
-                                        ((Bulletin.LottieLayout) progBulletin[0].getLayout()).textView.setText(text);
-                                    } catch (Throwable ignored) {}
+                                    if (!impl.isRetryingUpdate()) {
+                                        try {
+                                            float prog = impl.getDownloadingUpdateProgress();
+                                            long total = impl.getDownloadTotalSize();
+                                            long downloaded = impl.getDownloadBytesDownloaded();
+                                            String text;
+                                            if (total > 0) {
+                                                String d = android.text.format.Formatter.formatShortFileSize(activity, downloaded);
+                                                String t = android.text.format.Formatter.formatShortFileSize(activity, total);
+                                                text = LocaleController.getString(R.string.DownloadingUpdate) + NekoConfig.getChannelLabel() + " " + d + " / " + t;
+                                            } else {
+                                                text = LocaleController.getString(R.string.DownloadingUpdate) + NekoConfig.getChannelLabel() + " " + (int)(prog * 100) + "%";
+                                            }
+                                            ((Bulletin.LottieLayout) progBulletin[0].getLayout()).textView.setText(text);
+                                        } catch (Throwable ignored) {}
+                                    }
                                     AndroidUtilities.runOnUIThread(this, 500);
                                 }
                             }
@@ -383,20 +392,22 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
                                     @Override
                                     public void run() {
                                         if (impl.isDownloadingUpdate() && progBulletin[0] != null) {
-                                            try {
-                                                float prog = impl.getDownloadingUpdateProgress();
-                                                long total = impl.getDownloadTotalSize();
-                                                long downloaded = impl.getDownloadBytesDownloaded();
-                                                String text;
-                                                if (total > 0) {
-                                                    String d = android.text.format.Formatter.formatShortFileSize(activity, downloaded);
-                                                    String t = android.text.format.Formatter.formatShortFileSize(activity, total);
-                                                    text = LocaleController.getString(R.string.DownloadingUpdate) + NekoConfig.getChannelLabel() + " " + d + " / " + t;
-                                                } else {
-                                                    text = LocaleController.getString(R.string.DownloadingUpdate) + NekoConfig.getChannelLabel() + " " + (int)(prog * 100) + "%";
-                                                }
-                                                ((Bulletin.LottieLayout) progBulletin[0].getLayout()).textView.setText(text);
-                                            } catch (Throwable ignored) {}
+                                            if (!impl.isRetryingUpdate()) {
+                                                try {
+                                                    float prog = impl.getDownloadingUpdateProgress();
+                                                    long total = impl.getDownloadTotalSize();
+                                                    long downloaded = impl.getDownloadBytesDownloaded();
+                                                    String text;
+                                                    if (total > 0) {
+                                                        String d = android.text.format.Formatter.formatShortFileSize(activity, downloaded);
+                                                        String t = android.text.format.Formatter.formatShortFileSize(activity, total);
+                                                        text = LocaleController.getString(R.string.DownloadingUpdate) + NekoConfig.getChannelLabel() + " " + d + " / " + t;
+                                                    } else {
+                                                        text = LocaleController.getString(R.string.DownloadingUpdate) + NekoConfig.getChannelLabel() + " " + (int)(prog * 100) + "%";
+                                                    }
+                                                    ((Bulletin.LottieLayout) progBulletin[0].getLayout()).textView.setText(text);
+                                                } catch (Throwable ignored) {}
+                                            }
                                             AndroidUtilities.runOnUIThread(this, 500);
                                         }
                                     }
@@ -618,20 +629,22 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
             @Override
             public void run() {
                 if (impl.isDownloadingUpdate() && progBulletin[0] != null) {
-                    try {
-                        float prog = impl.getDownloadingUpdateProgress();
-                        long total = impl.getDownloadTotalSize();
-                        long downloaded = impl.getDownloadBytesDownloaded();
-                        String text;
-                        if (total > 0) {
-                            String d = android.text.format.Formatter.formatShortFileSize(activity, downloaded);
-                            String t = android.text.format.Formatter.formatShortFileSize(activity, total);
-                            text = LocaleController.getString(R.string.DownloadingUpdate) + NekoConfig.getChannelLabel() + " " + d + " / " + t;
-                        } else {
-                            text = LocaleController.getString(R.string.DownloadingUpdate) + NekoConfig.getChannelLabel() + " " + (int)(prog * 100) + "%";
-                        }
-                        ((Bulletin.LottieLayout) progBulletin[0].getLayout()).textView.setText(text);
-                    } catch (Throwable ignored) {}
+                    if (!impl.isRetryingUpdate()) {
+                        try {
+                            float prog = impl.getDownloadingUpdateProgress();
+                            long total = impl.getDownloadTotalSize();
+                            long downloaded = impl.getDownloadBytesDownloaded();
+                            String text;
+                            if (total > 0) {
+                                String d = android.text.format.Formatter.formatShortFileSize(activity, downloaded);
+                                String t = android.text.format.Formatter.formatShortFileSize(activity, total);
+                                text = LocaleController.getString(R.string.DownloadingUpdate) + NekoConfig.getChannelLabel() + " " + d + " / " + t;
+                            } else {
+                                text = LocaleController.getString(R.string.DownloadingUpdate) + NekoConfig.getChannelLabel() + " " + (int)(prog * 100) + "%";
+                            }
+                            ((Bulletin.LottieLayout) progBulletin[0].getLayout()).textView.setText(text);
+                        } catch (Throwable ignored) {}
+                    }
                     AndroidUtilities.runOnUIThread(this, 500);
                 } else if (progBulletin[0] != null) {
                     try { progBulletin[0].hide(); } catch (Throwable ignored) {}

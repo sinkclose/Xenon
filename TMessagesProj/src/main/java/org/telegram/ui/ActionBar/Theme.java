@@ -7865,16 +7865,20 @@ public class Theme {
 
     public static File getAssetFile(String assetName) {
         File file = new File(ApplicationLoader.getFilesDirFixed(), assetName);
-        long size;
-        try {
-            InputStream stream = ApplicationLoader.applicationContext.getAssets().open(assetName);
-            size = stream.available();
-            stream.close();
-        } catch (Exception e) {
-            size = 0;
-            FileLog.e(e);
+        boolean needCopy = !file.exists();
+        if (!needCopy) {
+            try (InputStream stream = ApplicationLoader.applicationContext.getAssets().open(assetName)) {
+                String assetHash = computeMd5(stream);
+                try (InputStream cached = new FileInputStream(file)) {
+                    needCopy = !assetHash.equals(computeMd5(cached));
+                } catch (Exception e) {
+                    needCopy = true;
+                }
+            } catch (Exception e) {
+                FileLog.e(e);
+            }
         }
-        if (!file.exists() || size != 0 && file.length() != size) {
+        if (needCopy) {
             try (InputStream in = ApplicationLoader.applicationContext.getAssets().open(assetName)) {
                 AndroidUtilities.copyFile(in, file);
             } catch (Exception e) {
@@ -7882,6 +7886,21 @@ public class Theme {
             }
         }
         return file;
+    }
+
+    private static String computeMd5(InputStream input) throws Exception {
+        java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
+        byte[] buffer = new byte[8192];
+        int read;
+        while ((read = input.read(buffer)) > 0) {
+            md.update(buffer, 0, read);
+        }
+        byte[] array = md.digest();
+        StringBuilder sb = new StringBuilder();
+        for (byte a : array) {
+            sb.append(Integer.toHexString((a & 0xFF) | 0x100).substring(1, 3));
+        }
+        return sb.toString();
     }
 
     public static int getPreviewColor(SparseIntArray colors, int key) {

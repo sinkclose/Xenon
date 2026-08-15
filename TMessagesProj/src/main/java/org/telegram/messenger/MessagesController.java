@@ -6729,7 +6729,7 @@ private boolean hasImportantUnread(TLRPC.Dialog dialog) {
     }
 
     public boolean isChatNoForwards(TLRPC.Chat chat) {
-        if (NekoConfig.shouldNOTTrustMe) {
+        if (false) {
             return false;
         }
         if (chat == null) {

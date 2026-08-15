@@ -18,7 +18,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
-import java.net.URL;
 
 import zxc.iconic.xenon.Extra;
 import zxc.iconic.xenon.helpers.ApkInstaller;
@@ -35,12 +34,17 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
 
     private static final String TAG = "ApplicationLoaderImpl";
     private static final String APK_DIR = "updates";
+    private static final int MAX_DOWNLOAD_RETRIES = 5;
+    private static final long RETRY_DELAY_MS = 10_000L;
+    private static final String DOWNLOAD_CANCELLED = "cancelled";
 
     private volatile BetaUpdate pendingUpdate;
     private volatile GitHubUpdateHelper.GitHubRelease pendingRelease;
     private volatile String pendingApkUrl;
     private volatile String pendingTitle;
     private volatile boolean downloading;
+    private volatile boolean retryingUpdate;
+    private volatile Bulletin downloadBulletin;
     private volatile float downloadProgress;
     private volatile long downloadTotalSize;
     private volatile long downloadBytesDownloaded;
@@ -180,90 +184,160 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
         downloadedApkFile = null;
 
         new Thread(() -> {
-            HttpURLConnection connection = null;
-            InputStream is = null;
-            FileOutputStream fos = null;
-            File tempFile = null;
-            boolean cleanupPartial = false;
-            try {
-                File dir = new File(applicationContext.getCacheDir(), APK_DIR);
-                if (!dir.exists()) dir.mkdirs();
-                tempFile = new File(dir, "xenon_update.apk");
-                if (tempFile.exists()) tempFile.delete();
-
-                URL url = new URL(apkUrl);
-                connection = (HttpURLConnection) url.openConnection();
-                connection.setInstanceFollowRedirects(true);
-                connection.setConnectTimeout(30000);
-                connection.setReadTimeout(60000);
-                connection.connect();
-
-                int code = connection.getResponseCode();
-                if (code != 200) {
-                    throw new Exception("Download HTTP " + code);
-                }
-
-                long totalSize = connection.getContentLength();
-                downloadTotalSize = totalSize;
-                is = connection.getInputStream();
-                fos = new FileOutputStream(tempFile);
-
-                byte[] buffer = new byte[8192];
-                long downloaded = 0;
-                int read;
-                while ((read = is.read(buffer)) != -1) {
-                    if (!downloading) {
-                        cleanupPartial = true;
-                        return;
-                    }
-                    fos.write(buffer, 0, read);
-                    downloaded += read;
-                    downloadBytesDownloaded = downloaded;
-                    if (totalSize > 0) {
-                        downloadProgress = (float) downloaded / totalSize;
-                    }
-                }
-                fos.flush();
-
-                downloadedApkFile = tempFile;
-                downloading = false;
-                downloadProgress = 1f;
-                if (pendingRelease != null && !TextUtils.isEmpty(pendingRelease.tagName)) {
-                    File tagFile = new File(tempFile.getParent(), tempFile.getName() + ".tag");
-                    try (java.io.FileWriter w = new java.io.FileWriter(tagFile)) {
-                        w.write(pendingRelease.tagName);
-                    } catch (Throwable ignored) {}
-                }
+            String error = downloadOnce(apkUrl);
+            if (error == null) {
                 if (onComplete != null) {
                     AndroidUtilities.runOnUIThread(onComplete);
                 }
-            } catch (Throwable e) {
-                FileLog.e(TAG + ": download failed", e);
-                downloading = false;
-                downloadProgress = 0f;
-                cleanupPartial = true;
-                AndroidUtilities.runOnUIThread(() -> {
-                    try {
-                        Toast.makeText(applicationContext,
-                                "Download failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
-                    } catch (Throwable ignored) {}
-                });
-            } finally {
-                try { if (fos != null) fos.close(); } catch (Throwable ignored) {}
-                try { if (is != null) is.close(); } catch (Throwable ignored) {}
-                if (connection != null) connection.disconnect();
-                if (cleanupPartial && tempFile != null && tempFile.exists()) {
-                    if (!tempFile.delete()) {
-                        FileLog.e(TAG + ": failed to delete partial APK at " + tempFile);
+                return;
+            }
+            if (DOWNLOAD_CANCELLED.equals(error) || !downloading) {
+                return;
+            }
+            for (int retry = 1; retry <= MAX_DOWNLOAD_RETRIES; retry++) {
+                if (!downloading) {
+                    return;
+                }
+                final int attempt = retry;
+                retryingUpdate = true;
+                AndroidUtilities.runOnUIThread(() -> updateRetryBulletin(attempt));
+                try {
+                    Thread.sleep(RETRY_DELAY_MS);
+                } catch (InterruptedException e) {
+                    retryingUpdate = false;
+                    return;
+                }
+                if (!downloading) {
+                    retryingUpdate = false;
+                    return;
+                }
+                error = downloadOnce(apkUrl);
+                if (error == null) {
+                    if (onComplete != null) {
+                        AndroidUtilities.runOnUIThread(onComplete);
                     }
+                    return;
+                }
+                if (DOWNLOAD_CANCELLED.equals(error)) {
+                    retryingUpdate = false;
+                    return;
                 }
             }
+            retryingUpdate = false;
+            downloading = false;
+            downloadProgress = 0f;
+            final String finalError = error;
+            AndroidUtilities.runOnUIThread(() -> showDownloadFailed(finalError));
         }, "XenonUpdateDownload").start();
+    }
+
+    private void updateRetryBulletin(int attempt) {
+        try {
+            Bulletin b = Bulletin.getVisibleBulletin();
+            if (b == null || !(b.getLayout() instanceof Bulletin.LottieLayout)) {
+                b = downloadBulletin;
+            }
+            if (b == null || !(b.getLayout() instanceof Bulletin.LottieLayout)) {
+                b = BulletinFactory.global()
+                        .createSimpleBulletin(R.raw.ic_download,
+                                "Downloading update (" + attempt + "/" + MAX_DOWNLOAD_RETRIES + ")")
+                        .show();
+                downloadBulletin = b;
+            }
+            if (b.getLayout() instanceof Bulletin.LottieLayout) {
+                ((Bulletin.LottieLayout) b.getLayout()).textView.setText(
+                        "Downloading update (" + attempt + "/" + MAX_DOWNLOAD_RETRIES + ")");
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    private void showDownloadFailed(String error) {
+        try {
+            Toast.makeText(applicationContext,
+                    "Download failed: " + error, Toast.LENGTH_LONG).show();
+        } catch (Throwable ignored) {}
+    }
+
+    private String downloadOnce(String apkUrl) {
+        HttpURLConnection connection = null;
+        InputStream is = null;
+        FileOutputStream fos = null;
+        File tempFile = null;
+        boolean cleanupPartial = false;
+        try {
+            File dir = new File(applicationContext.getCacheDir(), APK_DIR);
+            if (!dir.exists()) dir.mkdirs();
+            tempFile = new File(dir, "xenon_update.apk");
+            if (tempFile.exists()) tempFile.delete();
+
+            connection = GitHubUpdateHelper.openConnection(apkUrl);
+            connection.setInstanceFollowRedirects(true);
+            connection.setConnectTimeout(30000);
+            connection.setReadTimeout(60000);
+            connection.connect();
+
+            int code = connection.getResponseCode();
+            if (code != 200) {
+                throw new Exception("Download HTTP " + code);
+            }
+
+            long totalSize = connection.getContentLength();
+            downloadTotalSize = totalSize;
+            is = connection.getInputStream();
+            fos = new FileOutputStream(tempFile);
+
+            byte[] buffer = new byte[8192];
+            long downloaded = 0;
+            int read;
+            while ((read = is.read(buffer)) != -1) {
+                if (!downloading) {
+                    cleanupPartial = true;
+                    return DOWNLOAD_CANCELLED;
+                }
+                fos.write(buffer, 0, read);
+                downloaded += read;
+                downloadBytesDownloaded = downloaded;
+                if (downloaded > 0) {
+                    retryingUpdate = false;
+                }
+                if (totalSize > 0) {
+                    downloadProgress = (float) downloaded / totalSize;
+                }
+            }
+            fos.flush();
+
+            downloadedApkFile = tempFile;
+            downloading = false;
+            downloadProgress = 1f;
+            if (pendingRelease != null && !TextUtils.isEmpty(pendingRelease.tagName)) {
+                File tagFile = new File(tempFile.getParent(), tempFile.getName() + ".tag");
+                try (java.io.FileWriter w = new java.io.FileWriter(tagFile)) {
+                    w.write(pendingRelease.tagName);
+                } catch (Throwable ignored) {}
+            }
+            return null;
+        } catch (Throwable e) {
+            FileLog.e(TAG + ": download failed", e);
+            downloadProgress = 0f;
+            cleanupPartial = true;
+            return e.getMessage() != null ? e.getMessage() : "Unknown error";
+        } finally {
+            try { if (fos != null) fos.close(); } catch (Throwable ignored) {}
+            try { if (is != null) is.close(); } catch (Throwable ignored) {}
+            if (connection != null) connection.disconnect();
+            if (cleanupPartial && tempFile != null && tempFile.exists()) {
+                if (!tempFile.delete()) {
+                    FileLog.e(TAG + ": failed to delete partial APK at " + tempFile);
+                }
+            }
+        }
     }
 
     @Override
     public void cancelDownloadingUpdate() {
         downloading = false;
+        retryingUpdate = false;
+        downloadBulletin = null;
         downloadProgress = 0f;
         // If a fully-downloaded APK was already produced (download finished
         // before the user pressed cancel), delete it too — leaving the file
@@ -279,6 +353,11 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
     @Override
     public boolean isDownloadingUpdate() {
         return downloading;
+    }
+
+    @Override
+    public boolean isRetryingUpdate() {
+        return retryingUpdate;
     }
 
     @Override
@@ -388,20 +467,22 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
                     @Override
                     public void run() {
                         if (isDownloadingUpdate() && progBulletin[0] != null) {
-                            try {
-                                float prog = getDownloadingUpdateProgress();
-                                long total = getDownloadTotalSize();
-                                long downloaded = getDownloadBytesDownloaded();
-                                String text;
-                                if (total > 0) {
-                                    String d = android.text.format.Formatter.formatShortFileSize(applicationContext, downloaded);
-                                    String t = android.text.format.Formatter.formatShortFileSize(applicationContext, total);
-                                    text = "Downloading update... " + d + " / " + t;
-                                } else {
-                                    text = "Downloading update... " + (int)(prog * 100) + "%";
-                                }
-                                ((Bulletin.LottieLayout) progBulletin[0].getLayout()).textView.setText(text);
-                            } catch (Throwable ignored) {}
+                            if (!isRetryingUpdate()) {
+                                try {
+                                    float prog = getDownloadingUpdateProgress();
+                                    long total = getDownloadTotalSize();
+                                    long downloaded = getDownloadBytesDownloaded();
+                                    String text;
+                                    if (total > 0) {
+                                        String d = android.text.format.Formatter.formatShortFileSize(applicationContext, downloaded);
+                                        String t = android.text.format.Formatter.formatShortFileSize(applicationContext, total);
+                                        text = "Downloading update... " + d + " / " + t;
+                                    } else {
+                                        text = "Downloading update... " + (int)(prog * 100) + "%";
+                                    }
+                                    ((Bulletin.LottieLayout) progBulletin[0].getLayout()).textView.setText(text);
+                                } catch (Throwable ignored) {}
+                            }
                             AndroidUtilities.runOnUIThread(this, 500);
                         }
                     }

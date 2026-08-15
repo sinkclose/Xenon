@@ -66,7 +66,7 @@ public class InfiniteProgress {
         int count = (int) (radOffset / 360);
         radOffset -= count * 360;
 
-        wavePhaseAngle += (dt * NekoConfig.wavySpeed) / 1000f;
+        wavePhaseAngle += (dt * 50.0f) / 1000f;
         wavePhaseAngle %= 360f;
         wavyAmplitudeSmooth += (1f - wavyAmplitudeSmooth) * Math.min(1f, dt / 80f);
 
@@ -90,6 +90,14 @@ public class InfiniteProgress {
     }
 
     public void draw(Canvas canvas, float cx, float cy, float scale) {
+        if (!NekoConfig.wavyEnabled) {
+            cicleRect.set(cx - radius * scale, cy - radius * scale, cx + radius * scale, cy + radius * scale);
+            cicleRect.inset(AndroidUtilities.dp(1f), AndroidUtilities.dp(1f));
+            progressPaint.setStrokeWidth(AndroidUtilities.dp(2) * scale);
+            canvas.drawArc(cicleRect, radOffset, currentCircleLength, false, progressPaint);
+            updateAnimation();
+            return;
+        }
         cicleRect.set(cx - radius * scale, cy - radius * scale, cx + radius * scale, cy + radius * scale);
         progressPaint.setStrokeWidth(AndroidUtilities.dp(2) * scale);
         float inset = AndroidUtilities.dp(1f);
@@ -115,7 +123,7 @@ public class InfiniteProgress {
     }
 
     private void drawWavyArc(Canvas canvas, RectF oval, float startAngle, float sweepAngle, Paint paint) {
-        if (!oval.equals(wavyLastOval) || wavyLastGeneration != NekoConfig.wavyGeneration || wavyLastAmplitudeSmooth != wavyAmplitudeSmooth) {
+        if (!oval.equals(wavyLastOval) || wavyLastGeneration != 0 || wavyLastAmplitudeSmooth != wavyAmplitudeSmooth) {
             wavyLastOval.set(oval);
             wavyProgressPath.rewind();
 
@@ -123,8 +131,8 @@ public class InfiniteProgress {
             float cy = oval.centerY();
             float baseRadius = Math.min(oval.width(), oval.height()) / 2f;
 
-            float amplitude = baseRadius * NekoConfig.wavyAmplitudeFactor * wavyAmplitudeSmooth;
-            int waves = NekoConfig.wavyWaves;
+            float amplitude = baseRadius * 0.05f * wavyAmplitudeSmooth;
+            int waves = 11;
             int steps = 180;
 
             for (int i = 0; i <= steps; i++) {
@@ -142,7 +150,7 @@ public class InfiniteProgress {
             }
             wavyProgressPath.close();
             wavyProgressPathMeasure.setPath(wavyProgressPath, false);
-            wavyLastGeneration = NekoConfig.wavyGeneration;
+            wavyLastGeneration = 0;
             wavyLastAmplitudeSmooth = wavyAmplitudeSmooth;
         }
 

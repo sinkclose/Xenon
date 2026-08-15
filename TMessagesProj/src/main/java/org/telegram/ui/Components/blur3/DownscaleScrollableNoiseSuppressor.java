@@ -414,23 +414,23 @@ public class DownscaleScrollableNoiseSuppressor {
                     // artifact and the per-pixel texture-read explosion from multi-tap shader sampling.
                     // No saturation boost: the shader receives the real scene, not a frosted matte.
                     renderNodesForGlass.setScale(2, 2);
-                    renderNodesForGlass.setPrimaryEffectBlur(dpf2(Math.max(1f, zxc.iconic.xenon.NekoConfig.advancedGlassBlur)));
+                    renderNodesForGlass.setPrimaryEffectBlur(dpf2(Math.max(1f, zxc.iconic.xenon.NekoConfig.blurStrength / 7.5f)));
                 } else {
                     renderNodesForGlass.setScale(2, 2);
-                    renderNodesForGlass.setPrimaryEffectBlur(dpf2(4f), RenderNodeEffects.getSaturationX1_25RenderEffect());
+                    renderNodesForGlass.setPrimaryEffectBlur(dpf2(zxc.iconic.xenon.NekoConfig.blurStrength / 7.5f), RenderNodeEffects.getSaturationX1_25RenderEffect());
                 }
                 renderNodesForBlur = new DownscaledRenderNode("blur", 0);
                 renderNodesForBlur.setScale(8, 8);
-                renderNodesForBlur.setPrimaryEffectBlur(dpf2(40 - 1.66f));
+                renderNodesForBlur.setPrimaryEffectBlur(dpf2(zxc.iconic.xenon.NekoConfig.blurStrength * 4f / 3f));
             } else if (simpleMode) {
                 renderNodesForBlur = new DownscaledRenderNode("blur", 0);
                 renderNodesForBlur.setScale(allowNoiseSuppress ? 16 : 8, allowNoiseSuppress ? 16 : 8);
-                renderNodesForBlur.setPrimaryEffectBlur(dpf2(40), RenderNodeEffects.getSaturationX3RenderEffect());
+                renderNodesForBlur.setPrimaryEffectBlur(dpf2(zxc.iconic.xenon.NekoConfig.blurStrength * 4f / 3f), RenderNodeEffects.getSaturationX3RenderEffect());
                 renderNodesForGlass = null;
             } else {
                 renderNodesForBlur = new DownscaledRenderNode("blur", 1);
                 renderNodesForBlur.setScale(8, 8);
-                renderNodesForBlur.setPrimaryEffectBlur(dpf2(40));
+                renderNodesForBlur.setPrimaryEffectBlur(dpf2(zxc.iconic.xenon.NekoConfig.blurStrength * 4f / 3f));
                 renderNodesForBlur.setSecondaryEffect(0, RenderNodeEffects.getSaturationX3RenderEffect());
                 renderNodesForGlass = null;
             }
@@ -445,15 +445,26 @@ public class DownscaleScrollableNoiseSuppressor {
         }
 
         public void invalidate() {
+            // Sync glass blur with the Blur strength slider on every redraw.
             if (renderNodesForGlass != null) {
-                // Sync blur with the slider on every redraw.
                 if (zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass) {
-                    renderNodesForGlass.setPrimaryEffectBlur(dpf2(Math.max(1f, zxc.iconic.xenon.NekoConfig.advancedGlassBlur)));
+                    renderNodesForGlass.setPrimaryEffectBlur(dpf2(Math.max(1f, zxc.iconic.xenon.NekoConfig.blurStrength / 7.5f)));
+                } else {
+                    renderNodesForGlass.setPrimaryEffectBlur(dpf2(zxc.iconic.xenon.NekoConfig.blurStrength / 7.5f), RenderNodeEffects.getSaturationX1_25RenderEffect());
                 }
                 renderNodesForGlass.invalidateRenderNodes(renderNode);
                 renderNodesForBlur.invalidateRenderNodes(renderNodesForGlass.renderNodeRestored[0]);
             } else {
                 renderNodesForBlur.invalidateRenderNodes(renderNode);
+            }
+            // Sync the normal (frosted) blur with the Blur strength slider on every redraw.
+            if (isLiquidGlassEnabled) {
+                renderNodesForBlur.setPrimaryEffectBlur(dpf2(zxc.iconic.xenon.NekoConfig.blurStrength * 4f / 3f));
+            } else if (simpleMode) {
+                renderNodesForBlur.setPrimaryEffectBlur(dpf2(zxc.iconic.xenon.NekoConfig.blurStrength * 4f / 3f), RenderNodeEffects.getSaturationX3RenderEffect());
+            } else {
+                renderNodesForBlur.setPrimaryEffectBlur(dpf2(zxc.iconic.xenon.NekoConfig.blurStrength * 4f / 3f));
+                renderNodesForBlur.setSecondaryEffect(0, RenderNodeEffects.getSaturationX3RenderEffect());
             }
         }
     }

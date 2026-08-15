@@ -64,6 +64,10 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
     private final int doubleTapActionRow = rowId++;
     private final int maxRecentStickersRow = rowId++;
 
+    private final int blurPopupInChatRow = rowId++;
+    private final int holdToOpenPopupRow = rowId++;
+    private final int popupHoldTimeRow = rowId++;
+
     private final int transcribeProviderRow = rowId++;
     private final int cfCredentialsRow = rowId++;
 
@@ -173,6 +177,19 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
         items.add(TextSettingsCellFactory.of(maxRecentStickersRow, LocaleController.getString(R.string.MaxRecentStickers), String.valueOf(NekoConfig.maxRecentStickers)).slug("maxRecentStickers"));
         items.add(UItem.asShadow(null));
 
+        items.add(UItem.asHeader("Popup"));
+        items.add(UItem.asCheck(blurPopupInChatRow, LocaleController.getString(R.string.BlurPopupInChat)).setChecked(NekoConfig.blurPopupInChat).slug("blurPopupInChat"));
+        items.add(UItem.asCheck(holdToOpenPopupRow, LocaleController.getString(R.string.HoldToOpenPopup)).setChecked(NekoConfig.holdToOpenPopup).slug("holdToOpenPopup"));
+        if (NekoConfig.holdToOpenPopup) {
+            SeekbarConfig holdTimeConfig = new SeekbarConfig(
+                    LocaleController.getString(R.string.PopupHoldTime),
+                    "0.1s", "2.0s", 1, 20, 1,
+                    progress -> NekoConfig.setPopupHoldTime(progress / 10f));
+            holdTimeConfig.valueFormatter = v -> String.format(java.util.Locale.ROOT, "%.1fs", v / 10f);
+            items.add(SeekbarCellFactory.of(popupHoldTimeRow, holdTimeConfig, (int) (NekoConfig.popupHoldTime * 10)).slug("popupHoldTime"));
+        }
+        items.add(UItem.asShadow(null));
+
         items.add(UItem.asHeader(LocaleController.getString(R.string.PremiumPreviewVoiceToText)));
         items.add(TextSettingsCellFactory.of(transcribeProviderRow, LocaleController.getString(R.string.TranscribeProviderShort), switch (NekoConfig.transcribeProvider) {
             case NekoConfig.TRANSCRIBE_AUTO ->
@@ -212,11 +229,11 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
         items.add(UItem.asCheck(hideCameraInMediaPickerRow, LocaleController.getString(R.string.HideCameraInMediaPicker)).slug("hideCameraInMediaPicker").setChecked(NekoConfig.hideCameraInMediaPicker));
         items.add(UItem.asShadow(null));
 
-        items.add(UItem.asHeader(LocaleController.getString(R.string.InuSpoilers)));
-        items.add(TextSettingsCellFactory.of(textSpoilerModeRow, LocaleController.getString(R.string.InuTextSpoilerMode), textSpoilerModeLabel()).slug("textSpoilerMode"));
-        items.add(TextSettingsCellFactory.of(mediaSpoilerModeRow, LocaleController.getString(R.string.InuMediaSpoilerMode), mediaSpoilerModeLabel()).slug("mediaSpoilerMode"));
-        items.add(UItem.asCheck(spoilerExtendToLineEndRow, LocaleController.getString(R.string.InuSpoilerExtendToLineEnd), LocaleController.getString(R.string.InuSpoilerExtendToLineEndInfo)).slug("spoilerExtendToLineEnd").setChecked(NekoConfig.spoilerExtendToLineEnd));
-        items.add(UItem.asShadow(LocaleController.getString(R.string.InuSpoilerExtendToLineEndInfoExtra)));
+        items.add(UItem.asHeader(LocaleController.getString(R.string.Spoilers)));
+        items.add(TextSettingsCellFactory.of(textSpoilerModeRow, LocaleController.getString(R.string.TextSpoilerMode), textSpoilerModeLabel()).slug("textSpoilerMode"));
+        items.add(TextSettingsCellFactory.of(mediaSpoilerModeRow, LocaleController.getString(R.string.MediaSpoilerMode), mediaSpoilerModeLabel()).slug("mediaSpoilerMode"));
+        items.add(UItem.asCheck(spoilerExtendToLineEndRow, LocaleController.getString(R.string.SpoilerExtendToLineEnd), LocaleController.getString(R.string.SpoilerExtendToLineEndInfo)).slug("spoilerExtendToLineEnd").setChecked(NekoConfig.spoilerExtendToLineEnd));
+        items.add(UItem.asShadow(LocaleController.getString(R.string.SpoilerExtendToLineEndInfoExtra)));
         items.add(UItem.asShadow(null));
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.MessageMenu)));
@@ -453,6 +470,17 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
                 item.textValue = String.valueOf(NekoConfig.maxRecentStickers);
                 listView.adapter.notifyItemChanged(position, PARTIAL);
             }, resourcesProvider);
+        } else if (id == blurPopupInChatRow) {
+            NekoConfig.toggleBlurPopupInChat();
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.blurPopupInChat);
+            }
+        } else if (id == holdToOpenPopupRow) {
+            NekoConfig.toggleHoldToOpenPopup();
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.holdToOpenPopup);
+            }
+            listView.adapter.update(true);
         } else if (id == hideTimeOnStickerRow) {
             NekoConfig.toggleHideTimeOnSticker();
             if (view instanceof TextCheckCell) {
@@ -542,13 +570,13 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
         } else if (id == textSpoilerModeRow) {
             ArrayList<String> arrayList = new ArrayList<>();
             ArrayList<Integer> types = new ArrayList<>();
-            arrayList.add(LocaleController.getString(R.string.InuTextSpoilerModeDefault));
+            arrayList.add(LocaleController.getString(R.string.TextSpoilerModeDefault));
             types.add(NekoConfig.TEXT_SPOILER_DEFAULT);
-            arrayList.add(LocaleController.getString(R.string.InuTextSpoilerModeSimple));
+            arrayList.add(LocaleController.getString(R.string.TextSpoilerModeSimple));
             types.add(NekoConfig.TEXT_SPOILER_SIMPLE);
-            arrayList.add(LocaleController.getString(R.string.InuTextSpoilerModeEpstein));
+            arrayList.add(LocaleController.getString(R.string.TextSpoilerModeEpstein));
             types.add(NekoConfig.TEXT_SPOILER_EPSTEIN);
-            PopupHelper.show(arrayList, LocaleController.getString(R.string.InuTextSpoilerMode), types.indexOf(NekoConfig.textSpoilerMode), getParentActivity(), view, i -> {
+            PopupHelper.show(arrayList, LocaleController.getString(R.string.TextSpoilerMode), types.indexOf(NekoConfig.textSpoilerMode), getParentActivity(), view, i -> {
                 NekoConfig.setTextSpoilerMode(types.get(i));
                 item.textValue = textSpoilerModeLabel();
                 listView.adapter.notifyItemChanged(position, PARTIAL);
@@ -556,13 +584,13 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
         } else if (id == mediaSpoilerModeRow) {
             ArrayList<String> arrayList = new ArrayList<>();
             ArrayList<Integer> types = new ArrayList<>();
-            arrayList.add(LocaleController.getString(R.string.InuMediaSpoilerModeTelegram));
+            arrayList.add(LocaleController.getString(R.string.MediaSpoilerModeTelegram));
             types.add(NekoConfig.MEDIA_SPOILER_TELEGRAM);
-            arrayList.add(LocaleController.getString(R.string.InuMediaSpoilerModePill));
+            arrayList.add(LocaleController.getString(R.string.MediaSpoilerModePill));
             types.add(NekoConfig.MEDIA_SPOILER_PILL);
-            arrayList.add(LocaleController.getString(R.string.InuMediaSpoilerModeCircle));
+            arrayList.add(LocaleController.getString(R.string.MediaSpoilerModeCircle));
             types.add(NekoConfig.MEDIA_SPOILER_CIRCLE);
-            PopupHelper.show(arrayList, LocaleController.getString(R.string.InuMediaSpoilerMode), types.indexOf(NekoConfig.mediaSpoilerMode), getParentActivity(), view, i -> {
+            PopupHelper.show(arrayList, LocaleController.getString(R.string.MediaSpoilerMode), types.indexOf(NekoConfig.mediaSpoilerMode), getParentActivity(), view, i -> {
                 NekoConfig.setMediaSpoilerMode(types.get(i));
                 item.textValue = mediaSpoilerModeLabel();
                 listView.adapter.notifyItemChanged(position, PARTIAL);
@@ -577,17 +605,17 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
 
     private String textSpoilerModeLabel() {
         return switch (NekoConfig.textSpoilerMode) {
-            case NekoConfig.TEXT_SPOILER_SIMPLE -> LocaleController.getString(R.string.InuTextSpoilerModeSimple);
-            case NekoConfig.TEXT_SPOILER_EPSTEIN -> LocaleController.getString(R.string.InuTextSpoilerModeEpstein);
-            default -> LocaleController.getString(R.string.InuTextSpoilerModeDefault);
+            case NekoConfig.TEXT_SPOILER_SIMPLE -> LocaleController.getString(R.string.TextSpoilerModeSimple);
+            case NekoConfig.TEXT_SPOILER_EPSTEIN -> LocaleController.getString(R.string.TextSpoilerModeEpstein);
+            default -> LocaleController.getString(R.string.TextSpoilerModeDefault);
         };
     }
 
     private String mediaSpoilerModeLabel() {
         return switch (NekoConfig.mediaSpoilerMode) {
-            case NekoConfig.MEDIA_SPOILER_PILL -> LocaleController.getString(R.string.InuMediaSpoilerModePill);
-            case NekoConfig.MEDIA_SPOILER_CIRCLE -> LocaleController.getString(R.string.InuMediaSpoilerModeCircle);
-            default -> LocaleController.getString(R.string.InuMediaSpoilerModeTelegram);
+            case NekoConfig.MEDIA_SPOILER_PILL -> LocaleController.getString(R.string.MediaSpoilerModePill);
+            case NekoConfig.MEDIA_SPOILER_CIRCLE -> LocaleController.getString(R.string.MediaSpoilerModeCircle);
+            default -> LocaleController.getString(R.string.MediaSpoilerModeTelegram);
         };
     }
 

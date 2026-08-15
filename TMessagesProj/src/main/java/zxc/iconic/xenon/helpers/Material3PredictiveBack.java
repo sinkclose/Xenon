@@ -38,6 +38,8 @@ import org.telegram.ui.Components.CubicBezierInterpolator;
 import java.util.ArrayList;
 import java.util.List;
 
+import zxc.iconic.xenon.NekoConfig;
+
 /**
  * Material 3 predictive-back animation, ported from Inugram.
  *
@@ -309,7 +311,10 @@ public final class Material3PredictiveBack {
                 return;
             }
 
-            float scale = 1f - (1f - MAX_SCALE) * p;
+            // Predictive-back intensity (slider /10 → 0.1..2.0, 1.0 default) scales how far the
+            // leaving screen shrinks away: 0.1 is nearly imperceptible, 2.0 pulls it twice as far.
+            float intensity = Math.max(NekoConfig.predictiveBackIntensity / 10f, 0.001f);
+            float scale = 1f - (1f - MAX_SCALE) * intensity * p;
             // AOSP keeps the closing window centered for a right-edge swipe and only pushes it toward
             // the right edge for a left-edge swipe; the off-edge slide happens on commit either way.
             float maxDx = Math.max((w - scale * w) / 2f - edgeMarginPx, 0f);

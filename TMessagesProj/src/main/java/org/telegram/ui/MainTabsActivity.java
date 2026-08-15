@@ -75,6 +75,7 @@ import me.vkryl.android.animator.FactorAnimator;
 import zxc.iconic.xenon.BackButtonMenuRecent;
 import zxc.iconic.xenon.NekoConfig;
 import zxc.iconic.xenon.helpers.PasscodeHelper;
+import zxc.iconic.xenon.settings.MainTabsSettingsActivity;
 
 public class MainTabsActivity extends ViewPagerActivity implements NotificationCenter.NotificationCenterDelegate, FactorAnimator.Target {
 
@@ -282,9 +283,10 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
         tabsView = new MainTabsLayout(context, resourceProvider);
         tabsView.setClipChildren(false);
-        if (zxc.iconic.xenon.helpers.NonIslandHelper.bottomBar()) {
+        if (zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar()) {
             tabsView.setPadding(0, 0, 0, 0);
-            tabsView.setMaxWidth(Integer.MAX_VALUE);
+            tabsView.setMaxWidth(0);
+            tabsView.setSwipeSelectionEnabled(false);
         } else {
             tabsView.setPadding(dp(DialogsActivity.MAIN_TABS_MARGIN + 4), dp(DialogsActivity.MAIN_TABS_MARGIN + 4), dp(DialogsActivity.MAIN_TABS_MARGIN + 4), dp(DialogsActivity.MAIN_TABS_MARGIN + 4));
             tabsView.setMaxWidth(dp(328 + DialogsActivity.MAIN_TABS_MARGIN * 2));
@@ -294,22 +296,17 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
         selectTab(viewPager.getCurrentPosition(), false);
 
-        iBlur3SourceColor.setColor(getThemedColor(Theme.key_windowBackgroundWhite));
+        iBlur3SourceColor.setColor(getThemedColor(Theme.key_windowBackgroundGray));
 
         final ViewPositionWatcher viewPositionWatcher = new ViewPositionWatcher(contentView);
 
         BlurredBackgroundDrawableViewFactory iBlur3FactoryGlass = new BlurredBackgroundDrawableViewFactory(iBlur3SourceTabGlass != null ? iBlur3SourceTabGlass : iBlur3SourceColor);
         iBlur3FactoryGlass.setSourceRootView(viewPositionWatcher, contentView);
-        iBlur3FactoryGlass.setLiquidGlassEffectAllowed(LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) && !zxc.iconic.xenon.helpers.NonIslandHelper.bottomBar());
+        iBlur3FactoryGlass.setLiquidGlassEffectAllowed(!zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar());
 
         tabsViewBackground = iBlur3FactoryGlass.create(tabsView, BlurredBackgroundProviderImpl.mainTabs(resourceProvider));
-        if (zxc.iconic.xenon.helpers.NonIslandHelper.bottomBar()) {
-            tabsViewBackground.setRadius(0);
-            tabsViewBackground.setPadding(0);
-        } else {
-            tabsViewBackground.setRadius(dp(DialogsActivity.MAIN_TABS_HEIGHT / 2f));
-            tabsViewBackground.setPadding(dp(DialogsActivity.MAIN_TABS_MARGIN - 0.334f));
-        }
+        tabsViewBackground.setRadius(zxc.iconic.xenon.helpers.MainTabsUiHelper.getBackgroundRadius());
+        tabsViewBackground.setPadding(zxc.iconic.xenon.helpers.MainTabsUiHelper.getBackgroundInset());
         tabsView.setBackground(tabsViewBackground);
 
         BlurredBackgroundDrawableViewFactory iBlur3FactoryFade = new BlurredBackgroundDrawableViewFactory(iBlur3SourceColor);
@@ -326,10 +323,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
         tabsViewWrapper = new FrameLayout(context);
         tabsViewWrapper.setOnClickListener(v -> {});
-        if (zxc.iconic.xenon.helpers.NonIslandHelper.bottomBar()) {
-            tabsViewWrapper.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite, resourceProvider));
-        }
-        tabsViewWrapper.addView(tabsView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.helpers.NonIslandHelper.bottomBar() ? DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN : DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS, Gravity.BOTTOM | (zxc.iconic.xenon.helpers.NonIslandHelper.bottomBar() ? 0 : Gravity.CENTER_HORIZONTAL)));
+        tabsViewWrapper.addView(tabsView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.helpers.MainTabsUiHelper.getTabsViewHeightDp(), Gravity.BOTTOM | (zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar() ? 0 : Gravity.CENTER_HORIZONTAL)));
         tabsViewWrapper.setClipToPadding(false);
         tabsViewWrapper.setVisibility(NekoConfig.showMainTabs ? View.VISIBLE : View.GONE);
         contentView.addView(tabsViewWrapper, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM));
@@ -437,11 +431,24 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         final ShapeDrawable bg = Theme.createRoundRectDrawable(dp(28), getThemedColor(Theme.key_windowBackgroundWhite));
         bg.getPaint().setShadowLayer(dp(6), 0, dp(1), Theme.multAlpha(0xFF000000, 0.15f));
         o.setScrimViewBackground(bg);
+        o.addGapIf(o.getItemsCount() > 0);
+        o.add(R.drawable.msg_settings, getString(R.string.OpenBottomTabsSettings), () -> presentFragment(new MainTabsSettingsActivity()));
         o.show();
 
         MessagesController.getGlobalMainSettings().edit()
             .putInt("accountswitchhint", 3)
             .apply();
+    }
+
+    public void openTabSettingsPopup(View button) {
+        ItemOptions o = ItemOptions.makeOptions(this, button);
+        o.add(R.drawable.msg_settings, getString(R.string.OpenBottomTabsSettings), () -> presentFragment(new MainTabsSettingsActivity()));
+        o.setBlur(true);
+        o.translate(0, -dp(4));
+        final ShapeDrawable bg = Theme.createRoundRectDrawable(dp(28), getThemedColor(Theme.key_windowBackgroundWhite));
+        bg.getPaint().setShadowLayer(dp(6), 0, dp(1), Theme.multAlpha(0xFF000000, 0.15f));
+        o.setScrimViewBackground(bg);
+        o.show();
     }
 
     public LinearLayout accountView(int account, boolean selected) {
@@ -523,7 +530,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
     @Override
     protected int getStartPosition() {
-        if (NekoConfig.openSettingsBySwipe) {
+        if (false) {
             int settingsPosition = MainTabsManager.getPosition(MainTabsManager.TabType.SETTINGS);
             if (settingsPosition >= 0) {
                 return settingsPosition;
@@ -700,7 +707,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     @NonNull
     @Override
     protected WindowInsetsCompat onApplyWindowInsets(@NonNull View v, @NonNull WindowInsetsCompat insets) {
-        int bottomInset = zxc.iconic.xenon.helpers.NonIslandHelper.bottomBar() ? 0 : insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom;
+        int bottomInset = insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom;
         navigationBarHeight = bottomInset;
         final boolean isUpdateLayoutVisible = updateLayoutWrapper.isUpdateLayoutVisible();
         final int updateLayoutHeight = isUpdateLayoutVisible ? dp(UpdateLayoutWrapper.HEIGHT) : 0;
@@ -727,19 +734,14 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
             }
         }
 
-        if (zxc.iconic.xenon.helpers.NonIslandHelper.bottomBar()) {
-            // In non-island mode the wrapper has no bottom padding so the blur drawable
-            // extends under the system navigation bar. The tabsView itself gets a
-            // bottom padding equal to the navigation-bar height so the buttons
-            // stay above it, and we grow its LayoutParams height accordingly.
+        if (zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar()) {
             tabsViewWrapper.setPadding(0, 0, 0, 0);
-            final int tabsFullHeight = dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN) + navigationBarHeight;
+            tabsView.setPadding(0, 0, 0, navigationBarHeight);
             ViewGroup.LayoutParams tabsLp = tabsView.getLayoutParams();
-            if (tabsLp != null && tabsLp.height != tabsFullHeight) {
-                tabsLp.height = tabsFullHeight;
+            if (tabsLp != null) {
+                tabsLp.height = dp(64) + navigationBarHeight;
                 tabsView.setLayoutParams(tabsLp);
             }
-            tabsView.setPadding(0, 0, 0, navigationBarHeight);
         } else {
             tabsViewWrapper.setPadding(0, 0, 0, navigationBarHeight);
         }
@@ -1016,7 +1018,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     }
 
     private void blur3_updateColors() {
-        iBlur3SourceColor.setColor(getThemedColor(Theme.key_windowBackgroundWhite));
+        iBlur3SourceColor.setColor(getThemedColor(Theme.key_windowBackgroundGray));
         if (tabsViewBackground != null) {
             tabsViewBackground.updateColors();
         }
@@ -1043,6 +1045,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
             final MainTabsManager.TabType type = currentTabsConfig.get(position).type;
             final GlassTabView view = MainTabsManager.createTabView(context, resourceProvider, currentAccount, type);
             view.setShowTitle(zxc.iconic.xenon.NekoConfig.showMainTabsTitle);
+            view.setMainTabStyle();
             tabs[position] = view;
             if (type == MainTabsManager.TabType.PROFILE || type == MainTabsManager.TabType.SETTINGS) {
                 view.setOnLongClickListener(v -> {
@@ -1052,6 +1055,11 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
             } else if (type == MainTabsManager.TabType.CHATS) {
                 view.setOnLongClickListener(v -> {
                     BackButtonMenuRecent.show(currentAccount, this, v, null);
+                    return true;
+                });
+            } else if (type == MainTabsManager.TabType.CONTACTS || type == MainTabsManager.TabType.CALLS || type == MainTabsManager.TabType.FEED) {
+                view.setOnLongClickListener(v -> {
+                    openTabSettingsPopup(v);
                     return true;
                 });
             }
@@ -1144,6 +1152,6 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     }
 
     private boolean isTabsHidden() {
-        return NekoConfig.hideBottomNavigationBar || !NekoConfig.showMainTabs;
+        return false || !NekoConfig.showMainTabs;
     }
 }

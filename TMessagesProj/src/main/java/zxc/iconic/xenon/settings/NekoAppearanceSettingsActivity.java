@@ -1,29 +1,32 @@
 package zxc.iconic.xenon.settings;
 
 import android.content.Context;
-import android.content.DialogInterface;
-import android.text.InputType;
-import android.text.SpannableStringBuilder;
-import android.text.Spanned;
+import android.graphics.Canvas;
+import android.graphics.Paint;
 import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.View;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
+import org.telegram.messenger.UserConfig;
+import org.telegram.messenger.UserObject;
+import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.TextCheckCell;
-import org.telegram.ui.Components.EditTextBoldCursor;
-import org.telegram.ui.Components.URLSpanNoUnderline;
+import org.telegram.ui.Components.BulletinFactory;
+import org.telegram.ui.Components.ChatAvatarContainer;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
-import org.telegram.ui.LaunchActivity;
 
 import java.util.ArrayList;
 
@@ -34,14 +37,10 @@ import zxc.iconic.xenon.helpers.PopupHelper;
 public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity implements NotificationCenter.NotificationCenterDelegate {
 
     private final int emojiSetsRow = rowId++;
-    private final int predictiveBackAnimationRow = rowId++;
+    private final int navigationSettingsRow = rowId++;
     private final int appBarShadowRow = rowId++;
     private final int formatTimeWithSecondsRow = rowId++;
     private final int disableNumberRoundingRow = rowId++;
-    private final int hideBottomNavigationBarRow = rowId++;
-    private final int dynamicTabSizeRow = rowId++;
-    private final int mainTabsCustomizeRow = rowId++;
-    private final int tabletModeRow = rowId++;
 
     private final int hideStoriesRow = rowId++;
     private final int mediaPreviewRow = rowId++;
@@ -50,30 +49,31 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
     private final int tabsTitleTypeRow = rowId++;
     private final int tabsPositionRow = rowId++;
 
-    private final int strokeOnViewsRow = rowId++;
     private final int blurSettingsRow = rowId++;
     private final int hideRecordButtonRow = rowId++;
     private final int disableGooeyAvatarAnimationRow = rowId++;
     private final int gooeyAvatarOffsetRow = rowId++;
     private final int keepUnreadChatsOnTopRow = rowId++;
     private final int keepUnreadArchivedOnTopRow = rowId++;
-    private final int alternativeTransitionRow = rowId++;
-    private final int alternativeTransitionSpeedRow = rowId++;
-    private final int alternativeTransitionEaseRow = rowId++;
-    private final int alternativeTransitionEaseDescriptionRow = rowId++;
-    private final int aospTransitionRow = rowId++;
     private final int material3SwitchesRow = rowId++;
     private final int m3SectionsStyleRow = rowId++;
+    private final int materialSlidersRow = rowId++;
+    private final int material3ChatHeadersRow = rowId++;
+    private final int loadingIndicatorsRow = rowId++;
+    private final int chatHeaderSettingsRow = rowId++;
     private final int nonIslandTabBarsRow = rowId++;
     private final int nonIslandGlobalSearchRow = rowId++;
+    private final int material3BottomNavigationBarRow = rowId++;
+    private final int md3PlayerSeekBarRow = rowId++;
+    private final int md3FoldersRow = rowId++;
+    private final int material3DialogsRow = rowId++;
+    private final int avatarShapeRow = rowId++;
     private final int nonIslandChatElementsRow = rowId++;
-    private final int hideFadeViewRow = rowId++;
-    private final int disableGlassGlareRow = rowId++;
-    private final int disableScrimBlurRow = rowId++;
-    private final int nonIslandBottomBarRow = rowId++;
 
     private final int textAnimationSettingsRow = rowId++;
     private final int roundedBulletinRow = rowId++;
+
+    private final int liquidGlassRow = rowId++;
 
     @Override
     public boolean onFragmentCreate() {
@@ -96,9 +96,17 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
 
     @Override
     protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
+        items.add(UItem.asHeader(LocaleController.getString(R.string.BlurAndLiquidGlass)));
+        items.add(TextSettingsCellFactory.of(blurSettingsRow, LocaleController.getString(R.string.BlurSettings), "›").slug("blurSettings"));
+        items.add(TextSettingsCellFactory.of(liquidGlassRow, LocaleController.getString(R.string.BlurAndLiquidGlass), "›").slug("liquidGlass"));
+        items.add(UItem.asShadow(null));
+
+        items.add(UItem.asHeader(LocaleController.getString(R.string.Navigation)));
+        items.add(TextSettingsCellFactory.of(navigationSettingsRow, LocaleController.getString(R.string.NavigationSettings), "›").slug("navigationSettings"));
+        items.add(UItem.asShadow(null));
+
         items.add(UItem.asHeader(LocaleController.getString(R.string.ChangeChannelNameColor2)));
         items.add(EmojiSetCellFactory.of(emojiSetsRow, LocaleController.getString(R.string.EmojiSets)).slug("emojiSets"));
-        items.add(UItem.asCheck(predictiveBackAnimationRow, LocaleController.getString(R.string.PredictiveBackAnimation)).slug("predictiveBackAnimation").setChecked(NekoConfig.predictiveBackAnimation));
         items.add(UItem.asCheck(disableGooeyAvatarAnimationRow, LocaleController.getString(R.string.DisableGooeyAvatarAnimation)).setChecked(NekoConfig.disableGooeyAvatarAnimation).slug("disableGooeyAvatarAnimation"));
         SeekbarConfig offsetConfig = new SeekbarConfig(
                 LocaleController.getString(R.string.GooeyAvatarOffset),
@@ -116,42 +124,26 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         items.add(UItem.asCheck(appBarShadowRow, LocaleController.getString(R.string.DisableAppBarShadow)).slug("appBarShadow").setChecked(NekoConfig.disableAppBarShadow));
         items.add(UItem.asCheck(formatTimeWithSecondsRow, LocaleController.getString(R.string.FormatWithSeconds)).slug("formatTimeWithSeconds").setChecked(NekoConfig.formatTimeWithSeconds));
         items.add(UItem.asCheck(disableNumberRoundingRow, LocaleController.getString(R.string.DisableNumberRounding), "4.8K -> 4777").slug("disableNumberRounding").setChecked(NekoConfig.disableNumberRounding));
-        items.add(UItem.asCheck(hideBottomNavigationBarRow, LocaleController.getString(R.string.HideBottomNavigationBar)).setChecked(NekoConfig.hideBottomNavigationBar).slug("hideBottomNavigationBar"));
-        items.add(UItem.asCheck(dynamicTabSizeRow, LocaleController.getString(R.string.DynamicTabSize)).slug("dynamicTabSize").setChecked(NekoConfig.dynamicTabSize));
-        items.add(TextSettingsCellFactory.of(mainTabsCustomizeRow, LocaleController.getString(R.string.MainTabsCustomizeTitle), LocaleController.getString(R.string.MainTabsCustomizeHint)).slug("mainTabsCustomize"));
-        items.add(TextSettingsCellFactory.of(tabletModeRow, LocaleController.getString(R.string.TabletMode), switch (NekoConfig.tabletMode) {
-            case NekoConfig.TABLET_AUTO -> LocaleController.getString(R.string.TabletModeAuto);
-            case NekoConfig.TABLET_ENABLE -> LocaleController.getString(R.string.Enable);
-            default -> LocaleController.getString(R.string.Disable);
-        }).slug("tabletMode"));
-        items.add(UItem.asCheck(alternativeTransitionRow, LocaleController.getString(R.string.AlternativeTransition)).setChecked(NekoConfig.alternativeTransition).slug("alternativeTransition"));
-        if (NekoConfig.alternativeTransition) {
-            SeekbarConfig speedConfig = new SeekbarConfig(
-                    LocaleController.getString(R.string.TransitionSpeed),
-                    "100", "1000", 100, 1000, 5,
-                    progress -> NekoConfig.setAlternativeTransitionSpeed(Math.round(progress / 5f) * 5));
-            items.add(SeekbarCellFactory.of(alternativeTransitionSpeedRow, speedConfig, NekoConfig.alternativeTransitionSpeed).slug("alternativeTransitionSpeed"));
-            items.add(TextSettingsCellFactory.of(alternativeTransitionEaseRow, "Change ease", NekoConfig.alternativeTransitionEase).slug("alternativeTransitionEase"));
-            var description = new SpannableStringBuilder(LocaleController.getString(R.string.AlternativeTransitionEaseDescription));
-            int linkStart = description.toString().indexOf("cubic-bezier.com");
-            if (linkStart >= 0) {
-                description.setSpan(new URLSpanNoUnderline("https://cubic-bezier.com"), linkStart, linkStart + "cubic-bezier.com".length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            }
-            items.add(UItem.asShadow(alternativeTransitionEaseDescriptionRow, description));
-        }
         items.add(UItem.asHeader("Material Design 3"));
-        items.add(UItem.asCheck(material3SwitchesRow, "Switches").setChecked(NekoConfig.material3Switches).slug("material3Switches"));
-        items.add(UItem.asCheck(m3SectionsStyleRow, "List items").setChecked(NekoConfig.m3SectionsStyle).slug("m3SectionsStyle"));
+        items.add(UItem.asCheck(material3SwitchesRow, LocaleController.getString(R.string.Switches)).setChecked(NekoConfig.material3Switches).slug("material3Switches"));
+        items.add(UItem.asCheck(m3SectionsStyleRow, LocaleController.getString(R.string.ListItems)).setChecked(NekoConfig.m3SectionsStyle).slug("m3SectionsStyle"));
+        items.add(UItem.asCheck(materialSlidersRow, LocaleController.getString(R.string.MaterialSliders)).setChecked(NekoConfig.materialSliders).slug("materialSliders"));
+        items.add(UItem.asCheck(material3BottomNavigationBarRow, LocaleController.getString(R.string.BottomNavigationBar)).setChecked(NekoConfig.material3BottomNavigationBar).slug("material3BottomNavigationBar"));
+        items.add(UItem.asCheck(md3PlayerSeekBarRow, LocaleController.getString(R.string.PlayerSeekBar)).setChecked(NekoConfig.md3PlayerSeekBar).slug("md3PlayerSeekBar"));
+        items.add(UItem.asCheck(md3FoldersRow, LocaleController.getString(R.string.Md3Folders)).setChecked(NekoConfig.md3Folders).slug("md3Folders"));
+        items.add(InfoCheckCellFactory.of(loadingIndicatorsRow, LocaleController.getString(R.string.LoadingIndicators), NekoConfig.wavyEnabled, () -> showLoadingIndicatorsInfo()).slug("loadingIndicators"));
+        items.add(UItem.asCheck(material3DialogsRow, LocaleController.getString(R.string.Material3Dialogs)).setChecked(NekoConfig.material3Dialogs).slug("material3Dialogs"));
+        items.add(TextSettingsCellFactory.of(avatarShapeRow, LocaleController.getString(R.string.Avatars), "›").slug("avatarShape"));
         items.add(UItem.asShadow(null));
 
-        items.add(UItem.asHeader(LocaleController.getString(R.string.InuNonIslandUI)));
-        items.add(UItem.asCheck(nonIslandTabBarsRow, LocaleController.getString(R.string.InuNonIslandTabBars)).setChecked(NekoConfig.nonIslandTabBars).slug("nonIslandTabBars"));
-        items.add(UItem.asCheck(nonIslandGlobalSearchRow, LocaleController.getString(R.string.InuNonIslandGlobalSearch)).setChecked(NekoConfig.nonIslandGlobalSearch).slug("nonIslandGlobalSearch"));
-        items.add(UItem.asCheck(nonIslandChatElementsRow, LocaleController.getString(R.string.InuNonIslandChatElements)).setChecked(NekoConfig.nonIslandChatElements).slug("nonIslandChatElements"));
-        items.add(UItem.asCheck(hideFadeViewRow, LocaleController.getString(R.string.InuHideFadeView)).setChecked(NekoConfig.hideFadeView).slug("hideFadeView"));
-        items.add(UItem.asCheck(disableGlassGlareRow, LocaleController.getString(R.string.InuDisableGlassGlare)).setChecked(NekoConfig.disableGlassGlare).slug("disableGlassGlare"));
-        items.add(UItem.asCheck(disableScrimBlurRow, LocaleController.getString(R.string.InuDisableScrimBlur)).setChecked(NekoConfig.disableScrimBlur).slug("disableScrimBlur"));
-        items.add(UItem.asCheck(nonIslandBottomBarRow, LocaleController.getString(R.string.InuNonIslandBottomBar)).setChecked(NekoConfig.nonIslandBottomBar).slug("nonIslandBottomBar"));
+        items.add(UItem.asHeader("Chat Header"));
+        items.add(TextSettingsCellFactory.of(chatHeaderSettingsRow, LocaleController.getString(R.string.ChatHeaderSettings), "›").slug("chatHeaderSettings"));
+        items.add(UItem.asShadow(null));
+
+        items.add(UItem.asHeader(LocaleController.getString(R.string.NonIslandUI)));
+        items.add(UItem.asCheck(nonIslandTabBarsRow, LocaleController.getString(R.string.NonIslandTabBars)).setChecked(NekoConfig.nonIslandTabBars).slug("nonIslandTabBars"));
+        items.add(UItem.asCheck(nonIslandGlobalSearchRow, LocaleController.getString(R.string.NonIslandGlobalSearch)).setChecked(NekoConfig.nonIslandGlobalSearch).slug("nonIslandGlobalSearch"));
+        items.add(UItem.asCheck(nonIslandChatElementsRow, LocaleController.getString(R.string.NonIslandChatElements)).setChecked(NekoConfig.nonIslandChatElements).slug("nonIslandChatElements"));
         items.add(UItem.asShadow(LocaleController.getString(R.string.InuNonIslandHint)));
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.TextAnimation)));
@@ -175,11 +167,6 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         items.add(TextSettingsCellFactory.of(tabsPositionRow, LocaleController.getString(R.string.TabsPosition), LocaleController.getString(NekoConfig.bottomFilterTabs ? R.string.TabsPositionBottom : R.string.TabsPositionTop)).slug("tabsPosition"));
         items.add(UItem.asShadow(null));
 
-        items.add(UItem.asHeader(LocaleController.getString(R.string.LiteOptionsBlur2)));
-        items.add(UItem.asCheck(strokeOnViewsRow, LocaleController.getString(R.string.StrokeOnViews)).setChecked(NekoConfig.strokeOnViews).slug("strokeOnViews"));
-        items.add(TextSettingsCellFactory.of(blurSettingsRow, LocaleController.getString(R.string.BlurSettings), "›").slug("blurSettings"));
-        items.add(UItem.asShadow(null));
-
     }
 
     @Override
@@ -187,24 +174,8 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         var id = item.id;
         if (id == textAnimationSettingsRow) {
             presentFragment(new NekoTextAnimationSettingsActivity());
-        } else if (id == tabletModeRow) {
-            ArrayList<String> arrayList = new ArrayList<>();
-            ArrayList<Integer> types = new ArrayList<>();
-            arrayList.add(LocaleController.getString(R.string.TabletModeAuto));
-            types.add(NekoConfig.TABLET_AUTO);
-            arrayList.add(LocaleController.getString(R.string.Enable));
-            types.add(NekoConfig.TABLET_ENABLE);
-            arrayList.add(LocaleController.getString(R.string.Disable));
-            types.add(NekoConfig.TABLET_DISABLE);
-            PopupHelper.show(arrayList, LocaleController.getString(R.string.TabletMode), types.indexOf(NekoConfig.tabletMode), getParentActivity(), view, i -> {
-                NekoConfig.setTabletMode(types.get(i));
-                item.textValue = arrayList.get(i);
-                listView.adapter.notifyItemChanged(position, PARTIAL);
-                AndroidUtilities.resetTabletFlag();
-                if (getParentActivity() instanceof LaunchActivity) {
-                    ((LaunchActivity) getParentActivity()).invalidateTabletMode();
-                }
-            }, resourcesProvider);
+        } else if (id == navigationSettingsRow) {
+            presentFragment(new NekoNavigationSettingsActivity());
         } else if (id == emojiSetsRow) {
             presentFragment(new NekoEmojiSettingsActivity());
         } else if (id == disableNumberRoundingRow) {
@@ -243,6 +214,12 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
             }
             getNotificationCenter().postNotificationName(NotificationCenter.dialogFiltersUpdated);
             getNotificationCenter().postNotificationName(NotificationCenter.mainUserInfoChanged);
+        } else if (id == md3FoldersRow) {
+            NekoConfig.toggleMd3Folders();
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.md3Folders);
+            }
+            showRestartBulletin();
         } else if (id == tabsTitleTypeRow) {
             ArrayList<String> arrayList = new ArrayList<>();
             ArrayList<Integer> types = new ArrayList<>();
@@ -258,26 +235,6 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
                 listView.adapter.notifyItemChanged(position, PARTIAL);
                 getNotificationCenter().postNotificationName(NotificationCenter.dialogFiltersUpdated);
             }, resourcesProvider);
-        } else if (id == predictiveBackAnimationRow) {
-            NekoConfig.togglePredictiveBackAnimation();
-            if (view instanceof TextCheckCell) {
-                ((TextCheckCell) view).setChecked(NekoConfig.predictiveBackAnimation);
-            }
-            showRestartBulletin();
-        } else if (id == hideBottomNavigationBarRow) {
-            NekoConfig.toggleHideBottomNavigationBar();
-            if (view instanceof TextCheckCell) {
-                ((TextCheckCell) view).setChecked(NekoConfig.hideBottomNavigationBar);
-            }
-            parentLayout.rebuildAllFragmentViews(false, false);
-        } else if (id == dynamicTabSizeRow) {
-            NekoConfig.toggleDynamicTabSize();
-            if (view instanceof TextCheckCell) {
-                ((TextCheckCell) view).setChecked(NekoConfig.dynamicTabSize);
-            }
-            parentLayout.rebuildAllFragmentViews(false, false);
-        } else if (id == mainTabsCustomizeRow) {
-            presentFragment(new MainTabsSettingsActivity());
         } else if (id == tabsPositionRow) {
             ArrayList<String> arrayList = new ArrayList<>();
             arrayList.add(LocaleController.getString(R.string.TabsPositionTop));
@@ -288,11 +245,6 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
                 listView.adapter.notifyItemChanged(position, PARTIAL);
                 parentLayout.rebuildAllFragmentViews(false, false);
             }, resourcesProvider);
-        } else if (id == strokeOnViewsRow) {
-            NekoConfig.toggleStrokeOnViews();
-            if (view instanceof TextCheckCell) {
-                ((TextCheckCell) view).setChecked(NekoConfig.strokeOnViews);
-            }
         } else if (id == blurSettingsRow) {
             presentFragment(new NekoBlurSettingsActivity());
         } else if (id == disableGooeyAvatarAnimationRow) {
@@ -318,22 +270,6 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.hideRecordButton);
             }
-        } else if (id == alternativeTransitionRow) {
-            NekoConfig.toggleAlternativeTransition();
-            if (view instanceof TextCheckCell) {
-                ((TextCheckCell) view).setChecked(NekoConfig.alternativeTransition);
-            }
-            listView.adapter.update(true);
-            // Predictive back is registered once in LaunchActivity.onCreate, so switching the
-            // Material 3 predictive-back animation only takes effect after a restart.
-            showRestartBulletin();
-        } else if (id == alternativeTransitionEaseRow) {
-            showEaseDialog();
-        } else if (id == aospTransitionRow) {
-            NekoConfig.toggleAospTransition();
-            if (view instanceof TextCheckCell) {
-                ((TextCheckCell) view).setChecked(NekoConfig.aospTransition);
-            }
         } else if (id == material3SwitchesRow) {
             NekoConfig.toggleMaterial3Switches();
             if (view instanceof TextCheckCell) {
@@ -346,6 +282,12 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
                 ((TextCheckCell) view).setChecked(NekoConfig.m3SectionsStyle);
             }
             showRestartBulletin();
+        } else if (id == materialSlidersRow) {
+            NekoConfig.toggleMaterialSliders();
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.materialSliders);
+            }
+            listView.adapter.update(true);
         } else if (id == nonIslandTabBarsRow) {
             NekoConfig.toggleNonIslandTabBars();
             if (view instanceof TextCheckCell) {
@@ -357,83 +299,260 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
                 ((TextCheckCell) view).setChecked(NekoConfig.nonIslandGlobalSearch);
             }
         } else if (id == nonIslandChatElementsRow) {
+            if (!NekoConfig.nonIslandChatElements && NekoConfig.material3ChatHeaders) {
+                showHeaderConflictBulletin(LocaleController.getString(R.string.Material3ChatHeaders), LocaleController.getString(R.string.NonIslandChatElements), () -> {
+                    NekoConfig.toggleMaterial3ChatHeaders();
+                    NekoConfig.toggleNonIslandChatElements();
+                    listView.adapter.update(true);
+                });
+                return;
+            }
             NekoConfig.toggleNonIslandChatElements();
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.nonIslandChatElements);
             }
-        } else if (id == hideFadeViewRow) {
-            NekoConfig.toggleHideFadeView();
-            if (view instanceof TextCheckCell) {
-                ((TextCheckCell) view).setChecked(NekoConfig.hideFadeView);
+        } else if (id == material3ChatHeadersRow) {
+            if (!NekoConfig.material3ChatHeaders && NekoConfig.nonIslandChatElements) {
+                showHeaderConflictBulletin(LocaleController.getString(R.string.NonIslandChatElements), LocaleController.getString(R.string.Material3ChatHeaders), () -> {
+                    NekoConfig.toggleNonIslandChatElements();
+                    NekoConfig.toggleMaterial3ChatHeaders();
+                    listView.adapter.update(true);
+                });
+                return;
             }
-        } else if (id == disableGlassGlareRow) {
-            NekoConfig.toggleDisableGlassGlare();
-            if (view instanceof TextCheckCell) {
-                ((TextCheckCell) view).setChecked(NekoConfig.disableGlassGlare);
+            NekoConfig.toggleMaterial3ChatHeaders();
+            if (view instanceof InfoCheckCell) {
+                ((InfoCheckCell) view).setChecked(NekoConfig.material3ChatHeaders);
             }
-        } else if (id == disableScrimBlurRow) {
-            NekoConfig.toggleDisableScrimBlur();
-            if (view instanceof TextCheckCell) {
-                ((TextCheckCell) view).setChecked(NekoConfig.disableScrimBlur);
+        } else if (id == loadingIndicatorsRow) {
+            NekoConfig.toggleWavyEnabled();
+            if (view instanceof InfoCheckCell) {
+                ((InfoCheckCell) view).setChecked(NekoConfig.wavyEnabled);
             }
-        } else if (id == nonIslandBottomBarRow) {
-            NekoConfig.toggleNonIslandBottomBar();
+        } else if (id == material3BottomNavigationBarRow) {
+            NekoConfig.toggleMaterial3BottomNavigationBar();
             if (view instanceof TextCheckCell) {
-                ((TextCheckCell) view).setChecked(NekoConfig.nonIslandBottomBar);
+                ((TextCheckCell) view).setChecked(NekoConfig.material3BottomNavigationBar);
             }
-            showRestartBulletin();
+            parentLayout.rebuildAllFragmentViews(false, false);
+        } else if (id == md3PlayerSeekBarRow) {
+            NekoConfig.toggleMd3PlayerSeekBar();
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.md3PlayerSeekBar);
+            }
+            listView.adapter.update(true);
+        } else if (id == material3DialogsRow) {
+            if (!NekoConfig.material3Dialogs && NekoConfig.replaceDialogsWithSheet) {
+                showMaterial3DialogsConflictBulletin();
+                return;
+            }
+            NekoConfig.toggleMaterial3Dialogs();
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.material3Dialogs);
+            }
+            listView.adapter.update(true);
+        } else if (id == avatarShapeRow) {
+            presentFragment(new NekoAvatarShapeSettingsActivity());
         } else if (id == roundedBulletinRow) {
             NekoConfig.toggleRoundedBulletin();
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.roundedBulletin);
             }
+        } else if (id == liquidGlassRow) {
+            presentFragment(new NekoLiquidGlassSettingsActivity());
+        } else if (id == chatHeaderSettingsRow) {
+            presentFragment(new NekoChatHeaderSettingsActivity());
         }
     }
 
-    private void showEaseDialog() {
-        Context context = getParentActivity();
-        if (context == null) return;
+    private void showLoadingIndicatorsInfo() {
+        if (getParentActivity() == null) return;
+        org.telegram.ui.ActionBar.BottomSheet sheet = new org.telegram.ui.ActionBar.BottomSheet(getParentActivity(), false, resourcesProvider);
+        sheet.setTitle(LocaleController.getString(R.string.LoadingIndicators));
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(context, resourcesProvider);
-        builder.setTitle("Change ease");
-
-        LinearLayout container = new LinearLayout(context);
+        LinearLayout container = new LinearLayout(getParentActivity());
         container.setOrientation(LinearLayout.VERTICAL);
-        container.setPadding(AndroidUtilities.dp(24), AndroidUtilities.dp(16), AndroidUtilities.dp(24), 0);
+        container.setPadding(AndroidUtilities.dp(24), AndroidUtilities.dp(16), AndroidUtilities.dp(24), AndroidUtilities.dp(24));
 
-        EditTextBoldCursor editText = new EditTextBoldCursor(context);
-        editText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
-        editText.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, resourcesProvider));
-        editText.setInputType(InputType.TYPE_CLASS_TEXT);
-        editText.setText(NekoConfig.alternativeTransitionEase);
-        editText.setSelection(editText.getText().length());
-
-        container.addView(editText, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
-        builder.setView(container);
-
-        builder.setPositiveButton(LocaleController.getString("OK", R.string.OK), (dialog, which) -> {
-            String text = editText.getText().toString().trim();
-            if (!text.isEmpty()) {
-                NekoConfig.setAlternativeTransitionEase(text);
-                listView.adapter.update(true);
+        View previewView = new View(getParentActivity()) {
+            private final org.telegram.ui.Components.CircularProgressDrawable defaultCpd;
+            private final org.telegram.ui.Components.CircularProgressDrawable md3Cpd;
+            private final org.telegram.ui.Components.MediaActionDrawable defaultMad;
+            private final org.telegram.ui.Components.MediaActionDrawable md3Mad;
+            {
+                int color = Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, resourcesProvider);
+                defaultCpd = new org.telegram.ui.Components.CircularProgressDrawable(color);
+                defaultCpd.size = AndroidUtilities.dp(36);
+                defaultCpd.thickness = AndroidUtilities.dp(3);
+                defaultCpd.setCallback(this);
+                md3Cpd = new org.telegram.ui.Components.CircularProgressDrawable(color);
+                md3Cpd.size = AndroidUtilities.dp(36);
+                md3Cpd.thickness = AndroidUtilities.dp(3);
+                md3Cpd.setCallback(this);
+                defaultMad = new org.telegram.ui.Components.MediaActionDrawable();
+                defaultMad.setColor(color);
+                defaultMad.setCallback(this);
+                defaultMad.setIcon(org.telegram.ui.Components.MediaActionDrawable.ICON_CANCEL, false);
+                defaultMad.setProgress(0, false);
+                md3Mad = new org.telegram.ui.Components.MediaActionDrawable();
+                md3Mad.setColor(color);
+                md3Mad.setCallback(this);
+                md3Mad.setIcon(org.telegram.ui.Components.MediaActionDrawable.ICON_CANCEL, false);
+                md3Mad.setProgress(0, false);
+                setWillNotDraw(false);
             }
-        });
+            @Override
+            protected void onDraw(Canvas canvas) {
+                super.onDraw(canvas);
+                int w = getWidth();
+                int halfW = w / 2;
+                int cpdSize = AndroidUtilities.dp(60);
+                int madSize = AndroidUtilities.dp(48);
+                int cy1 = getHeight() / 4;
+                int cy2 = 3 * getHeight() / 4;
+                int leftCenterX = halfW / 2;
+                int rightCenterX = halfW + halfW / 2;
+                boolean savedWavy = zxc.iconic.xenon.NekoConfig.wavyEnabled;
 
-        builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
+                zxc.iconic.xenon.NekoConfig.wavyEnabled = false;
+                defaultCpd.setBounds(leftCenterX - cpdSize / 2, cy1 - cpdSize / 2, leftCenterX + cpdSize / 2, cy1 + cpdSize / 2);
+                defaultCpd.draw(canvas);
+                defaultMad.setBounds(leftCenterX - madSize / 2, cy2 - madSize / 2, leftCenterX + madSize / 2, cy2 + madSize / 2);
+                defaultMad.draw(canvas);
 
-        String defaultEase = "0.37,0.01,0.1,1";
-        builder.setNeutralButton(LocaleController.getString("Reset", R.string.Reset), (dialog, which) -> {
-            NekoConfig.setAlternativeTransitionEase(defaultEase);
-            listView.adapter.update(true);
-        });
+                zxc.iconic.xenon.NekoConfig.wavyEnabled = true;
+                md3Cpd.setBounds(rightCenterX - cpdSize / 2, cy1 - cpdSize / 2, rightCenterX + cpdSize / 2, cy1 + cpdSize / 2);
+                md3Cpd.draw(canvas);
+                md3Mad.setBounds(rightCenterX - madSize / 2, cy2 - madSize / 2, rightCenterX + madSize / 2, cy2 + madSize / 2);
+                md3Mad.draw(canvas);
 
-        AlertDialog dialog = builder.show();
-        if (NekoConfig.alternativeTransitionEase.equals(defaultEase)) {
-            dialog.getButton(DialogInterface.BUTTON_NEUTRAL).setAlpha(0.5f);
-        }
+                zxc.iconic.xenon.NekoConfig.wavyEnabled = savedWavy;
+                invalidate();
+            }
+        };
+        previewView.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, AndroidUtilities.dp(140)));
+        container.addView(previewView);
 
-        editText.requestFocus();
-        AndroidUtilities.showKeyboard(editText);
+        LinearLayout labelsLayout = new LinearLayout(getParentActivity());
+        labelsLayout.setOrientation(LinearLayout.HORIZONTAL);
+        labelsLayout.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        TextView leftLabel = new TextView(getParentActivity());
+        leftLabel.setText("Telegram");
+        leftLabel.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+        leftLabel.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2, resourcesProvider));
+        leftLabel.setGravity(Gravity.CENTER);
+        leftLabel.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        labelsLayout.addView(leftLabel);
+
+        TextView rightLabel = new TextView(getParentActivity());
+        rightLabel.setText(LocaleController.getString(R.string.MaterialDesign3));
+        rightLabel.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+        rightLabel.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2, resourcesProvider));
+        rightLabel.setGravity(Gravity.CENTER);
+        rightLabel.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        labelsLayout.addView(rightLabel);
+
+        container.addView(labelsLayout);
+
+        sheet.setCustomView(container);
+        sheet.show();
+    }
+
+    private void showChatHeadersInfo() {
+        if (getParentActivity() == null) return;
+        org.telegram.ui.ActionBar.BottomSheet sheet = new org.telegram.ui.ActionBar.BottomSheet(getParentActivity(), false, resourcesProvider);
+        sheet.setTitle(LocaleController.getString(R.string.Material3ChatHeaders));
+
+        LinearLayout container = new LinearLayout(getParentActivity());
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setPadding(0, 0, 0, 0);
+
+        int currentAccount = UserConfig.selectedAccount;
+        TLRPC.User user = org.telegram.messenger.MessagesController.getInstance(currentAccount).getUser(UserConfig.getInstance(currentAccount).clientUserId);
+        if (user == null) user = UserConfig.getInstance(currentAccount).getCurrentUser();
+        String userName = user != null ? UserObject.getUserName(user) : "User";
+        String onlineText = LocaleController.getString(R.string.Online);
+
+        org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceBitmap wallpaperSource = new org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceBitmap();
+
+        org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory factory = new org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory(wallpaperSource);
+        org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundProvider colorProvider = org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl.topPanelChatActivity(resourcesProvider);
+
+        org.telegram.ui.ActionBar.ActionBar normalActionBar = new org.telegram.ui.ActionBar.ActionBar(getParentActivity(), resourcesProvider);
+        normalActionBar.setOccupyStatusBar(false);
+        normalActionBar.setTitle("");
+        normalActionBar.setupGlass(factory, colorProvider, false);
+        ChatAvatarContainer normalAvatar = new ChatAvatarContainer(getParentActivity(), null, false, resourcesProvider);
+        normalAvatar.setOccupyStatusBar(false);
+        normalAvatar.setUserAvatar(user, true);
+        normalAvatar.setTitle(userName, false, false, false, false, null, false);
+        normalAvatar.setSubtitle(onlineText);
+        normalAvatar.setGlassMode();
+        normalAvatar.setM3HeaderMode(false);
+        normalActionBar.setChatAvatarContainer(normalAvatar);
+        normalActionBar.setBackButtonDrawable(new org.telegram.ui.ActionBar.BackDrawable(false));
+        normalActionBar.addView(normalAvatar, 0, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT, Gravity.TOP | Gravity.LEFT, 52, 0, 52, 0));
+        normalActionBar.createMenu().addItem(999, R.drawable.ic_ab_other);
+        normalActionBar.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, AndroidUtilities.dp(56)));
+        container.addView(normalActionBar);
+
+        TextView normalLabel = new TextView(getParentActivity());
+        normalLabel.setText("Telegram");
+        normalLabel.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+        normalLabel.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2, resourcesProvider));
+        normalLabel.setGravity(Gravity.CENTER);
+        normalLabel.setPadding(0, AndroidUtilities.dp(8), 0, AndroidUtilities.dp(16));
+        container.addView(normalLabel);
+
+        org.telegram.ui.ActionBar.ActionBar m3ActionBar = new org.telegram.ui.ActionBar.ActionBar(getParentActivity(), resourcesProvider);
+        m3ActionBar.setOccupyStatusBar(false);
+        m3ActionBar.setTitle("");
+        m3ActionBar.inu_m3ChatHeader = true;
+        m3ActionBar.setupGlass(factory, colorProvider, false);
+        ChatAvatarContainer m3Avatar = new ChatAvatarContainer(getParentActivity(), null, false, resourcesProvider);
+        m3Avatar.setOccupyStatusBar(false);
+        m3Avatar.setUserAvatar(user, true);
+        m3Avatar.setTitle(userName, false, false, false, false, null, false);
+        m3Avatar.setSubtitle(onlineText);
+        m3Avatar.setM3HeaderMode(true);
+        m3ActionBar.setChatAvatarContainer(m3Avatar);
+        m3ActionBar.setBackButtonDrawable(new org.telegram.ui.ActionBar.BackDrawable(false));
+        m3ActionBar.addView(m3Avatar, 0, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT, Gravity.TOP | Gravity.LEFT, 52, 0, 52, 0));
+        m3ActionBar.createMenu().addItem(999, R.drawable.ic_ab_other);
+        m3ActionBar.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, AndroidUtilities.dp(56)));
+        container.addView(m3ActionBar);
+
+        TextView m3Label = new TextView(getParentActivity());
+        m3Label.setText(LocaleController.getString(R.string.MaterialDesign3));
+        m3Label.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+        m3Label.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2, resourcesProvider));
+        m3Label.setGravity(Gravity.CENTER);
+        m3Label.setPadding(0, AndroidUtilities.dp(8), 0, AndroidUtilities.dp(24));
+        container.addView(m3Label);
+
+        sheet.setCustomView(container);
+        sheet.show();
+    }
+
+    private void showHeaderConflictBulletin(String disableWhat, String enableWhat, Runnable onDisable) {
+        BulletinFactory.of(this).createSimpleBulletin(R.raw.chats_infotip,
+                LocaleController.formatString(R.string.Material3ChatHeadersConflict, disableWhat, enableWhat),
+                LocaleController.getString(R.string.Disable),
+                onDisable).show();
+    }
+
+    private void showMaterial3DialogsConflictBulletin() {
+        BulletinFactory.of(this).createSimpleBulletin(R.raw.chats_infotip,
+                LocaleController.formatString(R.string.Material3DialogsConflict,
+                        LocaleController.getString(R.string.ReplaceDialogsWithSheet),
+                        LocaleController.getString(R.string.Material3Dialogs)),
+                LocaleController.getString(R.string.Disable),
+                () -> {
+                    NekoConfig.toggleReplaceDialogsWithSheet();
+                    NekoConfig.toggleMaterial3Dialogs();
+                    listView.adapter.update(true);
+                }).show();
     }
 
     @Override

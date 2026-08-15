@@ -40,6 +40,8 @@ import org.telegram.ui.TopicsFragment;
 import java.util.ArrayList;
 import java.util.LinkedList;
 
+import zxc.iconic.xenon.settings.MainTabsSettingsActivity;
+
 public class BackButtonMenuRecent {
 
     private static final int MAX_RECENT_DIALOGS = 25;
@@ -53,20 +55,22 @@ public class BackButtonMenuRecent {
             return;
         }
         var dialogs = getRecentDialogs(fragment.getCurrentAccount());
-        if (dialogs.isEmpty()) {
+        boolean fromMainTabs = fragment instanceof MainTabsActivity;
+        if (dialogs.isEmpty() && !fromMainTabs) {
             return;
         }
         var options = ItemOptions.makeOptions(fragment, button);
-        options.add(R.drawable.menu_clear_recent, LocaleController.getString(R.string.ClearButton), () -> {
-            var builder = new AlertDialog.Builder(context);
-            builder.setTitle(LocaleController.getString(R.string.ClearRecentChats));
-            builder.setMessage(LocaleController.getString(R.string.ClearRecentChatAlert));
-            builder.setPositiveButton(LocaleController.getString(R.string.ClearButton).toUpperCase(), (dialogInterface, i) -> clearRecentDialogs(currentAccount));
-            builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
-            fragment.showDialog(builder.create());
-        });
-        options.addGap();
-        for (var dialogId : dialogs) {
+        if (!dialogs.isEmpty()) {
+            options.add(R.drawable.menu_clear_recent, LocaleController.getString(R.string.ClearButton), () -> {
+                var builder = new AlertDialog.Builder(context);
+                builder.setTitle(LocaleController.getString(R.string.ClearRecentChats));
+                builder.setMessage(LocaleController.getString(R.string.ClearRecentChatAlert));
+                builder.setPositiveButton(LocaleController.getString(R.string.ClearButton).toUpperCase(), (dialogInterface, i) -> clearRecentDialogs(currentAccount));
+                builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+                fragment.showDialog(builder.create());
+            });
+            options.addGap();
+            for (var dialogId : dialogs) {
             final TLRPC.Chat chat;
             final TLRPC.User user;
             if (dialogId < 0) {
@@ -158,6 +162,12 @@ public class BackButtonMenuRecent {
                 return true;
             });
             options.addView(cell, LayoutHelper.createLinear(230, 48));
+        }
+        }
+
+        if (fromMainTabs) {
+            options.addGapIf(options.getItemsCount() > 0);
+            options.add(R.drawable.msg_settings, LocaleController.getString(R.string.OpenBottomTabsSettings), () -> fragment.presentFragment(new MainTabsSettingsActivity()));
         }
 
         if (fragment instanceof MainTabsActivity) {

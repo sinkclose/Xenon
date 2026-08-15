@@ -551,6 +551,18 @@ public class SimpleTextView extends View implements Drawable.Callback {
         return textWidth + (rightDrawableInside ? (rightDrawable != null ? (int) (rightDrawable.getIntrinsicWidth() * rightDrawableScale) : 0) + (rightDrawable2 != null ? (int) (rightDrawable2.getIntrinsicWidth() * rightDrawableScale) : 0) : 0);
     }
 
+    public int getDrawnWidth() {
+        int visibleTextWidth = textWidth;
+        if (getMeasuredWidth() > 0) {
+            int maxVisibleWidth = getMeasuredWidth() - getPaddingLeft() - getPaddingRight() - minusWidth;
+            visibleTextWidth = Math.min(visibleTextWidth, Math.max(0, maxVisibleWidth));
+        }
+        return (leftDrawable != null && !leftDrawableOutside ? drawablePadding + leftDrawable.getIntrinsicWidth() : 0)
+            + visibleTextWidth
+            + (rightDrawableOutside && rightDrawable != null ? drawablePadding + (int) (rightDrawable.getIntrinsicWidth() * rightDrawableScale) : 0)
+            + (rightDrawableOutside && rightDrawable2 != null ? drawablePadding + (int) (rightDrawable2.getIntrinsicWidth() * rightDrawableScale) : 0);
+    }
+
     public int getRightDrawableWidth() {
         if (rightDrawable == null)
             return 0;

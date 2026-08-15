@@ -55,6 +55,8 @@ import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.graphics.ColorUtils;
+import androidx.appcompat.view.ContextThemeWrapper;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
@@ -885,7 +887,7 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
 
             ImageView progressView = new ImageView(getContext());
             progressView.setImageDrawable(new CircularProgressDrawable(dp(9), AndroidUtilities.dp(0.2f), getThemedColor(Theme.key_dialog_inlineProgress)));
-            progressViewContainer.addView(progressView, LayoutHelper.createFrame(86, 86, Gravity.CENTER));
+            progressViewContainer.addView(progressView, LayoutHelper.createFrame(43, 43, Gravity.CENTER));
         } else {
             if (aboveMessageView != null) {
                 scrollContainer.addView(aboveMessageView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 22, 4, 22, 12));
@@ -1929,6 +1931,10 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
                 showAsBottomSheet();
                 return alertDialog;
             }
+            if (zxc.iconic.xenon.NekoConfig.material3Dialogs && alertDialog.progressViewStyle == 0 && alertDialog.items == null && alertDialog.itemIcons == null) {
+                showAsMaterialDialog();
+                return alertDialog;
+            }
             alertDialog.show();
             for (int i = 0; i < red.length; i++) {
                 if (!red[i]) continue;
@@ -2058,6 +2064,88 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
 
             sheet.setCustomView(scrollView);
             sheet.show();
+        }
+
+        private void showAsMaterialDialog() {
+            Context context = alertDialog.getContext();
+            Theme.ResourcesProvider rp = alertDialog.resourcesProvider;
+
+            OnDismissListener dialogDismissListener = sheetDismissListener;
+
+            Context themedContext = new ContextThemeWrapper(context, com.google.android.material.R.style.Theme_Material3_DayNight);
+            MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(
+                    themedContext,
+                    com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog);
+
+            if (alertDialog.title != null) builder.setTitle(alertDialog.title);
+            if (alertDialog.message != null) builder.setMessage(alertDialog.message);
+            if (alertDialog.customView != null) {
+                AndroidUtilities.removeFromParent(alertDialog.customView);
+                builder.setView(alertDialog.customView);
+            }
+            if (alertDialog.positiveButtonText != null) {
+                builder.setPositiveButton(alertDialog.positiveButtonText, (d, w) -> {
+                    if (alertDialog.positiveButtonListener != null)
+                        alertDialog.positiveButtonListener.onClick(alertDialog, AlertDialog.BUTTON_POSITIVE);
+                });
+            }
+            if (alertDialog.negativeButtonText != null) {
+                builder.setNegativeButton(alertDialog.negativeButtonText, (d, w) -> {
+                    if (alertDialog.negativeButtonListener != null)
+                        alertDialog.negativeButtonListener.onClick(alertDialog, AlertDialog.BUTTON_NEGATIVE);
+                });
+            }
+            if (alertDialog.neutralButtonText != null) {
+                builder.setNeutralButton(alertDialog.neutralButtonText, (d, w) -> {
+                    if (alertDialog.neutralButtonListener != null)
+                        alertDialog.neutralButtonListener.onClick(alertDialog, AlertDialog.BUTTON_NEUTRAL);
+                });
+            }
+
+            builder.setOnDismissListener(d -> {
+                if (alertDialog.onDismissListener != null)
+                    alertDialog.onDismissListener.onDismiss(alertDialog);
+                if (dialogDismissListener != null)
+                    dialogDismissListener.onDismiss(alertDialog);
+            });
+
+            androidx.appcompat.app.AlertDialog dialog = builder.show();
+
+            int bgColor = Theme.getColor(Theme.key_dialogBackground, rp);
+            int textColor = Theme.getColor(Theme.key_dialogTextBlack, rp);
+            int buttonColor = Theme.getColor(Theme.key_dialogButton, rp);
+
+            if (dialog.getWindow() != null) {
+                com.google.android.material.shape.MaterialShapeDrawable bg = new com.google.android.material.shape.MaterialShapeDrawable();
+                bg.setShapeAppearanceModel(com.google.android.material.shape.ShapeAppearanceModel.builder()
+                        .setAllCornerSizes(new com.google.android.material.shape.AbsoluteCornerSize(AndroidUtilities.dp(28)))
+                        .build());
+                bg.setFillColor(android.content.res.ColorStateList.valueOf(bgColor));
+                dialog.getWindow().setBackgroundDrawable(bg);
+            }
+
+            int titleId = context.getResources().getIdentifier("android:id/alertTitle", null, null);
+            if (titleId != 0) {
+                TextView titleView = dialog.findViewById(titleId);
+                if (titleView != null) titleView.setTextColor(textColor);
+            }
+            int messageId = context.getResources().getIdentifier("android:id/message", null, null);
+            if (messageId != 0) {
+                TextView messageView = dialog.findViewById(messageId);
+                if (messageView != null) messageView.setTextColor(textColor);
+            }
+
+            int[] btnIds = {DialogInterface.BUTTON_POSITIVE, DialogInterface.BUTTON_NEGATIVE, DialogInterface.BUTTON_NEUTRAL};
+            for (int btnId : btnIds) {
+                TextView button = (TextView) dialog.getButton(btnId);
+                if (button == null) continue;
+                int idx = (-btnId) - 1;
+                if (idx >= 0 && idx < red.length && red[idx]) {
+                    button.setTextColor(alertDialog.getThemedColor(Theme.key_text_RedBold));
+                } else {
+                    button.setTextColor(buttonColor);
+                }
+            }
         }
 
         public Runnable getDismissRunnable() {

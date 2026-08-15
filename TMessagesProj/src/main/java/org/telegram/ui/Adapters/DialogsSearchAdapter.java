@@ -1715,7 +1715,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
         switch (holder.getItemViewType()) {
             case VIEW_TYPE_PROFILE_CELL: {
                 ProfileSearchCell cell = (ProfileSearchCell) holder.itemView;
-                cell.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                cell.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundGray));
                 long oldDialogId = cell.getDialogId();
 
                 TLRPC.User user = null;
@@ -2131,7 +2131,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             case VIEW_TYPE_DIALOG_CELL:
             case VIEW_TYPE_PUBLIC_POST: {
                 DialogCell cell = (DialogCell) holder.itemView;
-                cell.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                cell.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundGray));
                 cell.useSeparator = (position != getItemCount() - 1);
                 MessageObject messageObject = (MessageObject) getItem(position);
                 boolean isLocalForum = searchForumResultMessages.contains(messageObject);
@@ -2150,7 +2150,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             }
             case VIEW_TYPE_HASHTAG_CELL: {
                 HashtagSearchCell cell = (HashtagSearchCell) holder.itemView;
-                cell.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                cell.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundGray));
                 cell.setText(searchResultHashtags.get(position - 1));
                 cell.setNeedDivider(position != searchResultHashtags.size());
                 break;

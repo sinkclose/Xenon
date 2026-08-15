@@ -500,6 +500,7 @@ public abstract class BlurredBackgroundDrawable extends Drawable {
 
     public static void drawStroke(Canvas canvas, float left, float top, float right, float bottom,
                                      float radii, float strokeWidth, boolean isTop, Paint paint) {
+        if (zxc.iconic.xenon.NekoConfig.disableGlassGlare) return;
         if (!NekoConfig.strokeOnViews) return;
         final float strokeHalf = strokeWidth / 2f;
         canvas.save();

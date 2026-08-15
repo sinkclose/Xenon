@@ -44,10 +44,6 @@ public class NonIslandHelper {
         return NekoConfig.disableScrimBlur;
     }
 
-    public static boolean bottomBar() {
-        return NekoConfig.nonIslandBottomBar;
-    }
-
     public static Boolean needChatLightNavBar(
         float inputBubbleHeight,
         Theme.ResourcesProvider resourcesProvider

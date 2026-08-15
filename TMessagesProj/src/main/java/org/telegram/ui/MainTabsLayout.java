@@ -26,6 +26,8 @@ import org.telegram.ui.Components.AnimatedLinearLayout;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.glass.GlassTabView;
 
+import zxc.iconic.xenon.helpers.MainTabsUiHelper;
+
 import java.util.HashSet;
 import java.util.Set;
 
@@ -47,6 +49,11 @@ public class MainTabsLayout extends AnimatedLinearLayout {
     private static final int[] PASS_PADDINGS_DP = {16, 8, 4};
 
     private int maxWidthPx;
+    private boolean swipeSelectionEnabled = true;
+
+    public void setSwipeSelectionEnabled(boolean enabled) {
+        swipeSelectionEnabled = enabled;
+    }
 
     public void setMaxWidth(int maxWidthPx) {
         if (this.maxWidthPx != maxWidthPx) {
@@ -68,6 +75,7 @@ public class MainTabsLayout extends AnimatedLinearLayout {
         final int maxTotalWidthForTabs = width - getPaddingLeft() - getPaddingRight();
         final int minTotalWidthForTabs = Math.min(dp(320), maxTotalWidthForTabs);
 
+        final boolean m3 = zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar();
         int chosenPass = PASS_TEXT_SIZES_DP.length - 1;
         float lastMeasuredTextSize = -1;
         for (int pass = 0; pass < PASS_TEXT_SIZES_DP.length; pass++) {
@@ -123,8 +131,8 @@ public class MainTabsLayout extends AnimatedLinearLayout {
             for (int a = 0, N = getChildCount(); a < N; a++) {
                 tabsTextWidthWithMargin[a] *= m;
             }
-        } else if (totalWidth < minTotalWidthForTabs && (!zxc.iconic.xenon.NekoConfig.dynamicTabSize || zxc.iconic.xenon.helpers.NonIslandHelper.bottomBar())) {
-            final float growW = minTotalWidthForTabs - totalWidth;
+        } else if (totalWidth < targetTotalWidth(m3, maxTotalWidthForTabs, minTotalWidthForTabs) && (!zxc.iconic.xenon.NekoConfig.dynamicTabSize || m3)) {
+            final float growW = targetTotalWidth(m3, maxTotalWidthForTabs, minTotalWidthForTabs) - totalWidth;
             final float growP = growW / totalWeight;
 
             for (int a = 0, N = getChildCount(); a < N; a++) {
@@ -143,7 +151,7 @@ public class MainTabsLayout extends AnimatedLinearLayout {
             l += tabsWidth[a];
         }
         setMeasuredDimension(l + getPaddingLeft() + getPaddingRight(), height);
-        if (zxc.iconic.xenon.helpers.NonIslandHelper.bottomBar() && l + getPaddingLeft() + getPaddingRight() < width) {
+        if (m3 && l + getPaddingLeft() + getPaddingRight() < width) {
             int extra = width - (l + getPaddingLeft() + getPaddingRight());
             int perTab = extra / visibleChildCount;
             int remainder = extra % visibleChildCount;
@@ -417,8 +425,8 @@ public class MainTabsLayout extends AnimatedLinearLayout {
             View selected = findSelectedTab();
             if (selected != null) {
                 animatedLongSelectedViewCenterX = selected.getX() + selected.getWidth() / 2f;
-                animatedLongSelectedViewOffsetX = animatedLongSelectedViewCenterX - x;
-                selectedTabPositionOffsetX.animateToFinalPosition(0);
+                animatedLongSelectedViewOffsetX = 0f;
+                selectedTabPositionOffsetX.cancel();
                 if (selected != found && found != null) {
                     found.performClick();
                 }
@@ -458,6 +466,7 @@ public class MainTabsLayout extends AnimatedLinearLayout {
     private final ClickHelper clickHelper = new ClickHelper(new ClickHelper.Delegate() {
         @Override
         public boolean needClickAt(View view, float x, float y) {
+            if (!swipeSelectionEnabled) return false;
             lastLongSelectedView = null;
             final View found = findChildUnder(MainTabsLayout.this, x, y);
             return found != null && !tabsWithIgnoreClick.contains(found);
@@ -469,6 +478,11 @@ public class MainTabsLayout extends AnimatedLinearLayout {
 
         @Override
         public boolean needLongPress(float x, float y) {
+            return true;
+        }
+
+        @Override
+        public boolean needLongPressOnSlopMove() {
             return true;
         }
 
@@ -628,7 +642,9 @@ public class MainTabsLayout extends AnimatedLinearLayout {
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
-        clickHelper.onTouchEvent(this, ev);
+        if (swipeSelectionEnabled) {
+            clickHelper.onTouchEvent(this, ev);
+        }
         return super.dispatchTouchEvent(ev);
     }
 
@@ -742,5 +758,9 @@ public class MainTabsLayout extends AnimatedLinearLayout {
 
     private static float getCenterX(View v) {
         return v.getX() + v.getWidth() * 0.5f;
+    }
+
+    private static int targetTotalWidth(boolean m3, int maxTotalWidth, int minTotalWidth) {
+        return m3 ? maxTotalWidth : minTotalWidth;
     }
 }

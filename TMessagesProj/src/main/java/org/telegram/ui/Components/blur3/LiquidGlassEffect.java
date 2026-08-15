@@ -17,7 +17,7 @@ import org.telegram.messenger.R;
 public class LiquidGlassEffect {
 
     private final RenderNode node;
-    private final RuntimeShader shader;
+    private RuntimeShader shader;
 
     // Highlight (edge glare)
     private RuntimeShader highlightShader;
@@ -29,29 +29,33 @@ public class LiquidGlassEffect {
     public LiquidGlassEffect(RenderNode node) {
         this.node = node;
         boolean advanced = zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass;
-        String code = advanced
-                ? AndroidUtilities.readRes(R.raw.liquid_glass_shader_advanced)
-                : AndroidUtilities.readRes(R.raw.liquid_glass_shader);
-        shader = new RuntimeShader(code);
-        node.setRenderEffect(RenderEffect.createRuntimeShaderEffect(shader, "img"));
-
-        if (advanced) {
-            String highlightCode = AndroidUtilities.readRes(R.raw.liquid_glass_highlight);
-            highlightShader = new RuntimeShader(highlightCode);
-            highlightPaint.setStyle(Paint.Style.STROKE);
-            highlightPaint.setStrokeWidth(AndroidUtilities.dp(0.35f) * 2f);
-            // Intentionally NOT using BlurMaskFilter on the stroke. A
-            // mask-filtered stroke with a RuntimeShader forces software
-            // rasterisation of the blurred mask every frame on every glass
-            // surface, which is what dropped frame rates from 120 Hz to
-            // 30–60 Hz once advanced glass was enabled (commit 918e5861b).
-            // The runtime shader's directional gradient already provides
-            // sufficient softness on its own; the dropped 0.5 dp Gaussian
-            // edge bleed is barely perceptible at this stroke width and alpha.
-            highlightPaint.setBlendMode(BlendMode.PLUS);
-            highlightPaint.setColor(Color.WHITE);
-            highlightPaint.setAlpha(42);
+        // Refraction (the liquid-glass distortion) only runs when liquid glass is on.
+        // The highlight (glare) is always created so it can be drawn over the frosted blur too.
+        if (org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS)) {
+            String code = advanced
+                    ? AndroidUtilities.readRes(R.raw.liquid_glass_shader_advanced)
+                    : AndroidUtilities.readRes(R.raw.liquid_glass_shader);
+            shader = new RuntimeShader(code);
+            node.setRenderEffect(RenderEffect.createRuntimeShaderEffect(shader, "img"));
+        } else {
+            shader = null;
         }
+
+        String highlightCode = AndroidUtilities.readRes(R.raw.liquid_glass_highlight);
+        highlightShader = new RuntimeShader(highlightCode);
+        highlightPaint.setStyle(Paint.Style.STROKE);
+        highlightPaint.setStrokeWidth(AndroidUtilities.dp(0.35f) * 2f);
+        // Intentionally NOT using BlurMaskFilter on the stroke. A
+        // mask-filtered stroke with a RuntimeShader forces software
+        // rasterisation of the blurred mask every frame on every glass
+        // surface, which is what dropped frame rates from 120 Hz to
+        // 30–60 Hz once advanced glass was enabled (commit 918e5861b).
+        // The runtime shader's directional gradient already provides
+        // sufficient softness on its own; the dropped 0.5 dp Gaussian
+        // edge bleed is barely perceptible at this stroke width and alpha.
+        highlightPaint.setBlendMode(BlendMode.PLUS);
+        highlightPaint.setColor(Color.WHITE);
+        highlightPaint.setAlpha(42);
     }
 
     private float resolutionX, resolutionY;
@@ -94,45 +98,45 @@ public class LiquidGlassEffect {
             final float g = Color.green(foregroundColor) / 255f * a;
             final float b = Color.blue(foregroundColor) / 255f * a;
 
-            if (zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass) {
-                final float fresnel = Math.max(0.25f, zxc.iconic.xenon.NekoConfig.advancedGlassFresnel);
-                final float refractionHeight = AndroidUtilities.dp(16f) * fresnel;
-                final float refractionAmount = -AndroidUtilities.dp(32f) * fresnel;
-                final float dispersion = Math.max(0.0f, Math.min(1.0f, zxc.iconic.xenon.NekoConfig.advancedGlassDispersion));
+            if (shader != null) {
+                if (zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass) {
+                    final float fresnel = Math.max(0.25f, zxc.iconic.xenon.NekoConfig.advancedGlassFresnel);
+                    final float refractionHeight = AndroidUtilities.dp(16f) * fresnel;
+                    final float refractionAmount = -AndroidUtilities.dp(32f) * fresnel;
+                    final float dispersion = Math.max(0.0f, Math.min(1.0f, zxc.iconic.xenon.NekoConfig.advancedGlassDispersion));
 
-                shader.setFloatUniform("size", sX * 2f, sY * 2f);
-                shader.setFloatUniform("center", cX, cY);
-                shader.setFloatUniform("radius", rLT, rRT, rRB, rLB);
-                shader.setFloatUniform("refractionHeight", refractionHeight);
-                shader.setFloatUniform("refractionAmount", refractionAmount);
-                shader.setFloatUniform("depthEffect", 0f);
-                shader.setFloatUniform("chromaticAberration", dispersion);
-                // Blur is done inside our shader on the raw scene. Do not rely on
-                // Telegram's stock frosted pre-blur, because it feeds the shader a
-                // matte texture instead of the actual content under the glass.
-node.setRenderEffect(RenderEffect.createRuntimeShaderEffect(shader, "img"));
-
-                // Update highlight shader uniforms
-                if (highlightShader != null) {
-                    highlightShader.setFloatUniform("size", sX * 2f, sY * 2f);
-                    highlightShader.setFloatUniform("cornerRadii", rLT, rRT, rRB, rLB);
-                    highlightShader.setColorUniform("color", Color.WHITE);
-                    highlightShader.setFloatUniform("angle", (float) Math.toRadians(45));
-                    highlightShader.setFloatUniform("falloff", Math.max(0.1f, zxc.iconic.xenon.NekoConfig.advancedGlassGlare));
-
-                    highlightRect.set(left, top, right, bottom);
-                    highlightCornerRadii = new float[]{rLT, rLT, rRT, rRT, rRB, rRB, rLB, rLB};
+                    shader.setFloatUniform("size", sX * 2f, sY * 2f);
+                    shader.setFloatUniform("center", cX, cY);
+                    shader.setFloatUniform("radius", rLT, rRT, rRB, rLB);
+                    shader.setFloatUniform("refractionHeight", refractionHeight);
+                    shader.setFloatUniform("refractionAmount", refractionAmount);
+                    shader.setFloatUniform("depthEffect", 0f);
+                    shader.setFloatUniform("chromaticAberration", dispersion);
+                    node.setRenderEffect(RenderEffect.createRuntimeShaderEffect(shader, "img"));
+                } else {
+                    shader.setFloatUniform("resolution", resX, resY);
+                    shader.setFloatUniform("center", cX, cY);
+                    shader.setFloatUniform("size", sX, sY);
+                    shader.setFloatUniform("radius", rRB, rRT, rLB, rLT);
+                    shader.setFloatUniform("thickness", thickness);
+                    shader.setFloatUniform("refract_intensity", intensity);
+                    shader.setFloatUniform("refract_index", index);
+                    shader.setFloatUniform("foreground_color_premultiplied", r, g, b, a);
+                    node.setRenderEffect(RenderEffect.createRuntimeShaderEffect(shader, "img"));
                 }
-            } else {
-                shader.setFloatUniform("resolution", resX, resY);
-                shader.setFloatUniform("center", cX, cY);
-                shader.setFloatUniform("size", sX, sY);
-                shader.setFloatUniform("radius", rRB, rRT, rLB, rLT);
-                shader.setFloatUniform("thickness", thickness);
-                shader.setFloatUniform("refract_intensity", intensity);
-                shader.setFloatUniform("refract_index", index);
-                shader.setFloatUniform("foreground_color_premultiplied", r, g, b, a);
-                node.setRenderEffect(RenderEffect.createRuntimeShaderEffect(shader, "img"));
+            }
+
+            // Highlight (glare) uniforms — always updated so the glare draws
+            // over the frosted blur even when liquid glass (refraction) is off.
+            if (highlightShader != null) {
+                highlightShader.setFloatUniform("size", sX * 2f, sY * 2f);
+                highlightShader.setFloatUniform("cornerRadii", rLT, rRT, rRB, rLB);
+                highlightShader.setColorUniform("color", Color.WHITE);
+                highlightShader.setFloatUniform("angle", (float) Math.toRadians(45));
+                highlightShader.setFloatUniform("falloff", Math.max(0.1f, zxc.iconic.xenon.NekoConfig.advancedGlassGlare));
+
+                highlightRect.set(left, top, right, bottom);
+                highlightCornerRadii = new float[]{rLT, rLT, rRT, rRT, rRB, rRB, rLB, rLB};
             }
         }
     }
@@ -149,6 +153,8 @@ node.setRenderEffect(RenderEffect.createRuntimeShaderEffect(shader, "img"));
      */
     public void drawHighlight(Canvas canvas, float parentAlpha) {
         if (highlightShader == null || highlightCornerRadii == null) return;
+        // Disable mode: shader glare strength is 0, so the highlight is skipped.
+        if (zxc.iconic.xenon.NekoConfig.advancedGlassGlare <= 0f) return;
 
         canvas.save();
         highlightClipPath.reset();

@@ -2848,7 +2848,7 @@ public class EmojiView extends FrameLayout implements
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             blurredBackgroundSourceRenderNode = new BlurredBackgroundSourceRenderNode(null);
             blurredBackgroundDrawableFactory = new BlurredBackgroundDrawableViewFactory(blurredBackgroundSourceRenderNode);
-            blurredBackgroundDrawableFactory.setLiquidGlassEffectAllowed(LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS));
+            blurredBackgroundDrawableFactory.setLiquidGlassEffectAllowed(true);
 
             scrollableViewNoiseSuppressor = new DownscaleScrollableNoiseSuppressor();
         } else {

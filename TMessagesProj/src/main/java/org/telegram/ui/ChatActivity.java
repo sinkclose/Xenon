@@ -102,6 +102,7 @@ import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.Choreographer;
 import android.view.PixelCopy;
 import android.view.animation.DecelerateInterpolator;
 import android.view.inputmethod.EditorInfo;
@@ -288,6 +289,7 @@ import org.telegram.ui.Components.chat.WallpaperBitmapProvider;
 import org.telegram.ui.Components.blur3.source.BlurredBackgroundSource;
 import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceBitmap;
 import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode;
+import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceColor;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
 import org.telegram.ui.Components.chat.layouts.ChatActivityFadeView;
 import org.telegram.ui.Components.chat.layouts.ChatActivitySideControlsButtonsLayout;
@@ -440,6 +442,12 @@ public class ChatActivity extends BaseFragment implements
     private final @NonNull BlurredBackgroundSourceWrapped navbarContentSourceWallpaper;
     private final @NonNull BlurredBackgroundDrawableViewFactory navbarContentDrawableFactory;
 
+    private final @Nullable BlurredBackgroundSourceRenderNode fadeBlurSource;
+    private final @Nullable BlurredBackgroundSourceColor fadeBlurUnderSource;
+    private final @Nullable BlurredBackgroundDrawableViewFactory fadeBlurFactory;
+    private OnPostDrawView fadeBlurCaptureView;
+    private final RectF fadeBlurCaptureRect = new RectF();
+
     private Dialog closeChatDialog;
     private boolean showCloseChatDialogLater;
     private FrameLayout progressView;
@@ -512,6 +520,7 @@ public class ChatActivity extends BaseFragment implements
     private ChatBigEmptyView bigEmptyView;
     private ArrayList<View> actionModeViews = new ArrayList<>();
     public ChatAvatarContainer avatarContainer;
+    private boolean inuAvatarRight;
     private AnimatedTextView selectedMessagesCountTextView;
     private RecyclerListView.OnItemClickListener mentionsOnItemClickListener;
     private SuggestEmojiView suggestEmojiPanel;
@@ -1067,10 +1076,14 @@ public class ChatActivity extends BaseFragment implements
     private int scrimPopupX, scrimPopupY;
     private ActionBarMenuSubItem[] scrimPopupWindowItems;
     private ActionBarMenuSubItem menuDeleteItem;
-    private ImageView popupBlurOverlayView;
-    private Bitmap popupBlurOverlayBitmap;
-    private android.view.Choreographer.FrameCallback popupBlurRefreshCallback;
-    private int popupBlurRefreshFrameCounter;
+    private boolean popupBlurApplied;
+    private ValueAnimator popupBlurAnimator;
+    private ViewTreeObserver.OnDrawListener popupBlurDrawListener;
+    private View popupBlurWaitingView;
+    private boolean popupBlurPending;
+    private Runnable holdPopupRunnable;
+    private Runnable holdOpenRunnable;
+    private View holdPopupView;
     private final Runnable updateDeleteItemRunnable = new Runnable() {
         @Override
         public void run() {
@@ -1275,6 +1288,7 @@ public class ChatActivity extends BaseFragment implements
     public final static int OPTION_CLEAR_FILE = 92;
     public final static int OPTION_SAVE_MESSAGE = 93;
     public final static int OPTION_REPEAT = 94;
+    public final static int OPTION_SELECT = 95;
     public final static int OPTION_SEND_NOW = 100;
     public final static int OPTION_EDIT_SCHEDULE_TIME = 102;
     public final static int OPTION_SPEED_PROMO = 103;
@@ -1416,14 +1430,26 @@ public class ChatActivity extends BaseFragment implements
     public void showHeaderItem(boolean show) {
         if (show) {
             if (chatActivityEnterView.hasText() && TextUtils.isEmpty(chatActivityEnterView.getSlowModeTimer())) {
-                if (attachItem != null) {
-                    attachItem.setVisibility(View.VISIBLE);
-                }
-                if (headerItem != null) {
-                    headerItem.setVisibility(View.GONE);
-                }
-                if (otherIcon != null) {
-                    otherIcon.setIconVisible(true);
+                if (inuAvatarRight) {
+                    if (attachItem != null) {
+                        attachItem.setVisibility(View.GONE);
+                    }
+                    if (headerItem != null) {
+                        headerItem.setVisibility(View.VISIBLE);
+                    }
+                    if (otherIcon != null) {
+                        otherIcon.setIconVisible(false);
+                    }
+                } else {
+                    if (attachItem != null) {
+                        attachItem.setVisibility(View.VISIBLE);
+                    }
+                    if (headerItem != null) {
+                        headerItem.setVisibility(View.GONE);
+                    }
+                    if (otherIcon != null) {
+                        otherIcon.setIconVisible(true);
+                    }
                 }
             } else {
                 if (attachItem != null) {
@@ -1742,6 +1768,9 @@ public class ChatActivity extends BaseFragment implements
                 showMenu = messageObject.messageOwner.action instanceof TLRPC.TL_messageActionSetMessagesTTL || actionCell.getMessageObject().type == MessageObject.TYPE_SUGGEST_PHOTO || actionCell.getMessageObject().isWallpaperAction() || actionCell.getMessageObject().type == MessageObject.TYPE_GIFT_STARS;
             }
             if (!actionBar.isActionModeShowed() && (!isReport() || showMenu)) {
+                if (NekoConfig.holdToOpenPopup) {
+                    return true;
+                }
                 result = createMenu(view, false, true, x, y, true);
             } else {
                 boolean outside = false;
@@ -1751,7 +1780,9 @@ public class ChatActivity extends BaseFragment implements
                 processRowSelect(view, outside, x, y);
             }
             if (view instanceof ChatMessageCell && (((ChatMessageCell) view).getMessageObject() != null && ((ChatMessageCell) view).getMessageObject().type != MessageObject.TYPE_JOINED_CHANNEL)) {
-                startMultiselect(position);
+                if (!NekoConfig.holdToOpenPopup) {
+                    startMultiselect(position);
+                }
                 result = true;
             }
             return result;
@@ -1919,6 +1950,9 @@ public class ChatActivity extends BaseFragment implements
                     }
                     return;
                 }
+            }
+            if (NekoConfig.holdToOpenPopup) {
+                return;
             }
             createMenu(view, true, false, x, y, false);
         }
@@ -2248,6 +2282,11 @@ public class ChatActivity extends BaseFragment implements
                 suggestEmojiPanel.onTextSelectionChanged(start, end);
             }
             if (end - start > 0) {
+                if (inuAvatarRight) {
+                    editTextStart = start;
+                    editTextEnd = end;
+                    return;
+                }
                 if (editTextItem.getTag() == null) {
                     editTextItem.setTag(1);
 
@@ -2406,14 +2445,26 @@ public class ChatActivity extends BaseFragment implements
                 editTextItem.setVisibility(View.GONE);
             }
             if (TextUtils.isEmpty(chatActivityEnterView.getSlowModeTimer())) {
-                if (headerItem != null) {
-                    headerItem.setVisibility(View.GONE);
-                }
-                if (attachItem != null) {
-                    attachItem.setVisibility(View.VISIBLE);
-                }
-                if (otherIcon != null) {
-                    otherIcon.setIconVisible(true);
+                if (inuAvatarRight) {
+                    if (headerItem != null) {
+                        headerItem.setVisibility(View.VISIBLE);
+                    }
+                    if (attachItem != null) {
+                        attachItem.setVisibility(View.GONE);
+                    }
+                    if (otherIcon != null) {
+                        otherIcon.setIconVisible(false);
+                    }
+                } else {
+                    if (headerItem != null) {
+                        headerItem.setVisibility(View.GONE);
+                    }
+                    if (attachItem != null) {
+                        attachItem.setVisibility(View.VISIBLE);
+                    }
+                    if (otherIcon != null) {
+                        otherIcon.setIconVisible(true);
+                    }
                 }
             }
         }
@@ -2763,7 +2814,7 @@ public class ChatActivity extends BaseFragment implements
             glassBackgroundSourceFrostedRenderNode.setUnderSource(navbarContentSourceWallpaper);
 
             glassBackgroundDrawableFactoryFrosted = new BlurredBackgroundDrawableViewFactory(glassBackgroundSourceFrostedRenderNode);
-            glassBackgroundDrawableFactoryFrosted.setLiquidGlassEffectAllowed(!NonIslandHelper.chatElements() && LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS));
+            glassBackgroundDrawableFactoryFrosted.setLiquidGlassEffectAllowed(!NonIslandHelper.chatElements());
 
             if (!NonIslandHelper.chatElements() && LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS)) {
                 glassBackgroundSourceRenderNode = new BlurredBackgroundSourceRenderNode(navbarContentSourceWallpaper);
@@ -2771,7 +2822,7 @@ public class ChatActivity extends BaseFragment implements
                 glassBackgroundSourceRenderNode.setScrollableNoiseSuppressor(scrollableViewNoiseSuppressor, DownscaleScrollableNoiseSuppressor.DRAW_GLASS);
                 glassBackgroundSourceRenderNode.setUnderSource(navbarContentSourceWallpaper);
                 glassBackgroundDrawableFactory = new BlurredBackgroundDrawableViewFactory(glassBackgroundSourceRenderNode);
-                glassBackgroundDrawableFactory.setLiquidGlassEffectAllowed(!NonIslandHelper.chatElements() && LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS));
+                glassBackgroundDrawableFactory.setLiquidGlassEffectAllowed(!NonIslandHelper.chatElements());
             } else {
                 glassBackgroundSourceRenderNode = null;
                 glassBackgroundDrawableFactory = glassBackgroundDrawableFactoryFrosted;
@@ -2791,6 +2842,17 @@ public class ChatActivity extends BaseFragment implements
         glassBackgroundDrawableFactory.setLinkedViewsRef(glassAttachedViews);
         glassBackgroundDrawableFactoryFrosted.setLinkedViewsRef(glassAttachedViews);
         scrimBlur3Factory.setLinkedViewsRef(new ReferenceList<>());
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && NekoConfig.blurredFadeView) {
+            fadeBlurUnderSource = new BlurredBackgroundSourceColor();
+            fadeBlurSource = new BlurredBackgroundSourceRenderNode(null);
+            fadeBlurSource.setUnderSource(fadeBlurUnderSource);
+            fadeBlurFactory = new BlurredBackgroundDrawableViewFactory(fadeBlurSource);
+        } else {
+            fadeBlurUnderSource = null;
+            fadeBlurSource = null;
+            fadeBlurFactory = null;
+        }
 
         navbarContentDrawableFactory.setLinkedDrawablesRef(glassAttachedDrawables);
         glassBackgroundDrawableFactory.setLinkedDrawablesRef(glassAttachedDrawables);
@@ -3504,10 +3566,11 @@ public class ChatActivity extends BaseFragment implements
     @Override
     public void onFragmentDestroy() {
         super.onFragmentDestroy();
-        if (feedIntegration != null) {
+if (feedIntegration != null) {
             feedIntegration.destroy();
             feedIntegration = null;
         }
+        stopFadeBlurContinuousUpdates();
         if (messageMetricsView != null) {
             messageMetricsView.finish();
         }
@@ -4326,6 +4389,10 @@ public class ChatActivity extends BaseFragment implements
         avatarContainer = new ChatAvatarContainer(context, this, currentEncryptedChat != null, themeDelegate) {
             @Override
             protected boolean onAvatarClick() {
+                if (NekoConfig.avatarPlacement == NekoConfig.AVATAR_PLACEMENT_RIGHT && !NonIslandHelper.chatElements() && headerItem != null) {
+                    headerItem.toggleSubMenu();
+                    return true;
+                }
                 if (currentUser != null && currentUser.linked_community_id != 0) {
                     showDialog(new CommunitySheet(ChatActivity.this, currentUser.linked_community_id));
                     return true;
@@ -4352,6 +4419,8 @@ public class ChatActivity extends BaseFragment implements
             }
         };
         avatarContainer.setGlassMode();
+        avatarContainer.setM3HeaderMode(NekoConfig.material3ChatHeaders);
+        avatarContainer.setBiggerAvatar(NekoConfig.biggerAvatar);
         avatarContainer.allowShorterStatus = true;
         avatarContainer.premiumIconHiddable = true;
         avatarContainer.allowDrawStories = dialog_id < 0 && !isTopic;
@@ -4446,7 +4515,7 @@ public class ChatActivity extends BaseFragment implements
             searchItemVisible = false;
         }
 
-        if (chatMode == 0 && (threadMessageId == 0 || isTopic) && !UserObject.isReplyUser(currentUser) && !isReport()) {
+        if (chatMode == 0 && (threadMessageId == 0 || isTopic) && !UserObject.isReplyUser(currentUser) && !isReport() && !(NekoConfig.avatarPlacement == NekoConfig.AVATAR_PLACEMENT_RIGHT && !NonIslandHelper.chatElements())) {
             TLRPC.UserFull userFull = null;
             if (currentUser != null) {
                 audioCallIconItem = menu.lazilyAddItem(call, R.drawable.call, themeDelegate);
@@ -4771,6 +4840,11 @@ public class ChatActivity extends BaseFragment implements
         invalidateBlurredSourcesView = new OnPostDrawView(context, true, this::invalidateMergedVisibleBlurredPositionsAndSourcesImpl);
         contentView.addView(invalidateBlurredSourcesView);
 
+        if (fadeBlurSource != null) {
+            fadeBlurCaptureView = new OnPostDrawView(context, true, flags -> invalidateFadeBlurImpl());
+            contentView.addView(fadeBlurCaptureView);
+        }
+
         final ViewPositionWatcher viewPositionWatcher = new ViewPositionWatcher(contentView);
 
         final ViewGroup parentView = parentChatActivity != null ? parentChatActivity.contentView : contentView;
@@ -4778,16 +4852,56 @@ public class ChatActivity extends BaseFragment implements
         glassBackgroundDrawableFactoryFrosted.setSourceRootView(viewPositionWatcher, parentView);
         navbarContentDrawableFactory.setSourceRootView(viewPositionWatcher, parentView);
         scrimBlur3Factory.setSourceRootView(viewPositionWatcher, parentView);
+        if (fadeBlurFactory != null) {
+            fadeBlurFactory.setSourceRootView(viewPositionWatcher, parentView);
+        }
 
         contentView.setOccupyStatusBar(!inBubbleMode && !isInsideContainer && !inPreviewMode);
 
 actionBar.inu_nonIsland = NonIslandHelper.chatElements();
+        actionBar.inu_m3ChatHeader = NekoConfig.material3ChatHeaders && !NonIslandHelper.chatElements();
+        final int avatarPlacement;
+        if (NonIslandHelper.chatElements()) {
+            avatarPlacement = NekoConfig.AVATAR_PLACEMENT_LEFT;
+        } else if (NekoConfig.centerChatHeader) {
+            avatarPlacement = NekoConfig.avatarPlacement;
+        } else {
+            avatarPlacement = NekoConfig.avatarPlacement == NekoConfig.AVATAR_PLACEMENT_CENTER ? NekoConfig.AVATAR_PLACEMENT_LEFT : NekoConfig.avatarPlacement;
+        }
+        final boolean centeredPill = NekoConfig.centerChatHeader && !NonIslandHelper.chatElements();
+        final boolean textOnlyPill = centeredPill && avatarPlacement != NekoConfig.AVATAR_PLACEMENT_CENTER;
+        final boolean avatarRight = avatarPlacement == NekoConfig.AVATAR_PLACEMENT_RIGHT && !NonIslandHelper.chatElements() && avatarContainer.hasVisibleAvatar();
+        inuAvatarRight = avatarRight;
+        actionBar.inu_centerChatHeader = centeredPill && avatarPlacement == NekoConfig.AVATAR_PLACEMENT_CENTER;
+        actionBar.inu_textOnlyPill = textOnlyPill;
+        avatarContainer.setAvatarPlacement(avatarPlacement);
+        avatarContainer.setTextOnlyPill(textOnlyPill);
         actionBar.setupGlass(
             glassBackgroundDrawableFactory,
             BlurredBackgroundProviderImpl.topPanelChatActivity(themeDelegate),
             ChatObject.isForum(currentChat));
         //actionBar.setChatAvatarContainer(avatarContainer);
         //avatarContainer.setActionBar(actionBar);
+        if (centeredPill) {
+            actionBar.setChatAvatarContainer(avatarContainer);
+            avatarContainer.setActionBar(actionBar);
+        }
+        if (avatarRight) {
+            avatarContainer.setRightTextInset(AndroidUtilities.dp(140));
+            if (avatarContainer.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+                ((ViewGroup.MarginLayoutParams) avatarContainer.getLayoutParams()).rightMargin = AndroidUtilities.dp(6);
+            }
+            if (headerItem != null) {
+                avatarContainer.setRightAnchorView(headerItem);
+                View iconView = headerItem.getIconView();
+                if (iconView != null) {
+                    iconView.setVisibility(View.INVISIBLE);
+                }
+                actionBar.inu_avatarRightBigger = NekoConfig.biggerAvatar;
+            }
+        } else if (textOnlyPill) {
+            avatarContainer.setRightTextInset(AndroidUtilities.dp(92));
+        }
 
         chatInputViewsContainer = new ChatInputViewsContainer(context);
         chatInputViewsContainer.setClipChildren(false);
@@ -6629,6 +6743,17 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
             }
         };
         chatListView.addEdgeEffectListener(() -> invalidateMergedVisibleBlurredPositionsAndSources(BLUR_INVALIDATE_FLAG_SCROLL | BLUR_INVALIDATE_FLAG_CLIP));
+        chatListView.addOnChildAttachStateChangeListener(new RecyclerView.OnChildAttachStateChangeListener() {
+            @Override
+            public void onChildViewAttachedToWindow(@NonNull View view) {
+                invalidateMergedVisibleBlurredPositionsAndSources(BLUR_INVALIDATE_FLAG_SCROLL);
+            }
+
+            @Override
+            public void onChildViewDetachedFromWindow(@NonNull View view) {
+                invalidateMergedVisibleBlurredPositionsAndSources(BLUR_INVALIDATE_FLAG_SCROLL);
+            }
+        });
         if (false && currentEncryptedChat != null) {
             chatListView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         }
@@ -6984,6 +7109,45 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
         });
         chatListView.setOnItemLongClickListener(onItemLongClickListener);
         chatListView.setOnItemClickListener(onItemClickListener);
+        chatListView.setOnInterceptTouchListener(event -> {
+            if (!NekoConfig.holdToOpenPopup) return false;
+            if (actionBar.isActionModeShowed() || isReport()) return false;
+            int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_DOWN) {
+                cancelHold();
+                View child = chatListView.findChildViewUnder(event.getX(), event.getY());
+                if (child instanceof ChatMessageCell) {
+                    final View hv = child;
+                    final float fx = event.getX() - child.getLeft();
+                    final float fy = event.getY() - child.getTop();
+                    holdPopupView = hv;
+                    final long holdDelay = 200L;
+                    final long scaleDuration = (long) (NekoConfig.popupHoldTime * 1000);
+                    holdPopupRunnable = () -> {
+                        ChatMessageCell cellHv = (ChatMessageCell) hv;
+                        hv.setPivotX((cellHv.getBackgroundDrawableLeft() + cellHv.getBackgroundDrawableRight()) / 2f);
+                        hv.setPivotY((cellHv.getBackgroundDrawableTop() + cellHv.getBackgroundDrawableBottom()) / 2f);
+                        hv.animate().scaleX(0.95f).scaleY(0.95f).setDuration(scaleDuration).setInterpolator(CubicBezierInterpolator.EASE_OUT).start();
+                        hv.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+                        holdOpenRunnable = () -> {
+                            hv.animate().scaleX(1f).scaleY(1f).setDuration(150).setInterpolator(CubicBezierInterpolator.EASE_OUT).start();
+                            hv.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+                            holdPopupRunnable = null;
+                            holdOpenRunnable = null;
+                            holdPopupView = null;
+                            createMenu(hv, false, true, fx, fy, true);
+                        };
+                        AndroidUtilities.runOnUIThread(holdOpenRunnable, scaleDuration);
+                        holdPopupRunnable = null;
+                    };
+                    AndroidUtilities.runOnUIThread(holdPopupRunnable, holdDelay);
+                    return true;
+                }
+            } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                cancelHold();
+            }
+            return false;
+        });
         chatListView.setOnScrollListener(new RecyclerView.OnScrollListener() {
 
             private float totalDy = 0;
@@ -7199,10 +7363,27 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
         contentView.addView(chatListView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
         chatActivityFadeView = new ChatActivityFadeView(context);
-        chatActivityFadeView.setup(navbarContentDrawableFactory);
-        chatActivityFadeView.setFadeHeightTop(dp(48));
-        chatActivityFadeView.setFadeHeightBottom(dp(48));
+        if (fadeBlurFactory != null) {
+            chatActivityFadeView.setup(fadeBlurFactory);
+            chatActivityFadeView.setOpaqueFade(true);
+        } else {
+            chatActivityFadeView.setup(NekoConfig.blurredFadeView ? glassBackgroundDrawableFactoryFrosted : navbarContentDrawableFactory);
+        }
+        if (NekoConfig.material3ChatHeaders || fadeBlurFactory != null) {
+            chatActivityFadeView.setFadeHeightTop(dp(48), false);
+        } else {
+            chatActivityFadeView.setFadeHeightTop(dp(48));
+        }
+        if (fadeBlurFactory != null) {
+            chatActivityFadeView.setFadeHeightBottom(dp(48), false);
+        } else {
+            chatActivityFadeView.setFadeHeightBottom(dp(48));
+        }
         contentView.addView(chatActivityFadeView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+        if (fadeBlurSource != null) {
+            chatActivityFadeView.post(this::invalidateFadeBlur);
+            startFadeBlurContinuousUpdates();
+        }
 
         if (getDialogId() != getUserConfig().getClientUserId()) {
             selectionReactionsOverlay = new ChatSelectionReactionMenuOverlay(this, context);
@@ -18151,6 +18332,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 invalidateMessagesVisiblePart = false;
                 updateMessagesVisiblePart(false);
             }
+            if (chatListItemAnimator != null && chatListItemAnimator.isRunning()) {
+                invalidateMergedVisibleBlurredPositionsAndSources(BLUR_INVALIDATE_FLAG_SCROLL);
+            }
             updateTextureViewPosition(false, false);
             updatePagedownButtonsPosition();
             if (scheduledOrNoSoundHint != null && scheduledOrNoSoundHint.isShowing()) {
@@ -18691,11 +18875,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 }
                 if (showSearchAsIcon || showAudioCallAsIcon || UserObject.isBotForumWithEditableTopics(currentUser)) {
                     if (avatarContainer != null && avatarContainer.getLayoutParams() != null) {
-                        ((ViewGroup.MarginLayoutParams) avatarContainer.getLayoutParams()).rightMargin = AndroidUtilities.dp(chatMode == MODE_SAVED ? 52 : 92);
+                        ((ViewGroup.MarginLayoutParams) avatarContainer.getLayoutParams()).rightMargin = inuAvatarRight ? AndroidUtilities.dp(6) : AndroidUtilities.dp(chatMode == MODE_SAVED ? 52 : 92);
                     }
                 } else {
                     if (avatarContainer != null && avatarContainer.getLayoutParams() != null) {
-                        ((ViewGroup.MarginLayoutParams) avatarContainer.getLayoutParams()).rightMargin = AndroidUtilities.dp(52);
+                        ((ViewGroup.MarginLayoutParams) avatarContainer.getLayoutParams()).rightMargin = inuAvatarRight ? AndroidUtilities.dp(6) : AndroidUtilities.dp(52);
                     }
                 }
                 if (showSearchAsIcon) {
@@ -31257,163 +31441,114 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.S)
     private void applyPopupBlur(View cellView) {
         if (!NekoConfig.blurPopupInChat || getParentActivity() == null) return;
-        android.view.Window window = getParentActivity().getWindow();
-        if (window == null) return;
-        View decorView = window.getDecorView();
-        int dw = decorView.getWidth();
-        int dh = decorView.getHeight();
-        if (dw <= 0 || dh <= 0) return;
-        removePopupBlur();
-        if (scrimPopupWindow != null) {
-            View cv = scrimPopupWindow.getContentView();
-            if (cv != null) addPopupDetachListener(cv);
+        if (Build.VERSION.SDK_INT < 31 || contentView == null) return;
+        popupBlurApplied = true;
+        float targetBlur = NekoConfig.disableBlurBs ? 0f : NekoConfig.blurOverlayRadius * 8f;
+        View popupContent = scrimPopupWindow != null ? scrimPopupWindow.getContentView() : null;
+        if (popupContent == null) {
+            startPopupBlur(targetBlur);
+            return;
         }
-        int pixelation = NekoConfig.blurPixelation;
-        int downscale = Math.max(1, 1 + pixelation / 5);
-        int bw = Math.max(1, dw / downscale);
-        int bh = Math.max(1, dh / downscale);
-        Bitmap bitmap = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888);
-        popupBlurOverlayBitmap = bitmap;
-        PixelCopy.request(window, bitmap, copyResult -> {
-            if (copyResult != PixelCopy.SUCCESS || popupBlurOverlayBitmap != bitmap) {
-                bitmap.recycle();
-                return;
-            }
-            ImageView imageView = new ImageView(getContext());
-            imageView.setScaleType(ImageView.ScaleType.FIT_XY);
-            imageView.setImageBitmap(bitmap);
-            boolean disableBlur = NekoConfig.disableBlurBs;
-            float targetBlur = disableBlur ? 0f : NekoConfig.blurOverlayRadius * 8f;
-            if (NekoConfig.blurSmoothly) {
-                imageView.setRenderEffect(RenderEffect.createBlurEffect(0f, 0f, Shader.TileMode.CLAMP));
-            } else {
-                imageView.setRenderEffect(RenderEffect.createBlurEffect(
-                    targetBlur, targetBlur, Shader.TileMode.CLAMP
-                ));
-            }
-            imageView.setTag("popup_blur_overlay");
-            imageView.setLayoutParams(new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
-            ));
-            ViewGroup content = (ViewGroup) getParentActivity().findViewById(android.R.id.content);
-            if (content != null) {
-                content.addView(imageView);
-                popupBlurOverlayView = imageView;
-                if (NekoConfig.blurSmoothly) {
-                    ValueAnimator animator = ValueAnimator.ofFloat(0f, targetBlur);
-                    animator.setDuration(NekoConfig.blurAnimationDuration);
-                    animator.setInterpolator(new CubicBezierInterpolator(0.3f, 0.8f, 0f, 1f));
-                    animator.addUpdateListener(a -> {
-                        if (popupBlurOverlayView != null) {
-                            float val = (float) a.getAnimatedValue();
-                            popupBlurOverlayView.setRenderEffect(RenderEffect.createBlurEffect(
-                                val, val, Shader.TileMode.CLAMP
-                            ));
-                        }
-                    });
-                    animator.start();
-                } else {
-                    imageView.setAlpha(0f);
-                    imageView.animate().alpha(1f).setDuration(200).setInterpolator(CubicBezierInterpolator.DEFAULT).start();
-                }
-                if (NekoConfig.blurOverlayRefresh) {
-                    setupPopupBlurRefresh(window, dw, dh, bw, bh);
-                }
-            }
-        }, new Handler(Looper.getMainLooper()));
-    }
-
-    @RequiresApi(api = Build.VERSION_CODES.S)
-    private void setupPopupBlurRefresh(android.view.Window window, int dw, int dh, int bw, int bh) {
-        popupBlurRefreshFrameCounter = 0;
-        popupBlurRefreshCallback = new android.view.Choreographer.FrameCallback() {
+        cancelPopupBlur();
+        popupBlurWaitingView = popupContent;
+        popupBlurPending = true;
+        popupBlurDrawListener = new ViewTreeObserver.OnDrawListener() {
             @Override
-            public void doFrame(long frameTimeNanos) {
-                if (popupBlurOverlayView == null) return;
-                popupBlurRefreshFrameCounter++;
-                int interval = NekoConfig.blurOverlayRefreshInterval;
-                if (popupBlurRefreshFrameCounter % interval != 0) {
-                    android.view.Choreographer.getInstance().postFrameCallback(this);
-                    return;
-                }
-                Bitmap newBitmap = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888);
-                PixelCopy.request(window, newBitmap, refreshResult -> {
-                    if (refreshResult == PixelCopy.SUCCESS && popupBlurOverlayView != null) {
-                        Bitmap old = popupBlurOverlayBitmap;
-                        popupBlurOverlayBitmap = newBitmap;
-                        popupBlurOverlayView.setImageBitmap(newBitmap);
-                        if (old != null) old.recycle();
-                    } else {
-                        newBitmap.recycle();
-                    }
-                    if (popupBlurOverlayView != null && NekoConfig.blurOverlayRefresh) {
-                        android.view.Choreographer.getInstance().postFrameCallback(popupBlurRefreshCallback);
-                    }
-                }, new Handler(Looper.getMainLooper()));
+            public void onDraw() {
+                if (!popupBlurPending || contentView == null) return;
+                popupBlurPending = false;
+                startPopupBlur(targetBlur);
             }
         };
-        android.view.Choreographer.getInstance().postFrameCallback(popupBlurRefreshCallback);
+        popupContent.getViewTreeObserver().addOnDrawListener(popupBlurDrawListener);
+    }
+
+    private void startPopupBlur(float targetBlur) {
+        if (contentView == null || !popupBlurApplied) return;
+        if (targetBlur <= 0f) {
+            contentView.setRenderEffect(null);
+            return;
+        }
+        contentView.setRenderEffect(RenderEffect.createBlurEffect(0f, 0f, Shader.TileMode.CLAMP));
+        popupBlurAnimator = ValueAnimator.ofFloat(0f, targetBlur);
+        popupBlurAnimator.setDuration(NekoConfig.blurAnimationDuration);
+        popupBlurAnimator.setInterpolator(new CubicBezierInterpolator(0.3f, 0.8f, 0f, 1f));
+        popupBlurAnimator.addUpdateListener(a -> {
+            if (contentView != null) {
+                float val = (float) a.getAnimatedValue();
+                contentView.setRenderEffect(RenderEffect.createBlurEffect(val, val, Shader.TileMode.CLAMP));
+            }
+        });
+        popupBlurAnimator.start();
+    }
+
+    private void cancelPopupBlur() {
+        if (popupBlurDrawListener != null && popupBlurWaitingView != null) {
+            popupBlurWaitingView.getViewTreeObserver().removeOnDrawListener(popupBlurDrawListener);
+        }
+        popupBlurDrawListener = null;
+        popupBlurWaitingView = null;
+        popupBlurPending = false;
+        if (popupBlurAnimator != null) {
+            popupBlurAnimator.cancel();
+            popupBlurAnimator = null;
+        }
     }
 
     private void removePopupBlur() {
-        removePopupBlur(false);
+        removePopupBlur(true);
+    }
+
+    private void cancelHold() {
+        if (holdPopupRunnable != null) {
+            AndroidUtilities.cancelRunOnUIThread(holdPopupRunnable);
+            holdPopupRunnable = null;
+        }
+        if (holdOpenRunnable != null) {
+            AndroidUtilities.cancelRunOnUIThread(holdOpenRunnable);
+            holdOpenRunnable = null;
+        }
+        if (holdPopupView != null) {
+            holdPopupView.animate().cancel();
+            holdPopupView.setScaleX(1f);
+            holdPopupView.setScaleY(1f);
+            holdPopupView = null;
+        }
     }
 
     private void removePopupBlur(boolean animated) {
-        popupBlurRefreshCallback = null;
-        if (popupBlurOverlayView != null) {
-            if (animated) {
-                View overlay = popupBlurOverlayView;
-                Bitmap bitmap = popupBlurOverlayBitmap;
-                overlay.animate().cancel();
-                long duration = 250;
-                if (Build.VERSION.SDK_INT >= 31 && NekoConfig.blurSmoothly && !NekoConfig.disableBlurBs) {
-                    float startBlur = NekoConfig.blurOverlayRadius * 8f;
-                    ValueAnimator blurAnim = ValueAnimator.ofFloat(startBlur, 0f);
-                    blurAnim.setDuration(duration);
-                    blurAnim.setInterpolator(CubicBezierInterpolator.EASE_OUT);
-                    blurAnim.addUpdateListener(a -> {
-                        if (popupBlurOverlayView == overlay) {
-                            float val = (float) a.getAnimatedValue();
-                            overlay.setRenderEffect(RenderEffect.createBlurEffect(
-                                val, val, Shader.TileMode.CLAMP
-                            ));
-                        }
-                    });
-                    blurAnim.start();
+        if (Build.VERSION.SDK_INT < 31 || !popupBlurApplied) return;
+        popupBlurApplied = false;
+        float currentBlur = NekoConfig.blurOverlayRadius * 8f;
+        if (popupBlurAnimator != null && popupBlurAnimator.isRunning()) {
+            currentBlur = (float) popupBlurAnimator.getAnimatedValue();
+        }
+        boolean wasBlurring = popupBlurAnimator != null;
+        cancelPopupBlur();
+        if (contentView == null) return;
+        if (animated && wasBlurring && NekoConfig.blurSmoothly && !NekoConfig.disableBlurBs && currentBlur > 0f) {
+            ValueAnimator blurAnim = ValueAnimator.ofFloat(currentBlur, 0f);
+            blurAnim.setDuration(250);
+            blurAnim.setInterpolator(CubicBezierInterpolator.EASE_OUT);
+            blurAnim.addUpdateListener(a -> {
+                if (contentView != null) {
+                    float val = (float) a.getAnimatedValue();
+                    contentView.setRenderEffect(RenderEffect.createBlurEffect(val, val, Shader.TileMode.CLAMP));
                 }
-                overlay.animate()
-                    .alpha(0f)
-                    .setDuration(duration)
-                    .setInterpolator(CubicBezierInterpolator.EASE_OUT)
-                    .withEndAction(() -> {
-                        ViewGroup parent = (ViewGroup) overlay.getParent();
-                        if (parent != null) parent.removeView(overlay);
-                        if (bitmap != null) bitmap.recycle();
-                        if (popupBlurOverlayView == overlay) {
-                            popupBlurOverlayView = null;
-                            popupBlurOverlayBitmap = null;
-                        }
-                    })
-                    .start();
-            } else {
-                popupBlurOverlayView.animate().cancel();
-                ViewGroup parent = (ViewGroup) popupBlurOverlayView.getParent();
-                if (parent != null) parent.removeView(popupBlurOverlayView);
-                popupBlurOverlayView = null;
-                if (popupBlurOverlayBitmap != null) {
-                    popupBlurOverlayBitmap.recycle();
-                    popupBlurOverlayBitmap = null;
+            });
+            blurAnim.addListener(new AnimatorListenerAdapter() {
+                @Override
+                public void onAnimationEnd(Animator animation) {
+                    if (contentView != null) {
+                        contentView.setRenderEffect(null);
+                    }
                 }
-            }
+            });
+            blurAnim.start();
         } else {
-            if (popupBlurOverlayBitmap != null) {
-                popupBlurOverlayBitmap.recycle();
-                popupBlurOverlayBitmap = null;
-            }
+            contentView.setRenderEffect(null);
         }
     }
 
@@ -34140,6 +34275,23 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
         boolean preserveDim = false;
         switch (option) {
+            case OPTION_SELECT: {
+                closeMenu();
+                BaseCell cell = findMessageCell(selectedObject.getId(), true);
+                if (cell != null) {
+                    processRowSelect(cell, false, 0, 0);
+                    if (chatActivityEnterView != null && chatActivityEnterView.getVisibility() == View.VISIBLE) {
+                        ArrayList<View> views = new ArrayList<>();
+                        if (mentionContainer != null && mentionContainer.getVisibility() == View.VISIBLE)
+                            views.add(mentionContainer);
+                        actionBar.showActionMode(true, null, null, views.toArray(new View[0]), new boolean[]{false, true, true}, null, 0);
+                    } else {
+                        actionBar.showActionMode(true, null, null, null, null, null, 0);
+                    }
+                    chatLayoutManager.setCanScrollVertically(true);
+                }
+                return;
+            }
             case OPTION_RETRY: {
                 final MessageObject object = selectedObject;
                 final MessageObject.GroupedMessages group = selectedObjectGroup;
@@ -41983,6 +42135,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
         @Override
         public void didLongPress(ChatMessageCell cell, float x, float y) {
+            if (NekoConfig.holdToOpenPopup) return;
             createMenu(cell, false, false, x, y, false);
             startMultiselect(chatListView.getChildAdapterPosition(cell));
         }
@@ -47344,6 +47497,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             options.add(OPTION_DELETE);
             icons.add(deleteIconRes);
         } else if (type == 1) {
+            if (NekoConfig.holdToOpenPopup) {
+                items.add(LocaleController.getString(R.string.Select));
+                options.add(OPTION_SELECT);
+                icons.add(R.drawable.msg_select);
+            }
             if (currentChat != null) {
                 if ((allowChatActions || isEphemeralFromBot) && !isInsideContainer) {
                     items.add(LocaleController.getString(R.string.Reply));
@@ -48070,6 +48228,23 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
         fadeHeight += dp(36 + 7) * getHashtagTabsShownT();
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlur) {
+            final int boundary = actionBar.getMeasuredHeight();
+            chatActivityFadeView.setFadeZoneTop(boundary + dp(48));
+            chatActivityFadeView.setFadeHeightTop(dp(48), false);
+            chatActivityFadeView.setFadeTopAlpha(255);
+            chatActivityFadeView.setDimFadeZoneTop(boundary);
+            return;
+        }
+
+        if (NekoConfig.material3ChatHeaders && fadeBlurFactory == null) {
+            fadeHeight += dp(16);
+            chatActivityFadeView.setFadeTopAlpha(230);
+        } else {
+            chatActivityFadeView.setFadeTopAlpha(255);
+        }
+
+        chatActivityFadeView.setDimFadeZoneTop(-1);
         chatActivityFadeView.setFadeZoneTop((int) fadeHeight);
     }
 
@@ -48745,6 +48920,8 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             parentChatActivity.invalidateMergedVisibleBlurredPositionsAndSources(flags);
         }
 
+        invalidateFadeBlur();
+
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || scrollableViewNoiseSuppressor == null) {
             return;
         }
@@ -48786,6 +48963,85 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
 
         //}
+    }
+
+    private long lastFadeBlurUpdateTime;
+    private boolean fadeBlurContinuousUpdating;
+    private final Choreographer.FrameCallback fadeBlurFrameCallback = new Choreographer.FrameCallback() {
+        @Override
+        public void doFrame(long frameTimeNanos) {
+            if (fadeBlurContinuousUpdating) {
+                invalidateFadeBlur();
+                Choreographer.getInstance().postFrameCallback(this);
+            }
+        }
+    };
+
+    private void startFadeBlurContinuousUpdates() {
+        if (fadeBlurContinuousUpdating) {
+            return;
+        }
+        fadeBlurContinuousUpdating = true;
+        Choreographer.getInstance().postFrameCallback(fadeBlurFrameCallback);
+    }
+
+    private void stopFadeBlurContinuousUpdates() {
+        fadeBlurContinuousUpdating = false;
+        Choreographer.getInstance().removeFrameCallback(fadeBlurFrameCallback);
+    }
+
+    private void invalidateFadeBlur() {
+        if (fadeBlurCaptureView != null) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlur && !fadeBlurContinuousUpdating) {
+                final long now = SystemClock.uptimeMillis();
+                if (now - lastFadeBlurUpdateTime < 1000 / Math.max(15, NekoConfig.progressiveFadeBlurRefreshRate)) {
+                    return;
+                }
+                lastFadeBlurUpdateTime = now;
+            }
+            fadeBlurCaptureView.invalidate(1);
+        }
+    }
+
+    private void invalidateFadeBlurImpl() {
+        if (fadeBlurSource == null || chatActivityFadeView == null || contentView == null) {
+            return;
+        }
+        if (fadeBlurSource.inRecording()) {
+            return;
+        }
+        final int fw = contentView.getWidth();
+        final int fh = contentView.getHeight();
+        if (fw <= 0 || fh <= 0) {
+            return;
+        }
+        fadeBlurCaptureRect.set(0, 0, fw, fh);
+        int wallpaperColor = getThemedColor(Theme.key_chat_wallpaper);
+        if (Color.alpha(wallpaperColor) < 255) {
+            wallpaperColor = ColorUtils.setAlphaComponent(wallpaperColor, 255);
+        }
+        if (fadeBlurUnderSource != null) {
+            fadeBlurUnderSource.setColor(wallpaperColor);
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlur) {
+            final int pixelation = Math.max(2, NekoConfig.blurredFadePixelation);
+            fadeBlurSource.setPixelation(pixelation);
+            int fadeZoneTop = chatActivityFadeView.getFadeZoneTop();
+            float topFraction = fadeZoneTop > dp(48) ? Math.min(1f, (fadeZoneTop - dp(48)) / (float) fh) : 1f;
+            int fadeZoneBottom = chatActivityFadeView.getFadeZoneBottom();
+            float bottomFraction = fadeZoneBottom > 0 ? Math.min(1f, fadeZoneBottom / (float) fh) : 1f;
+            fadeBlurSource.setProgressiveBlur(AndroidUtilities.dpf2(NekoConfig.progressiveFadeBlurMaxRadius) / pixelation, fw / pixelation, fh / pixelation, topFraction, bottomFraction, NekoConfig.progressiveFadeBlurSamples);
+        } else {
+            fadeBlurSource.setBlur(AndroidUtilities.dpf2(NekoConfig.blurredFadeBlurStrength));
+            fadeBlurSource.setPixelation(NekoConfig.blurredFadePixelation);
+        }
+        Canvas c = fadeBlurSource.beginRecording(fw, fh);
+        c.drawColor(wallpaperColor);
+        contentView.drawList(c, fadeBlurCaptureRect);
+        fadeBlurSource.endRecording();
+        chatActivityFadeView.setDimColor(wallpaperColor);
+        chatActivityFadeView.setDim(NekoConfig.blurredFadeDimming ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
+        chatActivityFadeView.invalidate();
     }
 
     private int getMergedVisibleBlurredPositions(List<RectF> positions) {

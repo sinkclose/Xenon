@@ -42,6 +42,13 @@ public class ClickHelper {
     default boolean needLongPress (float x, float y) {
       return false;
     }
+    // if true, a scheduled long-press is fired the moment the finger moves beyond
+    // the touch slop, instead of waiting for getLongPressDuration() to elapse.
+    // This lets drag-to-activate start immediately on actual dragging while a mere
+    // tap (no movement) still isn't treated as a long press.
+    default boolean needLongPressOnSlopMove () {
+      return false;
+    }
     // if onLongPressRequestedAt returned false,
     // parent is free to call ClickHelper.onLongPress any time later,
     // but before onLongPressCancelled is called
@@ -197,6 +204,9 @@ public class ClickHelper {
           delegate.onClickTouchMove(view, x, y);
           if ((flags & FLAG_IN_LONG_PRESS) != 0) {
             delegate.onLongPressMove(view, e, x, y, longPressX, longPressY);
+          } else if ((flags & FLAG_LONG_PRESS_SCHEDULED) != 0 && delegate.needLongPressOnSlopMove()
+                     && Math.max(Math.abs(startX - x), Math.abs(startY - y)) > ViewConfiguration.get(view.getContext()).getScaledTouchSlop()) {
+            longPressCallback.run();
           } else if (delegate.needCancelTouchBySlopMove() && Math.max(Math.abs(startX - x), Math.abs(startY - y)) > ViewConfiguration.get(view.getContext()).getScaledTouchSlop() * TOUCH_SLOP_SCALE) {
             resetTouch(view, x, y);
           }

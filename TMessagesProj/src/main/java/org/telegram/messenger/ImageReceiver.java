@@ -324,6 +324,7 @@ public class ImageReceiver implements NotificationCenter.NotificationCenterDeleg
     private boolean forceCrossfade;
     private boolean useRoundRadius = true;
     private final int[] roundRadius = new int[4];
+    public boolean isAvatarReceiver;
     private int[] emptyRoundRadius;
     private boolean isRoundRect = true;
     private Object mark;
@@ -425,6 +426,7 @@ public class ImageReceiver implements NotificationCenter.NotificationCenterDeleg
     }
 
     public void setForUserOrChat(TLObject object, Drawable avatarDrawable, Object parentObject, boolean animationEnabled, int vectorType, boolean big) {
+        isAvatarReceiver = true;
         if (parentObject == null) {
             parentObject = object;
         }
@@ -570,6 +572,9 @@ public class ImageReceiver implements NotificationCenter.NotificationCenterDeleg
     }
 
     public void setImage(ImageLocation mediaLocation, String mediaFilter, ImageLocation imageLocation, String imageFilter, ImageLocation thumbLocation, String thumbFilter, Drawable thumb, long size, String ext, Object parentObject, int cacheType) {
+        if (thumb instanceof AvatarDrawable) {
+            isAvatarReceiver = true;
+        }
         if (allowLoadingOnAttachedOnly && !attachedToWindow) {
             if (setImageBackup == null) {
                 setImageBackup = new SetImageBackup();
@@ -1867,6 +1872,49 @@ public class ImageReceiver implements NotificationCenter.NotificationCenterDeleg
     }
 
     public boolean draw(Canvas canvas) {
+        if (isAvatarReceiver && zxc.iconic.xenon.NekoConfig.avatarShape != 0 && imageW > 0 && imageH > 0) {
+            boolean apply;
+            if (parentView instanceof org.telegram.ui.Cells.DialogCell) {
+                apply = zxc.iconic.xenon.NekoConfig.avatarShapeInChatList;
+            } else if (parentView instanceof org.telegram.ui.Cells.ChatMessageCell) {
+                apply = zxc.iconic.xenon.NekoConfig.avatarShapeInChatMessages;
+            } else {
+                apply = true;
+            }
+            if (apply) {
+                int size = (int) Math.min(imageW, imageH);
+                if (size > 0) {
+                    android.graphics.Path path = zxc.iconic.xenon.settings.AvatarShapeHelper.pathForShape(zxc.iconic.xenon.NekoConfig.avatarShape, size);
+                    float offsetX = imageX + (imageW - size) / 2f;
+                    float offsetY = imageY + (imageH - size) / 2f;
+                    path.offset(offsetX, offsetY);
+                    if (zxc.iconic.xenon.NekoConfig.rotateAvatarShape) {
+                        float angle = (android.os.SystemClock.uptimeMillis() % 1000000L) * zxc.iconic.xenon.NekoConfig.avatarShapeRotationSpeed / 1000f % 360f;
+                        android.graphics.Matrix m = new android.graphics.Matrix();
+                        m.postRotate(angle, offsetX + size / 2f, offsetY + size / 2f);
+                        path.transform(m);
+                    }
+                    boolean restoreRadius = false;
+                    int sr0 = 0, sr1 = 0, sr2 = 0, sr3 = 0;
+                    if (zxc.iconic.xenon.NekoConfig.avatarShapeSquareBase && roundRadius[0] > 0) {
+                        sr0 = roundRadius[0]; sr1 = roundRadius[1]; sr2 = roundRadius[2]; sr3 = roundRadius[3];
+                        setRoundRadius(0);
+                        restoreRadius = true;
+                    }
+                    canvas.save();
+                    canvas.clipPath(path);
+                    boolean result = draw(canvas, null);
+                    canvas.restore();
+                    if (restoreRadius) {
+                        setRoundRadius(sr0, sr1, sr2, sr3);
+                    }
+                    if (zxc.iconic.xenon.NekoConfig.rotateAvatarShape) {
+                        invalidate();
+                    }
+                    return result;
+                }
+            }
+        }
         return draw(canvas, null);
     }
 

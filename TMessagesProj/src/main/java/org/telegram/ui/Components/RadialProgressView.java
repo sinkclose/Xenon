@@ -164,6 +164,78 @@ public class RadialProgressView extends View {
     }
 
     private void updateAnimation(long dt) {
+        if (!NekoConfig.wavyEnabled) {
+            radOffset += 360 * dt / rotationTime;
+            int count = (int) (radOffset / 360);
+            radOffset -= count * 360;
+
+            if (toCircle && toCircleProgress != 1f) {
+                toCircleProgress += 16 / 220f;
+                if (toCircleProgress > 1f) {
+                    toCircleProgress = 1f;
+                }
+            } else if (!toCircle && toCircleProgress != 0f) {
+                toCircleProgress -= 16 / 400f;
+                if (toCircleProgress < 0) {
+                    toCircleProgress = 0f;
+                }
+            }
+
+            if (noProgress) {
+                if (toCircleProgress == 0) {
+                    currentProgressTime += dt;
+                    if (currentProgressTime >= risingTime) {
+                        currentProgressTime = risingTime;
+                    }
+                    if (risingCircleLength) {
+                        currentCircleLength = 4 + 266 * accelerateInterpolator.getInterpolation(currentProgressTime / risingTime);
+                    } else {
+                        currentCircleLength = 4 - 270 * (1.0f - decelerateInterpolator.getInterpolation(currentProgressTime / risingTime));
+                    }
+
+                    if (currentProgressTime == risingTime) {
+                        if (risingCircleLength) {
+                            radOffset += 270;
+                            currentCircleLength = -266;
+                        }
+                        risingCircleLength = !risingCircleLength;
+                        currentProgressTime = 0;
+                    }
+                } else {
+                    if (risingCircleLength) {
+                        float old = currentCircleLength;
+                        currentCircleLength = 4 + 266 * accelerateInterpolator.getInterpolation(currentProgressTime / risingTime);
+                        currentCircleLength += 360 * toCircleProgress;
+                        float dx = old - currentCircleLength;
+                        if (dx > 0) {
+                            radOffset += old - currentCircleLength;
+                        }
+                    } else {
+                        float old = currentCircleLength;
+                        currentCircleLength = 4 - 270 * (1.0f - decelerateInterpolator.getInterpolation(currentProgressTime / risingTime));
+                        currentCircleLength -= 364 * toCircleProgress;
+                        float dx = old - currentCircleLength;
+                        if (dx > 0) {
+                            radOffset += old - currentCircleLength;
+                        }
+                    }
+                }
+            } else {
+                float progressDiff = currentProgress - progressAnimationStart;
+                if (progressDiff > 0) {
+                    progressTime += dt;
+                    if (progressTime >= 200.0f) {
+                        animatedProgress = progressAnimationStart = currentProgress;
+                        progressTime = 0;
+                    } else {
+                        animatedProgress = progressAnimationStart + progressDiff * AndroidUtilities.decelerateInterpolator.getInterpolation(progressTime / 200.0f);
+                    }
+                }
+                currentCircleLength = Math.max(4, 360 * animatedProgress);
+            }
+            invalidate();
+            return;
+        }
         if (rotationEnabled) {
             if (noProgress) {
                 long kickElapsed = lastAnimationNewTime - kickPhaseStartTime;
@@ -182,7 +254,7 @@ public class RadialProgressView extends View {
             radOffset -= count * 360;
         }
 
-        wavePhaseAngle += (dt * NekoConfig.wavySpeed) / 1000f;
+        wavePhaseAngle += (dt * 50.0f) / 1000f;
         wavePhaseAngle %= 360f;
 
         float targetScale;
@@ -190,7 +262,7 @@ public class RadialProgressView extends View {
             targetScale = 0f;
         } else {
             float absArc = Math.abs(currentCircleLength);
-            targetScale = (absArc > 0.90f * 360) ? 0f : 1f;
+            targetScale = (absArc > 0.85f * 360) ? 0f : 1f;
         }
         wavyAmplitudeSmooth += (targetScale - wavyAmplitudeSmooth) * Math.min(1f, dt / 80f);
 
@@ -269,6 +341,15 @@ public class RadialProgressView extends View {
 
     @Override
     protected void onDraw(Canvas canvas) {
+        if (!NekoConfig.wavyEnabled) {
+            int x = (getMeasuredWidth() - size) / 2;
+            int y = (getMeasuredHeight() - size) / 2;
+            cicleRect.set(x, y, x + size, y + size);
+            cicleRect.inset(AndroidUtilities.dp(1f), AndroidUtilities.dp(1f));
+            canvas.drawArc(cicleRect, radOffset, drawingCircleLenght = currentCircleLength, false, progressPaint);
+            updateAnimation();
+            return;
+        }
         int x = (getMeasuredWidth() - size) / 2;
         int y = (getMeasuredHeight() - size) / 2;
         cicleRect.set(x, y, x + size, y + size);
@@ -295,6 +376,13 @@ public class RadialProgressView extends View {
     }
 
     public void draw(Canvas canvas, float cx, float cy) {
+        if (!NekoConfig.wavyEnabled) {
+            cicleRect.set(cx - size / 2f, cy - size / 2f, cx + size / 2f, cy +  size / 2f);
+            cicleRect.inset(AndroidUtilities.dp(1f), AndroidUtilities.dp(1f));
+            canvas.drawArc(cicleRect, radOffset, drawingCircleLenght = currentCircleLength, false, progressPaint);
+            updateAnimation();
+            return;
+        }
         cicleRect.set(cx - size / 2f, cy - size / 2f, cx + size / 2f, cy +  size / 2f);
         float inset = AndroidUtilities.dp(1f);
         RectF insetOval = new RectF(cicleRect);
@@ -323,7 +411,7 @@ public class RadialProgressView extends View {
     }
 
     private void drawWavyArc(Canvas canvas, RectF oval, float startAngle, float sweepAngle, Paint paint) {
-        if (!oval.equals(wavyLastOval) || wavyLastGeneration != NekoConfig.wavyGeneration || wavyLastAmplitudeSmooth != wavyAmplitudeSmooth) {
+        if (!oval.equals(wavyLastOval) || wavyLastGeneration != 0 || wavyLastAmplitudeSmooth != wavyAmplitudeSmooth) {
             wavyLastOval.set(oval);
             wavyProgressPath.rewind();
 
@@ -331,8 +419,8 @@ public class RadialProgressView extends View {
             float cy = oval.centerY();
             float baseRadius = Math.min(oval.width(), oval.height()) / 2f;
 
-            float amplitude = baseRadius * NekoConfig.wavyAmplitudeFactor * wavyAmplitudeSmooth;
-            int waves = NekoConfig.wavyWaves;
+            float amplitude = baseRadius * 0.05f * wavyAmplitudeSmooth;
+            int waves = 11;
             int steps = 180;
 
             for (int i = 0; i <= steps; i++) {
@@ -350,7 +438,7 @@ public class RadialProgressView extends View {
             }
             wavyProgressPath.close();
             wavyProgressPathMeasure.setPath(wavyProgressPath, false);
-            wavyLastGeneration = NekoConfig.wavyGeneration;
+            wavyLastGeneration = 0;
             wavyLastAmplitudeSmooth = wavyAmplitudeSmooth;
         }
 

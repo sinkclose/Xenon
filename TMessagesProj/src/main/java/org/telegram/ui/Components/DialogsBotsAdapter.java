@@ -60,6 +60,7 @@ public class DialogsBotsAdapter extends UniversalAdapter {
 
     public DialogsBotsAdapter(RecyclerListView listView, Context context, int currentAccount, int folderId, boolean showOnlyPopular, Theme.ResourcesProvider resourcesProvider) {
         super(listView, context, currentAccount, 0, true, null, resourcesProvider);
+        setApplyBackground(false);
         super.fillItems = this::fillItems;
         this.context = context;
         this.currentAccount = currentAccount;

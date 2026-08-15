@@ -182,7 +182,7 @@ public abstract class ViewPagerActivity extends BaseFragment {
     @Override
     public void clearViews() {
         if (viewPager != null) {
-            initialFragmentPosition = NekoConfig.hideBottomNavigationBar ? 0 : viewPager.getCurrentPosition();
+            initialFragmentPosition = false ? 0 : viewPager.getCurrentPosition();
         }
         for (int a = 0, N = fragmentsArr.size(); a < N; a++) {
             final FragmentState state = fragmentsArr.valueAt(a);

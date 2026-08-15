@@ -159,13 +159,11 @@ public class NekoConfig {
     public static boolean hideChannelBottomButtons = false;
     public static boolean keepFormatting = true;
     public static boolean predictiveBackAnimation = false;
-    public static boolean hideBottomNavigationBar = false;
     public static boolean bottomFilterTabs = false;
     public static boolean strokeOnViews = true;
     public static boolean disableGooeyAvatarAnimation = false;
     public static int gooeyAvatarOffset = 0;
     public static boolean showMainTabs = true;
-    public static boolean openSettingsBySwipe = false;
     public static boolean showMainTabsTitle = true;
     public static boolean dynamicTabSize = false;
     public static boolean telegaDetectorEnabled = false;
@@ -182,19 +180,44 @@ public class NekoConfig {
      */
     public static boolean pluginGodMode = false;
     public static boolean hidePhoneNumber = false;
-    public static boolean autoInlineBot = false;
     public static boolean removeAds = false;
     public static boolean textAnimationEnabled = false;
     public static int textAnimCursorSpeed = 80;
     public static int textAnimFadeDuration = 300;
     public static int textAnimBlurStrength = 20;
     public static int textAnimBlurDuration = 350;
-    public static boolean alternativeTransition = false;
     public static int alternativeTransitionSpeed = 300;
     public static String alternativeTransitionEase = "0.37,0.01,0.1,1";
     public static boolean material3Switches = false;
     public static boolean m3SectionsStyle = false;
-    public static boolean aospTransition = false;
+    public static boolean material3ChatHeaders = false;
+    public static boolean materialSliders = false;
+    public static boolean centerChatHeader = false;
+    public static boolean biggerAvatar = false;
+    public static boolean blurredFadeView = false;
+    public static int blurredFadeBlurStrength = 20;
+    public static int blurredFadePixelation = 1;
+    public static boolean blurredFadeDimming = false;
+    public static int blurredFadeDimStrength = 50;
+    public static boolean progressiveFadeBlur = false;
+    public static int progressiveFadeBlurMaxRadius = 20;
+    public static int progressiveFadeBlurSamples = 11;
+    public static int progressiveFadeBlurRefreshRate = 120;
+    public static boolean progressiveFadeBlurOtherActivities = false;
+    public static final int AVATAR_PLACEMENT_LEFT = 0;
+    public static final int AVATAR_PLACEMENT_CENTER = 1;
+    public static final int AVATAR_PLACEMENT_RIGHT = 2;
+    public static int avatarPlacement = AVATAR_PLACEMENT_LEFT;
+    public static final int ANIMATION_STYLE_DEFAULT = 0;
+    public static final int ANIMATION_STYLE_IOS = 1;
+    public static final int ANIMATION_STYLE_AOSP = 2;
+    public static final int ANIMATION_STYLE_AOSP_ALT = 3;
+    public static final int ANIMATION_STYLE_FADE = 4;
+    public static int openAnimationStyle = ANIMATION_STYLE_DEFAULT;
+    public static int closeAnimationStyle = ANIMATION_STYLE_DEFAULT;
+    public static int predictiveBackAnimationStyle = ANIMATION_STYLE_DEFAULT;
+    public static int predictiveBackIntensity = 0;
+    public static int fadeDuration = 300;
     public static boolean removeChatDelay = false;
     public static boolean showOnlineDotsInChat = false;
     public static boolean optimizedPushService = false;
@@ -208,6 +231,9 @@ public class NekoConfig {
 
     public static final int DEFAULT_ADVANCED_GLASS_ALPHA = 100;
     public static final int DEFAULT_ADVANCED_GLASS_BLUR = 3;
+
+    public static final int DEFAULT_BLUR_STRENGTH = 30;
+    public static int blurStrength = DEFAULT_BLUR_STRENGTH;
     public static final boolean DEFAULT_ADVANCED_GLASS_WALLPAPER_BLUR = true;
     public static final float DEFAULT_ADVANCED_GLASS_DISPERSION = 1.0f;
     public static final float DEFAULT_ADVANCED_GLASS_FRESNEL = 1.0f;
@@ -215,6 +241,10 @@ public class NekoConfig {
     public static final int DEFAULT_ADVANCED_GLASS_TINT_PERCENT = 20;
     public static final boolean DEFAULT_ADVANCED_GLASS_TINT_BLACK_WHITE = false;
     public static final boolean DEFAULT_GLASS_BOTTOM_SHEET = false;
+
+    public static final int GLASS_GLARE_FULL = 0;
+    public static final int GLASS_GLARE_SOLID = 1;
+    public static final int GLASS_GLARE_DISABLE = 2;
 
     public static float liquidGlassIntensity = 0.75f;
     public static int liquidGlassThickness = 11;
@@ -230,21 +260,22 @@ public class NekoConfig {
     public static int advancedGlassTintPercent = DEFAULT_ADVANCED_GLASS_TINT_PERCENT;
     public static boolean advancedGlassTintBlackWhite = DEFAULT_ADVANCED_GLASS_TINT_BLACK_WHITE;
     public static boolean glassBottomSheet = DEFAULT_GLASS_BOTTOM_SHEET;
+    public static int glassGlareMode = GLASS_GLARE_FULL;
 
     public static boolean forceBlurLiquidGlass = false;
     public static boolean blurOverlay = false;
     public static boolean blurPopupInChat = false;
     public static int blurOverlayRadius = 10;
-    public static boolean blurOverlayRefresh = false;
+    public static boolean blurOverlayRefresh = true;
     public static int blurOverlayRefreshInterval = 2;
     public static int blurAnimationDuration = 500;
     public static boolean blurSmoothly = false;
     public static boolean disableBlurBs = false;
     public static int blurPixelation = 0;
     public static boolean replaceDialogsWithSheet = false;
+    public static boolean material3Dialogs = false;
     public static boolean keepUnreadChatsOnTop = false;
     public static boolean keepUnreadArchivedOnTop = false;
-    public static boolean shouldNOTTrustMe = false;
     public static boolean roundedBulletin = false;
     public static boolean nonIslandTabBars = false;
     public static boolean nonIslandGlobalSearch = false;
@@ -252,13 +283,18 @@ public class NekoConfig {
     public static boolean hideFadeView = false;
     public static boolean disableGlassGlare = true;
     public static boolean disableScrimBlur = false;
-    public static boolean nonIslandBottomBar = false;
+    public static boolean material3BottomNavigationBar = false;
+    public static boolean md3PlayerSeekBar = false;
+    public static boolean md3Folders = false;
+    public static int avatarShape = 0;
+    public static boolean avatarShapeInChatList = true;
+    public static boolean avatarShapeInChatMessages = true;
+    public static boolean rotateAvatarShape = false;
+    public static int avatarShapeRotationSpeed = 60;
+    public static boolean avatarShapeSquareBase = false;
     public static boolean wavyEnabled = true;
-
-    public static float wavyAmplitudeFactor = 0.05f;
-    public static int wavyWaves = 11;
-    public static float wavySpeed = 60f;
-    public static int wavyGeneration;
+    public static boolean holdToOpenPopup = false;
+    public static float popupHoldTime = 0.5f;
 
     public static int userMcc = 0;
 
@@ -305,18 +341,18 @@ public class NekoConfig {
             tabsTitleType = preferences.getInt("tabsTitleType2", TITLE_TYPE_MIX);
             confirmAVMessage = preferences.getBoolean("confirmAVMessage", false);
             askBeforeCall = preferences.getBoolean("askBeforeCall", true);
-            shouldNOTTrustMe = preferences.getBoolean("shouldNOTTrustMe", false);
             forceBlurLiquidGlass = preferences.getBoolean("forceBlurLiquidGlass", false);
             blurOverlay = preferences.getBoolean("blurOverlay", false);
             blurPopupInChat = preferences.getBoolean("blurPopupInChat", false);
             blurOverlayRadius = preferences.getInt("blurOverlayRadius", 10);
-            blurOverlayRefresh = preferences.getBoolean("blurOverlayRefresh", false);
+            blurOverlayRefresh = preferences.getBoolean("blurOverlayRefresh", true);
             blurOverlayRefreshInterval = preferences.getInt("blurOverlayRefreshInterval", 2);
             blurAnimationDuration = preferences.getInt("blurAnimationDuration", 500);
             blurSmoothly = preferences.getBoolean("blurSmoothly", false);
             disableBlurBs = preferences.getBoolean("disableBlurBs", false);
             blurPixelation = preferences.getInt("blurPixelation", 0);
             replaceDialogsWithSheet = preferences.getBoolean("replaceDialogsWithSheet", false);
+            material3Dialogs = preferences.getBoolean("material3Dialogs", false);
             keepUnreadChatsOnTop = preferences.getBoolean("keepUnreadChatsOnTop", false);
             keepUnreadArchivedOnTop = preferences.getBoolean("keepUnreadArchivedOnTop", false);
             disableNumberRounding = preferences.getBoolean("disableNumberRounding", false);
@@ -378,13 +414,11 @@ public class NekoConfig {
             hideChannelBottomButtons = preferences.getBoolean("hideChannelBottomButtons", false);
             keepFormatting = preferences.getBoolean("keepFormatting", true);
             predictiveBackAnimation = preferences.getBoolean("predictiveBackAnimation", false);
-            hideBottomNavigationBar = preferences.getBoolean("hideBottomNavigationBar", false);
             bottomFilterTabs = preferences.getBoolean("bottomFilterTabs", false);
             strokeOnViews = preferences.getBoolean("strokeOnViews", true);
             disableGooeyAvatarAnimation = preferences.getBoolean("disableGooeyAvatarAnimation", false);
             gooeyAvatarOffset = preferences.getInt("gooeyAvatarOffset", 0);
             showMainTabs = preferences.getBoolean("showMainTabs", true);
-            openSettingsBySwipe = preferences.getBoolean("openSettingsBySwipe", false);
             showMainTabsTitle = preferences.getBoolean("showMainTabsTitle", true);
             dynamicTabSize = preferences.getBoolean("dynamicTabSize", false);
             telegaDetectorEnabled = preferences.getBoolean("telegaDetectorEnabled", false);
@@ -394,7 +428,6 @@ public class NekoConfig {
             pluginsEnabled = preferences.getBoolean("pluginsEnabled", false);
             pluginGodMode = preferences.getBoolean("pluginGodMode", false);
             hidePhoneNumber = preferences.getBoolean("hidePhoneNumber", false);
-            autoInlineBot = preferences.getBoolean("autoInlineBot", false);
             xrayAppProxyEnabled = preferences.getBoolean("xrayAppProxyEnabled", false);
             xrayVpnMode = preferences.getBoolean("xrayVpnMode", false);
             xrayAppProxyLocalPort = preferences.getInt("xrayAppProxyLocalPort", 10808);
@@ -405,6 +438,7 @@ public class NekoConfig {
             useAdvancedLiquidGlass = preferences.getBoolean("useAdvancedLiquidGlass", false);
             advancedGlassAlpha = preferences.getInt("advancedGlassAlpha", DEFAULT_ADVANCED_GLASS_ALPHA);
             advancedGlassBlur = preferences.getInt("advancedGlassBlur", DEFAULT_ADVANCED_GLASS_BLUR);
+            blurStrength = preferences.getInt("blurStrength", DEFAULT_BLUR_STRENGTH);
             advancedGlassWallpaperBlur = preferences.getBoolean("advancedGlassWallpaperBlur", DEFAULT_ADVANCED_GLASS_WALLPAPER_BLUR);
             advancedGlassDispersion = preferences.getFloat("advancedGlassDispersion", DEFAULT_ADVANCED_GLASS_DISPERSION);
             advancedGlassFresnel = preferences.getFloat("advancedGlassFresnel", DEFAULT_ADVANCED_GLASS_FRESNEL);
@@ -422,12 +456,31 @@ public class NekoConfig {
             textAnimFadeDuration = preferences.getInt("textAnimFadeDuration", 300);
             textAnimBlurStrength = preferences.getInt("textAnimBlurStrength", 20);
             textAnimBlurDuration = preferences.getInt("textAnimBlurDuration", 350);
-            alternativeTransition = preferences.getBoolean("alternativeTransition", false);
             alternativeTransitionSpeed = preferences.getInt("alternativeTransitionSpeed", 300);
             alternativeTransitionEase = preferences.getString("alternativeTransitionEase", "0.37,0.01,0.1,1");
             material3Switches = preferences.getBoolean("material3Switches", false);
             m3SectionsStyle = preferences.getBoolean("m3SectionsStyle", false);
-            aospTransition = preferences.getBoolean("aospTransition", false);
+            material3ChatHeaders = preferences.getBoolean("material3ChatHeaders", false);
+            materialSliders = preferences.getBoolean("materialSliders", false);
+            centerChatHeader = preferences.getBoolean("centerChatHeader", false);
+            avatarPlacement = preferences.getInt("avatarPlacement", AVATAR_PLACEMENT_LEFT);
+            biggerAvatar = preferences.getBoolean("biggerAvatar", false);
+            blurredFadeView = preferences.getBoolean("blurredFadeView", false);
+            blurredFadeBlurStrength = preferences.getInt("blurredFadeBlurStrength", 20);
+            blurredFadePixelation = preferences.getInt("blurredFadePixelation", 1);
+            blurredFadeDimming = preferences.getBoolean("blurredFadeDimming", false);
+            blurredFadeDimStrength = preferences.getInt("blurredFadeDimStrength", 50);
+            progressiveFadeBlur = preferences.getBoolean("progressiveFadeBlur", false);
+            progressiveFadeBlurMaxRadius = preferences.getInt("progressiveFadeBlurMaxRadius", 20);
+            progressiveFadeBlurSamples = preferences.getInt("progressiveFadeBlurSamples", 11);
+            progressiveFadeBlurRefreshRate = preferences.getInt("progressiveFadeBlurRefreshRate", 120);
+            progressiveFadeBlurOtherActivities = preferences.getBoolean("progressiveFadeBlurOtherActivities", false);
+            openAnimationStyle = preferences.getInt("openAnimationStyle", ANIMATION_STYLE_DEFAULT);
+            closeAnimationStyle = preferences.getInt("closeAnimationStyle", ANIMATION_STYLE_DEFAULT);
+            predictiveBackAnimationStyle = preferences.getInt("predictiveBackAnimationStyle", ANIMATION_STYLE_DEFAULT);
+            predictiveBackIntensity = preferences.getInt("predictiveBackIntensity", 0);
+            fadeDuration = preferences.getInt("fadeDuration", 300);
+            predictiveBackAnimation = predictiveBackIntensity > 0;
             removeChatDelay = preferences.getBoolean("removeChatDelay", false);
             showOnlineDotsInChat = preferences.getBoolean("showOnlineDotsInChat", false);
             optimizedPushService = preferences.getBoolean("optimizedPushService", false);
@@ -437,13 +490,27 @@ public class NekoConfig {
             nonIslandChatElements = preferences.getBoolean("nonIslandChatElements", false);
             hideFadeView = preferences.getBoolean("hideFadeView", false);
             disableGlassGlare = preferences.getBoolean("disableGlassGlare", true);
+            // The Telegram stroke glare is always disabled in favor of the shader glare.
+            disableGlassGlare = true;
+            if (preferences.contains("glassGlareMode")) {
+                glassGlareMode = preferences.getInt("glassGlareMode", GLASS_GLARE_FULL);
+            } else {
+                // The shader glare is the only glare and is on by default.
+                glassGlareMode = GLASS_GLARE_FULL;
+            }
             disableScrimBlur = preferences.getBoolean("disableScrimBlur", false);
-            nonIslandBottomBar = preferences.getBoolean("nonIslandBottomBar", false);
+            material3BottomNavigationBar = preferences.getBoolean("material3BottomNavigationBar", false);
+            md3PlayerSeekBar = preferences.getBoolean("md3PlayerSeekBar", false);
+            md3Folders = preferences.getBoolean("md3Folders", false);
+            avatarShape = preferences.getInt("avatarShape", 0);
+            avatarShapeInChatList = preferences.getBoolean("avatarShapeInChatList", true);
+            avatarShapeInChatMessages = preferences.getBoolean("avatarShapeInChatMessages", true);
+            rotateAvatarShape = preferences.getBoolean("rotateAvatarShape", false);
+            avatarShapeRotationSpeed = preferences.getInt("avatarShapeRotationSpeed", 60);
+            avatarShapeSquareBase = preferences.getBoolean("avatarShapeSquareBase", false);
             wavyEnabled = preferences.getBoolean("wavyEnabled", true);
-
-            wavyAmplitudeFactor = preferences.getFloat("wavyAmplitudeFactor", 0.05f);
-            wavyWaves = preferences.getInt("wavyWaves", 11);
-            wavySpeed = preferences.getFloat("wavySpeed", 60f);
+            holdToOpenPopup = preferences.getBoolean("holdToOpenPopup", false);
+            popupHoldTime = preferences.getFloat("popupHoldTime", 0.5f);
 
             LensHelper.checkLensSupportAsync();
             preferences.registerOnSharedPreferenceChangeListener(listener);
@@ -634,14 +701,6 @@ public class NekoConfig {
         editor.apply();
     }
 
-    public static void toggleStrokeOnViews() {
-        strokeOnViews = !strokeOnViews;
-        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
-        SharedPreferences.Editor editor = preferences.edit();
-        editor.putBoolean("strokeOnViews", strokeOnViews);
-        editor.apply();
-    }
-
     public static void toggleDisableGooeyAvatarAnimation() {
         disableGooeyAvatarAnimation = !disableGooeyAvatarAnimation;
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
@@ -655,22 +714,6 @@ public class NekoConfig {
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
         editor.putInt("gooeyAvatarOffset", gooeyAvatarOffset);
-        editor.apply();
-    }
-
-    public static void togglePredictiveBackAnimation() {
-        predictiveBackAnimation = !predictiveBackAnimation;
-        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
-        SharedPreferences.Editor editor = preferences.edit();
-        editor.putBoolean("predictiveBackAnimation", predictiveBackAnimation);
-        editor.apply();
-    }
-
-    public static void toggleAlternativeTransition() {
-        alternativeTransition = !alternativeTransition;
-        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
-        SharedPreferences.Editor editor = preferences.edit();
-        editor.putBoolean("alternativeTransition", alternativeTransition);
         editor.apply();
     }
 
@@ -690,6 +733,14 @@ public class NekoConfig {
         editor.apply();
     }
 
+    public static void setFadeDuration(int value) {
+        fadeDuration = value;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putInt("fadeDuration", fadeDuration);
+        editor.apply();
+    }
+
     public static void toggleMaterial3Switches() {
         material3Switches = !material3Switches;
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
@@ -706,19 +757,157 @@ public class NekoConfig {
         editor.apply();
     }
 
-    public static void toggleAospTransition() {
-        aospTransition = !aospTransition;
+    public static void toggleMaterial3ChatHeaders() {
+        material3ChatHeaders = !material3ChatHeaders;
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
-        editor.putBoolean("aospTransition", aospTransition);
+        editor.putBoolean("material3ChatHeaders", material3ChatHeaders);
         editor.apply();
     }
 
-    public static void toggleHideBottomNavigationBar() {
-        hideBottomNavigationBar = !hideBottomNavigationBar;
+    public static void toggleMaterialSliders() {
+        materialSliders = !materialSliders;
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
-        editor.putBoolean("hideBottomNavigationBar", hideBottomNavigationBar);
+        editor.putBoolean("materialSliders", materialSliders);
+        editor.apply();
+    }
+
+    public static void toggleCenterChatHeader() {
+        centerChatHeader = !centerChatHeader;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("centerChatHeader", centerChatHeader);
+        editor.apply();
+    }
+
+    public static void toggleBiggerAvatar() {
+        biggerAvatar = !biggerAvatar;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("biggerAvatar", biggerAvatar);
+        editor.apply();
+    }
+
+    public static void toggleBlurredFadeView() {
+        blurredFadeView = !blurredFadeView;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("blurredFadeView", blurredFadeView);
+        editor.apply();
+    }
+
+    public static void setBlurredFadeBlurStrength(int value) {
+        blurredFadeBlurStrength = Math.max(0, Math.min(40, value));
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putInt("blurredFadeBlurStrength", blurredFadeBlurStrength);
+        editor.apply();
+    }
+
+    public static void setBlurredFadePixelation(int value) {
+        blurredFadePixelation = Math.max(1, Math.min(16, value));
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putInt("blurredFadePixelation", blurredFadePixelation);
+        editor.apply();
+    }
+
+    public static void toggleBlurredFadeDimming() {
+        blurredFadeDimming = !blurredFadeDimming;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("blurredFadeDimming", blurredFadeDimming);
+        editor.apply();
+    }
+
+    public static void setBlurredFadeDimStrength(int value) {
+        blurredFadeDimStrength = Math.max(0, Math.min(100, value));
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putInt("blurredFadeDimStrength", blurredFadeDimStrength);
+        editor.apply();
+    }
+
+    public static void toggleProgressiveFadeBlur() {
+        progressiveFadeBlur = !progressiveFadeBlur;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("progressiveFadeBlur", progressiveFadeBlur);
+        editor.apply();
+    }
+
+    public static void setProgressiveFadeBlurMaxRadius(int value) {
+        progressiveFadeBlurMaxRadius = Math.max(0, Math.min(40, value));
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putInt("progressiveFadeBlurMaxRadius", progressiveFadeBlurMaxRadius);
+        editor.apply();
+    }
+
+    public static void setProgressiveFadeBlurSamples(int value) {
+        progressiveFadeBlurSamples = Math.max(3, Math.min(25, value | 1));
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putInt("progressiveFadeBlurSamples", progressiveFadeBlurSamples);
+        editor.apply();
+    }
+
+    public static void setProgressiveFadeBlurRefreshRate(int value) {
+        progressiveFadeBlurRefreshRate = Math.max(15, Math.min(120, value));
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putInt("progressiveFadeBlurRefreshRate", progressiveFadeBlurRefreshRate);
+        editor.apply();
+    }
+
+    public static void toggleProgressiveFadeBlurOtherActivities() {
+        progressiveFadeBlurOtherActivities = !progressiveFadeBlurOtherActivities;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("progressiveFadeBlurOtherActivities", progressiveFadeBlurOtherActivities);
+        editor.apply();
+    }
+
+    public static void setAvatarPlacement(int placement) {
+        avatarPlacement = placement;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putInt("avatarPlacement", avatarPlacement);
+        editor.apply();
+    }
+
+    public static void setOpenAnimationStyle(int style) {
+        openAnimationStyle = style;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putInt("openAnimationStyle", openAnimationStyle);
+        editor.apply();
+    }
+
+    public static void setCloseAnimationStyle(int style) {
+        closeAnimationStyle = style;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putInt("closeAnimationStyle", closeAnimationStyle);
+        editor.apply();
+    }
+
+    public static void setPredictiveBackAnimationStyle(int style) {
+        predictiveBackAnimationStyle = style;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putInt("predictiveBackAnimationStyle", predictiveBackAnimationStyle);
+        editor.apply();
+    }
+
+    public static void setPredictiveBackIntensity(int value) {
+        predictiveBackIntensity = value;
+        predictiveBackAnimation = value > 0;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putInt("predictiveBackIntensity", predictiveBackIntensity);
+        editor.putBoolean("predictiveBackAnimation", predictiveBackAnimation);
         editor.apply();
     }
 
@@ -727,14 +916,6 @@ public class NekoConfig {
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("showMainTabs", showMainTabs);
-        editor.apply();
-    }
-
-    public static void setOpenSettingsBySwipe(boolean enabled) {
-        openSettingsBySwipe = enabled;
-        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
-        SharedPreferences.Editor editor = preferences.edit();
-        editor.putBoolean("openSettingsBySwipe", openSettingsBySwipe);
         editor.apply();
     }
 
@@ -759,14 +940,6 @@ public class NekoConfig {
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("telegaDetectorEnabled", telegaDetectorEnabled);
-        editor.apply();
-    }
-
-    public static void setAutoInlineBot(boolean enabled) {
-        autoInlineBot = enabled;
-        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
-        SharedPreferences.Editor editor = preferences.edit();
-        editor.putBoolean("autoInlineBot", autoInlineBot);
         editor.apply();
     }
 
@@ -1267,6 +1440,14 @@ public class NekoConfig {
         editor.apply();
     }
 
+    public static void toggleMaterial3Dialogs() {
+        material3Dialogs = !material3Dialogs;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("material3Dialogs", material3Dialogs);
+        editor.apply();
+    }
+
     public static void toggleKeepUnreadChatsOnTop() {
         keepUnreadChatsOnTop = !keepUnreadChatsOnTop;
         if (!keepUnreadChatsOnTop) {
@@ -1535,11 +1716,11 @@ public class NekoConfig {
         editor.apply();
     }
 
-    public static void setAdvancedGlassBlur(int value) {
-        advancedGlassBlur = Math.max(0, Math.min(200, value));
+    public static void setBlurStrength(int value) {
+        blurStrength = Math.max(0, Math.min(100, value));
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
-        editor.putInt("advancedGlassBlur", advancedGlassBlur);
+        editor.putInt("blurStrength", blurStrength);
         editor.apply();
     }
 
@@ -1600,9 +1781,30 @@ public class NekoConfig {
         editor.apply();
     }
 
+    public static void setGlassGlareMode(int mode) {
+        glassGlareMode = mode;
+        // The Telegram stroke glare is always disabled; the shader glare
+        // (advancedGlassGlare) is the only glare and is controlled here.
+        if (mode == GLASS_GLARE_SOLID) {
+            advancedGlassGlare = 0.1f;
+        } else if (mode == GLASS_GLARE_DISABLE) {
+            advancedGlassGlare = 0f;
+        } else if (mode == GLASS_GLARE_FULL) {
+            if (advancedGlassGlare < 0.1f) {
+                advancedGlassGlare = DEFAULT_ADVANCED_GLASS_GLARE;
+            }
+        }
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putInt("glassGlareMode", glassGlareMode);
+        editor.putFloat("advancedGlassGlare", advancedGlassGlare);
+        editor.apply();
+    }
+
     public static void resetAdvancedGlassToDefaults() {
         advancedGlassAlpha = DEFAULT_ADVANCED_GLASS_ALPHA;
         advancedGlassBlur = DEFAULT_ADVANCED_GLASS_BLUR;
+        blurStrength = DEFAULT_BLUR_STRENGTH;
         advancedGlassWallpaperBlur = DEFAULT_ADVANCED_GLASS_WALLPAPER_BLUR;
         advancedGlassDispersion = DEFAULT_ADVANCED_GLASS_DISPERSION;
         advancedGlassFresnel = DEFAULT_ADVANCED_GLASS_FRESNEL;
@@ -1610,10 +1812,14 @@ public class NekoConfig {
         advancedGlassTintPercent = DEFAULT_ADVANCED_GLASS_TINT_PERCENT;
         advancedGlassTintBlackWhite = DEFAULT_ADVANCED_GLASS_TINT_BLACK_WHITE;
         glassBottomSheet = DEFAULT_GLASS_BOTTOM_SHEET;
+        glassGlareMode = GLASS_GLARE_FULL;
+        disableGlassGlare = true;
+        strokeOnViews = true;
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
         editor.putInt("advancedGlassAlpha", advancedGlassAlpha);
         editor.putInt("advancedGlassBlur", advancedGlassBlur);
+        editor.putInt("blurStrength", blurStrength);
         editor.putBoolean("advancedGlassWallpaperBlur", advancedGlassWallpaperBlur);
         editor.putFloat("advancedGlassDispersion", advancedGlassDispersion);
         editor.putFloat("advancedGlassFresnel", advancedGlassFresnel);
@@ -1621,6 +1827,9 @@ public class NekoConfig {
         editor.putInt("advancedGlassTintPercent", advancedGlassTintPercent);
         editor.putBoolean("advancedGlassTintBlackWhite", advancedGlassTintBlackWhite);
         editor.putBoolean("glassBottomSheet", glassBottomSheet);
+        editor.putInt("glassGlareMode", glassGlareMode);
+        editor.putBoolean("disableGlassGlare", disableGlassGlare);
+        editor.putBoolean("strokeOnViews", strokeOnViews);
         editor.apply();
     }
 
@@ -1700,14 +1909,6 @@ public class NekoConfig {
         editor.apply();
     }
 
-    public static void toggleDisableGlassGlare() {
-        disableGlassGlare = !disableGlassGlare;
-        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
-        SharedPreferences.Editor editor = preferences.edit();
-        editor.putBoolean("disableGlassGlare", disableGlassGlare);
-        editor.apply();
-    }
-
     public static void toggleDisableScrimBlur() {
         disableScrimBlur = !disableScrimBlur;
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
@@ -1716,11 +1917,75 @@ public class NekoConfig {
         editor.apply();
     }
 
-    public static void toggleNonIslandBottomBar() {
-        nonIslandBottomBar = !nonIslandBottomBar;
+    public static void toggleMaterial3BottomNavigationBar() {
+        material3BottomNavigationBar = !material3BottomNavigationBar;
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
-        editor.putBoolean("nonIslandBottomBar", nonIslandBottomBar);
+        editor.putBoolean("material3BottomNavigationBar", material3BottomNavigationBar);
+        editor.apply();
+    }
+
+    public static void toggleMd3PlayerSeekBar() {
+        md3PlayerSeekBar = !md3PlayerSeekBar;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("md3PlayerSeekBar", md3PlayerSeekBar);
+        editor.apply();
+    }
+
+    public static void toggleMd3Folders() {
+        md3Folders = !md3Folders;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("md3Folders", md3Folders);
+        editor.apply();
+    }
+
+    public static void setAvatarShape(int value) {
+        avatarShape = value;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putInt("avatarShape", avatarShape);
+        editor.apply();
+    }
+
+    public static void toggleAvatarShapeInChatList() {
+        avatarShapeInChatList = !avatarShapeInChatList;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("avatarShapeInChatList", avatarShapeInChatList);
+        editor.apply();
+    }
+
+    public static void toggleAvatarShapeInChatMessages() {
+        avatarShapeInChatMessages = !avatarShapeInChatMessages;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("avatarShapeInChatMessages", avatarShapeInChatMessages);
+        editor.apply();
+    }
+
+    public static void toggleRotateAvatarShape() {
+        rotateAvatarShape = !rotateAvatarShape;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("rotateAvatarShape", rotateAvatarShape);
+        editor.apply();
+    }
+
+    public static void setAvatarShapeRotationSpeed(int value) {
+        avatarShapeRotationSpeed = value;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putInt("avatarShapeRotationSpeed", avatarShapeRotationSpeed);
+        editor.apply();
+    }
+
+    public static void toggleAvatarShapeSquareBase() {
+        avatarShapeSquareBase = !avatarShapeSquareBase;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("avatarShapeSquareBase", avatarShapeSquareBase);
         editor.apply();
     }
 
@@ -1780,29 +2045,19 @@ public class NekoConfig {
         editor.apply();
     }
 
-    public static void setWavyAmplitudeFactor(float value) {
-        wavyAmplitudeFactor = value;
-        wavyGeneration++;
+    public static void toggleHoldToOpenPopup() {
+        holdToOpenPopup = !holdToOpenPopup;
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
-        editor.putFloat("wavyAmplitudeFactor", wavyAmplitudeFactor);
+        editor.putBoolean("holdToOpenPopup", holdToOpenPopup);
         editor.apply();
     }
 
-    public static void setWavyWaves(int value) {
-        wavyWaves = value;
-        wavyGeneration++;
+    public static void setPopupHoldTime(float value) {
+        popupHoldTime = value;
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
-        editor.putInt("wavyWaves", wavyWaves);
-        editor.apply();
-    }
-
-    public static void setWavySpeed(float value) {
-        wavySpeed = value;
-        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
-        SharedPreferences.Editor editor = preferences.edit();
-        editor.putFloat("wavySpeed", wavySpeed);
+        editor.putFloat("popupHoldTime", popupHoldTime);
         editor.apply();
     }
 

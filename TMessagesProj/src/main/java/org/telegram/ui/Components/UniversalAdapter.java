@@ -56,6 +56,8 @@ import org.telegram.ui.StatisticActivity;
 import org.telegram.ui.Stories.recorder.HintView2;
 import org.telegram.ui.Stories.recorder.StoryPrivacyBottomSheet;
 
+import zxc.iconic.xenon.helpers.M3SectionsHelper;
+
 import java.util.ArrayList;
 
 import me.vkryl.core.BitwiseUtils;
@@ -591,6 +593,9 @@ public class UniversalAdapter extends AdapterWithDiffUtils {
     }
 
     private boolean hasDivider(int position) {
+        if (M3SectionsHelper.isEnabled()) {
+            return false;
+        }
         UItem item = getItem(position);
         UItem nextItem = getItem(position + 1);
         return item != null && !item.hideDivider && nextItem != null && isShadow(nextItem.viewType) == isShadow(item.viewType);

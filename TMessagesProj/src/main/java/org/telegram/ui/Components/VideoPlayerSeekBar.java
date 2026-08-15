@@ -76,6 +76,15 @@ public class VideoPlayerSeekBar {
     private int lineHeight = AndroidUtilities.dp(4);
     private int smallLineHeight = AndroidUtilities.dp(2);
 
+    private float waveStrength;
+    private float waveStrengthTarget;
+    private float wavePhase;
+    private long waveLastUpdate;
+    private float currentWaveStrength;
+    private static final float WAVELENGTH_DP = 30f;
+    private static final float WAVE_AMPLITUDE_DP = 2.5f;
+    private static final float WAVE_SPEED_DP_PER_SEC = 50f;
+
     private float transitionProgress;
     private int horizontalPadding;
     private int smallLineColor;
@@ -201,6 +210,11 @@ public class VideoPlayerSeekBar {
             bufferedProgress = value;
             bufferedAnimationValue = 0;
         }
+    }
+
+    public void setPlaying(boolean playing) {
+        waveStrengthTarget = playing ? 1f : 0f;
+        if (parentView != null) parentView.invalidate();
     }
 
     public float getProgress() {
@@ -340,6 +354,15 @@ public class VideoPlayerSeekBar {
     }
 
     public void draw(Canvas canvas, View view) {
+        long now = System.currentTimeMillis();
+        float waveDt = waveLastUpdate == 0 ? 0 : now - waveLastUpdate;
+        waveLastUpdate = now;
+        if (waveDt > 50) waveDt = 50;
+        float lerpMs = waveStrengthTarget > waveStrength ? 500f : 150f;
+        waveStrength += (waveStrengthTarget - waveStrength) * Math.min(1f, waveDt / lerpMs);
+        wavePhase += waveDt / 1000f * WAVE_SPEED_DP_PER_SEC;
+        float effectiveWaveStrength = zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar ? waveStrength * (1f - transitionProgress) : 0;
+        currentWaveStrength = effectiveWaveStrength;
         rect.left = horizontalPadding + AndroidUtilities.lerp(thumbWidth / 2f, 0, transitionProgress);
         rect.top = AndroidUtilities.lerp((height - lineHeight) / 2f, height - AndroidUtilities.dp(3) - smallLineHeight, transitionProgress);
         rect.bottom = AndroidUtilities.lerp((height + lineHeight) / 2f, height - AndroidUtilities.dp(3), transitionProgress);
@@ -372,8 +395,18 @@ public class VideoPlayerSeekBar {
         // background
         rect.right = horizontalPadding + AndroidUtilities.lerp(width - thumbWidth / 2f, parentView.getWidth() - horizontalPadding * 2f, transitionProgress);
         setPaintColor(selected ? backgroundSelectedColor : backgroundColor, 1f - transitionProgress);
-        drawProgressBar(canvas, rect, paint);
-
+        float progressEndX = zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar
+            ? horizontalPadding + AndroidUtilities.lerp(thumbWidth / 2f + (pressed ? draggingThumbX : currentThumbX), (parentView.getWidth() - horizontalPadding * 2f) * getProgress(), transitionProgress)
+            : 0f;
+        float trackGap = zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar ? AndroidUtilities.dp(1.5f) + AndroidUtilities.dp(1.5f) * currentWaveStrength : 0f;
+        if (zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar) {
+            AndroidUtilities.rectTmp.set(rect);
+            AndroidUtilities.rectTmp.left = progressEndX + trackGap;
+            drawProgressBar(canvas, AndroidUtilities.rectTmp, paint);
+        } else {
+            drawProgressBar(canvas, rect, paint);
+        }
+        float trackEndX = rect.right;
         if (bufferedAnimationValue != 1f) {
             bufferedAnimationValue += 16 / 100f;
             if (bufferedAnimationValue > 1) {
@@ -384,6 +417,10 @@ public class VideoPlayerSeekBar {
         }
 
         // buffered
+        float savedRectLeft = rect.left;
+        if (zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar) {
+            rect.left = Math.max(rect.left, progressEndX + trackGap);
+        }
         if (animateResetBuffering) {
             if (animateFromBufferedProgress > 0) {
                 rect.right = horizontalPadding + AndroidUtilities.lerp(thumbWidth / 2f + animateFromBufferedProgress * (width - thumbWidth), parentView.getWidth() - horizontalPadding * 2f, transitionProgress);
@@ -403,6 +440,7 @@ public class VideoPlayerSeekBar {
                 drawProgressBar(canvas, rect, paint);
             }
         }
+        rect.left = savedRectLeft;
 
         int newRad = AndroidUtilities.dp(pressed ? 8 : 6);
         if (currentRadius != newRad) {
@@ -436,16 +474,18 @@ public class VideoPlayerSeekBar {
             if (transitionProgress > 0f && rect.width() > 0) {
                 // progress stroke
                 strokePaint.setAlpha((int) (transitionProgress * 255 * 0.2f));
-                drawProgressBar(canvas, rect, strokePaint);
+                drawProgressBar(canvas, rect, strokePaint, true);
             }
             setPaintColor(ColorUtils.blendARGB(progressColor, smallLineColor, transitionProgress), 1f);
-            drawProgressBar(canvas, rect, paint);
+            drawProgressBar(canvas, rect, paint, true);
 
             rect.left = wasLeft;
 
             setPaintColor(ColorUtils.blendARGB(circleColor, getProgress() == 0 ? Color.TRANSPARENT : smallLineColor, transitionProgress), 1f - transitionProgress);
             float wasRight = horizontalPadding + AndroidUtilities.lerp(thumbWidth / 2f + loopBackWasThumbX, (parentView.getWidth() - horizontalPadding * 2f) * (loopBackWasThumbX / (float) (width - thumbWidth)), transitionProgress);
-            canvas.drawCircle(wasRight, rect.centerY(), circleRadius * loopBack, paint);
+            if (!zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar) {
+                canvas.drawCircle(wasRight, rect.centerY(), circleRadius * loopBack, paint);
+            }
         }
 
         // progress
@@ -453,14 +493,18 @@ public class VideoPlayerSeekBar {
         if (transitionProgress > 0f && rect.width() > 0) {
             // progress stroke
             strokePaint.setAlpha((int) (transitionProgress * 255 * 0.2f));
-            drawProgressBar(canvas, rect, strokePaint);
+            drawProgressBar(canvas, rect, strokePaint, true);
         }
         setPaintColor(ColorUtils.blendARGB(progressColor, smallLineColor, transitionProgress), 1f);
-        drawProgressBar(canvas, rect, paint);
+        drawProgressBar(canvas, rect, paint, true);
 
         // circle
         setPaintColor(ColorUtils.blendARGB(circleColor, getProgress() == 0 ? Color.TRANSPARENT : smallLineColor, transitionProgress), 1f - transitionProgress);
-        canvas.drawCircle(rect.right, rect.centerY(), circleRadius * (1f - loopBack), paint);
+        if (!zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar) {
+            canvas.drawCircle(rect.right, rect.centerY(), circleRadius * (1f - loopBack), paint);
+        } else {
+            canvas.drawCircle(trackEndX, rect.centerY(), rect.height() / 2f, paint);
+        }
 
         drawTimestampLabel(canvas);
     }
@@ -472,7 +516,20 @@ public class VideoPlayerSeekBar {
     private static Path tmpPath;
 
     private void drawProgressBar(Canvas canvas, RectF rect, Paint paint) {
-        float radius = AndroidUtilities.dp(AndroidUtilities.lerp(2, 1, transitionProgress));
+        drawProgressBar(canvas, rect, paint, false);
+    }
+
+    private void drawProgressBar(Canvas canvas, RectF rect, Paint paint, boolean wavy) {
+        if (wavy && currentWaveStrength > 0.01f && (timestamps == null || timestamps.isEmpty())) {
+            drawWavyBar(canvas, rect, paint);
+            return;
+        }
+        float radius;
+        if (zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar) {
+            radius = AndroidUtilities.dp(4);
+        } else {
+            radius = AndroidUtilities.dp(AndroidUtilities.lerp(2, 1, transitionProgress));
+        }
         if (timestamps == null || timestamps.isEmpty()) {
             canvas.drawRoundRect(rect, radius, radius, paint);
         } else {
@@ -551,6 +608,52 @@ public class VideoPlayerSeekBar {
         }
     }
 
+
+    private void drawWavyBar(Canvas canvas, RectF rect, Paint paint) {
+        float wavelength = AndroidUtilities.dp(WAVELENGTH_DP);
+        float amplitude = AndroidUtilities.dp(WAVE_AMPLITUDE_DP) * currentWaveStrength;
+        float cy = rect.centerY();
+        float barHeight = rect.height();
+        float capExt = barHeight / 2f;
+        float startX = rect.left + capExt;
+        float endX = rect.right - capExt;
+        if (endX < startX) {
+            endX = startX;
+        }
+        if (tmpPath == null) {
+            tmpPath = new Path();
+        }
+        tmpPath.reset();
+        float step = AndroidUtilities.dp(1f);
+        float phaseShift = wavePhase % wavelength;
+        boolean first = true;
+        for (float x = startX; x <= endX; x += step) {
+            float t = (x - startX + phaseShift) / wavelength * 2 * (float) Math.PI;
+            float y = cy + amplitude * (float) Math.sin(t);
+            if (first) {
+                tmpPath.moveTo(x, y);
+                first = false;
+            } else {
+                tmpPath.lineTo(x, y);
+            }
+        }
+        if (first) {
+            tmpPath.moveTo(startX, cy);
+        }
+        Paint.Style savedStyle = paint.getStyle();
+        Paint.Cap savedCap = paint.getStrokeCap();
+        float savedWidth = paint.getStrokeWidth();
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeCap(Paint.Cap.ROUND);
+        paint.setStrokeWidth(barHeight);
+        canvas.drawPath(tmpPath, paint);
+        paint.setStyle(savedStyle);
+        paint.setStrokeCap(savedCap);
+        paint.setStrokeWidth(savedWidth);
+        if (parentView != null && currentWaveStrength > 0.01f) {
+            parentView.invalidate();
+        }
+    }
 
     private int currentTimestamp = -1, lastTimestamp = -1;
     private StaticLayout[] timestampLabel;

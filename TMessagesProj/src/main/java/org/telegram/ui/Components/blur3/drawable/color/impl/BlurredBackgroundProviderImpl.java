@@ -14,11 +14,12 @@ import org.telegram.messenger.UserConfig;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundProvider;
 import org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundProviderBuilder;
+import zxc.iconic.xenon.helpers.MainTabsUiHelper;
 import zxc.iconic.xenon.helpers.NonIslandHelper;
 
 public class BlurredBackgroundProviderImpl {
     public static BlurredBackgroundProvider mainTabs(Theme.ResourcesProvider resourcesProvider) {
-        if (NonIslandHelper.bottomBar()) {
+        if (MainTabsUiHelper.isMaterial3NavigationBar()) {
             return new BlurredBackgroundProviderBuilder(resourcesProvider)
                 .setBackgroundColor((r, isDark) -> {
                     final float alpha = 0.76f;
@@ -175,7 +176,7 @@ public class BlurredBackgroundProviderImpl {
 
                     final float alpha = !NonIslandHelper.chatElements() && LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.85f : 0.76f;
                     final int colorBg = Theme.getColor(Theme.key_chat_topPanelBackground, r);
-                    return Theme.multAlpha(colorBg, alpha);
+                    return tintWithAccent(Theme.multAlpha(colorBg, alpha), r);
                 });
         if (!NonIslandHelper.chatElements()) {
             b.setStrokeColorTop(0xFFFFFFFF, 0x28FFFFFF)
@@ -405,8 +406,7 @@ public class BlurredBackgroundProviderImpl {
     /**
      * Blend the given glass background color toward the theme accent
      * ({@link Theme#key_chat_messageLinkIn}) by the user-controlled
-     * {@code advancedGlassTintPercent} slider (0..100, gated on
-     * {@code useAdvancedLiquidGlass}).
+     * {@code advancedGlassTintPercent} slider (0..100).
      *
      * <p>The slider's full range is intentionally mapped to a 0..0.5 blend
      * factor (rather than 0..1) — a direct linear mix to a saturated accent
@@ -417,13 +417,10 @@ public class BlurredBackgroundProviderImpl {
      *
      * <p>The original alpha is preserved so the surface keeps its translucency
      * profile — only the RGB channels are mixed toward the accent. This is a
-     * no-op when advanced glass is off or the slider is at 0, which keeps the
-     * default appearance identical to the pre-feature look.
+     * no-op when the slider is at 0, which keeps the default appearance
+     * identical to the pre-feature look.
      */
     public static int tintWithAccent(int color, Theme.ResourcesProvider resourcesProvider) {
-        if (!zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass) {
-            return color;
-        }
         final int percent = zxc.iconic.xenon.NekoConfig.advancedGlassTintPercent;
         if (percent <= 0) {
             return color;

@@ -149,7 +149,7 @@ public class SpoilerHelper {
             return true;
         }
 
-        String label = LocaleController.getString(R.string.InuMediaSpoilerLabel).toUpperCase();
+        String label = LocaleController.getString(R.string.MediaSpoilerLabel).toUpperCase();
         float padH = AndroidUtilities.dp(16);
         float padV = AndroidUtilities.dp(7);
         labelPaint.setTextSize(AndroidUtilities.dp(12));
