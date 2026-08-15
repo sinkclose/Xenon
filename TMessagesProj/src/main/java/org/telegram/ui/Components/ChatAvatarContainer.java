@@ -748,6 +748,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     }
 
     private boolean glassMode;
+
     public void setGlassMode() {
         if (zxc.iconic.xenon.helpers.NonIslandHelper.chatElements()) return;
         if (titleTextView != null) {
@@ -766,6 +767,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         final int subtitleTop = viewTop + dp(glassMode ? 23.66f : 24);
 
         avatarImageView.layout(1 + leftPadding, 1 + viewTop, 1 + leftPadding + avatarImageView.getMeasuredWidth(), 1 + viewTop + avatarImageView.getMeasuredHeight());
+
         int l = leftPadding + (avatarImageView.getVisibility() == VISIBLE ? dp(glassMode ? 49.66f : 55) : dp(glassMode ? 13 : 1)) + rightAvatarPadding;
         SimpleTextView titleTextLargerCopyView = this.titleTextLargerCopyView.get();
         if (getSubtitleTextView().getVisibility() != GONE) {
@@ -1372,6 +1374,15 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         if (avatarImageView != null) {
             avatarImageView.setForUserOrChat(chat, avatarDrawable);
             avatarImageView.setRoundRadius(ChatObject.isForum(chat) ? dp(ChatObject.hasStories(chat) ? 11 : 16) : dp(21));
+        }
+    }
+
+    public void setFeedAvatar() {
+        avatarDrawable.setInfo(UserConfig.getInstance(currentAccount).getClientUserId());
+        avatarDrawable.setAvatarType(1);
+        avatarDrawable.setCustomIcon(Theme.avatarDrawables[25]);
+        if (avatarImageView != null) {
+            avatarImageView.setImage(null, null, avatarDrawable, null);
         }
     }
 

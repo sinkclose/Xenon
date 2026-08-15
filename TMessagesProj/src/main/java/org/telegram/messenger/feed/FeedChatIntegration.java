@@ -895,10 +895,7 @@ public class FeedChatIntegration {
     }
 
     public void hideChannelWithUndo(final long j, CharSequence charSequence) {
-        FeedConfig feedConfig = FeedConfig.getInstance(this.currentAccount);
         FeedController feedController = FeedController.getInstance(this.currentAccount);
-        feedConfig.setExcluded(j, true);
-        feedController.markConfigApplied();
         feedController.getStore().setHidden(j, true);
         this.pendingHideDialogId = j;
         reconcileWithStore();
@@ -930,8 +927,6 @@ public class FeedChatIntegration {
         }
         this.pendingHideDialogId = 0L;
         FeedController feedController = FeedController.getInstance(this.currentAccount);
-        FeedConfig.getInstance(this.currentAccount).setExcluded(j, false);
-        feedController.markConfigApplied();
         feedController.getStore().setHidden(j, false);
         reconcileWithStore();
         onFeedExclusionsChanged();

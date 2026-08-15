@@ -3106,7 +3106,7 @@ public class Theme {
     public static Paint avatar_backgroundPaint;
 
     public static Drawable listSelector;
-    public static Drawable[] avatarDrawables = new Drawable[25];
+    public static Drawable[] avatarDrawables = new Drawable[26];
 
     public static Drawable moveUpDrawable;
 
@@ -8338,6 +8338,7 @@ public class Theme {
             avatarDrawables[22] = resources.getDrawable(R.drawable.filled_giveaway_premium);
             avatarDrawables[23] = resources.getDrawable(R.drawable.filled_giveaway_stars);
             avatarDrawables[24] = resources.getDrawable(R.drawable.filled_suggest_chat_avatar);
+            avatarDrawables[25] = resources.getDrawable(R.drawable.ic_feed_filled);
 
             if (dialogs_archiveAvatarDrawable != null) {
                 dialogs_archiveAvatarDrawable.setCallback(null);

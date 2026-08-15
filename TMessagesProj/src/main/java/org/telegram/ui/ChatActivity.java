@@ -4796,6 +4796,9 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
             glassBackgroundDrawableFactory.create(chatInputViewsContainer, blurredBackgroundColorProvider));
         chatInputViewsContainer.setUnderKeyboardBackgroundDrawable(
             glassBackgroundDrawableFactoryFrosted.create(chatInputViewsContainer, blurredBackgroundColorProvider));
+        if (isFeedSearch()) {
+            chatInputViewsContainer.drawInputBackground = false;
+        }
 
 
         chatInputBubbleContainer = chatInputViewsContainer.getInputIslandBubbleContainer();
@@ -9271,7 +9274,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (chatMode == MODE_SEARCH) {
             boolean asList = !isFeedSearch();
             animatorSearchResultAsListVisibility.setValue(asList, false);
-            searchExpandList.setText(LocaleController.getString(asList ? R.string.SearchAsChat : R.string.SearchAsList), false);
+            if (!isFeedSearch() && searchExpandList != null) {
+                searchExpandList.setText(LocaleController.getString(asList ? R.string.SearchAsChat : R.string.SearchAsList), false);
+            }
             updateSearchListEmptyView();
         }
 
@@ -25075,6 +25080,15 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     messagesSearchListView.getLayoutManager().scrollToPosition(messagesSearchAdapter.getItemCount() - 1);
                 }
             }
+            if (isFeedSearch()) {
+                org.telegram.messenger.feed.FeedController feedController = org.telegram.messenger.feed.FeedController.getInstance(currentAccount);
+                if (feedController.getStore().getVisibleCount() > 0) {
+                    showMessagesSearchListView(false);
+                } else if (endReached[0]) {
+                    showMessagesSearchListView(true);
+                }
+                updateSearchListEmptyView();
+            }
             if (hashtagSearchEmptyView != null) {
                 hashtagSearchEmptyView.showProgress(false);
             }
@@ -28505,7 +28519,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         } else if (bottomOverlayLinks || forceVisible) {
             bottomChannelButtonsLayout.setVisibility(View.VISIBLE);
             chatActivityEnterView.setVisibility(View.INVISIBLE);
-        } else if (searchItem != null && searchItemVisible) {
+        } else if (searchItem != null && searchItemVisible && !isFeedSearch()) {
             createSearchContainer();
             if (searchContainer == null) {
                 return;
@@ -28552,12 +28566,18 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             } else {
                 topViewWasVisible = 2;
             }
-        } else if (chatMode == MODE_SEARCH) {
+        } else if (chatMode == MODE_SEARCH && !isFeedSearch()) {
             createSearchContainer();
             if (searchContainer == null) {
                 return;
             }
             bottomViewsVisibilityController.setViewVisible(MESSAGE_SEARCH_CONTAINER, true, false);
+            invalidateChatListViewTopPadding();
+        } else if (isFeedSearch()) {
+            bottomViewsVisibilityController.setViewVisible(MESSAGE_SEARCH_CONTAINER, false, false);
+            showBottomOverlayProgress(false, false);
+            bottomChannelButtonsLayout.setVisibility(View.GONE);
+            chatActivityEnterView.setVisibility(View.GONE);
             invalidateChatListViewTopPadding();
         } else {
             bottomViewsVisibilityController.setViewVisible(MESSAGE_SEARCH_CONTAINER, false, true);
@@ -36412,6 +36432,17 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     private void updateSearchListEmptyView() {
+        if (isFeedSearch()) {
+            org.telegram.messenger.feed.FeedController feedController = org.telegram.messenger.feed.FeedController.getInstance(currentAccount);
+            if (feedController.hasChannels() && !feedController.hasIncludedChannels()) {
+                hashtagSearchEmptyView.title.setText(LocaleController.getString(R.string.FeedAllChannelsExcluded));
+            } else {
+                hashtagSearchEmptyView.title.setText(LocaleController.getString(R.string.FeedNoPosts));
+            }
+            hashtagSearchEmptyView.subtitle.setVisibility(View.GONE);
+            messagesSearchListView.setEmptyView(hashtagSearchEmptyView);
+            return;
+        }
         if (searchingHashtag != null) {
             hashtagSearchEmptyView.subtitle.setText(LocaleController.formatString(R.string.HashtagSearchEmptyViewFilteredSubtitle, searchingHashtag));
             messagesSearchListView.setEmptyView(hashtagSearchEmptyView);
@@ -36590,8 +36621,13 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     int idx = lastLoadIndex;
                     loading = true;
                     waitingForLoad.add(idx);
-                    fc.loadOlder(classGuid, idx);
-                    lastLoadIndex++;
+                    boolean result = fc.loadOlder(classGuid, idx);
+                    if (result) {
+                        lastLoadIndex++;
+                    } else {
+                        waitingForLoad.remove(Integer.valueOf(idx));
+                        loading = false;
+                    }
                 }
                 @Override public org.telegram.messenger.feed.FeedChatIntegration.ScrollAnchor captureScrollAnchor() {
                     if (chatListView == null || chatAdapter == null) return null;
@@ -36747,18 +36783,6 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (!isFeedSearch()) return;
         if (fullReload) reloadFeed();
         else reconcileFeedList();
-    }
-
-    public void applyFeedConfigChange() {
-        if (!isFeedSearch()) return;
-        org.telegram.messenger.feed.FeedController.getInstance(currentAccount).applyConfigChange(willBeFull -> {
-            if (isFinished || !isFeedSearch()) return;
-            if (willBeFull) {
-                reloadFeed();
-            } else {
-                reconcileFeedList();
-            }
-        });
     }
 
     public void reconcileFeedList() {
@@ -47942,6 +47966,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     /* */
 
     private float calculateInputIslandHeight(boolean target) {
+        if (isFeedSearch()) {
+            return 0;
+        }
         final float enterViewIslandHeight = Math.max(
             chatActivityEnterView != null ? chatActivityEnterView.getIslandTotalHeight(target): 0, dp(44));
 

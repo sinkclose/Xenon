@@ -9,29 +9,13 @@ import java.util.Iterator;
 
 public final class FeedStore {
 
-    public static final class Cursor {
-        public int date;
-        public int mid;
-        public long uid;
-
-        public boolean isEmpty() {
-            return date == 0;
-        }
-
-        public void set(int date, long uid, int mid) {
-            this.date = date;
-            this.uid = uid;
-            this.mid = mid;
-        }
-    }
-
     private int count;
     private boolean endReached;
     private final ArrayList<MessageObject> messages = new ArrayList<>();
     private final FeedMessageIdentityMap identityMap = new FeedMessageIdentityMap();
     private final HashSet<Long> hiddenDialogIds = new HashSet<>();
-    private final Cursor oldestCursor = new Cursor();
-    private final Cursor newestCursor = new Cursor();
+    private final FeedTimelineLoader.Cursor oldestCursor = new FeedTimelineLoader.Cursor();
+    private final FeedTimelineLoader.Cursor newestCursor = new FeedTimelineLoader.Cursor();
 
     public ArrayList<MessageObject> getMessages() {
         return messages;
@@ -117,8 +101,8 @@ public final class FeedStore {
         return changed;
     }
 
-    public Cursor getOldestCursor() { return oldestCursor; }
-    public Cursor getNewestCursor() { return newestCursor; }
+    public FeedTimelineLoader.Cursor getOldestCursor() { return oldestCursor; }
+    public FeedTimelineLoader.Cursor getNewestCursor() { return newestCursor; }
 
     public boolean isEndReached() { return endReached; }
 
@@ -334,7 +318,7 @@ public final class FeedStore {
             newestCursor.set(0, 0L, 0);
             return false;
         }
-        if (oldEmpty && compareTimeline(newestDate, newestUid, newestMid, oldestCursor.date, oldestCursor.uid, oldestCursor.mid) > 0) {
+        if (!oldEmpty && compareTimeline(oldestDate, oldestUid, oldestMid, oldestCursor.date, oldestCursor.uid, oldestCursor.mid) > 0) {
             endReached = false;
         }
         newestCursor.set(newestDate, newestUid, newestMid);

@@ -10,7 +10,6 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.OnApplyWindowInsetsListener;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
-import org.telegram.messenger.feed.FeedConfig;
 import org.telegram.messenger.feed.FeedController;
 import java.util.ArrayList;
 import org.telegram.messenger.AndroidUtilities;
@@ -34,7 +33,6 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
     private boolean embeddedChatCreated;
     private boolean hasMainTabs;
     private MainTabsActivityController mainTabsActivityController;
-    private int lastConfigGeneration;
 
     public void setMainTabsActivityController(MainTabsActivityController controller) {
         this.mainTabsActivityController = controller;
@@ -91,7 +89,6 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
         this.viewportFullyVisible = !z;
         NotificationCenter.getInstance(this.currentAccount).addObserver(this, NotificationCenter.didReceiveNewMessages);
         NotificationCenter.getInstance(this.currentAccount).addObserver(this, NotificationCenter.feedNeedReload);
-        this.lastConfigGeneration = FeedConfig.getInstance(this.currentAccount).getGeneration();
         return super.onFragmentCreate();
     }
 
@@ -99,9 +96,6 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
     public void onFragmentDestroy() {
         AndroidUtilities.cancelRunOnUIThread(this.loadNewPosts);
         destroyEmbeddedChat();
-        if (mainTabsActivityController != null && hasMainTabs) {
-            mainTabsActivityController.setTabsVisible(true);
-        }
         if (this.uiResumedHeld) {
             this.uiResumedHeld = false;
             FeedController.getInstance(this.currentAccount).setUiResumed(false);
@@ -267,7 +261,7 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
 
     public /* synthetic */ WindowInsetsCompat lambda$createView$1(View view, WindowInsetsCompat windowInsetsCompat) {
         this.lastWindowInsets = windowInsetsCompat;
-        int iDp = 0;
+        int iDp = hasMainTabs ? AndroidUtilities.dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
         if (iDp == 0) {
             return windowInsetsCompat;
         }
@@ -284,9 +278,6 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
         View view;
         WindowInsetsCompat windowInsetsCompat;
         super.onResume();
-        if (mainTabsActivityController != null && hasMainTabs) {
-            mainTabsActivityController.setTabsVisible(false);
-        }
         ChatActivityContainer chatActivityContainer2 = this.chatContainer;
         if (chatActivityContainer2 != null) {
             chatActivityContainer2.onResume();
@@ -300,14 +291,7 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
             ViewCompat.dispatchApplyWindowInsets(view, windowInsetsCompat);
         }
         reattachCurrentFeedVideoTexture();
-        int generation = FeedConfig.getInstance(this.currentAccount).getGeneration();
-        if (generation != this.lastConfigGeneration) {
-            this.lastConfigGeneration = generation;
-            ChatActivityContainer chatActivityContainer3 = this.chatContainer;
-            if (chatActivityContainer3 != null && (chatActivity2 = chatActivityContainer3.chatActivity) != null) {
-                chatActivity2.applyFeedConfigChange();
-            }
-        } else if (this.resumedOnce && (chatActivityContainer = this.chatContainer) != null && (chatActivity = chatActivityContainer.chatActivity) != null) {
+        if (this.resumedOnce && (chatActivityContainer = this.chatContainer) != null && (chatActivity = chatActivityContainer.chatActivity) != null) {
             chatActivity.reconcileFeedList();
             this.chatContainer.chatActivity.refreshFeedUnreadDivider();
             if (!FeedController.getInstance(this.currentAccount).getMessages().isEmpty()) {
@@ -355,9 +339,6 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
     @Override // org.telegram.ui.ActionBar.BaseFragment
     public void onPause() {
         super.onPause();
-        if (mainTabsActivityController != null && hasMainTabs) {
-            mainTabsActivityController.setTabsVisible(true);
-        }
         if (this.chatContainer != null) {
             updateFeedViewportActive(false);
             this.chatContainer.onPause();
@@ -408,10 +389,8 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
         if (actionBarMenuCreateMenu.getItem(76) == null) {
             actionBarMenuCreateMenu.addItem(76, R.drawable.msg_markread, this.chatContainer.chatActivity.themeDelegate).setContentDescription(LocaleController.getString(R.string.FeedMarkAllRead));
         }
-        if (actionBarMenuCreateMenu.getItem(75) == null) {
-            actionBarMenuCreateMenu.addItem(75, R.drawable.msg_settings, this.chatContainer.chatActivity.themeDelegate).setContentDescription(LocaleController.getString(R.string.FeedSettings));
-        }
         if (this.hasMainTabs) {
+            applyMainTabsHeaderLayout();
         }
         final ActionBar.ActionBarMenuOnItemClick actionBarMenuOnItemClick = actionBar.getActionBarMenuOnItemClick();
         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() { // from class: org.telegram.messenger.feed.ui.FeedActivity.4
@@ -434,10 +413,6 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
                 }
                 if (i == 76) {
                     FeedActivity.this.showMarkAllReadDialog();
-                    return;
-                }
-                if (i == 75) {
-                    FeedActivity.this.presentFragment(new FeedChannelsActivity());
                     return;
                 }
                 ActionBar.ActionBarMenuOnItemClick actionBarMenuOnItemClick2 = actionBarMenuOnItemClick;
@@ -473,6 +448,23 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
         }
     }
 
+    public void applyMainTabsHeaderLayout() {
+        ChatActivity chatActivity;
+        ChatAvatarContainer chatAvatarContainer;
+        ChatActivityContainer chatActivityContainer = this.chatContainer;
+        if (chatActivityContainer == null || (chatActivity = chatActivityContainer.chatActivity) == null || (chatAvatarContainer = chatActivity.avatarContainer) == null) {
+            return;
+        }
+        ViewGroup.LayoutParams layoutParams = chatAvatarContainer.getLayoutParams();
+        if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams marginLayoutParams = (ViewGroup.MarginLayoutParams) layoutParams;
+            int iDp = 0;
+            if (marginLayoutParams.leftMargin != iDp) {
+                marginLayoutParams.leftMargin = iDp;
+                this.chatContainer.chatActivity.avatarContainer.setLayoutParams(marginLayoutParams);
+            }
+        }
+    }
 
     public void showMarkAllReadDialog() {
         if (getParentActivity() == null) {
@@ -515,7 +507,8 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
             return;
         }
         chatAvatarContainer.setTitle(LocaleController.getString(R.string.Feed));
-                updateFeedSubtitle();
+        this.chatContainer.chatActivity.avatarContainer.setFeedAvatar();
+        updateFeedSubtitle();
     }
 
     public void updateFeedSubtitle() {
@@ -523,13 +516,13 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
         setFeedSubtitle(feedController.getIncludedChannelCount());
         feedController.loadChannels(new FeedController.ChannelsCallback() { // from class: org.telegram.messenger.feed.ui.FeedActivity$$ExternalSyntheticLambda0
             @Override // org.telegram.messenger.feed.FeedController.ChannelsCallback
-            public final void onChannels(ArrayList arrayList, int i, boolean z, int i2) {
-                FeedActivity.this.lambda$updateFeedSubtitle$3(arrayList, i, z, i2);
+            public final void onChannels(ArrayList arrayList, int i, boolean z) {
+                FeedActivity.this.lambda$updateFeedSubtitle$3(arrayList, i, z);
             }
         });
     }
 
-    public /* synthetic */ void lambda$updateFeedSubtitle$3(ArrayList arrayList, int i, boolean z, int i2) {
+    public /* synthetic */ void lambda$updateFeedSubtitle$3(ArrayList arrayList, int i, boolean z) {
         if (z) {
             return;
         }
