@@ -12397,7 +12397,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     private boolean wasCountViewShown;
 
     public void switchToEditMode(final int mode) {
-        if (currentEditMode == mode || mode != EDIT_MODE_NONE && ((isCurrentVideo && photoProgressViews[0].backgroundState != PROGRESS_PLAY) || (!isCurrentVideo && centerImage.getBitmap() == null)) || changeModeAnimation != null || imageMoveAnimation != null || isCaptionOpen()) {
+        if (currentEditMode == mode || (!isCurrentVideo && centerImage.getBitmap() == null) || changeModeAnimation != null || imageMoveAnimation != null || isCaptionOpen()) {
             return;
         }
         if (placeProvider != null && (currentEditMode == EDIT_MODE_NONE || mode == EDIT_MODE_NONE)) {
