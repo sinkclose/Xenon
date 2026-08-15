@@ -406,6 +406,8 @@
     <string name="ForceBlurLiquidGlass">Force enable blur and liquid glass options</string>
     <string name="DisableGooeyAvatarAnimation">Disable \"Gooey\" avatar animation</string>
     <string name="KeepUnreadChatsOnTop">Keep unread chats on top</string>
+    <string name="SmoothlyMoveChats">Smoothly move chats</string>
+    <string name="SetUnreadMessages">Set unread messages</string>
     <string name="KeepUnreadArchivedOnTop">Also show archived chats</string>
     <string name="GooeyAvatarOffset">Avatar pull-in offset</string>
     <string name="GooeyAvatarOffsetLeft">Higher</string>

@@ -276,6 +276,7 @@ public class NekoConfig {
     public static boolean material3Dialogs = false;
     public static boolean keepUnreadChatsOnTop = false;
     public static boolean keepUnreadArchivedOnTop = false;
+    public static boolean smoothlyMoveChats = false;
     public static boolean roundedBulletin = false;
     public static boolean nonIslandTabBars = false;
     public static boolean nonIslandGlobalSearch = false;
@@ -355,6 +356,7 @@ public class NekoConfig {
             material3Dialogs = preferences.getBoolean("material3Dialogs", false);
             keepUnreadChatsOnTop = preferences.getBoolean("keepUnreadChatsOnTop", false);
             keepUnreadArchivedOnTop = preferences.getBoolean("keepUnreadArchivedOnTop", false);
+            smoothlyMoveChats = preferences.getBoolean("smoothlyMoveChats", false);
             disableNumberRounding = preferences.getBoolean("disableNumberRounding", false);
             disableAppBarShadow = preferences.getBoolean("disableAppBarShadow", false);
             hideRecordButton = preferences.getBoolean("hideRecordButton", false);
@@ -1465,6 +1467,14 @@ public class NekoConfig {
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("keepUnreadArchivedOnTop", keepUnreadArchivedOnTop);
+        editor.apply();
+    }
+
+    public static void toggleSmoothlyMoveChats() {
+        smoothlyMoveChats = !smoothlyMoveChats;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("smoothlyMoveChats", smoothlyMoveChats);
         editor.apply();
     }
 

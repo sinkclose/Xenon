@@ -55,6 +55,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
     private final int gooeyAvatarOffsetRow = rowId++;
     private final int keepUnreadChatsOnTopRow = rowId++;
     private final int keepUnreadArchivedOnTopRow = rowId++;
+    private final int smoothlyMoveChatsRow = rowId++;
     private final int material3SwitchesRow = rowId++;
     private final int m3SectionsStyleRow = rowId++;
     private final int materialSlidersRow = rowId++;
@@ -119,6 +120,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         if (NekoConfig.keepUnreadChatsOnTop) {
             items.add(UItem.asCheck(keepUnreadArchivedOnTopRow, LocaleController.getString(R.string.KeepUnreadArchivedOnTop)).setChecked(NekoConfig.keepUnreadArchivedOnTop).slug("keepUnreadArchivedOnTop"));
         }
+        items.add(UItem.asCheck(smoothlyMoveChatsRow, LocaleController.getString(R.string.SmoothlyMoveChats)).setChecked(NekoConfig.smoothlyMoveChats).slug("smoothlyMoveChats"));
         items.add(UItem.asCheck(hideRecordButtonRow, LocaleController.getString(R.string.HideRecordButton)).setChecked(NekoConfig.hideRecordButton).slug("hideRecordButton"));
         items.add(UItem.asCheck(roundedBulletinRow, LocaleController.getString(R.string.RoundedBulletin)).setChecked(NekoConfig.roundedBulletin).slug("roundedBulletin"));
         items.add(UItem.asCheck(appBarShadowRow, LocaleController.getString(R.string.DisableAppBarShadow)).slug("appBarShadow").setChecked(NekoConfig.disableAppBarShadow));
@@ -265,6 +267,11 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.keepUnreadArchivedOnTop);
             }
+        } else if (id == smoothlyMoveChatsRow) {
+            NekoConfig.toggleSmoothlyMoveChats();
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.smoothlyMoveChats);
+            }
         } else if (id == hideRecordButtonRow) {
             NekoConfig.toggleHideRecordButton();
             if (view instanceof TextCheckCell) {
@@ -374,6 +381,8 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         container.setOrientation(LinearLayout.VERTICAL);
         container.setPadding(AndroidUtilities.dp(24), AndroidUtilities.dp(16), AndroidUtilities.dp(24), AndroidUtilities.dp(24));
 
+        org.telegram.ui.Components.MediaActionDrawable[] previewMads = new org.telegram.ui.Components.MediaActionDrawable[2];
+
         View previewView = new View(getParentActivity()) {
             private final org.telegram.ui.Components.CircularProgressDrawable defaultCpd;
             private final org.telegram.ui.Components.CircularProgressDrawable md3Cpd;
@@ -399,6 +408,8 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
                 md3Mad.setCallback(this);
                 md3Mad.setIcon(org.telegram.ui.Components.MediaActionDrawable.ICON_CANCEL, false);
                 md3Mad.setProgress(0, false);
+                previewMads[0] = defaultMad;
+                previewMads[1] = md3Mad;
                 setWillNotDraw(false);
             }
             @Override
@@ -454,6 +465,18 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         labelsLayout.addView(rightLabel);
 
         container.addView(labelsLayout);
+
+        AltSeekbar progressSeekbar = new AltSeekbar(getParentActivity(),
+                progress -> {
+                    for (org.telegram.ui.Components.MediaActionDrawable mad : previewMads) {
+                        if (mad != null) {
+                            mad.setProgress(progress / 100f, true);
+                        }
+                    }
+                }, 0, 100, "Progress", "0%", "100%", resourcesProvider, null);
+        progressSeekbar.setValueFormatter(v -> v + "%");
+        progressSeekbar.setDefaultValue(0);
+        container.addView(progressSeekbar, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
         sheet.setCustomView(container);
         sheet.show();

@@ -58,6 +58,7 @@ import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextPaint;
 import android.text.TextUtils;
+import android.text.InputType;
 import android.text.style.ImageSpan;
 import android.util.LongSparseArray;
 import android.util.Property;
@@ -223,6 +224,7 @@ import org.telegram.ui.Components.ChatAvatarContainer;
 import org.telegram.ui.Components.CombinedDrawable;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.DialogsItemAnimator;
+import org.telegram.ui.Components.EditTextBoldCursor;
 import org.telegram.ui.Components.FilterTabsView;
 import org.telegram.ui.Components.FiltersListBottomSheet;
 import org.telegram.ui.Components.FlickerLoadingView;
@@ -437,11 +439,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         };
 
         Runnable updateListRunnable = () -> {
+            dialogsAdapter.lastSmoothMoves.clear();
             dialogsAdapter.updateList(saveScrollPositionRunnable);
             invalidateScrollY = true;
             listView.updateDialogsOnNextDraw = true;
             updating = false;
             listView.invalidate();
+            animateSmoothMoves();
         };
 
         @Override
@@ -495,6 +499,76 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 listView.setItemAnimator(null);
             }
             AndroidUtilities.runOnUIThread(updateListRunnable, 36);
+        }
+
+        private void animateSmoothMoves() {
+            if (!NekoConfig.smoothlyMoveChats || dialogsAdapter.lastSmoothMoves.isEmpty()) {
+                return;
+            }
+            final ArrayList<int[]> moves = new ArrayList<>(dialogsAdapter.lastSmoothMoves);
+            dialogsAdapter.lastSmoothMoves.clear();
+            listView.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+                @Override
+                public void onGlobalLayout() {
+                    listView.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                    HashSet<Integer> targets = new HashSet<>();
+                    for (int a = 0; a < moves.size(); a++) {
+                        targets.add(moves.get(a)[1]);
+                    }
+                    for (int a = 0; a < moves.size(); a++) {
+                        int from = moves.get(a)[0];
+                        int to = moves.get(a)[1];
+                        if (from == to) {
+                            continue;
+                        }
+                        animateSmoothCell(to, from - to);
+                        int shift = from > to ? -1 : 1;
+                        int min = Math.min(from, to);
+                        int max = Math.max(from, to);
+                        for (int k = min; k <= max; k++) {
+                            if (k != to && !targets.contains(k)) {
+                                animateSmoothCell(k, shift);
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        private void animateSmoothCell(int position, int delta) {
+            if (delta == 0) {
+                return;
+            }
+            View view = null;
+            for (int b = 0; b < listView.getChildCount(); b++) {
+                View child = listView.getChildAt(b);
+                if (listView.getChildAdapterPosition(child) == position) {
+                    view = child;
+                    break;
+                }
+            }
+            if (view == null || !(view instanceof DialogCell)) {
+                return;
+            }
+            int offset = delta * view.getMeasuredHeight();
+            if (offset == 0) {
+                return;
+            }
+            view.setTranslationY(offset);
+            final View finalView = view;
+            view.animate().translationY(0).setDuration(300).setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT)
+                    .setListener(new AnimatorListenerAdapter() {
+                        @Override
+                        public void onAnimationEnd(Animator animation) {
+                            finalView.setTranslationY(0);
+                        }
+
+                        @Override
+                        public void onAnimationCancel(Animator animation) {
+                            finalView.setTranslationY(0);
+                        }
+                    })
+                    .start();
         }
     }
 
@@ -603,6 +677,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     private ActionBarMenuSubItem readItem;
     @Nullable
     private ActionBarMenuSubItem blockItem;
+
+    private int setUnreadMenuIndex = -1;
 
     private float additionalFloatingTranslation;
     private float floatingButtonPanOffset;
@@ -6877,6 +6953,37 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             return true;
         });
 
+        ActionBarPopupWindow.ActionBarPopupWindowLayout otherPopupLayout = otherItem.getPopupLayout();
+        LinearLayout setUnreadMenuView = new LinearLayout(getParentActivity());
+        setUnreadMenuView.setOrientation(LinearLayout.VERTICAL);
+        ActionBarMenuSubItem setUnreadBackItem = new ActionBarMenuSubItem(getParentActivity(), true, false);
+        setUnreadBackItem.setTextAndIcon(LocaleController.getString(R.string.Back), R.drawable.ic_ab_back);
+        setUnreadBackItem.setMinimumWidth(160);
+        setUnreadBackItem.setOnClickListener(e -> {
+            if (otherPopupLayout != null && otherPopupLayout.getSwipeBack() != null) {
+                otherPopupLayout.getSwipeBack().closeForeground();
+            }
+        });
+        setUnreadMenuView.addView(setUnreadBackItem);
+        ActionBarPopupWindow.GapView setUnreadGap = new ActionBarPopupWindow.GapView(getParentActivity(), getResourceProvider(), Theme.key_actionBarDefaultSubmenuSeparator);
+        setUnreadGap.setTag(R.id.fit_width_tag, 1);
+        setUnreadMenuView.addView(setUnreadGap, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 8));
+        ActionBarMenuSubItem setUnreadItem = new ActionBarMenuSubItem(getParentActivity(), false, true);
+        setUnreadItem.setTextAndIcon(LocaleController.getString(R.string.SetUnreadMessages), R.drawable.msg_markunread);
+        setUnreadItem.setMinimumWidth(160);
+        setUnreadItem.setOnClickListener(e -> {
+            ArrayList<Long> dialogIds = new ArrayList<>(selectedDialogs);
+            hideActionMode(false);
+            showSetUnreadCountDialog(dialogIds);
+        });
+        setUnreadMenuView.addView(setUnreadItem);
+        setUnreadMenuIndex = otherPopupLayout.addViewToSwipeBack(setUnreadMenuView);
+        readItem.setRightIcon(R.drawable.msg_arrowright, v -> {
+            if (otherPopupLayout != null && otherPopupLayout.getSwipeBack() != null) {
+                otherPopupLayout.getSwipeBack().openForeground(setUnreadMenuIndex);
+            }
+        });
+
         actionModeViews.add(pinItem);
         actionModeViews.add(archive2Item);
         actionModeViews.add(muteItem);
@@ -8731,10 +8838,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
         }
 
-        int flags = ActionBarPopupWindow.ActionBarPopupWindowLayout.FLAG_SHOWN_FROM_BOTTOM;
-        if (hasFolders) {
-            flags |= ActionBarPopupWindow.ActionBarPopupWindowLayout.FLAG_USE_SWIPEBACK;
-        }
+        int flags = ActionBarPopupWindow.ActionBarPopupWindowLayout.FLAG_SHOWN_FROM_BOTTOM | ActionBarPopupWindow.ActionBarPopupWindowLayout.FLAG_USE_SWIPEBACK;
 
         final BaseFragment[] previewActivity = new BaseFragment[1];
         previewMenu[0] = new ActionBarPopupWindow.ActionBarPopupWindowLayout(getParentActivity(), R.drawable.popup_fixed_alert4, getResourceProvider(), flags);
@@ -8764,19 +8868,28 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             ActionBarMenuSubItem markAsUnreadItem = new ActionBarMenuSubItem(getParentActivity(), true, false);
             if (cell.getHasUnread()) {
                 markAsUnreadItem.setTextAndIcon(LocaleController.getString(R.string.MarkAsRead), R.drawable.msg_markread);
+                markAsUnreadItem.setMinimumWidth(160);
+                markAsUnreadItem.setOnClickListener(e -> {
+                    markAsRead(dialogId);
+                    finishPreviewFragment();
+                });
             } else {
                 markAsUnreadItem.setTextAndIcon(LocaleController.getString(R.string.MarkAsUnread), R.drawable.msg_markunread);
-            }
-            markAsUnreadItem.setMinimumWidth(160);
-            markAsUnreadItem.setOnClickListener(e -> {
-                if (cell.getHasUnread()) {
-                    markAsRead(dialogId);
-                } else {
+                markAsUnreadItem.setMinimumWidth(160);
+                markAsUnreadItem.setOnClickListener(e -> {
                     markAsUnread(dialogId);
-                }
-                finishPreviewFragment();
-            });
+                    finishPreviewFragment();
+                });
+            }
             previewMenu[0].addView(markAsUnreadItem);
+            ActionBarMenuSubItem setUnreadItem = new ActionBarMenuSubItem(getParentActivity(), false, true);
+            setUnreadItem.setTextAndIcon(LocaleController.getString(R.string.SetUnreadMessages), R.drawable.msg_markunread);
+            setUnreadItem.setMinimumWidth(160);
+            setUnreadItem.setOnClickListener(e -> {
+                finishPreviewFragment();
+                AndroidUtilities.runOnUIThread(() -> showSetUnreadCountDialog(dialogId));
+            });
+            previewMenu[0].addView(setUnreadItem);
         }
 
         final boolean[] hasPinAction = new boolean[1];
@@ -9723,6 +9836,49 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         getMessagesController().markDialogAsUnread(did, null, 0);
     }
 
+    private void showSetUnreadCountDialog(long dialogId) {
+        ArrayList<Long> dialogIds = new ArrayList<>();
+        dialogIds.add(dialogId);
+        showSetUnreadCountDialog(dialogIds);
+    }
+
+    private void showSetUnreadCountDialog(ArrayList<Long> dialogIds) {
+        if (getParentActivity() == null) {
+            return;
+        }
+        EditTextBoldCursor editText = new EditTextBoldCursor(getParentActivity());
+        editText.setInputType(InputType.TYPE_CLASS_NUMBER);
+        editText.setHint(LocaleController.getString(R.string.SetUnreadMessages));
+        editText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
+        editText.setTextColor(Theme.getColor(Theme.key_dialogTextBlack));
+        editText.setHintTextColor(Theme.getColor(Theme.key_dialogTextHint));
+        editText.setBackgroundDrawable(Theme.createEditTextDrawable(getParentActivity(), false));
+        editText.setPadding(AndroidUtilities.dp(8), AndroidUtilities.dp(8), AndroidUtilities.dp(8), AndroidUtilities.dp(8));
+        editText.setGravity(Gravity.CENTER_HORIZONTAL);
+        editText.setSingleLine(true);
+        editText.setFocusable(true);
+        editText.setSelection(0);
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
+        builder.setTitle(LocaleController.getString(R.string.SetUnreadMessages));
+        builder.setView(editText);
+        builder.setPositiveButton(LocaleController.getString(R.string.Set), (dialog, which) -> {
+            String text = editText.getText().toString().trim();
+            int count = 0;
+            if (!text.isEmpty()) {
+                try {
+                    count = Integer.parseInt(text);
+                } catch (Exception ignored) {
+                }
+            }
+            for (int i = 0; i < dialogIds.size(); i++) {
+                getMessagesController().setDialogUnreadCount(dialogIds.get(i), count);
+            }
+        });
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+        builder.show();
+    }
+
     private void markDialogsAsRead(ArrayList<TLRPC.Dialog> dialogs) {
         debugLastUpdateAction = 2;
         int selectedDialogIndex = -1;
@@ -10100,10 +10256,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         if (readItem != null) {
             if (canReadCount != 0) {
                 readItem.setTextAndIcon(LocaleController.getString(R.string.MarkAsRead), R.drawable.msg_markread);
+                readItem.setRightIcon(0);
                 readItem.setVisibility(View.VISIBLE);
             } else {
                 if (forumCount == 0 && communitiesCount == 0) {
                     readItem.setTextAndIcon(LocaleController.getString(R.string.MarkAsUnread), R.drawable.msg_markunread);
+                    readItem.setRightIcon(R.drawable.msg_arrowright);
                     readItem.setVisibility(View.VISIBLE);
                 } else {
                     readItem.setVisibility(View.GONE);

@@ -389,6 +389,7 @@
     <string name="ForceBlurLiquidGlass">Принудительно включить размытие и жидкое стекло</string>
     <string name="DisableGooeyAvatarAnimation">Отключить \"тягучую\" анимацию аватарки</string>
     <string name="KeepUnreadChatsOnTop">Непрочитанные чаты сверху</string>
+    <string name="SmoothlyMoveChats">Плавно перемещать чаты</string>
     <string name="KeepUnreadArchivedOnTop">Также показывать архивированные</string>
     <string name="GooeyAvatarOffset">Смещение точки втягивания</string>
     <string name="GooeyAvatarOffsetLeft">Выше</string>
