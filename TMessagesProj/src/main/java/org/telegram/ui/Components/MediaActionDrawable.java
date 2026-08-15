@@ -680,10 +680,12 @@ public class MediaActionDrawable extends Drawable {
                     if (downloadProgress < 0.01f) {
                         gap = 22;
                     } else {
-                        float target = Math.min(22, Math.max(0, (360f - rad - 25.2f) / 2f));
-                        if (downloadProgress < 0.05f) {
-                            float t = (downloadProgress - 0.01f) / 0.04f;
-                            gap = 22 + (target - 22) * t;
+                        float target = Math.min(22, Math.max(0, 22f * (325f - rad) / 12f));
+                        if (animatedDownloadProgress < 0.01f + 12f / 360f) {
+                            float t = (animatedDownloadProgress - 0.01f) / (12f / 360f);
+                            t = Math.max(0, Math.min(1, t));
+                            t = t * t * (3 - 2 * t);
+                            gap = 22f * t;
                         } else {
                             gap = target;
                         }
@@ -738,10 +740,12 @@ public class MediaActionDrawable extends Drawable {
                     if (downloadProgress < 0.01f) {
                         gap = 22;
                     } else {
-                        float target = Math.min(22, Math.max(0, (360f - rad - 25.2f) / 2f));
-                        if (downloadProgress < 0.05f) {
-                            float t = (downloadProgress - 0.01f) / 0.04f;
-                            gap = 22 + (target - 22) * t;
+                        float target = Math.min(22, Math.max(0, 22f * (325f - rad) / 12f));
+                        if (animatedDownloadProgress < 0.01f + 12f / 360f) {
+                            float t = (animatedDownloadProgress - 0.01f) / (12f / 360f);
+                            t = Math.max(0, Math.min(1, t));
+                            t = t * t * (3 - 2 * t);
+                            gap = 22f * t;
                         } else {
                             gap = target;
                         }
@@ -1054,8 +1058,8 @@ public class MediaActionDrawable extends Drawable {
         wavePhaseAngle += (dt * 50.0f) / 1000f;
         wavePhaseAngle %= 360f;
 
-        float targetScale = (downloadProgress < 0.01f || (downloadProgress > 0.03f && downloadProgress < 0.85f)) ? 1f : 0f;
-        if (downloadProgress >= 0.01f && downloadProgress <= 0.03f) {
+        float targetScale = (downloadProgress < 0.01f || (downloadProgress > 0.13f && downloadProgress < 0.85f)) ? 1f : 0f;
+        if (downloadProgress >= 0.01f && downloadProgress <= 0.13f) {
             wavyAmplitudeSmooth = 0f;
         } else {
             wavyAmplitudeSmooth += (targetScale - wavyAmplitudeSmooth) * Math.min(1f, dt / 80f);
@@ -1105,7 +1109,7 @@ public class MediaActionDrawable extends Drawable {
                         if (elapsed >= INDET_GROW_DURATION / 2 && kickPhaseStartTime == indeterminatePhaseStartTime) {
                             kickPhaseStartTime = newTime;
                         }
-                        if (t >= 1f) {
+                        if (smooth >= 0.99f) {
                             indeterminatePhase = INDET_SHRINK;
                             indeterminatePhaseStartTime = newTime;
                             kickPhaseStartTime = newTime;
@@ -1116,7 +1120,7 @@ public class MediaActionDrawable extends Drawable {
                         float t = Math.min(1f, (float) elapsed / INDET_SHRINK_DURATION);
                         float eased = interpolator.getInterpolation(t);
                         indeterminateArcLength = INDETERMINATE_MAX_ARC - (INDETERMINATE_MAX_ARC - INDETERMINATE_MIN_ARC) * eased;
-                        if (t >= 1f) {
+                        if (eased >= 0.99f) {
                             indeterminatePhase = INDET_PAUSE;
                             indeterminatePhaseStartTime = newTime;
                             kickPhaseStartTime = newTime;
