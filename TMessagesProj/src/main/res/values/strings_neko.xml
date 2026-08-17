@@ -148,6 +148,8 @@
     <string name="Md3Folders">Folder (WIP)</string>
     <string name="Material3Dialogs">Dialogs</string>
     <string name="Material3DialogsConflict">Disable \"%1$s\" to enable \"%2$s\"</string>
+    <string name="TelegramDefaultDialog">Telegram default dialog</string>
+    <string name="Material3DialogPreview">Material 3 dialog</string>
     <string name="Avatars">Avatars</string>
     <string name="AvatarShapesHeader">Shapes</string>
     <string name="ApplyInChatList">Apply in chat list</string>

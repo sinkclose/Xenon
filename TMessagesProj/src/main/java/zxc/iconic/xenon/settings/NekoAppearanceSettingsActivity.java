@@ -1,9 +1,11 @@
 package zxc.iconic.xenon.settings;
 
 import android.content.Context;
+import android.content.DialogInterface;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.util.TypedValue;
+import android.view.ContextThemeWrapper;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -131,10 +133,10 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         items.add(UItem.asCheck(m3SectionsStyleRow, LocaleController.getString(R.string.ListItems)).setChecked(NekoConfig.m3SectionsStyle).slug("m3SectionsStyle"));
         items.add(UItem.asCheck(materialSlidersRow, LocaleController.getString(R.string.MaterialSliders)).setChecked(NekoConfig.materialSliders).slug("materialSliders"));
         items.add(UItem.asCheck(material3BottomNavigationBarRow, LocaleController.getString(R.string.BottomNavigationBar)).setChecked(NekoConfig.material3BottomNavigationBar).slug("material3BottomNavigationBar"));
-        items.add(UItem.asCheck(md3PlayerSeekBarRow, LocaleController.getString(R.string.PlayerSeekBar)).setChecked(NekoConfig.md3PlayerSeekBar).slug("md3PlayerSeekBar"));
+        items.add(InfoCheckCellFactory.of(md3PlayerSeekBarRow, LocaleController.getString(R.string.PlayerSeekBar), NekoConfig.md3PlayerSeekBar, () -> showPlayerSeekBarInfo()).slug("md3PlayerSeekBar"));
         items.add(UItem.asCheck(md3FoldersRow, LocaleController.getString(R.string.Md3Folders)).setChecked(NekoConfig.md3Folders).slug("md3Folders"));
         items.add(InfoCheckCellFactory.of(loadingIndicatorsRow, LocaleController.getString(R.string.LoadingIndicators), NekoConfig.wavyEnabled, () -> showLoadingIndicatorsInfo()).slug("loadingIndicators"));
-        items.add(UItem.asCheck(material3DialogsRow, LocaleController.getString(R.string.Material3Dialogs)).setChecked(NekoConfig.material3Dialogs).slug("material3Dialogs"));
+        items.add(InfoCheckCellFactory.of(material3DialogsRow, LocaleController.getString(R.string.Material3Dialogs), NekoConfig.material3Dialogs, () -> showDialogsInfo()).slug("material3Dialogs"));
         items.add(TextSettingsCellFactory.of(avatarShapeRow, LocaleController.getString(R.string.Avatars), "›").slug("avatarShape"));
         items.add(UItem.asShadow(null));
 
@@ -344,8 +346,8 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
             parentLayout.rebuildAllFragmentViews(false, false);
         } else if (id == md3PlayerSeekBarRow) {
             NekoConfig.toggleMd3PlayerSeekBar();
-            if (view instanceof TextCheckCell) {
-                ((TextCheckCell) view).setChecked(NekoConfig.md3PlayerSeekBar);
+            if (view instanceof InfoCheckCell) {
+                ((InfoCheckCell) view).setChecked(NekoConfig.md3PlayerSeekBar);
             }
             listView.adapter.update(true);
         } else if (id == material3DialogsRow) {
@@ -354,8 +356,8 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
                 return;
             }
             NekoConfig.toggleMaterial3Dialogs();
-            if (view instanceof TextCheckCell) {
-                ((TextCheckCell) view).setChecked(NekoConfig.material3Dialogs);
+            if (view instanceof InfoCheckCell) {
+                ((InfoCheckCell) view).setChecked(NekoConfig.material3Dialogs);
             }
             listView.adapter.update(true);
         } else if (id == avatarShapeRow) {
@@ -477,6 +479,181 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         progressSeekbar.setValueFormatter(v -> v + "%");
         progressSeekbar.setDefaultValue(0);
         container.addView(progressSeekbar, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        sheet.setCustomView(container);
+        sheet.show();
+    }
+
+    private void showDialogsInfo() {
+        Context context = getParentActivity();
+        if (context == null) return;
+
+        boolean savedReplace = NekoConfig.replaceDialogsWithSheet;
+        boolean savedMaterial = NekoConfig.material3Dialogs;
+        NekoConfig.replaceDialogsWithSheet = false;
+        NekoConfig.material3Dialogs = false;
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(context, resourcesProvider);
+        builder.setTitle(LocaleController.getString(R.string.AppNameNeko));
+        builder.setMessage(LocaleController.getString(R.string.TelegramDefaultDialog));
+        builder.setNegativeButton(LocaleController.getString(R.string.Close), null);
+        builder.setPositiveButton(LocaleController.getString(R.string.Next), (dialog, which) -> showMaterial3DialogPreview());
+        builder.setOnDismissListener(dialog -> {
+            NekoConfig.replaceDialogsWithSheet = savedReplace;
+            NekoConfig.material3Dialogs = savedMaterial;
+        });
+        builder.show();
+
+        NekoConfig.replaceDialogsWithSheet = savedReplace;
+        NekoConfig.material3Dialogs = savedMaterial;
+    }
+
+    private void showMaterial3DialogPreview() {
+        Context context = getParentActivity();
+        if (context == null) return;
+
+        Context themedContext = new ContextThemeWrapper(context, com.google.android.material.R.style.Theme_Material3_DayNight);
+        com.google.android.material.dialog.MaterialAlertDialogBuilder builder = new com.google.android.material.dialog.MaterialAlertDialogBuilder(
+                themedContext,
+                com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog);
+        builder.setTitle("Xenon");
+        builder.setMessage(LocaleController.getString(R.string.Material3DialogPreview));
+        builder.setNegativeButton(LocaleController.getString(R.string.Close), null);
+        builder.setPositiveButton(LocaleController.getString(R.string.Enable), (d, w) -> {
+            if (!NekoConfig.material3Dialogs) {
+                if (NekoConfig.replaceDialogsWithSheet) {
+                    showMaterial3DialogsConflictBulletin();
+                } else {
+                    NekoConfig.toggleMaterial3Dialogs();
+                    if (listView != null) {
+                        listView.adapter.update(true);
+                    }
+                }
+            }
+        });
+
+        androidx.appcompat.app.AlertDialog dialog = builder.show();
+
+        int bgColor = Theme.getColor(Theme.key_dialogBackground, resourcesProvider);
+        int textColor = Theme.getColor(Theme.key_dialogTextBlack, resourcesProvider);
+        int buttonColor = Theme.getColor(Theme.key_dialogButton, resourcesProvider);
+
+        if (dialog.getWindow() != null) {
+            com.google.android.material.shape.MaterialShapeDrawable bg = new com.google.android.material.shape.MaterialShapeDrawable();
+            bg.setShapeAppearanceModel(com.google.android.material.shape.ShapeAppearanceModel.builder()
+                    .setAllCornerSizes(new com.google.android.material.shape.AbsoluteCornerSize(AndroidUtilities.dp(28)))
+                    .build());
+            bg.setFillColor(android.content.res.ColorStateList.valueOf(bgColor));
+            dialog.getWindow().setBackgroundDrawable(bg);
+        }
+
+        int titleId = context.getResources().getIdentifier("alertTitle", "id", "android");
+        TextView titleView = titleId != 0 ? dialog.findViewById(titleId) : null;
+        if (titleView != null) titleView.setTextColor(textColor);
+        int messageId = context.getResources().getIdentifier("message", "id", "android");
+        TextView messageView = messageId != 0 ? dialog.findViewById(messageId) : null;
+        if (messageView != null) messageView.setTextColor(textColor);
+
+        int[] btnIds = {DialogInterface.BUTTON_POSITIVE, DialogInterface.BUTTON_NEGATIVE, DialogInterface.BUTTON_NEUTRAL};
+        for (int btnId : btnIds) {
+            TextView button = dialog.getButton(btnId);
+            if (button == null) continue;
+            button.setTextColor(buttonColor);
+        }
+    }
+
+    private void showPlayerSeekBarInfo() {
+        if (getParentActivity() == null) return;
+        org.telegram.ui.ActionBar.BottomSheet sheet = new org.telegram.ui.ActionBar.BottomSheet(getParentActivity(), false, resourcesProvider);
+        sheet.setTitle(LocaleController.getString(R.string.PlayerSeekBar));
+
+        LinearLayout container = new LinearLayout(getParentActivity());
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setPadding(AndroidUtilities.dp(24), AndroidUtilities.dp(16), AndroidUtilities.dp(24), AndroidUtilities.dp(24));
+
+        View defaultBar = new View(getParentActivity()) {
+            private final org.telegram.ui.Components.VideoPlayerSeekBar seekBar;
+            {
+                int bg = Theme.getColor(Theme.key_player_progressBackground, resourcesProvider);
+                int cache = Theme.getColor(Theme.key_player_progressCachedBackground, resourcesProvider);
+                int progress = Theme.getColor(Theme.key_player_progress, resourcesProvider);
+                seekBar = new org.telegram.ui.Components.VideoPlayerSeekBar(this);
+                seekBar.setHorizontalPadding(AndroidUtilities.dp(2));
+                seekBar.setColors(bg, cache, progress, progress, progress, progress);
+                seekBar.setProgress(0.5f, false);
+                seekBar.setBufferedProgress(0.85f);
+                seekBar.setPlaying(true);
+                setWillNotDraw(false);
+            }
+            @Override
+            protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+                super.onSizeChanged(w, h, oldw, oldh);
+                seekBar.setSize(w, h);
+                seekBar.setProgress(0.5f, false);
+            }
+            @Override
+            protected void onDraw(Canvas canvas) {
+                super.onDraw(canvas);
+                boolean saved = zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar;
+                zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar = false;
+                seekBar.draw(canvas, this);
+                zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar = saved;
+                invalidate();
+            }
+        };
+        defaultBar.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, AndroidUtilities.dp(48)));
+        container.addView(defaultBar);
+
+        TextView defaultLabel = new TextView(getParentActivity());
+        defaultLabel.setText("Telegram");
+        defaultLabel.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+        defaultLabel.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2, resourcesProvider));
+        defaultLabel.setGravity(Gravity.CENTER);
+        defaultLabel.setPadding(0, 0, 0, AndroidUtilities.dp(16));
+        defaultLabel.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        container.addView(defaultLabel);
+
+        View md3Bar = new View(getParentActivity()) {
+            private final org.telegram.ui.Components.VideoPlayerSeekBar seekBar;
+            {
+                int bg = Theme.getColor(Theme.key_player_progressBackground, resourcesProvider);
+                int cache = Theme.getColor(Theme.key_player_progressCachedBackground, resourcesProvider);
+                int progress = Theme.getColor(Theme.key_player_progress, resourcesProvider);
+                seekBar = new org.telegram.ui.Components.VideoPlayerSeekBar(this);
+                seekBar.setHorizontalPadding(AndroidUtilities.dp(2));
+                seekBar.setColors(bg, cache, progress, progress, progress, progress);
+                seekBar.setProgress(0.5f, false);
+                seekBar.setBufferedProgress(0.85f);
+                seekBar.setPlaying(true);
+                seekBar.setTransitionProgress(0f);
+                setWillNotDraw(false);
+            }
+            @Override
+            protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+                super.onSizeChanged(w, h, oldw, oldh);
+                seekBar.setSize(w, h);
+                seekBar.setProgress(0.5f, false);
+            }
+            @Override
+            protected void onDraw(Canvas canvas) {
+                super.onDraw(canvas);
+                boolean saved = zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar;
+                zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar = true;
+                seekBar.draw(canvas, this);
+                zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar = saved;
+                invalidate();
+            }
+        };
+        md3Bar.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, AndroidUtilities.dp(48)));
+        container.addView(md3Bar);
+
+        TextView md3Label = new TextView(getParentActivity());
+        md3Label.setText("Material Design 3");
+        md3Label.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+        md3Label.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2, resourcesProvider));
+        md3Label.setGravity(Gravity.CENTER);
+        md3Label.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        container.addView(md3Label);
 
         sheet.setCustomView(container);
         sheet.show();

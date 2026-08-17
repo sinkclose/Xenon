@@ -2116,6 +2116,19 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
             int buttonColor = Theme.getColor(Theme.key_dialogButton, rp);
 
             if (dialog.getWindow() != null) {
+                int maxWidth;
+                if (AndroidUtilities.isTablet()) {
+                    if (AndroidUtilities.isSmallTablet()) {
+                        maxWidth = dp(446);
+                    } else {
+                        maxWidth = dp(496);
+                    }
+                } else {
+                    maxWidth = dp(356);
+                }
+                int calculatedWidth = AndroidUtilities.displaySize.x - dp(56);
+                dialog.getWindow().setLayout(Math.min(maxWidth, calculatedWidth), WindowManager.LayoutParams.WRAP_CONTENT);
+
                 com.google.android.material.shape.MaterialShapeDrawable bg = new com.google.android.material.shape.MaterialShapeDrawable();
                 bg.setShapeAppearanceModel(com.google.android.material.shape.ShapeAppearanceModel.builder()
                         .setAllCornerSizes(new com.google.android.material.shape.AbsoluteCornerSize(AndroidUtilities.dp(28)))
@@ -2124,16 +2137,12 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
                 dialog.getWindow().setBackgroundDrawable(bg);
             }
 
-            int titleId = context.getResources().getIdentifier("android:id/alertTitle", null, null);
-            if (titleId != 0) {
-                TextView titleView = dialog.findViewById(titleId);
-                if (titleView != null) titleView.setTextColor(textColor);
-            }
-            int messageId = context.getResources().getIdentifier("android:id/message", null, null);
-            if (messageId != 0) {
-                TextView messageView = dialog.findViewById(messageId);
-                if (messageView != null) messageView.setTextColor(textColor);
-            }
+            int titleId = context.getResources().getIdentifier("alertTitle", "id", "android");
+            TextView titleView = titleId != 0 ? dialog.findViewById(titleId) : null;
+            if (titleView != null) titleView.setTextColor(textColor);
+            int messageId = context.getResources().getIdentifier("message", "id", "android");
+            TextView messageView = messageId != 0 ? dialog.findViewById(messageId) : null;
+            if (messageView != null) messageView.setTextColor(textColor);
 
             int[] btnIds = {DialogInterface.BUTTON_POSITIVE, DialogInterface.BUTTON_NEGATIVE, DialogInterface.BUTTON_NEUTRAL};
             for (int btnId : btnIds) {
