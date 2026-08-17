@@ -5333,7 +5333,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             var index = bottomFilterTabs() && chatInputViewsContainer != null ?
                     contentView.indexOfChild(chatInputViewsContainer) :
                     -1;
-            contentView.addView(filterTabsView, index, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 36 + 7 + 7, bottomFilterTabs() ? Gravity.BOTTOM : Gravity.TOP, 4, 0, 4, 0));
+            contentView.addView(filterTabsView, index, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, (NekoConfig.md3Folders ? 41 : 36) + 7 + 7, bottomFilterTabs() ? Gravity.BOTTOM : Gravity.TOP, 4, 0, 4, 0));
             NonIslandHelper.applyFilterTabBar(filterTabsView, contentView);
         }
 
