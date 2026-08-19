@@ -455,6 +455,8 @@
     <string name="PluginsDesc">Lua-скриптинг для автоматизации</string>
     <string name="PluginsEnable">Включить плагины</string>
     <string name="PluginsEnableDesc">Когда выключено, код плагинов не выполняется</string>
+    <string name="PluginsAutoSafeMode">Автоматически включать безопасный режим</string>
+    <string name="PluginsAutoSafeModeDesc">Автоматически отключать плагины после сбоя или зависания. Выключи, чтобы плагины оставались включёнными даже при сбое клиента — отключить их вручную можно, удерживая кнопку громкости при открытии приложения.</string>
     <string name="PluginsInstall">Установить плагин</string>
     <string name="PluginsInstalled">Установлены</string>
     <string name="PluginsEmpty">Нет установленных плагинов.\nНажми «Установить плагин», чтобы добавить.</string>

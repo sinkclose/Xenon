@@ -47,6 +47,7 @@ public class NekoPluginsActivity extends BaseNekoSettingsActivity {
     private static final int REQUEST_CODE_INSTALL = 7001;
 
     private final int enableRow = rowId++;
+    private final int autoSafeModeRow = rowId++;
     private final int godModeRow = rowId++;
     private final int installRow = rowId++;
     private final int pluginsHeaderRow = rowId++;
@@ -60,6 +61,11 @@ public class NekoPluginsActivity extends BaseNekoSettingsActivity {
         items.add(UItem.asHeader(LocaleController.getString(R.string.Plugins)));
         items.add(UItem.asCheck(enableRow, LocaleController.getString(R.string.PluginsEnable),
                 LocaleController.getString(R.string.PluginsEnableDesc)).setChecked(NekoConfig.pluginsEnabled));
+        items.add(UItem.asShadow(null));
+
+        items.add(UItem.asCheck(autoSafeModeRow, LocaleController.getString(R.string.PluginsAutoSafeMode),
+                LocaleController.getString(R.string.PluginsAutoSafeModeDesc))
+                .setChecked(NekoConfig.pluginAutoSafeMode));
         items.add(UItem.asShadow(null));
 
         items.add(UItem.asCheck(godModeRow, LocaleController.getString(R.string.PluginGodMode),
@@ -123,6 +129,11 @@ public class NekoPluginsActivity extends BaseNekoSettingsActivity {
                 showRestartBulletin();
             }
             updateRows();
+        } else if (id == autoSafeModeRow) {
+            NekoConfig.togglePluginAutoSafeMode();
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.pluginAutoSafeMode);
+            }
         } else if (id == godModeRow) {
             if (NekoConfig.pluginGodMode) {
                 // Turning off is unconditional — no confirmation needed.
