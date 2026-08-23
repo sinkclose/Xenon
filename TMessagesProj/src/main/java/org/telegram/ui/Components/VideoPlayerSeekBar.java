@@ -84,6 +84,8 @@ public class VideoPlayerSeekBar {
     private static final float WAVELENGTH_DP = 30f;
     private static final float WAVE_AMPLITUDE_DP = 2.5f;
     private static final float WAVE_SPEED_DP_PER_SEC = 50f;
+    private float waveProgressFade;
+    private long thumbSmoothUpdateTime;
 
     private float transitionProgress;
     private int horizontalPadding;
@@ -194,7 +196,7 @@ public class VideoPlayerSeekBar {
         } else if (thumbX > width - thumbWidth) {
             thumbX = width - thumbWidth;
         }
-        if (Math.abs(animatedThumbX - thumbX) > AndroidUtilities.dp(8)) {
+        if ((animated || !zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar) && Math.abs(animatedThumbX - thumbX) > AndroidUtilities.dp(8)) {
             animatedThumbX = thumbX;
         }
     }
@@ -361,7 +363,11 @@ public class VideoPlayerSeekBar {
         float lerpMs = waveStrengthTarget > waveStrength ? 500f : 150f;
         waveStrength += (waveStrengthTarget - waveStrength) * Math.min(1f, waveDt / lerpMs);
         wavePhase += waveDt / 1000f * WAVE_SPEED_DP_PER_SEC;
-        float effectiveWaveStrength = zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar ? waveStrength * (1f - transitionProgress) : 0;
+        if (zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar) {
+            float waveProgressTarget = (progress > 0.05f && progress < 0.95f) ? 1f : 0f;
+            waveProgressFade += (waveProgressTarget - waveProgressFade) * Math.min(1f, waveDt / 150f);
+        }
+        float effectiveWaveStrength = zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar ? waveStrength * (1f - transitionProgress) * waveProgressFade : 0;
         currentWaveStrength = effectiveWaveStrength;
         rect.left = horizontalPadding + AndroidUtilities.lerp(thumbWidth / 2f, 0, transitionProgress);
         rect.top = AndroidUtilities.lerp((height - lineHeight) / 2f, height - AndroidUtilities.dp(3) - smallLineHeight, transitionProgress);
@@ -369,7 +375,20 @@ public class VideoPlayerSeekBar {
 
         float thumbX = this.thumbX;
         animatedThumbX = Math.min(animatedThumbX, thumbX);
-        animatedThumbX = AndroidUtilities.lerp(animatedThumbX, thumbX, .5f);
+        if (zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar) {
+            if (thumbSmoothUpdateTime == 0) {
+                thumbSmoothUpdateTime = now;
+            }
+            long thumbDt = now - thumbSmoothUpdateTime;
+            thumbSmoothUpdateTime = now;
+            if (thumbDt > 50) {
+                thumbDt = 50;
+            }
+            float thumbSmoothK = 1f - (float) Math.exp(-thumbDt / 150f);
+            animatedThumbX += (thumbX - animatedThumbX) * thumbSmoothK;
+        } else {
+            animatedThumbX = AndroidUtilities.lerp(animatedThumbX, thumbX, .5f);
+        }
         if (Math.abs(thumbX - animatedThumbX) > 0.005f) {
             parentView.invalidate();
         }

@@ -81,6 +81,7 @@ public class NonIslandHelper {
 
     public static void applyFilterTabBar(FilterTabsView tabsView, SizeNotifierFrameLayout contentView) {
         if (!tabBars()) return;
+        if (Md3FilterTabsHelper.isEnabled()) return;
         tabsView.setBlurredBackground(null);
         tabsView.setBackground(null);
         tabsView.inu_blurHelper = new BlurBehindHelper(tabsView, contentView, Theme.key_windowBackgroundWhite);

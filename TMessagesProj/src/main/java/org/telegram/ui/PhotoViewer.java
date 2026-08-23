@@ -10759,6 +10759,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
 
     private void playVideoOrWeb() {
         if (isGifControllable()) {
+            if (currentAnimation != null) {
+                currentAnimation.setPaused(false);
+            }
             centerImage.startAnimation();
             isPlaying = true; if (videoPlayerSeekbar != null) videoPlayerSeekbar.setPlaying(true);
             if (photoProgressViews != null && photoProgressViews[0] != null) {
@@ -10776,6 +10779,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
 
     private void pauseVideoOrWeb() {
         if (isGifControllable()) {
+            if (currentAnimation != null) {
+                currentAnimation.setPaused(true);
+            }
             centerImage.stopAnimation();
             isPlaying = false; if (videoPlayerSeekbar != null) videoPlayerSeekbar.setPlaying(false);
             if (photoProgressViews != null && photoProgressViews[0] != null) {
@@ -14991,6 +14997,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             return;
         }
         gifSetupRetries = 0;
+        if (currentAnimation != null) {
+            currentAnimation.setPaused(false);
+        }
+        centerImage.startAnimation();
         playerLooping = true;
         if (loopItem != null) {
             loopItem.setEnabledByColor(playerLooping, 0xFFFFFFFF, 0xFF73B4EC);
@@ -19173,6 +19183,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                 }
             }
             if (currentAnimation != null) {
+                currentAnimation.setPaused(false);
                 currentAnimation.removeSecondParentView(containerView);
                 currentAnimation = null;
                 centerImage.setImageBitmap((Drawable) null);
@@ -19302,6 +19313,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             parentAlertWindowVisibilityController = null;
         }
         if (currentAnimation != null) {
+            currentAnimation.setPaused(false);
             currentAnimation.removeSecondParentView(containerView);
             currentAnimation = null;
         }
@@ -21391,6 +21403,17 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         return false;
     }
 
+    private boolean isTapOnVideoProgressButton(float x, float y) {
+        if (photoProgressViews == null || photoProgressViews[0] == null || containerView == null) {
+            return false;
+        }
+        PhotoProgressView progressView = photoProgressViews[0];
+        int size = (int) (progressView.size * progressView.scale);
+        int bx = progressView.getX();
+        int by = progressView.getY();
+        return x >= bx && x <= bx + size && y >= by && y <= by + size;
+    }
+
     @Override
     public boolean onSingleTapConfirmed(MotionEvent e) {
         if (discardTap) {
@@ -21469,7 +21492,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                             }
                         } else {
                             if (state == PROGRESS_PLAY || state == PROGRESS_PAUSE) {
-                                if (photoProgressViews[0].isVisible()) {
+                                if (photoProgressViews[0].isVisible() && (!isGifControllable() || isTapOnVideoProgressButton(x, y))) {
                                     manuallyPaused = true;
                                     toggleVideoPlayer();
                                     return true;

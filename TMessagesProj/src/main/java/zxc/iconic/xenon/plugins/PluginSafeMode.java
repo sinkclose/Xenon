@@ -317,7 +317,7 @@ public final class PluginSafeMode {
                     + "Plugins disabled by user (safe mode).\n");
             if (activity != null) {
                 org.telegram.messenger.AndroidUtilities.runOnUIThread(
-                        () -> showCrashSheet(activity, System.currentTimeMillis(), "safe", true), 500);
+                        () -> showCrashSheet(activity, System.currentTimeMillis(), "safe", true, true), 500);
             }
         } catch (Throwable t) {
             FileLog.e(t);
@@ -451,13 +451,18 @@ public final class PluginSafeMode {
         String reason = crashed ? "crash" : "hang";
 
         // Only disable plugins if they were actually active — a crash/hang in
-        // pure Telegram code shouldn't blame (and disable) plugins.
-        if (pluginsActiveLastTime) {
+        // pure Telegram code shouldn't blame (and disable) plugins. And only if
+        // automatic Safe Mode is enabled: when the user turns it off, plugins
+        // stay enabled no matter what and Safe Mode must be started manually
+        // (hold a volume button while the app is opening).
+        boolean disabledPlugins = false;
+        if (pluginsActiveLastTime && NekoConfig.pluginAutoSafeMode) {
             try {
                 NekoConfig.pluginsEnabled = false;
                 ctx.getSharedPreferences("nekoconfig", Context.MODE_PRIVATE)
                         .edit().putBoolean("pluginsEnabled", false).commit();
                 PluginManager.getInstance().onEnabledChanged();
+                disabledPlugins = true;
             } catch (Throwable t) {
                 FileLog.e("checkAndHandleCrash: onEnabledChanged threw", t);
             }
@@ -485,11 +490,12 @@ public final class PluginSafeMode {
         final long crashTime = when;
         final String crashReason = reason;
         final boolean showPlugins = pluginsActiveLastTime;
+        final boolean pluginsDisabled = disabledPlugins;
         org.telegram.messenger.AndroidUtilities.runOnUIThread(
-                () -> showCrashSheet(activity, crashTime, crashReason, showPlugins), 800);
+                () -> showCrashSheet(activity, crashTime, crashReason, showPlugins, pluginsDisabled), 800);
     }
 
-    private static void showCrashSheet(Activity activity, long crashTime, String reason, boolean pluginsActive) {
+    private static void showCrashSheet(Activity activity, long crashTime, String reason, boolean pluginsActive, boolean pluginsDisabled) {
         try {
             final String crashLog = readCrashLog();
             boolean isHang = "hang".equals(reason);
@@ -513,18 +519,33 @@ public final class PluginSafeMode {
             TextView body = new TextView(activity);
             if (isHang) {
                 if (pluginsActive) {
-                    body.setText("The client failed to finish starting up last time — it most likely "
-                            + "hung or was killed. Plugins have been disabled to keep things stable. "
-                            + "If a plugin caused this, review or remove it before re-enabling them.");
+                    if (pluginsDisabled) {
+                        body.setText("The client failed to finish starting up last time — it most likely "
+                                + "hung or was killed. Plugins have been disabled to keep things stable. "
+                                + "If a plugin caused this, review or remove it before re-enabling them.");
+                    } else {
+                        body.setText("The client failed to finish starting up last time — it most likely "
+                                + "hung or was killed. Plugins were left enabled because automatic safe "
+                                + "mode is off. To disable them manually, hold a volume button while the "
+                                + "app is opening, or turn them off in Settings → Plugins.");
+                    }
                 } else {
                     body.setText("The client failed to finish starting up last time — it most likely "
                             + "hung or was killed. You can copy the log below to report it.");
                 }
             } else {
                 if (pluginsActive) {
-                    body.setText("The client crashed on the previous launch. Plugins have been "
-                            + "disabled to keep things stable. If a plugin caused this, you can "
-                            + "review or remove it. Copy the crash log below if you want to report it.");
+                    if (pluginsDisabled) {
+                        body.setText("The client crashed on the previous launch. Plugins have been "
+                                + "disabled to keep things stable. If a plugin caused this, you can "
+                                + "review or remove it. Copy the crash log below if you want to report it.");
+                    } else {
+                        body.setText("The client crashed on the previous launch. Plugins were left "
+                                + "enabled because automatic safe mode is off. If a plugin caused this, "
+                                + "you can disable it manually: hold a volume button while the app is "
+                                + "opening, or turn it off in Settings → Plugins. Copy the crash log "
+                                + "below if you want to report it.");
+                    }
                 } else {
                     body.setText("The client crashed on the previous launch. You can copy the "
                             + "crash log below to report it.");

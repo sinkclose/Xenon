@@ -29,6 +29,7 @@ import android.widget.FrameLayout;
 import android.widget.TextView;
 
 import androidx.recyclerview.widget.DiffUtil;
+import androidx.recyclerview.widget.ListUpdateCallback;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager.widget.ViewPager;
 
@@ -546,6 +547,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
 
     boolean isCalculatingDiff;
     boolean updateListPending;
+    public final ArrayList<int[]> lastSmoothMoves = new ArrayList<>();
     private final static boolean ALLOW_UPDATE_IN_BACKGROUND = BuildVars.DEBUG_PRIVATE_VERSION;
 
     public void updateList(Runnable saveScrollPosition) {
@@ -588,7 +590,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                 saveScrollPosition.run();
             }
             itemInternals = newItems;
-            result.dispatchUpdatesTo(this);
+            dispatchUpdates(result);
         } else {
             Utilities.searchQueue.postRunnable(() -> {
                 DiffUtil.DiffResult result = DiffUtil.calculateDiff(callback);
@@ -601,7 +603,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                         saveScrollPosition.run();
                     }
                     itemInternals = newItems;
-                    result.dispatchUpdatesTo(this);
+                    dispatchUpdates(result);
                     if (updateListPending) {
                         updateListPending = false;
                         updateList(saveScrollPosition);
@@ -610,6 +612,34 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             });
         }
 
+    }
+
+    private void dispatchUpdates(DiffUtil.DiffResult result) {
+        lastSmoothMoves.clear();
+        result.dispatchUpdatesTo(new ListUpdateCallback() {
+            @Override
+            public void onInserted(int position, int count) {
+                notifyItemRangeInserted(position, count);
+            }
+
+            @Override
+            public void onRemoved(int position, int count) {
+                notifyItemRangeRemoved(position, count);
+            }
+
+            @Override
+            public void onMoved(int fromPosition, int toPosition) {
+                if (fromPosition != toPosition) {
+                    lastSmoothMoves.add(new int[]{fromPosition, toPosition});
+                }
+                notifyItemMoved(fromPosition, toPosition);
+            }
+
+            @Override
+            public void onChanged(int position, int count, Object payload) {
+                notifyItemRangeChanged(position, count, payload);
+            }
+        });
     }
 
     @Override

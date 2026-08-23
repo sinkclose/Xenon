@@ -74,6 +74,7 @@ import java.util.Map;
 
 import zxc.iconic.xenon.NekoConfig;
 import zxc.iconic.xenon.folder.FolderIconHelper;
+import zxc.iconic.xenon.helpers.Md3FilterTabsHelper;
 
 @SuppressLint("ViewConstructor")
 public class FilterTabsView extends FrameLayout {
@@ -418,6 +419,38 @@ public class FilterTabsView extends FrameLayout {
             } else {
                 tabWidth = currentTab.iconWidth + ((countWidth != 0 && !animateCounterRemove) ? (int) (countWidth + counterSpace) : 0);
             }
+            if (Md3FilterTabsHelper.isEnabled()) {
+                float selectionProgress;
+                if (manualScrollingToPosition != -1) {
+                    selectionProgress = currentTab.id == selectedTabId ? 1f : 0f;
+                } else if (md3TransitionProgress < 1 && md3PrevPosition != -1) {
+                    if (currentPosition == md3PrevPosition) {
+                        selectionProgress = 1f - md3TransitionProgress;
+                    } else if (currentPosition == FilterTabsView.this.currentPosition) {
+                        selectionProgress = md3TransitionProgress;
+                    } else {
+                        selectionProgress = 0f;
+                    }
+                } else if (animatingIndicator) {
+                    if (currentPosition == previousPosition) {
+                        selectionProgress = 1f - animatingIndicatorProgress;
+                    } else if (currentPosition == FilterTabsView.this.currentPosition) {
+                        selectionProgress = animatingIndicatorProgress;
+                    } else {
+                        selectionProgress = 0f;
+                    }
+                } else {
+                    selectionProgress = currentTab.id == selectedTabId ? 1f : 0f;
+                }
+                Md3FilterTabsHelper.drawTabBackground(canvas, getMeasuredWidth(), getMeasuredHeight(), currentPosition, getTabsCount(), selectionProgress, Theme.getColor(activeTextColorKey, resourcesProvider), Theme.getColor(unactiveTextColorKey, resourcesProvider), Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider));
+                int activeColor = Theme.getColor(activeTextColorKey, resourcesProvider);
+                int inactiveColor = Theme.getColor(unactiveTextColorKey, resourcesProvider);
+                int color = selectionProgress >= 0.5f
+                        ? (ColorUtils.calculateLuminance(activeColor) < 0.5f ? 0xffffffff : 0xff000000)
+                        : inactiveColor;
+                textPaint.setColor(color);
+                emojiColorFilter = new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN);
+            }
             float textX = ((getMeasuredWidth() - tabWidth) / 2f) + currentTab.iconWidth;
             if (animateTextX) {
                 textX = textX * changeProgress + animateFromTextX * (1f - changeProgress);
@@ -521,7 +554,11 @@ public class FilterTabsView extends FrameLayout {
                     int color2 = Theme.getColor(aBackgroundColorKey, resourcesProvider);
                     textCounterPaint.setColor(ColorUtils.blendARGB(color1, color2, animationValue));
                 }
-                if (Theme.hasThemeKey(unreadKey) && Theme.hasThemeKey(unreadOtherKey)) {
+                if (Md3FilterTabsHelper.isEnabled()) {
+                    int counterColor = textPaint.getColor();
+                    counterPaint.setColor(counterColor);
+                    textCounterPaint.setColor(ColorUtils.calculateLuminance(counterColor) < 0.5f ? 0xffffffff : 0xff000000);
+                } else if (Theme.hasThemeKey(unreadKey) && Theme.hasThemeKey(unreadOtherKey)) {
                     int color1 = Theme.getColor(unreadKey, resourcesProvider);
                     if ((animatingIndicator || manualScrollingToPosition != -1) && (currentTab.id == id1 || currentTab.id == id2)) {
                         int color3 = Theme.getColor(unreadOtherKey, resourcesProvider);
@@ -915,8 +952,10 @@ public class FilterTabsView extends FrameLayout {
     private int currentPosition;
     private int selectedTabId = -1;
     private int allTabsWidth;
-
     private int additionalTabWidth;
+    private float md3TransitionProgress;
+    private int md3PrevPosition = -1;
+    private ValueAnimator md3TransitionAnimator;
 
     private boolean animatingIndicator;
     private float animatingIndicatorProgress;
@@ -1053,6 +1092,12 @@ public class FilterTabsView extends FrameLayout {
                 }
                 return super.canHighlightChildAt(child, x, y);
             }
+
+@Override
+            public boolean onTouchEvent(MotionEvent event) {
+                return super.onTouchEvent(event);
+            }
+
         };
         listView.setClipChildren(false);
         listView.setOverScrollMode(OVER_SCROLL_NEVER);
@@ -1268,6 +1313,10 @@ public class FilterTabsView extends FrameLayout {
     BlurredBackgroundDrawable blurredBackgroundDrawable;
 
     public void setBlurredBackground(BlurredBackgroundDrawable drawable) {
+        if (Md3FilterTabsHelper.isEnabled()) {
+            setBackground(blurredBackgroundDrawable = null);
+            return;
+        }
         setBackground(blurredBackgroundDrawable = drawable);
     }
 
@@ -1555,6 +1604,9 @@ public class FilterTabsView extends FrameLayout {
     }
 
     private void drawSelector(Canvas canvas) {
+        if (Md3FilterTabsHelper.isEnabled()) {
+            return;
+        }
         final int height = getMeasuredHeight();
         selectorDrawable.setAlpha((int) (255 * listView.getAlpha()));
         float indicatorX = 0;
@@ -1636,6 +1688,17 @@ public class FilterTabsView extends FrameLayout {
 
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
+        if (Md3FilterTabsHelper.isEnabled()) {
+            if (inu_blurHelper != null) {
+                canvas.save();
+                canvas.clipRect(0, 0, getMeasuredWidth(), getMeasuredHeight());
+                super.dispatchDraw(canvas);
+                canvas.restore();
+                return;
+            }
+            super.dispatchDraw(canvas);
+            return;
+        }
         if (inu_blurHelper != null) {
             inu_blurHelper.draw(canvas);
             super.dispatchDraw(canvas);
@@ -1744,7 +1807,8 @@ public class FilterTabsView extends FrameLayout {
             progress = 1.0f;
         }
 
-        if (progress > 0) {
+        boolean selectionCommitted = Md3FilterTabsHelper.isEnabled() && currentPosition == position && selectedTabId == id;
+        if (progress > 0 && !selectionCommitted) {
             manualScrollingToPosition = position;
             manualScrollingToId = id;
         } else {
@@ -1757,9 +1821,32 @@ public class FilterTabsView extends FrameLayout {
         invalidate();
         scrollToChild(position);
 
-        if (progress >= 1.0f) {
+        if (progress >= 1.0f || (Md3FilterTabsHelper.isEnabled() && progress >= 0.5f)) {
             manualScrollingToPosition = -1;
             manualScrollingToId = -1;
+            if (Md3FilterTabsHelper.isEnabled() && currentPosition != position) {
+                md3PrevPosition = currentPosition;
+                md3TransitionProgress = 0f;
+                if (md3TransitionAnimator != null) {
+                    md3TransitionAnimator.cancel();
+                }
+                md3TransitionAnimator = ValueAnimator.ofFloat(0f, 1f);
+                md3TransitionAnimator.setDuration(320);
+                md3TransitionAnimator.setInterpolator(interpolator);
+                md3TransitionAnimator.addUpdateListener(animator -> {
+                    md3TransitionProgress = (float) animator.getAnimatedValue();
+                    listView.invalidateViews();
+                    listView.invalidate();
+                    invalidate();
+                });
+                md3TransitionAnimator.addListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        md3PrevPosition = -1;
+                    }
+                });
+                md3TransitionAnimator.start();
+            }
             currentPosition = position;
             selectedTabId = id;
         }

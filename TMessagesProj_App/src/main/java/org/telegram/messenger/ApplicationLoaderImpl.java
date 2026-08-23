@@ -18,6 +18,8 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.util.ArrayList;
+import java.util.List;
 
 import zxc.iconic.xenon.Extra;
 import zxc.iconic.xenon.helpers.ApkInstaller;
@@ -50,6 +52,9 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
     private volatile long downloadBytesDownloaded;
     private volatile File downloadedApkFile;
     private volatile int checkCounter;
+
+    private final Object downloadLock = new Object();
+    private final List<Runnable> downloadCompletions = new ArrayList<>();
 
     @Override
     protected String onGetApplicationId() {
@@ -162,22 +167,46 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
     }
 
     public void downloadUpdate(Runnable onComplete) {
-        if (downloading) return;
         String apkUrl = pendingApkUrl;
         if (TextUtils.isEmpty(apkUrl)) return;
-        doDownload(apkUrl, onComplete);
+        downloadUpdate(apkUrl, onComplete);
     }
 
     public void downloadUpdate(String apkUrl, Runnable onComplete) {
-        if (downloading) return;
         if (TextUtils.isEmpty(apkUrl)) return;
-        pendingApkUrl = apkUrl;
-        doDownload(apkUrl, onComplete);
+        synchronized (downloadLock) {
+            // A download is already running (another updater started it) — don't
+            // start a second one that would fight over the shared progress fields
+            // and the shared temp file. Attach to the running download instead and
+            // run this caller's completion callback when it finishes.
+            if (downloading) {
+                if (onComplete != null) {
+                    downloadCompletions.add(onComplete);
+                }
+                return;
+            }
+            // The APK for this URL was already fully downloaded earlier — don't
+            // re-download it, just complete immediately.
+            File existing = findDownloadedApk();
+            if (existing != null) {
+                downloadedApkFile = existing;
+                if (onComplete != null) {
+                    AndroidUtilities.runOnUIThread(onComplete);
+                }
+                return;
+            }
+            pendingApkUrl = apkUrl;
+            downloading = true;
+            downloadCompletions.clear();
+            if (onComplete != null) {
+                downloadCompletions.add(onComplete);
+            }
+        }
+        doDownload(apkUrl);
     }
 
-    private void doDownload(String apkUrl, Runnable onComplete) {
+    private void doDownload(String apkUrl) {
 
-        downloading = true;
         downloadProgress = 0f;
         downloadTotalSize = 0;
         downloadBytesDownloaded = 0;
@@ -186,12 +215,12 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
         new Thread(() -> {
             String error = downloadOnce(apkUrl);
             if (error == null) {
-                if (onComplete != null) {
-                    AndroidUtilities.runOnUIThread(onComplete);
-                }
+                downloading = false;
+                fireDownloadCompletions();
                 return;
             }
             if (DOWNLOAD_CANCELLED.equals(error) || !downloading) {
+                downloading = false;
                 return;
             }
             for (int retry = 1; retry <= MAX_DOWNLOAD_RETRIES; retry++) {
@@ -213,13 +242,13 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
                 }
                 error = downloadOnce(apkUrl);
                 if (error == null) {
-                    if (onComplete != null) {
-                        AndroidUtilities.runOnUIThread(onComplete);
-                    }
+                    downloading = false;
+                    fireDownloadCompletions();
                     return;
                 }
                 if (DOWNLOAD_CANCELLED.equals(error)) {
                     retryingUpdate = false;
+                    downloading = false;
                     return;
                 }
             }
@@ -229,6 +258,19 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
             final String finalError = error;
             AndroidUtilities.runOnUIThread(() -> showDownloadFailed(finalError));
         }, "XenonUpdateDownload").start();
+    }
+
+    private void fireDownloadCompletions() {
+        List<Runnable> completions;
+        synchronized (downloadLock) {
+            completions = new ArrayList<>(downloadCompletions);
+            downloadCompletions.clear();
+        }
+        for (Runnable onComplete : completions) {
+            if (onComplete != null) {
+                AndroidUtilities.runOnUIThread(onComplete);
+            }
+        }
     }
 
     private void updateRetryBulletin(int attempt) {
@@ -368,6 +410,31 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
     @Override
     public File getDownloadedUpdateFile() {
         return downloadedApkFile;
+    }
+
+    // Returns a previously fully-downloaded APK (in memory or on disk with a
+    // matching release tag), or null if none matches the pending release.
+    private File findDownloadedApk() {
+        File f = downloadedApkFile;
+        if (f != null && f.exists()) {
+            return f;
+        }
+        File cachedApk = new File(applicationContext.getCacheDir(), APK_DIR + "/xenon_update.apk");
+        if (!cachedApk.exists() || cachedApk.length() <= 0) {
+            return null;
+        }
+        if (pendingRelease == null || TextUtils.isEmpty(pendingRelease.tagName)) {
+            return null;
+        }
+        File tagFile = new File(cachedApk.getParent(), cachedApk.getName() + ".tag");
+        if (!tagFile.exists()) {
+            return null;
+        }
+        try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader(tagFile))) {
+            return pendingRelease.tagName.equals(r.readLine()) ? cachedApk : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
     public long getDownloadTotalSize() {

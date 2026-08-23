@@ -115,6 +115,9 @@ public class PluginManager {
     private static volatile long hookStartTimestamp;
     private static volatile String hookInProgress;
     private static Thread watchdogThread;
+    // Set once when the watchdog would have killed the process but automatic
+    // Safe Mode is off, so we only log the skip a single time.
+    private static volatile boolean watchdogKillSkippedLogged;
 
     private static void startWatchdogIfNeeded() {
         if (watchdogThread != null && watchdogThread.isAlive()) return;
@@ -130,6 +133,19 @@ public class PluginManager {
                 long elapsed = System.currentTimeMillis() - hookStartTimestamp;
                 if (elapsed > ENGINE_WATCHDOG_TIMEOUT_MS) {
                     String hook = hookInProgress;
+                    if (!NekoConfig.pluginAutoSafeMode) {
+                        // Automatic Safe Mode is off — never kill the process or
+                        // disable plugins on our own. If the UI thread is wedged
+                        // the user can still recover via the hardware panic switch
+                        // (press volume keys 4 times quickly).
+                        if (!watchdogKillSkippedLogged) {
+                            watchdogKillSkippedLogged = true;
+                            org.telegram.messenger.FileLog.e("Plugin engine watchdog: hook '"
+                                    + hook + "' has been running for " + elapsed
+                                    + "ms — automatic safe mode is off, not killing the process");
+                        }
+                        continue;
+                    }
                     org.telegram.messenger.FileLog.e("Plugin engine watchdog: hook '"
                             + hook + "' has been running for " + elapsed
                             + "ms — killing process to recover");
@@ -795,6 +811,14 @@ public class PluginManager {
      */
     private void quarantinePlugin(LoadedPlugin plugin, String reason) {
         try {
+            if (!NekoConfig.pluginAutoSafeMode) {
+                // Automatic Safe Mode is off — don't disable plugins on our own.
+                // Log the failure so it can be debugged, but keep the plugin
+                // enabled; the user asked to be in full control of the engine.
+                FileLog.e("Plugin failure (automatic safe mode is off, not disabling): "
+                        + plugin.fileName + " — " + reason);
+                return;
+            }
             getPrefs().edit().putBoolean("plugin_enabled_" + plugin.fileName, false).apply();
             FileLog.e("Plugin quarantined: " + plugin.fileName + " — " + reason);
             org.telegram.messenger.AndroidUtilities.runOnUIThread(() -> {
@@ -821,6 +845,14 @@ public class PluginManager {
      */
     public void quarantineFile(String fileName, String stage, Throwable t) {
         try {
+            if (!NekoConfig.pluginAutoSafeMode) {
+                // Automatic Safe Mode is off — don't disable plugins on our own.
+                // Log the failure so it can be debugged, but keep the plugin
+                // enabled; the user asked to be in full control of the engine.
+                FileLog.e("Plugin failure (automatic safe mode is off, not disabling): "
+                        + fileName + " — " + stage, t);
+                return;
+            }
             getPrefs().edit().putBoolean("plugin_enabled_" + fileName, false).apply();
             FileLog.e("Plugin quarantined: " + fileName + " — " + stage, t);
             PluginApi.stopAllForPlugin(fileName);

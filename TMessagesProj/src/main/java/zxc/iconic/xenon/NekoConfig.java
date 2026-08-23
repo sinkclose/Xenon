@@ -178,6 +178,14 @@ public class NekoConfig {
      * remain unreachable. Intended for trusted plugins that need full access.
      */
     public static boolean pluginGodMode = false;
+    /**
+     * When true (default), the plugin engine automatically enters Safe Mode —
+     * i.e. disables plugins — after a crash, hang, watchdog timeout or plugin
+     * failure. When false, automatic recovery is disabled: plugins stay enabled
+     * no matter what the client does, and Safe Mode can only be started
+     * manually (hold a volume button while the app is opening).
+     */
+    public static boolean pluginAutoSafeMode = true;
     public static boolean hidePhoneNumber = false;
     public static boolean removeAds = false;
     public static boolean textAnimationEnabled = false;
@@ -275,6 +283,7 @@ public class NekoConfig {
     public static boolean material3Dialogs = false;
     public static boolean keepUnreadChatsOnTop = false;
     public static boolean keepUnreadArchivedOnTop = false;
+    public static boolean smoothlyMoveChats = false;
     public static boolean roundedBulletin = false;
     public static boolean nonIslandTabBars = false;
     public static boolean nonIslandGlobalSearch = false;
@@ -350,6 +359,7 @@ public class NekoConfig {
             material3Dialogs = preferences.getBoolean("material3Dialogs", false);
             keepUnreadChatsOnTop = preferences.getBoolean("keepUnreadChatsOnTop", false);
             keepUnreadArchivedOnTop = preferences.getBoolean("keepUnreadArchivedOnTop", false);
+            smoothlyMoveChats = preferences.getBoolean("smoothlyMoveChats", false);
             disableNumberRounding = preferences.getBoolean("disableNumberRounding", false);
             disableAppBarShadow = preferences.getBoolean("disableAppBarShadow", false);
             hideRecordButton = preferences.getBoolean("hideRecordButton", false);
@@ -422,6 +432,7 @@ public class NekoConfig {
             bypassBlocking = preferences.getBoolean("bypassBlocking", false);
             pluginsEnabled = preferences.getBoolean("pluginsEnabled", false);
             pluginGodMode = preferences.getBoolean("pluginGodMode", false);
+            pluginAutoSafeMode = preferences.getBoolean("pluginAutoSafeMode", true);
             hidePhoneNumber = preferences.getBoolean("hidePhoneNumber", false);
             xrayAppProxyEnabled = preferences.getBoolean("xrayAppProxyEnabled", false);
             xrayVpnMode = preferences.getBoolean("xrayVpnMode", false);
@@ -983,6 +994,14 @@ public class NekoConfig {
         // API call without reloading the engine.
     }
 
+    public static void togglePluginAutoSafeMode() {
+        pluginAutoSafeMode = !pluginAutoSafeMode;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("pluginAutoSafeMode", pluginAutoSafeMode);
+        editor.apply();
+    }
+
     public static void toggleKeepFormatting() {
         keepFormatting = !keepFormatting;
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
@@ -1456,6 +1475,14 @@ public class NekoConfig {
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("keepUnreadArchivedOnTop", keepUnreadArchivedOnTop);
+        editor.apply();
+    }
+
+    public static void toggleSmoothlyMoveChats() {
+        smoothlyMoveChats = !smoothlyMoveChats;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("smoothlyMoveChats", smoothlyMoveChats);
         editor.apply();
     }
 

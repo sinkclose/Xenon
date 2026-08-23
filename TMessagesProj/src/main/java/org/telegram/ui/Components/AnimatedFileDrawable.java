@@ -128,6 +128,7 @@ public class AnimatedFileDrawable extends BitmapDrawable implements Animatable, 
     private boolean applyTransformation;
     private final RectF dstRect = new RectF();
     private volatile boolean isRunning;
+    private volatile boolean paused;
     private volatile boolean isRecycled;
     public volatile AnimatedFileNative mDecoder;
     private boolean ptrFail;
@@ -770,12 +771,19 @@ public class AnimatedFileDrawable extends BitmapDrawable implements Animatable, 
 
     @Override
     public void start() {
-        if (isRunning || parents.size() == 0 && !ignoreNoParent) {
+        if (paused || isRunning || parents.size() == 0 && !ignoreNoParent) {
             return;
         }
         isRunning = true;
         scheduleNextGetFrame();
         AndroidUtilities.runOnUIThread(mStartTask);
+    }
+
+    public void setPaused(boolean paused) {
+        this.paused = paused;
+        if (paused) {
+            stop();
+        }
     }
 
     public float getCurrentProgress() {

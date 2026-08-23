@@ -17323,6 +17323,20 @@ public class MessagesStorage extends BaseController {
         });
     }
 
+    public void setDialogUnreadCount(long did, int count) {
+        storageQueue.postRunnable(() -> {
+            try {
+                SQLitePreparedStatement state = database.executeFast("UPDATE dialogs SET unread_count = ? WHERE did = ?");
+                state.bindInteger(1, Math.max(0, count));
+                state.bindLong(2, did);
+                state.step();
+                state.dispose();
+            } catch (Exception e) {
+                checkSQLException(e);
+            }
+        });
+    }
+
     public void setDialogUnread(long did, boolean unread) {
         storageQueue.postRunnable(() -> {
             SQLitePreparedStatement state = null;

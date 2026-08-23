@@ -148,6 +148,8 @@
     <string name="Md3Folders">Folder (WIP)</string>
     <string name="Material3Dialogs">Dialogs</string>
     <string name="Material3DialogsConflict">Disable \"%1$s\" to enable \"%2$s\"</string>
+    <string name="TelegramDefaultDialog">Telegram default dialog</string>
+    <string name="Material3DialogPreview">Material 3 dialog</string>
     <string name="Avatars">Avatars</string>
     <string name="AvatarShapesHeader">Shapes</string>
     <string name="ApplyInChatList">Apply in chat list</string>
@@ -406,6 +408,8 @@
     <string name="ForceBlurLiquidGlass">Force enable blur and liquid glass options</string>
     <string name="DisableGooeyAvatarAnimation">Disable \"Gooey\" avatar animation</string>
     <string name="KeepUnreadChatsOnTop">Keep unread chats on top</string>
+    <string name="SmoothlyMoveChats">Smoothly move chats</string>
+    <string name="SetUnreadMessages">Set unread messages</string>
     <string name="KeepUnreadArchivedOnTop">Also show archived chats</string>
     <string name="GooeyAvatarOffset">Avatar pull-in offset</string>
     <string name="GooeyAvatarOffsetLeft">Higher</string>
@@ -482,6 +486,8 @@
     <string name="PluginsDesc">Lua scripting engine for automation</string>
     <string name="PluginsEnable">Enable plugins</string>
     <string name="PluginsEnableDesc">When disabled, no plugin code executes</string>
+    <string name="PluginsAutoSafeMode">Automatically enable safe mode</string>
+    <string name="PluginsAutoSafeModeDesc">Automatically disable plugins after a crash or hang. Turn off to keep plugins enabled even if the client crashes — you can still disable them manually by holding a volume button while the app is opening.</string>
     <string name="PluginsInstall">Install plugin</string>
     <string name="PluginsInstalled">Installed</string>
     <string name="PluginsEmpty">No plugins installed.\nTap "Install plugin" to add one.</string>

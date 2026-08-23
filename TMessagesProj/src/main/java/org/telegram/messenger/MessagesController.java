@@ -17202,6 +17202,30 @@ private boolean hasImportantUnread(TLRPC.Dialog dialog) {
         }
     }
 
+    public void setDialogUnreadCount(long dialogId, int count) {
+        TLRPC.Dialog dialog = dialogs_dict.get(dialogId);
+        if (dialog == null) {
+            return;
+        }
+        dialog.unread_count = Math.max(0, count);
+        if (!dialog.unread_mark) {
+            dialog.unread_mark = true;
+            if (dialog.unread_count == 0 && !isDialogMuted(dialogId, 0)) {
+                unreadUnmutedDialogs++;
+            }
+            getMessagesStorage().setDialogUnread(dialogId, true);
+        }
+        getMessagesStorage().setDialogUnreadCount(dialogId, dialog.unread_count);
+        getNotificationCenter().postNotificationName(NotificationCenter.updateInterfaces, UPDATE_MASK_READ_DIALOG_MESSAGE);
+        for (int b = 0; b < selectedDialogFilter.length; b++) {
+            if (selectedDialogFilter[b] != null && (selectedDialogFilter[b].flags & DIALOG_FILTER_FLAG_EXCLUDE_READ) != 0) {
+                sortDialogs(null);
+                getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload);
+                break;
+            }
+        }
+    }
+
     public void loadUnreadDialogs() {
         if (loadingUnreadDialogs || getUserConfig().unreadDialogsLoaded) {
             return;
