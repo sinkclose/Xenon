@@ -11,6 +11,7 @@ import android.graphics.drawable.Drawable;
 import android.os.SystemClock;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.SharedConfig;
 import org.telegram.ui.ActionBar.Theme;
 
 /**
@@ -37,6 +38,9 @@ public class OctagonBadgeDrawable extends Drawable {
     private long lastUpdateTime;
 
     private String badgeText = ":3";
+
+    private final ThrottledDrawableInvalidator throttledInvalidate =
+            new ThrottledDrawableInvalidator(this, ThrottledDrawableInvalidator.FRAME_INTERVAL_30_FPS);
 
     /** Full-opacity base colors; alpha is applied via {@link #setAlpha(int)}. */
     private int baseBgColor;
@@ -198,6 +202,15 @@ public class OctagonBadgeDrawable extends Drawable {
         }
     }
 
+    /**
+     * Particles run an endless self-invalidation loop that redraws the whole host
+     * cell (heavy for chat message cells). Keep them only on capable devices; on
+     * low-end hardware the badge renders as a static octagon.
+     */
+    private static boolean shouldAnimateParticles() {
+        return SharedConfig.getDevicePerformanceClass() > SharedConfig.PERFORMANCE_CLASS_LOW;
+    }
+
     @Override
     public void draw(Canvas canvas) {
         boundsRect.set(getBounds());
@@ -212,13 +225,11 @@ public class OctagonBadgeDrawable extends Drawable {
         float frameDt = Math.min(now - lastUpdateTime, 50) / 16.67f;
         lastUpdateTime = now;
 
-        drawParticles(canvas, boundsRect, frameDt, now);
-        drawOctagon(canvas, boundsRect);
-
-        Callback cb = getCallback();
-        if (cb != null) {
-            cb.invalidateDrawable(this);
+        if (shouldAnimateParticles()) {
+            drawParticles(canvas, boundsRect, frameDt, now);
+            throttledInvalidate.onDrawn();
         }
+        drawOctagon(canvas, boundsRect);
     }
 
     private void drawOctagon(Canvas canvas, RectF bounds) {

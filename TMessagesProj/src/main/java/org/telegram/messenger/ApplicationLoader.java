@@ -49,9 +49,7 @@ import java.io.File;
 import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
 
-import zxc.iconic.xenon.FirebaseFix;
 import zxc.iconic.xenon.NekoConfig;
-import zxc.iconic.xenon.helpers.AnalyticsHelper;
 import zxc.iconic.xenon.helpers.ComponentsHelper;
 import zxc.iconic.xenon.proxy.XrayAppProxyManager;
 import zxc.iconic.xenon.proxy.XrayConfigValidator;
@@ -92,7 +90,6 @@ public class ApplicationLoader extends Application {
     @Override
     protected void attachBaseContext(Context base) {
         super.attachBaseContext(base);
-        FirebaseFix.check(base);
     }
 
     public static ILocationServiceProvider getLocationServiceProvider() {
@@ -318,7 +315,6 @@ public class ApplicationLoader extends Application {
         // of main-thread state.
         zxc.iconic.xenon.plugins.VolumeKeyPanicSwitch.register();
 
-        AnalyticsHelper.start(this);
         ComponentsHelper.fixComponents(this);
 
         if (BuildVars.LOGS_ENABLED) {

@@ -4,9 +4,9 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.SystemClock;
-import android.view.Choreographer;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.widget.FrameLayout;
 
 import org.telegram.messenger.AndroidUtilities;
@@ -34,18 +34,13 @@ public class ProgressiveFadeBlurController {
     private boolean flipped;
     private boolean continuousUpdating;
     private boolean updateAtScreenRefreshRate;
-    private final Choreographer.FrameCallback frameCallback = new Choreographer.FrameCallback() {
+    private int drawCount;
+    private int lastProcessedDrawCount = -1;
+    private final ViewTreeObserver.OnPreDrawListener drawCountListener = new ViewTreeObserver.OnPreDrawListener() {
         @Override
-        public void doFrame(long frameTimeNanos) {
-            if (!continuousUpdating) {
-                return;
-            }
-            try {
-                parent.invalidate();
-            } catch (Exception e) {
-                FileLog.e(e);
-            }
-            Choreographer.getInstance().postFrameCallback(this);
+        public boolean onPreDraw() {
+            drawCount++;
+            return true;
         }
     };
     private final Runnable updateRunnable = new Runnable() {
@@ -96,6 +91,19 @@ public class ProgressiveFadeBlurController {
         } else {
             parent.addView(fadeView, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         }
+        fadeView.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            @Override
+            public void onViewAttachedToWindow(View v) {
+                v.getViewTreeObserver().addOnPreDrawListener(drawCountListener);
+            }
+
+            @Override
+            public void onViewDetachedFromWindow(View v) {
+                if (v.getViewTreeObserver().isAlive()) {
+                    v.getViewTreeObserver().removeOnPreDrawListener(drawCountListener);
+                }
+            }
+        });
     }
 
     public void setFadeZoneTop(int fadeZoneTop) {
@@ -151,11 +159,11 @@ public class ProgressiveFadeBlurController {
             return;
         }
         continuousUpdating = true;
-        fadeView.removeCallbacks(updateRunnable);
-        if (updateAtScreenRefreshRate) {
-            Choreographer.getInstance().removeFrameCallback(frameCallback);
-            Choreographer.getInstance().postFrameCallback(frameCallback);
-        } else {
+        // In screen-refresh-rate mode updates are fully event-driven: captures are
+        // requested from real draw passes (see invalidate) and skip themselves when
+        // nothing on screen changes, so no continuous loop is needed.
+        if (!updateAtScreenRefreshRate) {
+            fadeView.removeCallbacks(updateRunnable);
             fadeView.post(updateRunnable);
         }
     }
@@ -163,7 +171,6 @@ public class ProgressiveFadeBlurController {
     public void stopContinuousUpdates() {
         continuousUpdating = false;
         fadeView.removeCallbacks(updateRunnable);
-        Choreographer.getInstance().removeFrameCallback(frameCallback);
     }
 
     public void addCaptureView(View view) {
@@ -185,6 +192,13 @@ public class ProgressiveFadeBlurController {
 
     public void invalidate() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || source.inRecording() || SizeNotifierFrameLayout.drawingBlur) {
+            return;
+        }
+        // When the only draw pass since the previous record is the fade-view redraw
+        // scheduled by that record itself, the captured content is unchanged: skip
+        // re-recording and do not invalidate again, so an idle screen stops rendering
+        // instead of looping record -> redraw -> record at the display refresh rate.
+        if (drawCount == lastProcessedDrawCount) {
             return;
         }
         final int fw = captureView.getWidth();
@@ -224,6 +238,9 @@ public class ProgressiveFadeBlurController {
             FileLog.e(e);
         }
         fadeView.setDim(dimEnabled && NekoConfig.blurredFadeDimming ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
+        // +1 accounts for the fade-view redraw this record schedules, so it is not
+        // mistaken for a content change on the next draw pass.
+        lastProcessedDrawCount = drawCount + 1;
         fadeView.invalidate();
     }
 

@@ -22,6 +22,17 @@ public class OnPostDrawView extends View implements ViewTreeObserver.OnPreDrawLi
     }
 
     private int invalidateFlags = 0;
+    private int preDrawCount;
+
+    /**
+     * Number of view-tree draw passes observed while attached. Increments on
+     * every pre-draw, whether or not anything requested an invalidation
+     * callback, so callers can detect that the tree actually redrew.
+     */
+    public int getPreDrawCount() {
+        return preDrawCount;
+    }
+
     public void invalidate(int flags) {
         if (invalidateFlags == 0) {
             invalidate();
@@ -84,6 +95,7 @@ public class OnPostDrawView extends View implements ViewTreeObserver.OnPreDrawLi
 
     @Override
     public boolean onPreDraw() {
+        preDrawCount++;
         if (onPreDrawMode && invalidateFlags != 0) {
             callback.onPostDraw(invalidateFlags);
             invalidateFlags = 0;

@@ -48967,13 +48967,21 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
     private long lastFadeBlurUpdateTime;
     private boolean fadeBlurContinuousUpdating;
+    private int lastFadeBlurCaptureDrawCount;
     private final Choreographer.FrameCallback fadeBlurFrameCallback = new Choreographer.FrameCallback() {
         @Override
         public void doFrame(long frameTimeNanos) {
-            if (fadeBlurContinuousUpdating) {
-                invalidateFadeBlur();
-                Choreographer.getInstance().postFrameCallback(this);
+            if (!fadeBlurContinuousUpdating) {
+                return;
             }
+            // Re-capture only when the view tree actually redrew since the previous
+            // capture. When nothing on screen changes the recorded blur snapshot is
+            // still valid, so the chat must not be forced to render at the display
+            // refresh rate forever.
+            if (fadeBlurCaptureView == null || fadeBlurCaptureView.getPreDrawCount() != lastFadeBlurCaptureDrawCount) {
+                invalidateFadeBlur();
+            }
+            Choreographer.getInstance().postFrameCallback(this);
         }
     };
 
@@ -48992,7 +49000,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
     private void invalidateFadeBlur() {
         if (fadeBlurCaptureView != null) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlur && !fadeBlurContinuousUpdating) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlur) {
                 final long now = SystemClock.uptimeMillis();
                 if (now - lastFadeBlurUpdateTime < 1000 / Math.max(15, NekoConfig.progressiveFadeBlurRefreshRate)) {
                     return;
@@ -49007,6 +49015,10 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (fadeBlurSource == null || chatActivityFadeView == null || contentView == null) {
             return;
         }
+        // Mark this draw pass as captured even if the recording below is skipped,
+        // so the continuous loop does not retry every vsync while the view is not
+        // laid out; the next real draw pass will trigger a new capture anyway.
+        lastFadeBlurCaptureDrawCount = fadeBlurCaptureView.getPreDrawCount();
         if (fadeBlurSource.inRecording()) {
             return;
         }

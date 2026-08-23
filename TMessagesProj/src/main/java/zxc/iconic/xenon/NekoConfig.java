@@ -21,7 +21,6 @@ import java.util.Set;
 import java.util.function.BiConsumer;
 
 import app.nekogram.translator.DeepLTranslator;
-import zxc.iconic.xenon.helpers.AnalyticsHelper;
 import zxc.iconic.xenon.helpers.CloudSettingsHelper;
 import zxc.iconic.xenon.helpers.LensHelper;
 import zxc.iconic.xenon.translator.Translator;
@@ -299,10 +298,6 @@ public class NekoConfig {
     public static int userMcc = 0;
 
     private static final SharedPreferences.OnSharedPreferenceChangeListener listener = (preferences, key) -> {
-        var map = new HashMap<String, String>(1);
-        map.put("key", key);
-        AnalyticsHelper.trackEvent("neko_config_changed", map);
-
         CloudSettingsHelper.getInstance().doAutoSync();
     };
     private static boolean configLoaded;
@@ -516,12 +511,8 @@ public class NekoConfig {
             preferences.registerOnSharedPreferenceChangeListener(listener);
 
             if (!configLoaded) {
-                var map = new HashMap<String, String>();
-                map.put("buildType", BuildConfig.BUILD_TYPE);
-                map.put("mcc", String.valueOf(userMcc));
-                AnalyticsHelper.trackEvent("load_config", map);
+                configLoaded = true;
             }
-            configLoaded = true;
         }
     }
 

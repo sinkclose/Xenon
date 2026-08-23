@@ -23,6 +23,7 @@ public class TextBadgeDrawable extends Drawable {
     private final String text;
     private final int intrinsicW;
     private final int intrinsicH;
+    private final RectF boundsRect = new RectF();
 
     public TextBadgeDrawable(String text, boolean small, Theme.ResourcesProvider resourcesProvider) {
         this.text = (text != null && !text.isEmpty()) ? text : ":3";
@@ -69,13 +70,13 @@ public class TextBadgeDrawable extends Drawable {
 
     @Override
     public void draw(Canvas canvas) {
-        RectF bounds = new RectF(getBounds());
-        if (bounds.isEmpty()) return;
+        boundsRect.set(getBounds());
+        if (boundsRect.isEmpty()) return;
 
         Paint.FontMetrics fm = textPaint.getFontMetrics();
         // Center text glyphs vertically inside the allocated bounds.
-        float textY = bounds.centerY() - (fm.ascent + fm.descent) / 2f;
-        canvas.drawText(text, bounds.centerX(), textY, textPaint);
+        float textY = boundsRect.centerY() - (fm.ascent + fm.descent) / 2f;
+        canvas.drawText(text, boundsRect.centerX(), textY, textPaint);
     }
 
     @Override

@@ -20,12 +20,14 @@ import org.telegram.messenger.FileLog;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
+import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.Utilities;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.AnimatedEmojiDrawable;
 import org.telegram.ui.Components.OctagonBadgeDrawable;
 import org.telegram.ui.Components.TextBadgeDrawable;
+import org.telegram.ui.Components.ThrottledDrawableInvalidator;
 
 import java.io.BufferedReader;
 import java.io.InputStream;
@@ -483,6 +485,8 @@ public class CustomBadgeController {
         private final Path starPath = new Path();
         private final RectF boundsRect = new RectF();
         private final StarParticle[] particles = new StarParticle[10];
+        private final ThrottledDrawableInvalidator throttledInvalidate =
+                new ThrottledDrawableInvalidator(this, ThrottledDrawableInvalidator.FRAME_INTERVAL_30_FPS);
         private long lastUpdateTime;
 
         private int baseParticleColor = 0xCCFFFFFF;
@@ -517,13 +521,15 @@ public class CustomBadgeController {
             float frameDt = Math.min(now - lastUpdateTime, 50) / 16.67f;
             lastUpdateTime = now;
 
-            drawParticles(canvas, boundsRect, frameDt, now);
+            // Particles drive their own redraw loop; the emoji animates on its own
+            // invalidation pipeline (see addView), so it keeps playing regardless.
+            if (SharedConfig.getDevicePerformanceClass() > SharedConfig.PERFORMANCE_CLASS_LOW) {
+                drawParticles(canvas, boundsRect, frameDt, now);
+                throttledInvalidate.onDrawn();
+            }
 
             emoji.setBounds(getBounds());
             emoji.draw(canvas);
-
-            Callback cb = getCallback();
-            if (cb != null) cb.invalidateDrawable(this);
         }
 
         @Override

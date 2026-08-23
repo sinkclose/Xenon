@@ -13,8 +13,6 @@ public class Extra {
     public static int APP_ID = BuildConfig.API_ID;
     public static String APP_HASH = BuildConfig.API_HASH;
 
-    public static boolean FORCE_ANALYTICS = "play".equals(BuildConfig.BUILD_TYPE);
-
     public static boolean isDirectApp() {
         return "release".equals(BuildConfig.BUILD_TYPE) || "debug".equals(BuildConfig.BUILD_TYPE);
     }

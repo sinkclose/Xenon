@@ -13,6 +13,7 @@ import android.os.Build;
 import android.os.SystemClock;
 import android.text.Editable;
 import android.text.Layout;
+import android.text.TextPaint;
 import android.text.TextWatcher;
 import android.text.style.ForegroundColorSpan;
 import android.view.Choreographer;
@@ -37,6 +38,9 @@ public class TextAnimationEditText extends EditTextCaption {
         long startTime;
         long duration;
         long blurDuration;
+        ForegroundColorSpan span;
+        boolean done;        // animation finished, waiting for span removal
+        boolean removalPosted;
     }
 
     private static class DeletedCharAnim {
@@ -65,6 +69,8 @@ public class TextAnimationEditText extends EditTextCaption {
     private float cursorMotion = 0;
 
     private boolean spaceJumpActive;
+    private boolean cursorSuppressed;
+    private float suppressedCursorWidth;
     private long spaceJumpTime;
     private boolean enterDiveActive;
     private long enterDiveTime;
@@ -98,7 +104,8 @@ public class TextAnimationEditText extends EditTextCaption {
                     long now = System.currentTimeMillis();
                     int maxCount = Math.min(count, 50);
                     for (int i = start; i < start + maxCount && i < s.length(); ) {
-                        int cLen = graphemeClusterLength(s, i, start + maxCount);
+                        // s.length() as limit — never cut a grapheme cluster at the anim cap
+                        int cLen = graphemeClusterLength(s, i, s.length());
                         DeletedCharAnim anim = new DeletedCharAnim();
                         anim.ch = s.subSequence(i, Math.min(i + cLen, s.length())).toString();
                         anim.x = layout.getPrimaryHorizontal(i);
@@ -155,7 +162,9 @@ public class TextAnimationEditText extends EditTextCaption {
                         if (i >= s.length()) break;
                         // Determine grapheme cluster length: handle surrogate pairs and
                         // ZWJ sequences so emoji don't split into two \uFFFD replacement chars.
-                        int clusterLen = graphemeClusterLength(s, i, start + count);
+                        // s.length() as limit — an inserted char may merge with a following
+                        // combining mark/emoji, and clusters must never be split.
+                        int clusterLen = graphemeClusterLength(s, i, s.length());
                         int spanEnd = Math.min(i + clusterLen, s.length());
                         CharAnim anim = new CharAnim();
                         anim.index = i;
@@ -164,7 +173,9 @@ public class TextAnimationEditText extends EditTextCaption {
                         anim.duration = Math.max(50, NekoConfig.textAnimFadeDuration);
                         anim.blurDuration = Math.max(50, NekoConfig.textAnimBlurDuration);
                         charAnims.add(anim);
-                        editable.setSpan(new ForegroundColorSpan(Color.TRANSPARENT), i, spanEnd, Editable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                        ForegroundColorSpan span = new ForegroundColorSpan(Color.TRANSPARENT);
+                        anim.span = span;
+                        editable.setSpan(span, i, spanEnd, Editable.SPAN_EXCLUSIVE_EXCLUSIVE);
                         i += clusterLen;
                     }
                     invalidate();
@@ -173,7 +184,16 @@ public class TextAnimationEditText extends EditTextCaption {
 
             @Override
             public void afterTextChanged(Editable s) {
-                charAnims.removeIf(a -> a.index >= s.length() || a.endIndex > s.length());
+                Iterator<CharAnim> it = charAnims.iterator();
+                while (it.hasNext()) {
+                    CharAnim anim = it.next();
+                    if (anim.index >= s.length() || anim.endIndex > s.length()) {
+                        if (anim.span != null && s.getSpanStart(anim.span) >= 0) {
+                            s.removeSpan(anim.span);
+                        }
+                        it.remove();
+                    }
+                }
             }
         });
     }
@@ -261,11 +281,19 @@ public class TextAnimationEditText extends EditTextCaption {
         boolean smoothCursor = NekoConfig.textAnimationEnabled && NekoConfig.textAnimCursorSpeed > 0;
         float origWidth = getCursorWidth();
         if (smoothCursor) {
-            setCursorWidth(0);
+            // Only touch the real cursor when the state actually changes — calling
+            // setCursorWidth every frame keeps invalidating and makes it flicker.
+            if (!cursorSuppressed && origWidth > 0) {
+                cursorSuppressed = true;
+                suppressedCursorWidth = origWidth;
+                setCursorWidth(0);
+            }
+        } else if (cursorSuppressed) {
+            cursorSuppressed = false;
+            setCursorWidth(suppressedCursorWidth);
         }
         super.onDraw(canvas);
         if (smoothCursor) {
-            setCursorWidth(origWidth);
             drawAnimatedCursor(canvas);
         }
         drawCharAnimations(canvas);
@@ -463,9 +491,12 @@ public class TextAnimationEditText extends EditTextCaption {
 
         canvas.translate(getPaddingLeft(), getExtendedPaddingTop() + voffsetText);
 
+        TextPaint textPaint = getPaint();
         animPaint.setColor(getCurrentTextColor());
         animPaint.setTypeface(getTypeface());
         animPaint.setTextSize(getTextSize());
+        animPaint.setLetterSpacing(textPaint.getLetterSpacing());
+        animPaint.setFontFeatureSettings(textPaint.getFontFeatureSettings());
         animPaint.setStyle(Paint.Style.FILL);
 
         int blur = NekoConfig.textAnimBlurStrength;
@@ -484,8 +515,20 @@ public class TextAnimationEditText extends EditTextCaption {
                 long elapsed = now - anim.startTime;
                 float linearProgress = Math.min(1f, elapsed / (float) Math.max(1, anim.duration));
                 if (linearProgress >= 1) {
-                    it.remove();
+                    if (!anim.done) {
+                        anim.done = true;
+                        anim.removalPosted = true;
+                        post(() -> {
+                            Editable editable = getText();
+                            if (editable != null && anim.span != null && editable.getSpanStart(anim.span) >= 0) {
+                                editable.removeSpan(anim.span);
+                            }
+                            charAnims.remove(anim);
+                        });
+                    }
 
+                    // Keep drawing at full alpha until the transparent span is
+                    // actually removed, otherwise the char blinks invisible for a frame.
                     float x = layout.getPrimaryHorizontal(anim.index);
                     int line = layout.getLineForOffset(anim.index);
                     float y = layout.getLineBaseline(line);
@@ -494,21 +537,6 @@ public class TextAnimationEditText extends EditTextCaption {
                     animPaint.setAlpha(255);
                     animPaint.setMaskFilter(null);
                     canvas.drawText(ch, x, y, animPaint);
-
-                    final int doneStart = anim.index;
-                    final int doneEnd = safeEnd;
-                    post(() -> {
-                        Editable editable = getText();
-                        if (editable != null && doneStart < editable.length()) {
-                            int end = Math.min(doneEnd, editable.length());
-                            ForegroundColorSpan[] spans = editable.getSpans(doneStart, end, ForegroundColorSpan.class);
-                            for (ForegroundColorSpan span : spans) {
-                                if (span.getForegroundColor() == Color.TRANSPARENT) {
-                                    editable.removeSpan(span);
-                                }
-                            }
-                        }
-                    });
                     continue;
                 }
 
@@ -579,33 +607,70 @@ public class TextAnimationEditText extends EditTextCaption {
 
     /**
      * Returns the number of {@code char} values that form one grapheme cluster
-     * starting at {@code pos} in {@code s}. Covers:
+     * starting at {@code pos} in {@code s}. The whole cluster is animated and
+     * drawn as a single unit — splitting it would render pieces that the shaper
+     * would never produce on their own (half a flag, a lone skin tone, etc.).
+     * Covers:
      * <ul>
-     *   <li>Surrogate pairs (basic emoji, e.g. \uD83D\uDE00 = \uD83D + \uDE00)
-     *   <li>Variation selectors (\uFE0F / \uFE0E after an emoji code point)
-     *   <li>Combining Enclosing Keycap (\u20E3)
-     *   <li>ZWJ sequences (e.g. family emoji: base + \u200D + another emoji ...)
+     *   <li>Surrogate pairs (basic emoji, e.g. \uD83D\uDE00 = \uD83D + \uDE00)</li>
+     *   <li>Regional-indicator pairs (flags 🇺🇸 — two RI code points = ONE glyph)</li>
+     *   <li>Emoji skin-tone modifiers (U+1F3FB..U+1F3FF, e.g. 👍🏽)</li>
+     *   <li>Variation selectors (\uFE00..\uFE0F) and Combining Enclosing Keycap (\u20E3)</li>
+     *   <li>ZWJ sequences (e.g. family emoji: base + \u200D + another emoji ...)</li>
+     *   <li>Tag sequences (U+E0020..U+E007F, e.g. England flag 🏴󠁧󠁢󠁥󠁮󠁧󠁿)</li>
+     *   <li>General combining marks (accents, Indic matras, Zalgo text)</li>
      * </ul>
      * All other characters return 1.
      *
-     * @param limit upper bound (exclusive) on how many chars we may consume
+     * @param limit soft upper bound (exclusive) on how many chars we may consume;
+     *              cluster integrity is allowed to cross it so a cluster is never split
      */
     private static int graphemeClusterLength(CharSequence s, int pos, int limit) {
-        if (pos >= s.length()) return 1;
-        int len = Character.charCount(Character.codePointAt(s, pos));
-        // ZWJ-sequence: keep consuming ZWJ + next code point pairs
-        while (pos + len < limit && pos + len < s.length()) {
-            char next = s.charAt(pos + len);
-            if (next == '\u200D') {
+        int textLen = s.length();
+        if (pos >= textLen) return 1;
+        int firstCp = Character.codePointAt(s, pos);
+        int len = Character.charCount(firstCp);
+
+        // Regional-indicator pair: consume exactly two RIs so a flag is one unit.
+        if (firstCp >= 0x1F1E6 && firstCp <= 0x1F1FF) {
+            int next = pos + len;
+            if (next < textLen) {
+                int secondCp = Character.codePointAt(s, next);
+                if (secondCp >= 0x1F1E6 && secondCp <= 0x1F1FF) {
+                    len += Character.charCount(secondCp);
+                }
+            }
+            return len;
+        }
+
+        while (pos + len < textLen && pos + len < limit) {
+            int cp = Character.codePointAt(s, pos + len);
+            if (cp == 0x200D) {
                 // Zero-Width Joiner: absorb ZWJ + following code point
-                if (pos + len + 1 >= s.length()) break;
-                int followLen = Character.charCount(Character.codePointAt(s, pos + len + 1));
-                len += 1 + followLen;
-            } else if (next == '\uFE0F' || next == '\uFE0E' || next == '\u20E3') {
-                // Variation selector or combining enclosing keycap
+                if (pos + len + 1 >= textLen) break;
+                len += 1 + Character.charCount(Character.codePointAt(s, pos + len + 1));
+            } else if (cp >= 0xFE00 && cp <= 0xFE0F) {
+                // Variation selectors (emoji/text presentation)
+                len += 1;
+            } else if (cp == 0x20E3) {
+                // Combining enclosing keycap (e.g. 1️⃣)
+                len += 1;
+            } else if (cp >= 0x1F3FB && cp <= 0x1F3FF) {
+                // Emoji skin-tone modifier (Fitzpatrick)
+                len += Character.charCount(cp);
+            } else if (cp >= 0xE0020 && cp <= 0xE007F) {
+                // Tag characters (subdivision flag sequences end with U+E007F)
                 len += 1;
             } else {
-                break;
+                int type = Character.getType(cp);
+                if (type == Character.NON_SPACING_MARK
+                        || type == Character.COMBINING_SPACING_MARK
+                        || type == Character.ENCLOSING_MARK) {
+                    // Combining marks must stay glued to their base glyph
+                    len += Character.charCount(cp);
+                } else {
+                    break;
+                }
             }
         }
         return len;
