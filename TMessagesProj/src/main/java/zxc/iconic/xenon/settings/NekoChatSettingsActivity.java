@@ -88,6 +88,8 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
 
     private final int messageMenuRow = 100;
 
+    private final int customizeMentionMenuRow = rowId++;
+
     private final int textSpoilerModeRow = rowId++;
     private final int mediaSpoilerModeRow = rowId++;
     private final int spoilerExtendToLineEndRow = rowId++;
@@ -234,6 +236,9 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
         items.add(TextSettingsCellFactory.of(mediaSpoilerModeRow, LocaleController.getString(R.string.MediaSpoilerMode), mediaSpoilerModeLabel()).slug("mediaSpoilerMode"));
         items.add(UItem.asCheck(spoilerExtendToLineEndRow, LocaleController.getString(R.string.SpoilerExtendToLineEnd), LocaleController.getString(R.string.SpoilerExtendToLineEndInfo)).slug("spoilerExtendToLineEnd").setChecked(NekoConfig.spoilerExtendToLineEnd));
         items.add(UItem.asShadow(LocaleController.getString(R.string.SpoilerExtendToLineEndInfoExtra)));
+        items.add(UItem.asShadow(null));
+
+        items.add(TextSettingsCellFactory.of(customizeMentionMenuRow, "Customize mention menu").slug("customizeMentionMenu"));
         items.add(UItem.asShadow(null));
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.MessageMenu)));
@@ -600,6 +605,8 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.spoilerExtendToLineEnd);
             }
+        } else if (id == customizeMentionMenuRow) {
+            presentFragment(new NekoMentionSettingsActivity());
         }
     }
 

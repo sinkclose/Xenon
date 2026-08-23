@@ -15,8 +15,11 @@ import android.Manifest;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.PorterDuff;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.location.Location;
+import android.widget.ImageView;
 import android.os.Build;
 import android.text.Spanned;
 import android.text.TextUtils;
@@ -69,6 +72,8 @@ import org.telegram.ui.Components.CombinedDrawable;
 import org.telegram.ui.Components.EmojiView;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RecyclerListView;
+
+import zxc.iconic.xenon.NekoConfig;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -139,6 +144,23 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
     private boolean isSearchingMentions;
     private TLRPC.User user;
     public TLRPC.Chat chat;
+
+    public static final String CUSTOMIZE_MENTION_ITEM = "__customize_mention_menu__";
+
+    private boolean shouldShowCustomizeButton() {
+        return !NekoConfig.hideCustomMentionButton && searchResultUsernames != null && !isBotContext() && !isStickers() && !isBannedInline();
+    }
+
+    private TLObject resolveCustomUsername(String username) {
+        if (TextUtils.isEmpty(username)) return null;
+        String clean = username.trim().replace("@", "");
+        if (TextUtils.isEmpty(clean)) return null;
+        return MessagesController.getInstance(currentAccount).getUserOrChat(clean);
+    }
+
+    private boolean hasCustomMentions() {
+        return NekoConfig.customMentionUsernames != null && !NekoConfig.customMentionUsernames.isEmpty();
+    }
 
     private boolean searchInDialogs = false;
 
@@ -1271,30 +1293,96 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
             final LongSparseArray<TLRPC.User> newResultsHashMap = new LongSparseArray<>();
             final LongSparseArray<TLObject> newMap = new LongSparseArray<>();
 
-            final ArrayList<TLRPC.TL_topPeer> bots = new ArrayList<>();
-            bots.addAll(MediaDataController.getInstance(currentAccount).inlineBots);
-
-            if (currentChat == null || !(ChatObject.isMonoForum(currentChat) || ChatObject.isChannelAndNotMegaGroup(currentChat))) {
-                bots.addAll(MediaDataController.getInstance(currentAccount).guestBots);
-            }
-
-            final ArrayList<TLRPC.TL_topPeer> inlineBots = sortAndDeduplicateTopPeers(bots);
-            if (!usernameOnly && needBotContext && dogPostion == 0 && !inlineBots.isEmpty()) {
-                int count = 0;
-                for (int a = 0; a < inlineBots.size(); a++) {
-                    TLRPC.User user = messagesController.getUser(inlineBots.get(a).peer.user_id);
-                    if (user == null) {
-                        continue;
+            if (hasCustomMentions()) {
+                if (!usernameOnly && needBotContext && dogPostion == 0) {
+                    int count = 0;
+                    for (String rawUsername : NekoConfig.customMentionUsernames) {
+                        if (count >= 5) break;
+                        String clean = rawUsername == null ? "" : rawUsername.trim().replace("@", "");
+                        if (TextUtils.isEmpty(clean)) continue;
+                        // check prefix using clean if we will need dummy fallback
+                        boolean prefixMatches = usernameString.length() == 0 || clean.toLowerCase().startsWith(usernameString);
+                        TLObject obj = resolveCustomUsername(rawUsername);
+                        if (obj == null) {
+                            if (!prefixMatches) continue;
+                            TLRPC.TL_user dummy = new TLRPC.TL_user();
+                            dummy.id = (long) clean.toLowerCase().hashCode();
+                            if (dummy.id == 0) dummy.id = 0x5f5e100L;
+                            dummy.first_name = clean;
+                            dummy.username = clean;
+                            dummy.access_hash = 0;
+                            // photo null -> AvatarDrawable will show letter
+                            newResult.add(dummy);
+                            newMap.put(dummy.id, dummy);
+                            count++;
+                            continue;
+                        }
+                        String username = null;
+                        long mapId = 0;
+                        if (obj instanceof TLRPC.User) {
+                            TLRPC.User u = (TLRPC.User) obj;
+                            username = UserObject.getPublicUsername(u);
+                            if (TextUtils.isEmpty(username)) username = clean;
+                            mapId = u.id;
+                            if (newResultsHashMap.indexOfKey(mapId) >= 0) continue;
+                        } else if (obj instanceof TLRPC.Chat) {
+                            TLRPC.Chat c = (TLRPC.Chat) obj;
+                            username = ChatObject.getPublicUsername(c);
+                            if (TextUtils.isEmpty(username)) username = clean;
+                            mapId = -c.id;
+                            if (newMap.indexOfKey(mapId) >= 0) continue;
+                        } else {
+                            username = clean;
+                        }
+                        if (!TextUtils.isEmpty(username) && (usernameString.length() == 0 || username.toLowerCase().startsWith(usernameString) || clean.toLowerCase().startsWith(usernameString))) {
+                            newResult.add(obj);
+                            if (obj instanceof TLRPC.User) {
+                                TLRPC.User u = (TLRPC.User) obj;
+                                newResultsHashMap.put(u.id, u);
+                                newMap.put(u.id, obj);
+                            } else if (obj instanceof TLRPC.Chat) {
+                                TLRPC.Chat c = (TLRPC.Chat) obj;
+                                newMap.put(-c.id, obj);
+                            }
+                            count++;
+                        } else if (prefixMatches) {
+                            // Fallback: if resolved username doesn't match but clean does, still add dummy for visibility
+                            TLRPC.TL_user dummy = new TLRPC.TL_user();
+                            dummy.id = (long) clean.toLowerCase().hashCode();
+                            dummy.first_name = clean;
+                            dummy.username = clean;
+                            newResult.add(dummy);
+                            newMap.put(dummy.id, dummy);
+                            count++;
+                        }
                     }
-                    String username = UserObject.getPublicUsername(user);
-                    if (!TextUtils.isEmpty(username) && (usernameString.length() == 0 || username.toLowerCase().startsWith(usernameString))) {
-                        newResult.add(user);
-                        newResultsHashMap.put(user.id, user);
-                        newMap.put(user.id, user);
-                        count++;
-                    }
-                    if (count == 5) {
-                        break;
+                }
+            } else {
+                final ArrayList<TLRPC.TL_topPeer> bots = new ArrayList<>();
+                bots.addAll(MediaDataController.getInstance(currentAccount).inlineBots);
+
+                if (currentChat == null || !(ChatObject.isMonoForum(currentChat) || ChatObject.isChannelAndNotMegaGroup(currentChat))) {
+                    bots.addAll(MediaDataController.getInstance(currentAccount).guestBots);
+                }
+
+                final ArrayList<TLRPC.TL_topPeer> inlineBots = sortAndDeduplicateTopPeers(bots);
+                if (!usernameOnly && needBotContext && dogPostion == 0 && !inlineBots.isEmpty()) {
+                    int count = 0;
+                    for (int a = 0; a < inlineBots.size(); a++) {
+                        TLRPC.User user = messagesController.getUser(inlineBots.get(a).peer.user_id);
+                        if (user == null) {
+                            continue;
+                        }
+                        String username = UserObject.getPublicUsername(user);
+                        if (!TextUtils.isEmpty(username) && (usernameString.length() == 0 || username.toLowerCase().startsWith(usernameString))) {
+                            newResult.add(user);
+                            newResultsHashMap.put(user.id, user);
+                            newMap.put(user.id, user);
+                            count++;
+                        }
+                        if (count == 5) {
+                            break;
+                        }
                     }
                 }
             }

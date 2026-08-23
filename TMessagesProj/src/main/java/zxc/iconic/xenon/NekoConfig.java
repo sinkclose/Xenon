@@ -2,6 +2,7 @@ package zxc.iconic.xenon;
 
 import android.app.Activity;
 import android.content.SharedPreferences;
+import android.text.TextUtils;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -304,6 +305,9 @@ public class NekoConfig {
     public static boolean holdToOpenPopup = false;
     public static float popupHoldTime = 0.5f;
 
+    public static ArrayList<String> customMentionUsernames = new ArrayList<>();
+    public static boolean hideCustomMentionButton = false;
+
     public static int userMcc = 0;
 
     private static final SharedPreferences.OnSharedPreferenceChangeListener listener = (preferences, key) -> {
@@ -517,6 +521,17 @@ public class NekoConfig {
             wavyEnabled = preferences.getBoolean("wavyEnabled", true);
             holdToOpenPopup = preferences.getBoolean("holdToOpenPopup", false);
             popupHoldTime = preferences.getFloat("popupHoldTime", 0.5f);
+            String customMentionRaw = preferences.getString("customMentionUsernames", "");
+            customMentionUsernames.clear();
+            if (!TextUtils.isEmpty(customMentionRaw)) {
+                for (String s : customMentionRaw.split(",")) {
+                    String t = s.trim().replace("@", "");
+                    if (!TextUtils.isEmpty(t)) {
+                        customMentionUsernames.add(t);
+                    }
+                }
+            }
+            hideCustomMentionButton = preferences.getBoolean("hideCustomMentionButton", false);
 
             LensHelper.checkLensSupportAsync();
             preferences.registerOnSharedPreferenceChangeListener(listener);
@@ -2077,6 +2092,35 @@ public class NekoConfig {
         SharedPreferences.Editor editor = preferences.edit();
         editor.putFloat("popupHoldTime", popupHoldTime);
         editor.apply();
+    }
+
+    public static void setCustomMentionUsernames(ArrayList<String> list) {
+        customMentionUsernames.clear();
+        if (list != null) {
+            for (String s : list) {
+                if (s == null) continue;
+                String t = s.trim().replace("@", "");
+                if (!TextUtils.isEmpty(t) && t.length() <= 32) {
+                    customMentionUsernames.add(t);
+                }
+            }
+        }
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putString("customMentionUsernames", TextUtils.join(",", customMentionUsernames));
+        editor.apply();
+    }
+
+    public static void setHideCustomMentionButton(boolean hide) {
+        hideCustomMentionButton = hide;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("hideCustomMentionButton", hideCustomMentionButton);
+        editor.apply();
+    }
+
+    public static void toggleHideCustomMentionButton() {
+        setHideCustomMentionButton(!hideCustomMentionButton);
     }
 
     public static int getNotificationColor() {
