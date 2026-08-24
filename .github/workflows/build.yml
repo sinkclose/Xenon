@@ -2,7 +2,7 @@ name: Build
 
 on:
   push:
-    branches: [ "main", "dev", "ci" ]
+    branches: [ "main", "dev", "ci", "ayu-features" ]
     paths-ignore:
       - '**.md'
       - '.github/**'
@@ -117,15 +117,21 @@ jobs:
           GIT_HASH=$(git rev-parse HEAD)
           GIT_SHORT=$(git rev-parse --short=7 HEAD)
           GIT_DATE=$(git log -1 --format=%cI)
-          echo "Embedding commit: $GIT_SHORT ($GIT_HASH)"
+          CHANNEL=""
+          if [ "${{ github.ref }}" = "refs/heads/ayu-features" ]; then
+            CHANNEL="posral"
+          fi
+          echo "Embedding commit: $GIT_SHORT ($GIT_HASH) channel: $CHANNEL"
           ./gradlew :TMessagesProj_App:assembleRelease \
             -PgitCommitHash=$GIT_HASH \
             -PgitCommitShort=$GIT_SHORT \
-            -PgitCommitDate=$GIT_DATE
+            -PgitCommitDate=$GIT_DATE \
+            -PbuildChannel=$CHANNEL
           ./gradlew :TMessagesProj_App:bundleRelease \
             -PgitCommitHash=$GIT_HASH \
             -PgitCommitShort=$GIT_SHORT \
-            -PgitCommitDate=$GIT_DATE
+            -PgitCommitDate=$GIT_DATE \
+            -PbuildChannel=$CHANNEL
 
       - name: Attest
         if: github.event_name != 'pull_request'
@@ -142,7 +148,7 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ayu-features')
     permissions:
       contents: write
     steps:
@@ -197,11 +203,27 @@ jobs:
           echo "hash_short=$COMMIT_HASH" >> $GITHUB_OUTPUT
           echo "hash_full=$COMMIT_FULL" >> $GITHUB_OUTPUT
 
+      # ayu-features publishes to its own posral- prerelease stream so it never
+      # shadows the main /releases/latest. main keeps the original bare-hash tag.
+      - name: Release channel parameters
+        id: channel
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/ayu-features" ]; then
+            echo "tag_prefix=posral-" >> $GITHUB_OUTPUT
+            echo "name_prefix=[posral] " >> $GITHUB_OUTPUT
+            echo "is_posral=true" >> $GITHUB_OUTPUT
+          else
+            echo "tag_prefix=" >> $GITHUB_OUTPUT
+            echo "name_prefix=" >> $GITHUB_OUTPUT
+            echo "is_posral=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
-          name: "${{ steps.commit_info.outputs.title }}"
-          tag_name: "${{ steps.commit_info.outputs.hash_short }}"
+          name: "${{ steps.channel.outputs.name_prefix }}${{ steps.commit_info.outputs.title }}"
+          tag_name: "${{ steps.channel.outputs.tag_prefix }}${{ steps.commit_info.outputs.hash_short }}"
+          prerelease: ${{ steps.channel.outputs.is_posral }}
           body: |
             ## Build Info
             - **Commit:** `${{ steps.commit_info.outputs.hash_full }}`

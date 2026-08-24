@@ -7,6 +7,7 @@ import androidx.core.text.HtmlCompat;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
+import org.telegram.messenger.BuildConfig;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.messenger.UserConfig;
@@ -166,7 +167,8 @@ public class NekoGeneralSettingsActivity extends BaseNekoSettingsActivity {
         items.add(UItem.asCheck(autoDownloadUpdateRow, LocaleController.getString(R.string.AutoDownloadUpdate)).slug("autoDownloadUpdate").setChecked(NekoConfig.autoDownloadUpdate));
         items.add(UItem.asShadow(null));
 
-        items.add(UItem.asButton(switchToAyuRow, R.drawable.msg_download, LocaleController.getString(R.string.SwitchToAyu)).slug("switchToAyu"));
+        boolean isPosral = GitHubUpdateHelper.CHANNEL_POSRAL.equalsIgnoreCase(BuildConfig.BUILD_CHANNEL);
+        items.add(UItem.asButton(switchToAyuRow, R.drawable.msg_download, LocaleController.getString(isPosral ? R.string.SwitchToMain : R.string.SwitchToAyu)).slug(isPosral ? "switchToMain" : "switchToAyu"));
         items.add(UItem.asShadow(null));
     }
 
@@ -321,11 +323,12 @@ public class NekoGeneralSettingsActivity extends BaseNekoSettingsActivity {
                 listView.adapter.notifyItemChanged(position, PARTIAL);
             }, resourcesProvider);
         } else if (id == switchToAyuRow) {
+            boolean isPosral = GitHubUpdateHelper.CHANNEL_POSRAL.equalsIgnoreCase(BuildConfig.BUILD_CHANNEL);
             var activity = getParentActivity();
             if (activity == null) return;
             AlertDialog.Builder builder = new AlertDialog.Builder(activity);
-            builder.setTitle(LocaleController.getString(R.string.SwitchToAyu));
-            builder.setMessage(LocaleController.getString(R.string.SwitchToAyuConfirm));
+            builder.setTitle(LocaleController.getString(isPosral ? R.string.SwitchToMain : R.string.SwitchToAyu));
+            builder.setMessage(LocaleController.getString(isPosral ? R.string.SwitchToMainConfirm : R.string.SwitchToAyuConfirm));
             builder.setPositiveButton(LocaleController.getString(R.string.OK), (dialog, which) -> {
                 var impl = ApplicationLoader.applicationLoaderInstance;
                 if (impl != null && impl.isDownloadingUpdate()) {
@@ -335,7 +338,7 @@ public class NekoGeneralSettingsActivity extends BaseNekoSettingsActivity {
                 var spinner = new AlertDialog(activity, AlertDialog.ALERT_TYPE_SPINNER);
                 spinner.setCanCancel(true);
                 spinner.show();
-                GitHubUpdateHelper.checkForAyuUpdate(new GitHubUpdateHelper.UpdateCallback() {
+                GitHubUpdateHelper.UpdateCallback switchCallback = new GitHubUpdateHelper.UpdateCallback() {
                     @Override
                     public void onUpdateAvailable(GitHubUpdateHelper.GitHubRelease release) {
                         try { spinner.dismiss(); } catch (Throwable ignored) {}
@@ -409,7 +412,8 @@ public class NekoGeneralSettingsActivity extends BaseNekoSettingsActivity {
                     @Override
                     public void onNoUpdate() {
                         try { spinner.dismiss(); } catch (Throwable ignored) {}
-                        BulletinFactory.of(NekoGeneralSettingsActivity.this).createErrorBulletin("No ayu-features release found").show();
+                        String msg = isPosral ? "No main release found" : "No ayu-features release found";
+                        BulletinFactory.of(NekoGeneralSettingsActivity.this).createErrorBulletin(msg).show();
                     }
 
                     @Override
@@ -417,7 +421,12 @@ public class NekoGeneralSettingsActivity extends BaseNekoSettingsActivity {
                         try { spinner.dismiss(); } catch (Throwable ignored) {}
                         BulletinFactory.of(NekoGeneralSettingsActivity.this).createErrorBulletin(error != null ? error : "Unknown error").show();
                     }
-                });
+                };
+                if (isPosral) {
+                    GitHubUpdateHelper.checkForMainUpdate(switchCallback);
+                } else {
+                    GitHubUpdateHelper.checkForAyuUpdate(switchCallback);
+                }
             });
             builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
             builder.show();
