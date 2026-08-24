@@ -2,7 +2,7 @@ name: Build
 
 on:
   push:
-    branches: [ "main", "dev", "ci" ]
+    branches: [ "main", "dev", "ci", "ayu-features" ]
     paths-ignore:
       - '**.md'
       - '.github/**'
