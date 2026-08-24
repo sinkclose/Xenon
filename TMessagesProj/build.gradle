@@ -257,7 +257,7 @@ android {
             buildConfigField("String", "GIT_COMMIT_HASH", "\"${resolvedGitHash}\"")
             buildConfigField("String", "GIT_COMMIT_SHORT", "\"${resolvedGitShort}\"")
             buildConfigField("String", "GIT_COMMIT_DATE", "\"${resolvedGitCommitDate}\"")
-            buildConfigField("String", "BUILD_CHANNEL", "\"${project.findProperty('buildChannel') ?: 'stable'}\"")
+            buildConfigField("String", "BUILD_CHANNEL", "\"${project.findProperty('buildChannel') ?: ''}\"")
             buildConfigField("long","HELPER_BOT_ID", "${getLongProperty("helperBotId", 0)}")
             buildConfigField("String","HELPER_BOT_USERNAME", "\"${localProperties.get("helperBotUsername")}\"")
 
@@ -274,7 +274,7 @@ android {
             buildConfigField("String", "GIT_COMMIT_HASH", "\"${resolvedGitHash}\"")
             buildConfigField("String", "GIT_COMMIT_SHORT", "\"${resolvedGitShort}\"")
             buildConfigField("String", "GIT_COMMIT_DATE", "\"${resolvedGitCommitDate}\"")
-            buildConfigField("String", "BUILD_CHANNEL", "\"${project.findProperty('buildChannel') ?: 'stable'}\"")
+            buildConfigField("String", "BUILD_CHANNEL", "\"${project.findProperty('buildChannel') ?: ''}\"")
             buildConfigField("long","HELPER_BOT_ID", "${getLongProperty("helperBotId", 0)}")
             buildConfigField("String","HELPER_BOT_USERNAME", "\"${localProperties.get("helperBotUsername")}\"")
 

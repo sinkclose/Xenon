@@ -117,15 +117,21 @@ jobs:
           GIT_HASH=$(git rev-parse HEAD)
           GIT_SHORT=$(git rev-parse --short=7 HEAD)
           GIT_DATE=$(git log -1 --format=%cI)
-          echo "Embedding commit: $GIT_SHORT ($GIT_HASH)"
+          CHANNEL=""
+          if [ "${{ github.ref }}" = "refs/heads/ayu-features" ]; then
+            CHANNEL="posral"
+          fi
+          echo "Embedding commit: $GIT_SHORT ($GIT_HASH) channel: $CHANNEL"
           ./gradlew :TMessagesProj_App:assembleRelease \
             -PgitCommitHash=$GIT_HASH \
             -PgitCommitShort=$GIT_SHORT \
-            -PgitCommitDate=$GIT_DATE
+            -PgitCommitDate=$GIT_DATE \
+            -PbuildChannel=$CHANNEL
           ./gradlew :TMessagesProj_App:bundleRelease \
             -PgitCommitHash=$GIT_HASH \
             -PgitCommitShort=$GIT_SHORT \
-            -PgitCommitDate=$GIT_DATE
+            -PgitCommitDate=$GIT_DATE \
+            -PbuildChannel=$CHANNEL
 
       - name: Attest
         if: github.event_name != 'pull_request'
