@@ -527,6 +527,9 @@
     <string name="ClearDatabaseConfirm">Все сохранённые удалённые сообщения и история редактирований будут безвозвратно удалены. Продолжить?</string>
     <string name="ClearDatabaseDone">База данных очищена</string>
     <string name="ClearDatabaseFreeUp">Освободится %1$s (%2$d удалённых сообщений, %3$d редакций)</string>
+    <string name="ViewDeleted">Просмотр удалённых</string>
+    <string name="ViewDeletedEmpty">Нет сохранённых удалённых сообщений в этом чате.</string>
+    <string name="ViewDeletedMedia">Медиа</string>
     <string name="PushServiceText">Xenon запущен</string>
     <string name="Material3ChatHeaders">Шапки чатов</string>
     <string name="CenterChatHeader">Заголовок по центру</string>

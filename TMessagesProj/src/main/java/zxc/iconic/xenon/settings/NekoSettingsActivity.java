@@ -80,6 +80,7 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
     private final int passcodeRow = rowId++;
     private final int experimentRow = rowId++;
     private final int pluginsRow = rowId++;
+    private final int ayuRow = rowId++;
     private final int accessibilityRow = rowId++;
 
     private final int checkUpdateRow = rowId++;
@@ -196,6 +197,7 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
         }
         items.add(UItem.asButton(experimentRow, R.drawable.msg_fave, LocaleController.getString(R.string.NotificationsOther)).slug("experiment"));
         items.add(UItem.asButton(pluginsRow, R.drawable.msg_edit, LocaleController.getString(R.string.Plugins)).slug("plugins"));
+        items.add(UItem.asButton(ayuRow, R.drawable.msg_delete, LocaleController.getString(R.string.Ayugram)).slug("ayugram"));
         AccessibilityManager am = (AccessibilityManager) ApplicationLoader.applicationContext.getSystemService(Context.ACCESSIBILITY_SERVICE);
         if (am != null && am.isTouchExplorationEnabled()) {
             items.add(UItem.asButton(accessibilityRow, LocaleController.getString(R.string.AccessibilitySettings)).slug("accessibility"));
@@ -243,6 +245,8 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
             presentFragment(new NekoExperimentalSettingsActivity());
         } else if (id == pluginsRow) {
             presentFragment(new NekoPluginsActivity());
+        } else if (id == ayuRow) {
+            presentFragment(new NekoAyuSettingsActivity());
         } else if (id == accessibilityRow) {
             presentFragment(new AccessibilitySettingsActivity());
         } else if (id == creatorRow) {

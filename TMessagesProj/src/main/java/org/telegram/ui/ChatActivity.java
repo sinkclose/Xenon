@@ -828,6 +828,10 @@ public class ChatActivity extends BaseFragment implements
     private CharSequence formwardingNameText;
     private MessageObject forwardingMessage;
     private MessageObject.GroupedMessages forwardingMessageGroup;
+    // When true, the next didSelectDialogs call should re-send the selected
+    // locally-saved deleted messages as brand-new messages (without the
+    // "fwd_id"/author attribution), since the originals no longer exist on the server.
+    private boolean forwardingDeletedMessages;
     private MessageObject.GroupedMessages replyingQuoteGroup;
     public MessageObject replyingTopMessage;
     private ReplyQuote replyingQuote;
@@ -1306,6 +1310,8 @@ public class ChatActivity extends BaseFragment implements
 
     public final static int OPTION_VIEW_STATISTICS = 115;
 
+    public final static int OPTION_XENON_EDIT_HISTORY = 990;
+
     private final static int[] allowedNotificationsDuringChatListAnimations = new int[]{
             NotificationCenter.messagesRead,
             NotificationCenter.threadMessagesRead,
@@ -1704,6 +1710,7 @@ public class ChatActivity extends BaseFragment implements
     private final static int show_pinned = 90;
     private final static int delete_history = 91;
     private final static int recent_actions = 92;
+    private final static int view_deleted = 93;
 
     private final static int bot_help = 30;
     private final static int bot_settings = 31;
@@ -3128,6 +3135,7 @@ public class ChatActivity extends BaseFragment implements
             .add(NotificationCenter.didLoadSendAsPeers)
             .add(NotificationCenter.closeChatActivity)
             .add(NotificationCenter.messagesDeleted)
+            .add(NotificationCenter.messagesDeletedNotification)
             .add(NotificationCenter.historyCleared)
             .add(NotificationCenter.messageReceivedByServer)
             .add(NotificationCenter.messageReceivedByAck)
@@ -4266,6 +4274,8 @@ if (feedIntegration != null) {
                     updatePinnedMessageView(true);
                 } else if (id == recent_actions) {
                     presentFragment(new ChannelAdminLogActivity(currentChat));
+                } else if (id == view_deleted) {
+                    presentFragment(new zxc.iconic.xenon.deleted.XenonViewDeletedActivity(getDialogId(), currentAccount));
                 } else if (id == topic_close) {
                     if (forumTopic == null)
                         return;
@@ -4804,6 +4814,11 @@ if (feedIntegration != null) {
             headerItem.addSubItem(888, R.drawable.menu_download_round, "Dump Canvas");
         }
 
+        // --- Xenon: view saved deleted messages of this chat ---
+        if (zxc.iconic.xenon.NekoConfig.enableSaveDeletedMessages && headerItem != null && getDialogId() != 0) {
+            headerItem.lazilyAddSubItem(view_deleted, R.drawable.msg_view_file, LocaleController.getString(R.string.ViewDeleted));
+        }
+
         // --- Plugin menu items ---
         if (NekoConfig.pluginsEnabled && headerItem != null) {
             org.luaj.vm2.LuaValue ctx = org.luaj.vm2.LuaValue.tableOf(new org.luaj.vm2.LuaValue[]{
@@ -5317,7 +5332,8 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                             currentEncryptedChat == null && message.getId() < 0 ||
                             currentChat != null && ChatObject.isForum(currentChat) && !allowReplyOnOpenTopic ||
                             hasTextSelection() ||
-                            message.isEphemeral() && message.isOut()
+                            message.isEphemeral() && message.isOut() ||
+                            message != null && message.isAyuDeleted()
                         ) {
                             slidingViewSetOffset(0);
                             slidingView = null;
@@ -12789,6 +12805,124 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         return false;
     }
 
+    // Returns true if any of the currently selected messages is a locally-saved
+    // deleted message. Used to hide Reply and force NoQuoteForward in the
+    // selection bottom bar and popup menu.
+    private boolean hasSelectedAyuDeletedMessage() {
+        try {
+            for (int i = 0; i < selectedMessagesIds.length; ++i) {
+                for (int j = 0; j < selectedMessagesIds[i].size(); ++j) {
+                    MessageObject msg = selectedMessagesIds[i].valueAt(j);
+                    if (msg != null && msg.isAyuDeleted()) {
+                        return true;
+                    }
+                }
+            }
+        } catch (Exception ignore) {}
+        return false;
+    }
+
+    // Opens the dialog picker for re-sending locally-saved deleted messages.
+    // Sets the forwardingDeletedMessages flag so that didSelectDialogs routes
+    // the chosen messages through sendDeletedMessagesAsNew instead of the
+    // standard forward path (which would fail because the source messages no
+    // longer exist on the server).
+    private void openForwardForDeleted() {
+        forwardingDeletedMessages = true;
+        if (selectionReactionsOverlay != null && selectionReactionsOverlay.isVisible()) {
+            selectionReactionsOverlay.setHiddenByScroll(true);
+        }
+        Bundle args = new Bundle();
+        args.putBoolean("onlySelect", true);
+        args.putInt("dialogsType", DialogsActivity.DIALOGS_TYPE_FORWARD);
+        args.putInt("messagesCount", 1);
+        args.putBoolean("canSelectTopics", true);
+        DialogsActivity fragment = new DialogsActivity(args);
+        fragment.setDelegate(ChatActivity.this);
+        presentFragment(fragment);
+    }
+
+    // Re-sends the content of locally-saved deleted messages as brand-new
+    // messages from the current user. The source messages were deleted on the
+    // server, so we cannot forward them normally — instead we re-send their
+    // text/media by id (the media still exists on the server, decoupled from
+    // the deleted message).
+    private void sendDeletedMessagesAsNew(ArrayList<MessageObject> messages, long did, boolean notify, int scheduleDate, int scheduleRepeatPeriod) {
+        final long monoForumPeerId = getSendMonoForumPeerId();
+        final MessageSuggestionParams suggestionParams = getSendMessageSuggestionParams();
+        for (int i = 0; i < messages.size(); i++) {
+            MessageObject msg = messages.get(i);
+            if (msg == null || msg.messageOwner == null) continue;
+            String caption = msg.messageOwner.message;
+            ArrayList<TLRPC.MessageEntity> entities = msg.messageOwner.entities;
+            TLRPC.MessageMedia media = MessageObject.getMedia(msg.messageOwner);
+            boolean isPhoto = media instanceof TLRPC.TL_messageMediaPhoto && media.photo instanceof TLRPC.TL_photo;
+            boolean isDoc = media instanceof TLRPC.TL_messageMediaDocument && msg.getDocument() != null;
+            boolean hasMedia = isPhoto || isDoc;
+            try {
+                File localFile = null;
+                if (hasMedia) {
+                    try {
+                        localFile = FileLoader.getInstance(currentAccount).getPathToMessage(msg.messageOwner);
+                    } catch (Exception ignore) {
+                    }
+                }
+                if (localFile != null && localFile.exists() && localFile.length() > 0) {
+                    String path = localFile.getAbsolutePath();
+                    if (isPhoto) {
+                        SendMessagesHelper.prepareSendingPhoto(
+                                getAccountInstance(), path, null, null, did, null, null, null, null,
+                                entities != null ? new ArrayList<>(entities) : null, null, null, 0, null, null,
+                                notify, scheduleDate, scheduleRepeatPeriod, 0, false,
+                                TextUtils.isEmpty(caption) ? null : caption, null, 0, 0, 0, monoForumPeerId, suggestionParams);
+                    } else {
+                        ArrayList<String> paths = new ArrayList<>();
+                        paths.add(path);
+                        ArrayList<String> originalPaths = new ArrayList<>();
+                        originalPaths.add(path);
+                        SendMessagesHelper.prepareSendingDocuments(
+                                getAccountInstance(), paths, originalPaths, null,
+                                TextUtils.isEmpty(caption) ? null : caption,
+                                entities != null ? new ArrayList<>(entities) : null, null, did,
+                                null, null, null, null, null, notify, scheduleDate, scheduleRepeatPeriod,
+                                null, null, 0, 0, false, 0, monoForumPeerId, suggestionParams);
+                    }
+                } else {
+                    SendMessagesHelper.SendMessageParams params;
+                    if (isDoc) {
+                        TLRPC.Document document = msg.getDocument();
+                        if (document instanceof TLRPC.TL_document) {
+                            params = SendMessagesHelper.SendMessageParams.of(
+                                    (TLRPC.TL_document) document, null, null, did, null, null,
+                                    TextUtils.isEmpty(caption) ? null : caption, entities,
+                                    null, null, notify, scheduleDate, scheduleRepeatPeriod, 0, null, null, false);
+                            params.monoForumPeer = monoForumPeerId;
+                            params.suggestionParams = suggestionParams;
+                            getSendMessagesHelper().sendMessage(params);
+                        }
+                    } else if (isPhoto) {
+                        params = SendMessagesHelper.SendMessageParams.of(
+                                (TLRPC.TL_photo) media.photo, null, did, null, null,
+                                TextUtils.isEmpty(caption) ? null : caption, entities,
+                                null, null, notify, scheduleDate, scheduleRepeatPeriod, 0, null, false, false);
+                        params.monoForumPeer = monoForumPeerId;
+                        params.suggestionParams = suggestionParams;
+                        getSendMessagesHelper().sendMessage(params);
+                    } else if (!TextUtils.isEmpty(msg.messageOwner.message)) {
+                        params = SendMessagesHelper.SendMessageParams.of(
+                                msg.messageOwner.message, did, null, null, null, true,
+                                entities, null, null, notify, scheduleDate, scheduleRepeatPeriod, null, false);
+                        params.monoForumPeer = monoForumPeerId;
+                        params.suggestionParams = suggestionParams;
+                        getSendMessagesHelper().sendMessage(params);
+                    }
+                }
+            } catch (Exception e) {
+                FileLog.e(e);
+            }
+        }
+    }
+
     private void share() {
         MessageObject msg = null;
         for (int a = 1; a >= 0; a--) {
@@ -19802,14 +19936,25 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
                 boolean noforwards = isPeerNoForwards() || hasSelectedNoforwardsMessage();
                 if (actionsButtonsLayout != null) {
+                    boolean selectedAyuDeleted = hasSelectedAyuDeletedMessage();
                     actionsButtonsLayout.setForwardButtonDelegate(hasCaption, id -> {
-                        setForwardParams(id == ForwardItem.ID_FORWARD_NOQUOTE, id == ForwardItem.ID_FORWARD_NOCAPTION);
-                        openForward(false);
+                        if (selectedAyuDeleted) {
+                            openForwardForDeleted();
+                        } else {
+                            setForwardParams(id == ForwardItem.ID_FORWARD_NOQUOTE, id == ForwardItem.ID_FORWARD_NOCAPTION);
+                            openForward(false);
+                        }
                     });
-                    actionsButtonsLayout.setForwardButtonTextAndIcon(
-                            ForwardItem.getLastForwardOptionTitle(hasCaption, true),
-                            ForwardItem.getLastForwardOptionIcon(hasCaption)
-                    );
+                    String forwardTitle = selectedAyuDeleted
+                            ? LocaleController.getString(R.string.Forward)
+                            : ForwardItem.getLastForwardOptionTitle(hasCaption, true);
+                    android.graphics.drawable.Drawable forwardIcon;
+                    if (selectedAyuDeleted) {
+                        forwardIcon = ApplicationLoader.applicationContext.getResources().getDrawable(R.drawable.msg_forward).mutate();
+                    } else {
+                        forwardIcon = ForwardItem.getLastForwardOptionIcon(hasCaption);
+                    }
+                    actionsButtonsLayout.setForwardButtonTextAndIcon(forwardTitle, forwardIcon);
                 }
                 if (prevCantForwardCount == 0 && cantForwardMessagesCount != 0 || prevCantForwardCount != 0 && cantForwardMessagesCount == 0) {
                     forwardButtonAnimation = new AnimatorSet();
@@ -19946,7 +20091,10 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                             }
                         }
                     }
-                    actionsButtonsLayout.showReplyButton(newVisibility == View.VISIBLE, true);
+                    // Hide the Reply button for locally-saved deleted messages: replying would
+                    // reference a message id that no longer exists on the server.
+                    boolean showReply = newVisibility == View.VISIBLE && !hasSelectedAyuDeletedMessage();
+                    actionsButtonsLayout.showReplyButton(showReply, true);
                 }
 
                 if (actionsButtonsLayout != null) {
@@ -22070,16 +22218,34 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             }
             checkGroupMessagesOrder();
             if (NekoConfig.enableSaveDeletedMessages && loadIndex == 0 && messArr != null && !messArr.isEmpty()) {
-                if (NekoConfig.enableSaveDeletedMessages) {
-                    var ctrl = zxc.iconic.xenon.deleted.XenonDeletedMessagesController.getInstance();
-                    java.util.Set<Integer> savedIds = ctrl.getAllSavedMessageIds(dialog_id, currentAccount);
-                    SparseArray<MessageObject> dict = messagesDict[loadIndex];
-                    for (int i = 0; i < dict.size(); i++) {
-                        MessageObject msgObj = dict.valueAt(i);
-                        if (savedIds.contains(msgObj.getId())) {
-                            msgObj.messageOwner.ayuDeleted = true;
-                        }
+                long minId = Integer.MAX_VALUE;
+                long maxId = Integer.MIN_VALUE;
+                for (int rIdx = 0; rIdx < messArr.size(); rIdx++) {
+                    int msgId = messArr.get(rIdx).getId();
+                    if (msgId > 0) {
+                        if (msgId < minId) minId = msgId;
+                        if (msgId > maxId) maxId = msgId;
                     }
+                }
+                if (minId <= maxId) {
+                    var ctrl = zxc.iconic.xenon.deleted.XenonDeletedMessagesController.getInstance();
+                    ctrl.getMessagesForRange(dialog_id, currentAccount, minId, maxId, messArr.size(), saved -> {
+                        if (saved == null || saved.isEmpty() || chatAdapter == null) return;
+                        if (getDialogId() != dialog_id) return;
+                        for (int i = 0; i < saved.size(); i++) {
+                            MessageObject mo = saved.get(i);
+                            MessageObject existing = messagesDict[0].get(mo.getId());
+                            if (existing != null) {
+                                existing.messageOwner.ayuDeleted = true;
+                                chatAdapter.updateRowWithMessageObject(existing, true, false);
+                                chatAdapter.invalidateRowWithMessageObject(existing);
+                            } else {
+                                java.util.ArrayList<MessageObject> single = new java.util.ArrayList<>();
+                                single.add(mo);
+                                getNotificationCenter().postNotificationName(NotificationCenter.didReceiveNewMessages, dialog_id, single, false, 0);
+                            }
+                        }
+                    });
                 }
             }
             if (createUnreadLoading) {
@@ -23118,6 +23284,20 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     finishFragment();
                 } else {
                     removeSelfFromStack();
+                }
+            }
+        } else if (id == NotificationCenter.messagesDeletedNotification) {
+            long dialogId = (Long) args[0];
+            if (getDialogId() != dialogId) return;
+            if (chatAdapter == null) return;
+            ArrayList<Integer> messageIds = (ArrayList<Integer>) args[1];
+            for (int a = 0, N = messageIds.size(); a < N; a++) {
+                int mid = messageIds.get(a);
+                MessageObject currentMessage = messagesDict[0].get(mid);
+                if (currentMessage != null) {
+                    currentMessage.messageOwner.ayuDeleted = true;
+                    chatAdapter.updateRowWithMessageObject(currentMessage, true, false);
+                    chatAdapter.invalidateRowWithMessageObject(currentMessage);
                 }
             }
         } else if (id == NotificationCenter.quickRepliesDeleted) {
@@ -31924,6 +32104,12 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 icons.add(R.drawable.msg_calendar2);
             }
 
+            if (zxc.iconic.xenon.NekoConfig.enableSaveEditsHistory && selectedObject != null && selectedObject.messageOwner != null && zxc.iconic.xenon.edits.XenonEditsHistoryController.getInstance().hasAnyRevisions(getDialogId(), selectedObject.messageOwner.id, currentAccount)) {
+                items.add(LocaleController.getString(R.string.EditsHistoryMenuText));
+                options.add(OPTION_XENON_EDIT_HISTORY);
+                icons.add(R.drawable.msg_log);
+            }
+
             if (options.isEmpty() && optionsView == null) {
                 return false;
             }
@@ -35430,6 +35616,12 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 }, getResourceProvider(), AlertsCreator.SUGGEST_DATE_PICKER_MODE_EDIT).show(), AmountUtils.Amount.of(suggestedPost != null ? suggestedPost.price : null), !ChatObject.canManageMonoForum(currentAccount, getDialogId()));
                 break;
             }
+            case OPTION_XENON_EDIT_HISTORY: {
+                if (selectedObject != null && selectedObject.messageOwner != null) {
+                    presentFragment(new zxc.iconic.xenon.edits.XenonEditsHistoryActivity(getDialogId(), selectedObject.messageOwner.id, currentAccount));
+                }
+                break;
+            }
         }
         selectedObject = null;
         selectedObjectGroup = null;
@@ -35642,6 +35834,51 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     }
                 }
             }
+        }
+
+        // --- Xenon: re-send locally-saved deleted messages as new messages.
+        if (forwardingDeletedMessages) {
+            forwardingDeletedMessages = false;
+            if (fragment.resetDelegate) {
+                fragment.setDelegate(null);
+            }
+            if (forwardingMessage != null) {
+                forwardingMessage = null;
+                forwardingMessageGroup = null;
+            } else {
+                for (int a = 1; a >= 0; a--) {
+                    selectedMessagesCanCopyIds[a].clear();
+                    selectedMessagesCanStarIds[a].clear();
+                    selectedMessagesIds[a].clear();
+                }
+                hideActionMode();
+                updatePinnedMessageView(true);
+                updateVisibleRows();
+            }
+            messagePreviewParams = null;
+            hideFieldPanel(false);
+            for (int a = 0; a < dids.size(); a++) {
+                final long did = dids.get(a).dialogId;
+                if (message != null) {
+                    final SendMessagesHelper.SendMessageParams params = SendMessagesHelper.SendMessageParams.of(message.toString(), did, null, null, null, true, null, null, null, notify, scheduleDate, scheduleRepeatPeriod, null, false);
+                    params.monoForumPeer = getSendMonoForumPeerId();
+                    params.suggestionParams = getSendMessageSuggestionParams();
+                    getSendMessagesHelper().sendMessage(params);
+                }
+                sendDeletedMessagesAsNew(fmessages, did, notify, scheduleDate, scheduleRepeatPeriod);
+            }
+            fragment.finishFragment();
+            createUndoView();
+            if (undoView != null) {
+                if (dids.size() == 1) {
+                    if (!BulletinFactory.of(ChatActivity.this).showForwardedBulletinWithTag(dids.get(0).dialogId, fmessages.size())) {
+                        undoView.showWithAction(dids.get(0).dialogId, UndoView.ACTION_FWD_MESSAGES, fmessages.size());
+                    }
+                } else {
+                    undoView.showWithAction(0, UndoView.ACTION_FWD_MESSAGES, fmessages.size(), dids.size(), null, null);
+                }
+            }
+            return true;
         }
 
         if (!fragment.isQuote && (dids.size() > 1 || dids.get(0).dialogId == getUserConfig().getClientUserId() || message != null || scheduleDate != 0 || !notify)) {

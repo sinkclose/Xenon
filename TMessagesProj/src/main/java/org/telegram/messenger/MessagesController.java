@@ -21048,6 +21048,61 @@ private boolean hasImportantUnread(TLRPC.Dialog dialog) {
             }
         });
 
+        // --- Xenon save-deleted-messages hook (server-side deletion path)
+        if (zxc.iconic.xenon.NekoConfig.enableSaveDeletedMessages && deletedMessages != null) {
+            FileLog.d("XenonDeleteHook: got update, entries=" + deletedMessages.size());
+            var ayuCtrl = zxc.iconic.xenon.deleted.XenonDeletedMessagesController.getInstance();
+            var deletedMessagesFinal2 = deletedMessages.clone();
+            getMessagesStorage().getStorageQueue().postRunnable(() -> {
+                var notificationsToSend = new LongSparseArray<ArrayList<Integer>>();
+                for (int a = 0, size = deletedMessagesFinal2.size(); a < size; a++) {
+                    long possibleDialogId = deletedMessagesFinal2.keyAt(a);
+                    ArrayList<Integer> messageIds = deletedMessagesFinal2.valueAt(a);
+                    if (messageIds == null || messageIds.isEmpty()) continue;
+                    FileLog.d("XenonDeleteHook: possibleDialogId=" + possibleDialogId + " ids=" + messageIds);
+                    ArrayList<Long> dialogIdsToCheck = new ArrayList<>();
+                    if (possibleDialogId == 0) {
+                        var resolved = zxc.iconic.xenon.helpers.MessageHelper.getInstance(currentAccount).getDialogIdsToUpdate(messageIds);
+                        if (resolved != null && !resolved.isEmpty()) {
+                            dialogIdsToCheck.addAll(resolved);
+                            FileLog.d("XenonDeleteHook: resolved dialogIds=" + resolved);
+                        } else {
+                            FileLog.d("XenonDeleteHook: could not resolve dialogId (possibleDialogId==0)");
+                        }
+                    }
+                    if (dialogIdsToCheck.isEmpty()) {
+                        dialogIdsToCheck.add(possibleDialogId);
+                    }
+                    for (long dialogId : dialogIdsToCheck) {
+                        var messagesToSave = zxc.iconic.xenon.helpers.MessageHelper.getInstance(currentAccount).getMessagesStorageMessages(dialogId, messageIds);
+                        if (messagesToSave != null && !messagesToSave.isEmpty()) {
+                            FileLog.d("XenonDeleteHook: dialog " + dialogId + " found " + messagesToSave.size() + " messages in DB");
+                            for (var msg : messagesToSave) {
+                                if (zxc.iconic.xenon.deleted.XenonDeletedState.isDeletePermitted(dialogId, msg.id)) {
+                                    FileLog.d("XenonDeleteHook: msg " + msg.id + " delete permitted, skipping save");
+                                    continue;
+                                }
+                                ayuCtrl.onMessageDeleted(msg, dialogId, currentAccount);
+                            }
+                        } else {
+                            FileLog.d("XenonDeleteHook: dialog " + dialogId + " NO messages found in DB for ids=" + messageIds);
+                        }
+                        notificationsToSend.put(dialogId, messageIds);
+                    }
+                }
+                if (notificationsToSend.size() > 0) {
+                    AndroidUtilities.runOnUIThread(() -> {
+                        for (int i = 0, n = notificationsToSend.size(); i < n; i++) {
+                            long dialogId = notificationsToSend.keyAt(i);
+                            ArrayList<Integer> messageIds = notificationsToSend.valueAt(i);
+                            getNotificationCenter().postNotificationName(NotificationCenter.messagesDeletedNotification, dialogId, messageIds);
+                        }
+                    });
+                }
+            });
+        }
+        // --- end hook
+
         LongSparseIntArray markAsReadMessagesInboxFinal = markAsReadMessagesInbox;
         LongSparseIntArray markAsReadMessagesOutboxFinal = markAsReadMessagesOutbox;
         LongSparseArray<ArrayList<Integer>> markContentAsReadMessagesFinal = markContentAsReadMessages;

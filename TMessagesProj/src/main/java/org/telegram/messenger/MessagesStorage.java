@@ -15815,6 +15815,11 @@ public class MessagesStorage extends BaseController {
                                     if (oldMessage.out && !message.out) {
                                         message.out = oldMessage.out;
                                     }
+                                    if (zxc.iconic.xenon.NekoConfig.enableSaveEditsHistory && oldMessage.message != null && message.message != null) {
+                                        if (!oldMessage.message.equals(message.message) || !sameMedia) {
+                                            zxc.iconic.xenon.edits.XenonEditsHistoryController.getInstance().onMessageEdited(oldMessage, dialogId, currentAccount);
+                                        }
+                                    }
                                     if (!sameMedia) {
                                         addFilesToDelete(oldMessage, filesToDelete, idsToDelete, namesToDelete, false);
                                     }

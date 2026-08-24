@@ -42,7 +42,10 @@ import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.Utilities;
+import org.telegram.SQLite.SQLiteCursor;
+import org.telegram.SQLite.SQLiteException;
 import org.telegram.tgnet.ConnectionsManager;
+import org.telegram.tgnet.NativeByteBuffer;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
@@ -167,6 +170,63 @@ public class MessageHelper extends BaseController {
                 .append(' ')
                 .append(LocaleController.getInstance().getFormatterDay().format((long) (messageObject.messageOwner.date) * 1000));
         return spannableStringBuilder;
+    }
+
+    public ArrayList<TLRPC.Message> getMessagesStorageMessages(long dialogId, ArrayList<Integer> messageIds) {
+        ArrayList<TLRPC.Message> messages = null;
+        SQLiteCursor cursor = null;
+        try {
+            String ids = TextUtils.join(",", messageIds);
+            cursor = getMessagesStorage().getDatabase().queryFinalized(String.format(Locale.US, "SELECT data FROM messages_v2 WHERE uid = %d AND mid IN (%s)", dialogId, ids));
+            while (cursor.next()) {
+                NativeByteBuffer data = cursor.byteBufferValue(0);
+                if (data != null) {
+                    TLRPC.Message message = TLRPC.Message.TLdeserialize(data, data.readInt32(false), false);
+                    if (message != null) {
+                        message.readAttachPath(data, UserConfig.getInstance(currentAccount).clientUserId);
+                        if (messages == null) {
+                            messages = new ArrayList<>();
+                        }
+                        messages.add(message);
+                    }
+                    data.reuse();
+                }
+            }
+            cursor.dispose();
+            cursor = null;
+        } catch (SQLiteException e) {
+            FileLog.e(e);
+        } finally {
+            if (cursor != null) {
+                cursor.dispose();
+            }
+        }
+        return messages;
+    }
+
+    public ArrayList<Long> getDialogIdsToUpdate(ArrayList<Integer> messageIds) {
+        ArrayList<Long> dialogIds = null;
+        SQLiteCursor cursor = null;
+        try {
+            String ids = TextUtils.join(",", messageIds);
+            cursor = getMessagesStorage().getDatabase().queryFinalized(String.format(Locale.US, "SELECT DISTINCT uid FROM messages_v2 WHERE mid IN (%s)", ids));
+            while (cursor.next()) {
+                long did = cursor.longValue(0);
+                if (dialogIds == null) {
+                    dialogIds = new ArrayList<>();
+                }
+                dialogIds.add(did);
+            }
+            cursor.dispose();
+            cursor = null;
+        } catch (SQLiteException e) {
+            FileLog.e(e);
+        } finally {
+            if (cursor != null) {
+                cursor.dispose();
+            }
+        }
+        return dialogIds;
     }
 
     public static CharSequence createTranslateString(MessageObject messageObject) {
@@ -299,8 +359,6 @@ public class MessageHelper extends BaseController {
         } else if (selectedObject.isVoiceTranscriptionOpen() && !TextUtils.isEmpty(selectedObject.messageOwner.voiceTranscription) && !TranscribeButton.isTranscribing(selectedObject)) {
             messageObject = selectedObject;
         } else if (!selectedObject.isVoiceTranscriptionOpen() && !TextUtils.isEmpty(selectedObject.messageOwner.message) && !isLinkOrEmojiOnlyMessage(selectedObject)) {
-            messageObject = selectedObject;
-        } else if (selectedObject.type == MessageObject.TYPE_ARTICLE) {
             messageObject = selectedObject;
         }
         if (messageObject != null && messageObject.translating) {

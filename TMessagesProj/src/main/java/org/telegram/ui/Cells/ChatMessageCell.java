@@ -6851,7 +6851,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         if (messageObject.updateSideMenuEnabled(isSideMenuEnabled)) {
             messageChanged = true;
         }
-        if (messageChanged || dataChanged || groupChanged || pollChanged || widthChanged && messageObject.isPoll() || isPhotoDataChanged(messageObject) || pinnedBottom != bottomNear || pinnedTop != topNear) {
+        boolean lastAyuDeleted = ayuDeleted;
+        ayuDeleted = messageObject.isAyuDeleted();
+        if (messageChanged || dataChanged || groupChanged || pollChanged || widthChanged && messageObject.isPoll() || isPhotoDataChanged(messageObject) || pinnedBottom != bottomNear || pinnedTop != topNear || lastAyuDeleted != ayuDeleted || ayuDeleted) {
             postRunnableHolder.clear();
 
             if (stickerSetIcons != null) {

@@ -477,6 +477,9 @@
     <string name="SaveDeletedMessages">Deleted messages</string>
     <string name="SaveDeletedMessagesDesc">Save messages when they are deleted</string>
     <string name="DeletedMessage">deleted</string>
+    <string name="ViewDeleted">View deleted</string>
+    <string name="ViewDeletedEmpty">No deleted messages saved in this chat.</string>
+    <string name="ViewDeletedMedia">Media</string>
     <string name="RoundedBulletin">Round bulletin</string>
     <string name="TestBottomSheet">Test BottomSheet</string>
     <string name="TestBottomSheetTitle">hi</string>
