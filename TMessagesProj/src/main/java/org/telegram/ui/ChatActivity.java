@@ -22069,19 +22069,6 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 }
             }
             checkGroupMessagesOrder();
-            if (NekoConfig.enableSaveDeletedMessages && loadIndex == 0 && messArr != null && !messArr.isEmpty()) {
-                if (NekoConfig.enableSaveDeletedMessages) {
-                    var ctrl = zxc.iconic.xenon.deleted.XenonDeletedMessagesController.getInstance();
-                    java.util.Set<Integer> savedIds = ctrl.getAllSavedMessageIds(dialog_id, currentAccount);
-                    SparseArray<MessageObject> dict = messagesDict[loadIndex];
-                    for (int i = 0; i < dict.size(); i++) {
-                        MessageObject msgObj = dict.valueAt(i);
-                        if (savedIds.contains(msgObj.getId())) {
-                            msgObj.messageOwner.ayuDeleted = true;
-                        }
-                    }
-                }
-            }
             if (createUnreadLoading) {
                 createUnreadMessageAfterId = 0;
             }
@@ -27126,9 +27113,6 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         for (int a = 0; a < size; a++) {
             Integer mid = markAsDeletedMessages.get(a);
             MessageObject obj = chatAdapter != null && chatAdapter.isFiltered ? filteredMessagesDict.get(mid) :  messagesDict[loadIndex].get(mid);
-            if (NekoConfig.enableSaveDeletedMessages && obj != null && !zxc.iconic.xenon.deleted.XenonDeletedState.isDeletePermitted(getDialogId(), mid)) {
-                continue;
-            }
             if (selectedObject != null && obj == selectedObject || obj != null && selectedObjectGroup != null && selectedObjectGroup == groupedMessagesMap.get(obj.getGroupId())) {
                 closeMenu();
             }
