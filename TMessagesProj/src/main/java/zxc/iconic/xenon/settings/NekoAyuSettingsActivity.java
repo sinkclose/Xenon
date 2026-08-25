@@ -51,11 +51,21 @@ public class NekoAyuSettingsActivity extends BaseNekoSettingsActivity {
         Utilities.globalQueue.postRunnable(() -> {
             long size = XenonDeletedMessagesController.getInstance().getStorageSize()
                     + XenonEditsHistoryController.getInstance().getStorageSize();
-            String formatted = size > 0 ? AndroidUtilities.formatFileSize(size) : "";
+            String tmp = size > 0 ? AndroidUtilities.formatFileSize(size) : "0 B";
+            if (size == 0) {
+                // also show count if size is 0 but items exist (e.g. tiny files)
+                int c1 = XenonDeletedMessagesController.getInstance().getItemCount();
+                int c2 = XenonEditsHistoryController.getInstance().getItemCount();
+                if (c1 + c2 > 0) tmp = c1 + c2 + " items";
+            }
+            final String formatted = tmp;
             AndroidUtilities.runOnUIThread(() -> {
                 dbSizeText = formatted;
                 if (listView != null && listView.adapter != null) {
                     listView.adapter.update(true);
+                } else {
+                    // view not ready yet, retry shortly
+                    AndroidUtilities.runOnUIThread(this::recomputeStorageSize, 300);
                 }
             });
         });

@@ -21327,8 +21327,15 @@ private boolean hasImportantUnread(TLRPC.Dialog dialog) {
                             continue;
                         }
                         MessageObject obj = dialogMessagesByIds.get(msgId);
+                        TLRPC.Message toSave = null;
                         if (obj != null && obj.messageOwner != null) {
-                            ctrl.onMessageDeleted(obj.messageOwner, key, currentAccount);
+                            toSave = obj.messageOwner;
+                        } else {
+                            var list = zxc.iconic.xenon.helpers.MessageHelper.getInstance(currentAccount).getMessagesStorageMessages(key, new ArrayList<>(java.util.Collections.singletonList(msgId)));
+                            if (list != null && !list.isEmpty()) toSave = list.get(0);
+                        }
+                        if (toSave != null) {
+                            ctrl.onMessageDeleted(toSave, key, currentAccount);
                             savedIds.add(msgId);
                         }
                     }
@@ -21337,6 +21344,12 @@ private boolean hasImportantUnread(TLRPC.Dialog dialog) {
                             MessageObject savedObj = dialogMessagesByIds.get(savedMsgId);
                             if (savedObj != null) {
                                 savedObj.messageOwner.ayuDeleted = true;
+                            } else {
+                                // also try to mark in DB-loaded messages if not in memory
+                                var list2 = zxc.iconic.xenon.helpers.MessageHelper.getInstance(currentAccount).getMessagesStorageMessages(key, new ArrayList<>(java.util.Collections.singletonList(savedMsgId)));
+                                if (list2 != null && !list2.isEmpty()) {
+                                    // will be marked on next load via getAllSavedMessageIds
+                                }
                             }
                         }
                         arrayList.removeAll(savedIds);

@@ -22217,36 +22217,36 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 }
             }
             checkGroupMessagesOrder();
-            if (NekoConfig.enableSaveDeletedMessages && loadIndex == 0 && messArr != null && !messArr.isEmpty()) {
-                long minId = Integer.MAX_VALUE;
-                long maxId = Integer.MIN_VALUE;
-                for (int rIdx = 0; rIdx < messArr.size(); rIdx++) {
-                    int msgId = messArr.get(rIdx).getId();
-                    if (msgId > 0) {
-                        if (msgId < minId) minId = msgId;
-                        if (msgId > maxId) maxId = msgId;
-                    }
-                }
-                if (minId <= maxId) {
-                    var ctrl = zxc.iconic.xenon.deleted.XenonDeletedMessagesController.getInstance();
-                    ctrl.getMessagesForRange(dialog_id, currentAccount, minId, maxId, messArr.size(), saved -> {
-                        if (saved == null || saved.isEmpty() || chatAdapter == null) return;
-                        if (getDialogId() != dialog_id) return;
-                        for (int i = 0; i < saved.size(); i++) {
-                            MessageObject mo = saved.get(i);
-                            MessageObject existing = messagesDict[0].get(mo.getId());
-                            if (existing != null) {
+            if (NekoConfig.enableSaveDeletedMessages && loadIndex == 0) {
+                var ctrl = zxc.iconic.xenon.deleted.XenonDeletedMessagesController.getInstance();
+                ctrl.getAllMessagesForDialog(dialog_id, currentAccount, saved -> {
+                    if (saved == null || saved.isEmpty() || chatAdapter == null) return;
+                    if (getDialogId() != dialog_id) return;
+                    for (int i = 0; i < saved.size(); i++) {
+                        MessageObject mo = saved.get(i);
+                        MessageObject existing = messagesDict[0].get(mo.getId());
+                        if (existing != null) {
+                            if (!existing.messageOwner.ayuDeleted) {
                                 existing.messageOwner.ayuDeleted = true;
                                 chatAdapter.updateRowWithMessageObject(existing, true, false);
                                 chatAdapter.invalidateRowWithMessageObject(existing);
-                            } else {
+                            }
+                        } else {
+                            boolean already = false;
+                            for (int j = 0; j < messages.size(); j++) {
+                                if (messages.get(j).getId() == mo.getId()) {
+                                    already = true;
+                                    break;
+                                }
+                            }
+                            if (!already) {
                                 java.util.ArrayList<MessageObject> single = new java.util.ArrayList<>();
                                 single.add(mo);
                                 getNotificationCenter().postNotificationName(NotificationCenter.didReceiveNewMessages, dialog_id, single, false, 0);
                             }
                         }
-                    });
-                }
+                    }
+                });
             }
             if (createUnreadLoading) {
                 createUnreadMessageAfterId = 0;
