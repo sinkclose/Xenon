@@ -5857,6 +5857,83 @@ public class MessagesStorage extends BaseController {
         });
     }
 
+    /**
+     * Xenon: messages saved by the save-deleted-messages feature stay in the local DB
+     * (so their content survives), but they must no longer count toward unread
+     * mention/reply badges since they can never be read. Marks them fully read and
+     * recomputes the affected unread-mention counters for the dialog and its topics.
+     */
+    public void markXenonSavedDeletedMessagesRead(long dialogId, ArrayList<Integer> mids) {
+        if (mids == null || mids.isEmpty()) {
+            return;
+        }
+        storageQueue.postRunnable(() -> {
+            SQLiteCursor cursor = null;
+            try {
+                String idsStr = TextUtils.join(",", mids);
+                database.executeFast(String.format(Locale.US,
+                        "UPDATE messages_v2 SET read_state = read_state | 3 WHERE mid IN (%s) AND uid = %d AND read_state IN(0, 1)",
+                        idsStr, dialogId)).stepThis().dispose();
+                database.executeFast(String.format(Locale.US,
+                        "UPDATE messages_topics SET read_state = read_state | 3 WHERE mid IN (%s) AND uid = %d AND read_state IN(0, 1)",
+                        idsStr, dialogId)).stepThis().dispose();
+
+                int mentions = 0;
+                cursor = database.queryFinalized(String.format(Locale.US,
+                        "SELECT COUNT(mid) FROM messages_v2 WHERE uid = %d AND mention = 1 AND read_state IN(0, 1)", dialogId));
+                if (cursor.next()) {
+                    mentions = cursor.intValue(0);
+                }
+                cursor.dispose();
+                cursor = null;
+                database.executeFast(String.format(Locale.US,
+                        "UPDATE dialogs SET unread_count_i = %d WHERE did = %d", mentions, dialogId)).stepThis().dispose();
+
+                LongSparseIntArray sparseArray = new LongSparseIntArray(1);
+                sparseArray.put(dialogId, mentions);
+                AndroidUtilities.runOnUIThread(() -> getMessagesController().processDialogsUpdateRead(null, sparseArray));
+                if (mentions == 0) {
+                    updateFiltersReadCounter(null, sparseArray, true);
+                }
+
+                ArrayList<Integer> topicIds = new ArrayList<>();
+                cursor = database.queryFinalized(String.format(Locale.US,
+                        "SELECT DISTINCT topic_id FROM messages_topics WHERE uid = %d AND mid IN (%s)", dialogId, idsStr));
+                while (cursor.next()) {
+                    int tid = cursor.intValue(0);
+                    if (tid != 0) {
+                        topicIds.add(tid);
+                    }
+                }
+                cursor.dispose();
+                cursor = null;
+                for (int topicId : topicIds) {
+                    int topicMentions = 0;
+                    cursor = database.queryFinalized(String.format(Locale.US,
+                            "SELECT COUNT(mid) FROM messages_topics WHERE uid = %d AND topic_id = %d AND mention = 1 AND read_state IN(0, 1)",
+                            dialogId, topicId));
+                    if (cursor.next()) {
+                        topicMentions = cursor.intValue(0);
+                    }
+                    cursor.dispose();
+                    cursor = null;
+                    database.executeFast(String.format(Locale.US,
+                            "UPDATE topics SET unread_mentions = %d WHERE did = %d AND topic_id = %d",
+                            topicMentions, dialogId, topicId)).stepThis().dispose();
+                    final int fTopicMentions = topicMentions;
+                    AndroidUtilities.runOnUIThread(() ->
+                            getMessagesController().getTopicsController().updateMentionsUnread(dialogId, topicId, fTopicMentions));
+                }
+            } catch (Exception e) {
+                checkSQLException(e);
+            } finally {
+                if (cursor != null) {
+                    cursor.dispose();
+                }
+            }
+        });
+    }
+
     public void createTaskForMid(long dialogId, int messageId, int time, int readTime, int ttl, boolean inner) {
         storageQueue.postRunnable(() -> {
             SQLitePreparedStatement state = null;

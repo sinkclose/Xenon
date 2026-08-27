@@ -5332,8 +5332,7 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                             currentEncryptedChat == null && message.getId() < 0 ||
                             currentChat != null && ChatObject.isForum(currentChat) && !allowReplyOnOpenTopic ||
                             hasTextSelection() ||
-                            message.isEphemeral() && message.isOut() ||
-                            message != null && message.isAyuDeleted()
+                            message.isEphemeral() && message.isOut()
                         ) {
                             slidingViewSetOffset(0);
                             slidingView = null;
@@ -12855,6 +12854,48 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             if (msg == null || msg.messageOwner == null) continue;
             String caption = msg.messageOwner.message;
             ArrayList<TLRPC.MessageEntity> entities = msg.messageOwner.entities;
+
+            // Xenon: prepend a clickable author attribution — a real forward header
+            // is impossible because the source message no longer exists on the server.
+            // Visual mimics native forward: "Firstname:\n<content>" with clickable name.
+            String authorName = zxc.iconic.xenon.helpers.DeletedMessagesSendHelper.getAuthorName(currentAccount, msg);
+            if (authorName != null) {
+                String prefix;
+                if (TextUtils.isEmpty(caption)) {
+                    prefix = authorName + ":";
+                } else {
+                    prefix = authorName + ":\n";
+                }
+                ArrayList<TLRPC.MessageEntity> prefixedEntities = new ArrayList<>();
+                long mentionUserId = zxc.iconic.xenon.helpers.DeletedMessagesSendHelper.getMentionUserId(currentAccount, msg);
+                TLRPC.MessageEntity authorEntity;
+                if (mentionUserId != 0) {
+                    TLRPC.TL_messageEntityMentionName mention = new TLRPC.TL_messageEntityMentionName();
+                    mention.offset = 0;
+                    mention.length = authorName.length();
+                    mention.user_id = mentionUserId;
+                    authorEntity = mention;
+                } else {
+                    TLRPC.TL_messageEntityBold bold = new TLRPC.TL_messageEntityBold();
+                    bold.offset = 0;
+                    bold.length = authorName.length();
+                    authorEntity = bold;
+                }
+                prefixedEntities.add(authorEntity);
+                int shift = prefix.length();
+                if (entities != null) {
+                    for (int e = 0; e < entities.size(); e++) {
+                        TLRPC.MessageEntity clone = zxc.iconic.xenon.helpers.DeletedMessagesSendHelper.cloneEntity(entities.get(e));
+                        if (clone != null) {
+                            clone.offset += shift;
+                            prefixedEntities.add(clone);
+                        }
+                    }
+                }
+                caption = prefix + (TextUtils.isEmpty(caption) ? "" : caption);
+                entities = prefixedEntities;
+            }
+
             TLRPC.MessageMedia media = MessageObject.getMedia(msg.messageOwner);
             boolean isPhoto = media instanceof TLRPC.TL_messageMediaPhoto && media.photo instanceof TLRPC.TL_photo;
             boolean isDoc = media instanceof TLRPC.TL_messageMediaDocument && msg.getDocument() != null;
@@ -12908,9 +12949,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                         params.monoForumPeer = monoForumPeerId;
                         params.suggestionParams = suggestionParams;
                         getSendMessagesHelper().sendMessage(params);
-                    } else if (!TextUtils.isEmpty(msg.messageOwner.message)) {
+                    } else if (!TextUtils.isEmpty(caption)) {
                         params = SendMessagesHelper.SendMessageParams.of(
-                                msg.messageOwner.message, did, null, null, null, true,
+                                caption, did, null, null, null, true,
                                 entities, null, null, notify, scheduleDate, scheduleRepeatPeriod, null, false);
                         params.monoForumPeer = monoForumPeerId;
                         params.suggestionParams = suggestionParams;
@@ -12970,6 +13011,10 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     private void openForward(boolean fromActionBar) {
+        if (hasSelectedAyuDeletedMessage()) {
+            openForwardForDeleted();
+            return;
+        }
         if (isPeerNoForwards() || hasSelectedNoforwardsMessage()) {
             // We should update text if user changed locale without re-opening chat activity
             String str;
@@ -20091,9 +20136,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                             }
                         }
                     }
-                    // Hide the Reply button for locally-saved deleted messages: replying would
-                    // reference a message id that no longer exists on the server.
-                    boolean showReply = newVisibility == View.VISIBLE && !hasSelectedAyuDeletedMessage();
+                    boolean showReply = newVisibility == View.VISIBLE;
                     actionsButtonsLayout.showReplyButton(showReply, true);
                 }
 
@@ -22217,37 +22260,6 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 }
             }
             checkGroupMessagesOrder();
-            if (NekoConfig.enableSaveDeletedMessages && loadIndex == 0) {
-                var ctrl = zxc.iconic.xenon.deleted.XenonDeletedMessagesController.getInstance();
-                ctrl.getAllMessagesForDialog(dialog_id, currentAccount, saved -> {
-                    if (saved == null || saved.isEmpty() || chatAdapter == null) return;
-                    if (getDialogId() != dialog_id) return;
-                    for (int i = 0; i < saved.size(); i++) {
-                        MessageObject mo = saved.get(i);
-                        MessageObject existing = messagesDict[0].get(mo.getId());
-                        if (existing != null) {
-                            if (!existing.messageOwner.ayuDeleted) {
-                                existing.messageOwner.ayuDeleted = true;
-                                chatAdapter.updateRowWithMessageObject(existing, true, false);
-                                chatAdapter.invalidateRowWithMessageObject(existing);
-                            }
-                        } else {
-                            boolean already = false;
-                            for (int j = 0; j < messages.size(); j++) {
-                                if (messages.get(j).getId() == mo.getId()) {
-                                    already = true;
-                                    break;
-                                }
-                            }
-                            if (!already) {
-                                java.util.ArrayList<MessageObject> single = new java.util.ArrayList<>();
-                                single.add(mo);
-                                getNotificationCenter().postNotificationName(NotificationCenter.didReceiveNewMessages, dialog_id, single, false, 0);
-                            }
-                        }
-                    }
-                });
-            }
             if (createUnreadLoading) {
                 createUnreadMessageAfterId = 0;
             }
@@ -22284,7 +22296,10 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     highlightPollOptionId = pollOptionId;
                 }
                 if (showScrollToMessageError && messageId != startLoadFromMessageId) {
-                    BulletinFactory.of(this).createErrorBulletin(LocaleController.getString(R.string.MessageNotFound), themeDelegate).show();
+                    boolean isDeletedTarget = NekoConfig.enableSaveDeletedMessages && startLoadFromMessageId != 0 && zxc.iconic.xenon.deleted.XenonDeletedMessagesController.getInstance().isMessageSaved(dialog_id, startLoadFromMessageId, currentAccount);
+                    if (!isDeletedTarget) {
+                        BulletinFactory.of(this).createErrorBulletin(LocaleController.getString(R.string.MessageNotFound), themeDelegate).show();
+                    }
                 }
                 scrollToMessage = obj;
                 if (postponedScroll) {
@@ -22320,6 +22335,128 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             }
         }
         checkGroupMessagesOrder();
+        if (NekoConfig.enableSaveDeletedMessages && loadIndex == 0) {
+            int pendingId = zxc.iconic.xenon.deleted.XenonDeletedState.peekPendingHighlight(dialog_id);
+            if (pendingId != 0) {
+                var ctrlPending = zxc.iconic.xenon.deleted.XenonDeletedMessagesController.getInstance();
+                ctrlPending.getMessagesByIds(dialog_id, currentAccount, java.util.Collections.singletonList(pendingId), savedPending -> {
+                    if (savedPending == null || savedPending.isEmpty() || chatAdapter == null) {
+                        zxc.iconic.xenon.deleted.XenonDeletedState.consumePendingHighlight(dialog_id);
+                        return;
+                    }
+                    if (getDialogId() != dialog_id) {
+                        zxc.iconic.xenon.deleted.XenonDeletedState.consumePendingHighlight(dialog_id);
+                        return;
+                    }
+                    MessageObject pendingMo = savedPending.get(0);
+                    MessageObject existing = messagesDict[0].get(pendingMo.getId());
+                    boolean needAdd = false;
+                    if (existing != null) {
+                        if (!existing.messageOwner.ayuDeleted) {
+                            existing.messageOwner.ayuDeleted = true;
+                            chatAdapter.updateRowWithMessageObject(existing, true, false);
+                            chatAdapter.invalidateRowWithMessageObject(existing);
+                        }
+                        pendingMo = existing;
+                    } else {
+                        boolean already = false;
+                        for (MessageObject m : messages) {
+                            if (m.getId() == pendingMo.getId()) {
+                                already = true;
+                                pendingMo = m;
+                                break;
+                            }
+                        }
+                        if (!already) {
+                            needAdd = true;
+                        }
+                    }
+                    if (needAdd) {
+                        java.util.ArrayList<MessageObject> toAdd = new java.util.ArrayList<>();
+                        toAdd.add(pendingMo);
+                        getNotificationCenter().postNotificationName(NotificationCenter.didReceiveNewMessages, dialog_id, toAdd, false, 0);
+                    }
+                    final MessageObject target = pendingMo;
+                    highlightMessageId = pendingId;
+                    scrollToMessage = target;
+                    scrollToMessagePosition = -9000;
+                    zxc.iconic.xenon.deleted.XenonDeletedState.consumePendingHighlight(dialog_id);
+                    AndroidUtilities.runOnUIThread(() -> {
+                        MessageObject found = messagesDict[0].get(pendingId);
+                        if (found == null) {
+                            for (MessageObject m : messages) if (m.getId() == pendingId) { found = m; break; }
+                        }
+                        if (found == null) found = target;
+                        int idx = messages.indexOf(found);
+                        if (idx >= 0 && chatAdapter != null && chatListView != null) {
+                            chatLayoutManager.scrollToPositionWithOffset(chatAdapter.messagesStartRow + idx, 0);
+                        } else {
+                            AndroidUtilities.runOnUIThread(() -> {
+                                MessageObject f2 = messagesDict[0].get(pendingId);
+                                if (f2 == null) for (MessageObject m : messages) if (m.getId() == pendingId) { f2 = m; break; }
+                                if (f2 != null) {
+                                    int idx2 = messages.indexOf(f2);
+                                    if (idx2 >= 0 && chatAdapter != null && chatListView != null) {
+                                        chatLayoutManager.scrollToPositionWithOffset(chatAdapter.messagesStartRow + idx2, 0);
+                                    }
+                                }
+                            }, 500);
+                        }
+                    }, 250);
+                });
+            }
+            if (!messArr.isEmpty()) {
+                int minId = 0;
+                int maxId = 0;
+                for (int i = 0; i < messArr.size(); i++) {
+                    MessageObject o = messArr.get(i);
+                    if (o == null || o.messageOwner instanceof TLRPC.TL_messageEmpty) continue;
+                    int mid = o.getId();
+                    if (mid == 0) continue;
+                    if (minId == 0 || mid < minId) minId = mid;
+                    if (mid > maxId) maxId = mid;
+                }
+                if (maxId != 0) {
+                    // skip range if it only contains the pending message already handled above
+                    if (pendingId != 0 && minId == pendingId && maxId == pendingId) {
+                        // already handled
+                    } else {
+                        var ctrl = zxc.iconic.xenon.deleted.XenonDeletedMessagesController.getInstance();
+                        ctrl.getMessagesForRange(dialog_id, currentAccount, minId, maxId, 0, saved -> {
+                            if (saved == null || saved.isEmpty() || chatAdapter == null) return;
+                            if (getDialogId() != dialog_id) return;
+                            java.util.ArrayList<MessageObject> toAdd = new java.util.ArrayList<>();
+                            for (int i = 0; i < saved.size(); i++) {
+                                MessageObject mo = saved.get(i);
+                                if (mo.getId() == pendingId) continue;
+                                MessageObject existing = messagesDict[0].get(mo.getId());
+                                if (existing != null) {
+                                    if (!existing.messageOwner.ayuDeleted) {
+                                        existing.messageOwner.ayuDeleted = true;
+                                        chatAdapter.updateRowWithMessageObject(existing, true, false);
+                                        chatAdapter.invalidateRowWithMessageObject(existing);
+                                    }
+                                } else {
+                                    boolean already = false;
+                                    for (int j = 0; j < messages.size(); j++) {
+                                        if (messages.get(j).getId() == mo.getId()) {
+                                            already = true;
+                                            break;
+                                        }
+                                    }
+                                    if (!already) {
+                                        toAdd.add(mo);
+                                    }
+                                }
+                            }
+                            if (!toAdd.isEmpty()) {
+                                getNotificationCenter().postNotificationName(NotificationCenter.didReceiveNewMessages, dialog_id, toAdd, false, 0);
+                            }
+                        });
+                    }
+                }
+            }
+        }
         if (createUnreadLoading) {
             createUnreadMessageAfterId = 0;
         }
@@ -34523,6 +34660,10 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     selectedObjectToEditCaption = null;
                     selectedObjectGroup = null;
                     return;
+                }
+                // deleted messages no longer exist on the server — re-send as copy instead
+                if (selectedObject != null && selectedObject.isAyuDeleted()) {
+                    forwardingDeletedMessages = true;
                 }
                 setForwardParams(option == OPTION_FORWARD_NOQUOTE, option == OPTION_FORWARD_NOCAPTION);
                 ForwardItem.setLastForwardOption(option);

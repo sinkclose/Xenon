@@ -21352,6 +21352,9 @@ private boolean hasImportantUnread(TLRPC.Dialog dialog) {
                                 }
                             }
                         }
+                        // saved copies stay in the local DB, so mark them read to keep
+                        // unread mention/reply counters correct
+                        getMessagesStorage().markXenonSavedDeletedMessagesRead(key, new ArrayList<>(savedIds));
                         arrayList.removeAll(savedIds);
                         AndroidUtilities.runOnUIThread(() -> {
                             getNotificationCenter().postNotificationName(NotificationCenter.messagesDeletedNotification, key, savedIds);

@@ -45,6 +45,9 @@ public class XenonDeletedMessagesController {
 
     private void saveMessage(TLRPC.Message message, long dialogId, int accountId) {
         try {
+            // deleted messages must never count as unread mentions/media
+            message.mentioned = false;
+            message.media_unread = false;
             int size = message.getObjectSize();
             FileLog.d("XenonSave: msg " + message.id + " dialog " + dialogId + " size " + size);
             NativeByteBuffer buffer = new NativeByteBuffer(size);
@@ -93,6 +96,11 @@ public class XenonDeletedMessagesController {
         }
     }
 
+    public boolean isMessageSaved(long dialogId, int messageId, int accountId) {
+        File dialogDir = new File(storageDir, dialogId + "_" + accountId);
+        return new File(dialogDir, messageId + ".dat").exists();
+    }
+
     public List<Integer> getExistingMessageIds(long dialogId, List<Integer> messageIds, int accountId) {
         List<Integer> existing = new ArrayList<>();
         File dialogDir = new File(storageDir, dialogId + "_" + accountId);
@@ -124,6 +132,19 @@ public class XenonDeletedMessagesController {
                 for (File f : files) f.delete();
             }
         }
+    }
+
+    private MessageObject buildDeletedMessageObject(TLRPC.Message message, long dialogId, int accountId) {
+        message.ayuDeleted = true;
+        // legacy saved files may still carry unread/mention flags — clear them
+        message.mentioned = false;
+        message.media_unread = false;
+        if (message.dialog_id == 0) {
+            message.dialog_id = dialogId;
+        }
+        MessageObject obj = new MessageObject(accountId, message, true, true);
+        obj.setIsRead();
+        return obj;
     }
 
     public void getMessagesForRange(long dialogId, int accountId, long startId, long endId, int limit, Utilities.Callback<ArrayList<MessageObject>> callback) {
@@ -166,15 +187,8 @@ public class XenonDeletedMessagesController {
                     if (limit > 0 && added >= limit) break;
                     TLRPC.Message message = getMessage(dialogId, msgId, accountId);
                     if (message == null) continue;
-                    message.ayuDeleted = true;
-                    if (message.dialog_id == 0) {
-                        message.dialog_id = dialogId;
-                    }
                     try {
-                        MessageObject obj = new MessageObject(accountId, message, true, true);
-                        // ensure the message is rendered as already read
-                        obj.setIsRead();
-                        result.add(obj);
+                        result.add(buildDeletedMessageObject(message, dialogId, accountId));
                         added++;
                     } catch (Exception e) {
                         FileLog.e("XenonReinject build MessageObject", e);
@@ -188,13 +202,13 @@ public class XenonDeletedMessagesController {
         });
     }
 
-    private void finishReinject(ArrayList<MessageObject> result, Utilities.Callback<ArrayList<MessageObject>> callback) {
+    private <T> void finishReinject(ArrayList<T> result, Utilities.Callback<ArrayList<T>> callback) {
         if (callback == null) return;
         AndroidUtilities.runOnUIThread(() -> callback.run(result));
     }
 
     /**
-     * Loads every saved deleted message for a dialog, sorted by message id ascending
+     * Loads saved deleted messages for a dialog sorted by message id ascending
      * (oldest first), as a list of {@link MessageObject} ready for display. Runs the
      * file I/O off the main thread and delivers the result on the UI thread.
      */
@@ -207,20 +221,48 @@ public class XenonDeletedMessagesController {
                 for (int msgId : ids) {
                     TLRPC.Message message = getMessage(dialogId, msgId, accountId);
                     if (message == null) continue;
-                    message.ayuDeleted = true;
-                    if (message.dialog_id == 0) {
-                        message.dialog_id = dialogId;
-                    }
                     try {
-                        MessageObject obj = new MessageObject(accountId, message, true, true);
-                        obj.setIsRead();
-                        result.add(obj);
+                        result.add(buildDeletedMessageObject(message, dialogId, accountId));
                     } catch (Exception e) {
                         FileLog.e("XenonViewDeleted build MessageObject", e);
                     }
                 }
             } catch (Exception e) {
                 FileLog.e("XenonViewDeleted load", e);
+            }
+            finishReinject(result, callback);
+        });
+    }
+
+    /**
+     * Returns all saved message ids for a dialog sorted ascending (oldest first),
+     * off the main thread.
+     */
+    public void getSortedSavedMessageIds(long dialogId, int accountId, Utilities.Callback<ArrayList<Integer>> callback) {
+        Utilities.globalQueue.postRunnable(() -> {
+            ArrayList<Integer> ids = new ArrayList<>(getAllSavedMessageIds(dialogId, accountId));
+            Collections.sort(ids);
+            finishReinject(ids, callback);
+        });
+    }
+
+    /**
+     * Builds MessageObjects only for the given (ascending) message ids. Used for
+     * paged loading so we never deserialize more messages than requested.
+     */
+    public void getMessagesByIds(long dialogId, int accountId, List<Integer> msgIds, Utilities.Callback<ArrayList<MessageObject>> callback) {
+        Utilities.globalQueue.postRunnable(() -> {
+            ArrayList<MessageObject> result = new ArrayList<>();
+            if (msgIds != null) {
+                for (int msgId : msgIds) {
+                    TLRPC.Message message = getMessage(dialogId, msgId, accountId);
+                    if (message == null) continue;
+                    try {
+                        result.add(buildDeletedMessageObject(message, dialogId, accountId));
+                    } catch (Exception e) {
+                        FileLog.e("XenonPaged build MessageObject", e);
+                    }
+                }
             }
             finishReinject(result, callback);
         });

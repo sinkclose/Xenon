@@ -27,4 +27,22 @@ public class XenonDeletedState {
         if (list == null) return;
         list.remove((Object) messageId);
     }
+
+    private static final LongSparseArray<Integer> pendingHighlight = new LongSparseArray<>();
+
+    public static void setPendingHighlight(long dialogId, int messageId) {
+        pendingHighlight.put(dialogId, messageId);
+    }
+
+    public static int consumePendingHighlight(long dialogId) {
+        Integer v = pendingHighlight.get(dialogId);
+        if (v == null) return 0;
+        pendingHighlight.remove(dialogId);
+        return v;
+    }
+
+    public static int peekPendingHighlight(long dialogId) {
+        Integer v = pendingHighlight.get(dialogId);
+        return v != null ? v : 0;
+    }
 }

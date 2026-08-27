@@ -7787,6 +7787,20 @@ public class ChatActivityEnterView extends FrameLayout implements
             parentFragment.showQuoteMessageUpdate();
             return false;
         }
+        // Xenon: a locally-saved deleted message cannot be referenced on the server,
+        // so instead of sending a dangling reply we embed its content as a collapsed
+        // quote (clickable author + original text) at the top of the outgoing message
+        if (replyingMessageObject != null && replyingMessageObject.isAyuDeleted() && replyingMessageObject.messageOwner != null) {
+            CharSequence quote = buildXenonDeletedQuote(replyingMessageObject);
+            replyingMessageObject = null;
+            if (!TextUtils.isEmpty(quote)) {
+                SpannableStringBuilder combined = new SpannableStringBuilder(quote);
+                if (!TextUtils.isEmpty(text)) {
+                    combined.append(text);
+                }
+                text = combined;
+            }
+        }
         int[] emojiOnly = new int[1];
         Emoji.parseEmojis(text, emojiOnly);
         boolean hasOnlyEmoji = emojiOnly[0] > 0;
@@ -7910,6 +7924,34 @@ public class ChatActivityEnterView extends FrameLayout implements
 
     public long getSendMonoForumPeerId() {
         return parentFragment != null ? parentFragment.getSendMonoForumPeerId() : 0;
+    }
+
+    /**
+     * Xenon: builds the collapsed-quote prefix used when replying to a locally-saved
+     * deleted message: clickable author name on the first line, original content below,
+     * all wrapped into a collapsible blockquote entity.
+     */
+    private CharSequence buildXenonDeletedQuote(MessageObject msg) {
+        int account = currentAccount;
+        String authorName = zxc.iconic.xenon.helpers.DeletedMessagesSendHelper.getAuthorName(account, msg);
+        String content = zxc.iconic.xenon.helpers.DeletedMessagesSendHelper.describeContent(msg);
+        SpannableStringBuilder sb = new SpannableStringBuilder();
+        if (!TextUtils.isEmpty(authorName)) {
+            sb.append(authorName).append('\n');
+            long mentionUserId = zxc.iconic.xenon.helpers.DeletedMessagesSendHelper.getMentionUserId(account, msg);
+            if (mentionUserId != 0) {
+                sb.setSpan(new URLSpanUserMention(String.valueOf(mentionUserId), 3), 0, authorName.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+        }
+        if (!TextUtils.isEmpty(content)) {
+            sb.append(content);
+        }
+        if (sb.length() == 0) {
+            return null;
+        }
+        QuoteSpan.putQuote(sb, 0, sb.length(), true);
+        sb.append('\n');
+        return sb;
     }
 
     public MessageSuggestionParams getSendMessageSuggestionParams() {
