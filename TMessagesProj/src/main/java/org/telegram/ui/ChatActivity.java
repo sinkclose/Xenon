@@ -1116,6 +1116,15 @@ public class ChatActivity extends BaseFragment implements
     private boolean postponedScrollIsCanceled;
     private ChatActivityTextSelectionHelper textSelectionHelper;
     private View slidingView;
+    // Xenon: swipe bubbles vertical menu (Reply/Edit/Delete)
+    private int swipeBubbleSelected = OPTION_REPLY;
+    private float swipeVerticalOffset = 0;
+    private float swipeVerticalStartY = 0;
+    private boolean swipeVerticalTracking = false;
+    private int lastVibratedSelection = 0;
+    private float swipeDisplayOffset = 0;
+    private android.animation.ValueAnimator swipeOffsetAnimator;
+    private float bubblesAppearProgress = 0f;
 
     private final float[] tmpOverlayPos = new float[2];
     private float[] computeArticleOverlayPos(View overlay) {
@@ -4981,8 +4990,8 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                     .setMinValue(0f)
                     .setMaxValue(springMultiplier)
                     .setSpring(new SpringForce(0)
-                            .setStiffness(SpringForce.STIFFNESS_MEDIUM)
-                            .setDampingRatio(SpringForce.DAMPING_RATIO_NO_BOUNCY))
+                            .setStiffness(130f)
+                            .setDampingRatio(0.94f))
                     .addUpdateListener((animation, value, velocity) -> invalidate());
             private FloatValueHolder slidingFillProgress = new FloatValueHolder(0);
             private SpringAnimation slidingFillProgressSpring = new SpringAnimation(slidingFillProgress)
@@ -5182,13 +5191,21 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                 boolean visible = translationX <= -AndroidUtilities.dp(20);
                 float endVisibleValue = visible ? springMultiplier : 0;
                 if (endVisibleValue != slidingDrawableVisibilitySpring.getSpring().getFinalPosition()) {
+                    float hs = visible ? 130f : 900f;
+                    float hd = visible ? 0.94f : 0.95f;
+                    slidingDrawableVisibilitySpring.getSpring().setStiffness(hs).setDampingRatio(hd);
                     slidingDrawableVisibilitySpring.getSpring().setFinalPosition(endVisibleValue);
                     if (!slidingDrawableVisibilitySpring.isRunning()) {
                         slidingDrawableVisibilitySpring.start();
                     }
                 }
 
-                float iconProgress = slidingDrawableVisibilityProgress.getValue() / springMultiplier;
+                float rawIconProgress = slidingDrawableVisibilityProgress.getValue() / springMultiplier;
+                float hideFactor = 1f;
+                if (translationX > -AndroidUtilities.dp(20)) {
+                    hideFactor = Math.max(0f, Math.min(1f, (-translationX) / (float) AndroidUtilities.dp(20)));
+                }
+                float iconProgress = rawIconProgress * hideFactor;
                 MessageObject slidingMsg = getSlidingMessageObject();
                 float x = getMeasuredWidth() + translationX * (slidingMsg != null && slidingMsg.isOut() ? 0.5f : 1f);
                 float y = slidingView.getTop() + slidingView.getMeasuredHeight() / 2f;
@@ -5202,6 +5219,14 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                     Theme.applyServiceShaderMatrix(getMeasuredWidth(), AndroidUtilities.displaySize.y, 0, getY() + AndroidUtilities.rectTmp.top);
                     if (fillProgress == 0) {
                         int outlineAlpha = outlineActionBackgroundPaint.getAlpha();
+                        // soft shadow behind outline - blurred
+                        outlineActionBackgroundPaint.setAlpha((int) (outlineAlpha * iconProgress * 0.14f));
+                        float prevW = outlineActionBackgroundPaint.getStrokeWidth();
+                        outlineActionBackgroundPaint.setStrokeWidth(prevW + AndroidUtilities.dp(7));
+                        outlineActionBackgroundPaint.setShadowLayer(AndroidUtilities.dp(7), 0, 0, android.graphics.Color.argb((int)(outlineAlpha * iconProgress * 0.18f), 0,0,0));
+                        canvas.drawArc(AndroidUtilities.rectTmp, -90, 360 * progress, false, outlineActionBackgroundPaint);
+                        outlineActionBackgroundPaint.clearShadowLayer();
+                        outlineActionBackgroundPaint.setStrokeWidth(prevW);
                         outlineActionBackgroundPaint.setAlpha((int) (outlineAlpha * iconProgress));
                         canvas.drawArc(AndroidUtilities.rectTmp, -90, 360 * progress, false, outlineActionBackgroundPaint);
                         outlineActionBackgroundPaint.setAlpha(outlineAlpha);
@@ -5211,61 +5236,71 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                             if (isDark) {
                                 outlineActionBackgroundDarkenPaint.setColor(Color.WHITE);
                             }
+                            float prevW2 = outlineActionBackgroundDarkenPaint.getStrokeWidth();
+                            outlineActionBackgroundDarkenPaint.setAlpha((int) (outlineAlpha * iconProgress * 0.14f));
+                            outlineActionBackgroundDarkenPaint.setStrokeWidth(prevW2 + AndroidUtilities.dp(7));
+                            outlineActionBackgroundDarkenPaint.setShadowLayer(AndroidUtilities.dp(7), 0, 0, android.graphics.Color.argb((int)(outlineAlpha * iconProgress * 0.18f), 0,0,0));
+                            canvas.drawArc(AndroidUtilities.rectTmp, -90, 360 * progress, false, outlineActionBackgroundDarkenPaint);
+                            outlineActionBackgroundDarkenPaint.clearShadowLayer();
+                            outlineActionBackgroundDarkenPaint.setStrokeWidth(prevW2);
                             outlineActionBackgroundDarkenPaint.setAlpha((int) (outlineAlpha * iconProgress));
                             canvas.drawArc(AndroidUtilities.rectTmp, -90, 360 * progress, false, outlineActionBackgroundDarkenPaint);
                         }
                     }
                 }
-                AndroidUtilities.rectTmp.set((int) (x - AndroidUtilities.dp(16) * scale), (int) (y - AndroidUtilities.dp(16) * scale), (int) (x + AndroidUtilities.dp(16) * scale), (int) (y + AndroidUtilities.dp(16) * scale));
-                Theme.applyServiceShaderMatrix(getMeasuredWidth(), AndroidUtilities.displaySize.y, 0, getY() + AndroidUtilities.rectTmp.top);
-                path.rewind();
-                path.addRoundRect(AndroidUtilities.rectTmp, AndroidUtilities.dp(16) * scale, AndroidUtilities.dp(16) * scale, Path.Direction.CW);
-
-                int wasAlpha = chatActionBackgroundPaint.getAlpha();
-                chatActionBackgroundPaint.setAlpha((int) (iconProgress * 0.6f * progress * wasAlpha));
-                canvas.drawPath(path, chatActionBackgroundPaint);
-                chatActionBackgroundPaint.setAlpha(wasAlpha);
-
-                if (themeDelegate.hasGradientService()) {
-                    wasAlpha = Theme.chat_actionBackgroundGradientDarkenPaint.getAlpha();
-                    if (isDark) {
-                        Theme.chat_actionBackgroundGradientDarkenPaint.setColor(Color.WHITE);
-                    }
-                    Theme.chat_actionBackgroundGradientDarkenPaint.setAlpha((int) (iconProgress * 0.6f * progress * wasAlpha));
-                    canvas.drawPath(path, Theme.chat_actionBackgroundGradientDarkenPaint);
-                    Theme.chat_actionBackgroundGradientDarkenPaint.setAlpha(wasAlpha);
-                }
-
-                if (clearScale != 0f) {
-                    AndroidUtilities.rectTmp.set((int) (x - AndroidUtilities.dp(16) * clearScale), (int) (y - AndroidUtilities.dp(16) * clearScale), (int) (x + AndroidUtilities.dp(16) * clearScale), (int) (y + AndroidUtilities.dp(16) * clearScale));
+                int wasAlpha = 0;
+                if (!zxc.iconic.xenon.NekoConfig.swipeOtherBubbles) {
+                    AndroidUtilities.rectTmp.set((int) (x - AndroidUtilities.dp(16) * scale), (int) (y - AndroidUtilities.dp(16) * scale), (int) (x + AndroidUtilities.dp(16) * scale), (int) (y + AndroidUtilities.dp(16) * scale));
+                    Theme.applyServiceShaderMatrix(getMeasuredWidth(), AndroidUtilities.displaySize.y, 0, getY() + AndroidUtilities.rectTmp.top);
                     path.rewind();
-                    path.addRoundRect(AndroidUtilities.rectTmp, AndroidUtilities.dp(16), AndroidUtilities.dp(16), Path.Direction.CW);
+                    path.addRoundRect(AndroidUtilities.rectTmp, AndroidUtilities.dp(16) * scale, AndroidUtilities.dp(16) * scale, Path.Direction.CW);
 
-                    canvas.save();
-                    canvas.clipPath(path, Region.Op.DIFFERENCE);
-                }
+                    wasAlpha = chatActionBackgroundPaint.getAlpha();
+                    chatActionBackgroundPaint.setAlpha((int) (iconProgress * 0.6f * progress * wasAlpha));
+                    canvas.drawPath(path, chatActionBackgroundPaint);
+                    chatActionBackgroundPaint.setAlpha(wasAlpha);
 
-                AndroidUtilities.rectTmp.set((int) (x - AndroidUtilities.dp(16) * scale), (int) (y - AndroidUtilities.dp(16) * scale), (int) (x + AndroidUtilities.dp(16) * scale), (int) (y + AndroidUtilities.dp(16) * scale));
-                Theme.applyServiceShaderMatrix(getMeasuredWidth(), AndroidUtilities.displaySize.y, 0, getY() + AndroidUtilities.rectTmp.top);
-                path.rewind();
-                path.addRoundRect(AndroidUtilities.rectTmp, AndroidUtilities.dp(16) * scale, AndroidUtilities.dp(16) * scale, Path.Direction.CW);
-
-                wasAlpha = chatActionBackgroundPaint.getAlpha();
-                chatActionBackgroundPaint.setAlpha((int) (iconProgress * 0.4f * wasAlpha));
-                canvas.drawPath(path, chatActionBackgroundPaint);
-                chatActionBackgroundPaint.setAlpha(wasAlpha);
-
-                if (themeDelegate.hasGradientService()) {
-                    wasAlpha = Theme.chat_actionBackgroundGradientDarkenPaint.getAlpha();
-                    if (isDark) {
-                        Theme.chat_actionBackgroundGradientDarkenPaint.setColor(Color.WHITE);
+                    if (themeDelegate.hasGradientService()) {
+                        wasAlpha = Theme.chat_actionBackgroundGradientDarkenPaint.getAlpha();
+                        if (isDark) {
+                            Theme.chat_actionBackgroundGradientDarkenPaint.setColor(Color.WHITE);
+                        }
+                        Theme.chat_actionBackgroundGradientDarkenPaint.setAlpha((int) (iconProgress * 0.6f * progress * wasAlpha));
+                        canvas.drawPath(path, Theme.chat_actionBackgroundGradientDarkenPaint);
+                        Theme.chat_actionBackgroundGradientDarkenPaint.setAlpha(wasAlpha);
                     }
-                    Theme.chat_actionBackgroundGradientDarkenPaint.setAlpha((int) (iconProgress * 0.4f * wasAlpha));
-                    canvas.drawPath(path, Theme.chat_actionBackgroundGradientDarkenPaint);
-                    Theme.chat_actionBackgroundGradientDarkenPaint.setAlpha(wasAlpha);
-                }
-                if (clearScale != 0f) {
-                    canvas.restore();
+
+                    if (clearScale != 0f) {
+                        AndroidUtilities.rectTmp.set((int) (x - AndroidUtilities.dp(16) * clearScale), (int) (y - AndroidUtilities.dp(16) * clearScale), (int) (x + AndroidUtilities.dp(16) * clearScale), (int) (y + AndroidUtilities.dp(16) * clearScale));
+                        path.rewind();
+                        path.addRoundRect(AndroidUtilities.rectTmp, AndroidUtilities.dp(16), AndroidUtilities.dp(16), Path.Direction.CW);
+
+                        canvas.save();
+                        canvas.clipPath(path, Region.Op.DIFFERENCE);
+                    }
+
+                    AndroidUtilities.rectTmp.set((int) (x - AndroidUtilities.dp(16) * scale), (int) (y - AndroidUtilities.dp(16) * scale), (int) (x + AndroidUtilities.dp(16) * scale), (int) (y + AndroidUtilities.dp(16) * scale));
+                    Theme.applyServiceShaderMatrix(getMeasuredWidth(), AndroidUtilities.displaySize.y, 0, getY() + AndroidUtilities.rectTmp.top);
+                    path.rewind();
+                    path.addRoundRect(AndroidUtilities.rectTmp, AndroidUtilities.dp(16) * scale, AndroidUtilities.dp(16) * scale, Path.Direction.CW);
+
+                    wasAlpha = chatActionBackgroundPaint.getAlpha();
+                    chatActionBackgroundPaint.setAlpha((int) (iconProgress * 0.4f * wasAlpha));
+                    canvas.drawPath(path, chatActionBackgroundPaint);
+                    chatActionBackgroundPaint.setAlpha(wasAlpha);
+
+                    if (themeDelegate.hasGradientService()) {
+                        wasAlpha = Theme.chat_actionBackgroundGradientDarkenPaint.getAlpha();
+                        if (isDark) {
+                            Theme.chat_actionBackgroundGradientDarkenPaint.setColor(Color.WHITE);
+                        }
+                        Theme.chat_actionBackgroundGradientDarkenPaint.setAlpha((int) (iconProgress * 0.4f * wasAlpha));
+                        canvas.drawPath(path, Theme.chat_actionBackgroundGradientDarkenPaint);
+                        Theme.chat_actionBackgroundGradientDarkenPaint.setAlpha(wasAlpha);
+                    }
+                    if (clearScale != 0f) {
+                        canvas.restore();
+                    }
                 }
 
                 float outerRingProgress = slidingOuterRingProgress.getValue() / springMultiplier;
@@ -5302,11 +5337,263 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                 }
 
                 int alpha = (int) (iconProgress * 0xFF);
-                Drawable replyIconDrawable = getThemedDrawable(Theme.key_drawable_replyIcon);
-                replyIconDrawable.setAlpha(alpha);
-                replyIconDrawable.setBounds((int) (x - replyIconDrawable.getIntrinsicWidth() / 2 * scale), (int) (y - replyIconDrawable.getIntrinsicHeight() / 2 * scale), (int) (x + replyIconDrawable.getIntrinsicWidth() / 2 * scale), (int) (y + replyIconDrawable.getIntrinsicHeight() / 2 * scale));
-                replyIconDrawable.draw(canvas);
-                replyIconDrawable.setAlpha(255);
+                if (zxc.iconic.xenon.NekoConfig.swipeOtherBubbles && slidingView != null && iconProgress > 0) {
+                    Drawable replyIcon = getThemedDrawable(Theme.key_drawable_replyIcon);
+                    Drawable editIcon;
+                    Drawable deleteIcon;
+                    Drawable copyIcon;
+                    Drawable forwardIcon;
+                    Drawable saveIcon;
+                    Drawable pinIcon;
+                    Drawable selectIcon;
+                    Drawable translateIcon;
+                    try { editIcon = getContext().getResources().getDrawable(R.drawable.msg_edit).mutate(); } catch (Exception e) { editIcon = replyIcon; }
+                    try { deleteIcon = getContext().getResources().getDrawable(R.drawable.msg_delete).mutate(); } catch (Exception e) { deleteIcon = replyIcon; }
+                    try { copyIcon = getContext().getResources().getDrawable(R.drawable.msg_copy).mutate(); } catch (Exception e) { copyIcon = replyIcon; }
+                    try { forwardIcon = getContext().getResources().getDrawable(R.drawable.msg_forward).mutate(); } catch (Exception e) { forwardIcon = replyIcon; }
+                    try { saveIcon = getContext().getResources().getDrawable(R.drawable.msg_saved).mutate(); } catch (Exception e) { saveIcon = replyIcon; }
+                    try { pinIcon = getContext().getResources().getDrawable(R.drawable.msg_pin).mutate(); } catch (Exception e) { pinIcon = replyIcon; }
+                    try { selectIcon = getContext().getResources().getDrawable(R.drawable.msg_select).mutate(); } catch (Exception e) { selectIcon = replyIcon; }
+                    try { translateIcon = getContext().getResources().getDrawable(R.drawable.msg_translate).mutate(); } catch (Exception e) { translateIcon = replyIcon; }
+                    MessageObject mo = getSlidingMessageObject();
+                    // Build bubbles exactly from popup menu for this message
+                    java.util.ArrayList<Drawable> iconList = new java.util.ArrayList<>();
+                    java.util.ArrayList<Integer> idxList = new java.util.ArrayList<>();
+                    if (mo != null) {
+                        MessageObject prevSel = selectedObject;
+                        MessageObject.GroupedMessages prevGroup = selectedObjectGroup;
+                        MessageObject prevCaption = selectedObjectToEditCaption;
+                        selectedObject = mo;
+                        selectedObjectGroup = getValidGroupedMessage(mo);
+                        selectedObjectToEditCaption = null;
+                        java.util.ArrayList<Integer> popupIconsRes = new java.util.ArrayList<>();
+                        java.util.ArrayList<CharSequence> popupItemsTmp = new java.util.ArrayList<>();
+                        java.util.ArrayList<Integer> popupOpts = new java.util.ArrayList<>();
+                        try { fillMessageMenu(mo, popupIconsRes, popupItemsTmp, popupOpts); } catch (Exception ignore) {}
+                        selectedObject = prevSel;
+                        selectedObjectGroup = prevGroup;
+                        selectedObjectToEditCaption = prevCaption;
+                        if (popupOpts.isEmpty()) {
+                            popupOpts.add(OPTION_REPLY);
+                            popupIconsRes.add(R.drawable.menu_reply);
+                        }
+                        for (int i = 0; i < popupOpts.size(); i++) {
+                            int res = i < popupIconsRes.size() ? popupIconsRes.get(i) : R.drawable.menu_reply;
+                            Drawable d;
+                            try { d = getContext().getResources().getDrawable(res).mutate(); } catch (Exception e) { d = replyIcon; }
+                            if (d != null) {
+                                int col = isDark ? 0xFFFFFFFF : 0xFF1A1A1A;
+                                d.setColorFilter(new android.graphics.PorterDuffColorFilter(col, android.graphics.PorterDuff.Mode.SRC_IN));
+                            }
+                            iconList.add(d);
+                            idxList.add(popupOpts.get(i));
+                        }
+                    } else {
+                        iconList.add(replyIcon); idxList.add(OPTION_REPLY);
+                    }
+                    // labels for names mode
+                    java.util.ArrayList<CharSequence> labelList = new java.util.ArrayList<>();
+                    if (mo != null) {
+                        MessageObject prevSel2 = selectedObject;
+                        MessageObject.GroupedMessages prevGroup2 = selectedObjectGroup;
+                        MessageObject prevCaption2 = selectedObjectToEditCaption;
+                        selectedObject = mo;
+                        selectedObjectGroup = getValidGroupedMessage(mo);
+                        selectedObjectToEditCaption = null;
+                        java.util.ArrayList<Integer> tmpIcons = new java.util.ArrayList<>();
+                        java.util.ArrayList<CharSequence> tmpItems = new java.util.ArrayList<>();
+                        java.util.ArrayList<Integer> tmpOpts = new java.util.ArrayList<>();
+                        try { fillMessageMenu(mo, tmpIcons, tmpItems, tmpOpts); } catch (Exception ignore) {}
+                        selectedObject = prevSel2;
+                        selectedObjectGroup = prevGroup2;
+                        selectedObjectToEditCaption = prevCaption2;
+                        if (tmpOpts.size() == idxList.size()) {
+                            for (int i = 0; i < tmpOpts.size(); i++) labelList.add(tmpItems.get(i) != null ? tmpItems.get(i) : "");
+                        } else {
+                            for (int i = 0; i < idxList.size(); i++) labelList.add("");
+                        }
+                    } else {
+                        labelList.add("Reply");
+                    }
+                    while (labelList.size() < idxList.size()) labelList.add("");
+                    int count = iconList.size();
+                    float spacing = AndroidUtilities.dp(36);
+                    float _taEarly = (Math.abs(translationX) >= AndroidUtilities.dp(48) && iconProgress > 0.82f) ? 1f : 0f;
+                    bubblesAppearProgress += (_taEarly - bubblesAppearProgress) * 0.045f;
+                    if (Math.abs(_taEarly - bubblesAppearProgress) > 0.005f) invalidate(); else bubblesAppearProgress = _taEarly;
+                    // only allow pulling up (negative), not down beyond top
+                    float maxDy = (count - 1) * spacing;
+                    float clampedDy = Math.max(-maxDy, Math.min(0, swipeVerticalOffset));
+                    float raw = -clampedDy / spacing;
+                    int newSelPos;
+                    if (idxList.size() > 1 && swipeBubbleSelected == idxList.get(0) && raw < 0.85f) {
+                        newSelPos = 0;
+                    } else {
+                        newSelPos = Math.round(raw);
+                    }
+                    newSelPos = Math.max(0, Math.min(count - 1, newSelPos));
+                    if (bubblesAppearProgress < 0.02f) newSelPos = 0;
+                    int newSel = idxList.get(newSelPos);
+                    if (newSel != swipeBubbleSelected) {
+                        swipeBubbleSelected = newSel;
+                        if (lastVibratedSelection != newSel) {
+                            try { performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING); } catch (Exception ignore) {}
+                            lastVibratedSelection = newSel;
+                        }
+                        // spring overshoot
+                        float target = -newSelPos * spacing;
+                        if (swipeOffsetAnimator != null) swipeOffsetAnimator.cancel();
+                        swipeOffsetAnimator = android.animation.ValueAnimator.ofFloat(swipeDisplayOffset, target);
+                        swipeOffsetAnimator.setDuration(260);
+                        swipeOffsetAnimator.setInterpolator(new android.view.animation.OvershootInterpolator(1.35f));
+                        swipeOffsetAnimator.addUpdateListener(a -> { swipeDisplayOffset = (float) a.getAnimatedValue(); invalidate(); });
+                        swipeOffsetAnimator.start();
+                    }
+                    // snap with ease + subtle drag while scrolling
+                    float targetOffset = -newSelPos * spacing;
+                    // subtle up/down while dragging between snaps
+                    float dragRemainder = clampedDy + newSelPos * spacing;
+                    float dragOffset = dragRemainder * 0.22f;
+                    swipeDisplayOffset += (targetOffset - swipeDisplayOffset) * 0.32f;
+                    if (Math.abs(targetOffset - swipeDisplayOffset) < 0.5f) swipeDisplayOffset = targetOffset;
+                    else if (count > 1) invalidate();
+                    // show names + right-aligned pills over message
+                    boolean showNames = zxc.iconic.xenon.NekoConfig.swipeOtherBubbles && zxc.iconic.xenon.NekoConfig.swipeBubbleShowNames;
+                    Paint labelPaint = null;
+                    float labelBubbleScaleMul = 1f;
+                    float labelTextSize = AndroidUtilities.dp(12);
+                    if (showNames && !labelList.isEmpty()) {
+                        labelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                        labelPaint.setTextSize(labelTextSize);
+                        try { labelPaint.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf")); } catch (Exception ignore) {}
+                        labelPaint.setColor(isDark ? Color.WHITE : 0xFF1A1A1A);
+                        labelPaint.clearShadowLayer();
+                        float maxW = 0;
+                        for (CharSequence cs : labelList) if (cs != null) maxW = Math.max(maxW, labelPaint.measureText(cs.toString()));
+                        if (maxW > AndroidUtilities.dp(84)) {
+                            labelTextSize = AndroidUtilities.dp(11);
+                            labelPaint.setTextSize(labelTextSize);
+                            labelBubbleScaleMul = 0.9f;
+                        }
+                    }
+                    for (int p = 0; p < count; p++) {
+                        Drawable d = iconList.get(p);
+                        float bubbleY = y + p * spacing + swipeDisplayOffset + dragOffset;
+                        float appearGate = 1f;
+                        if (p > 0) {
+                            float staggerStep = count > 2 ? 0.68f / (count - 1) : 0.18f;
+                            float stagger = (p - 1) * staggerStep;
+                            appearGate = Math.max(0f, Math.min(1f, (bubblesAppearProgress * 1.75f - stagger) / 0.62f));
+                            if (appearGate < 0.02f) continue;
+                        }
+                        float dist = Math.abs(bubbleY - y) / spacing;
+                        float t = 1f - Math.min(1f, dist);
+                        t = t * t;
+                        float bubbleScale = scale * (0.78f + 0.22f * t) * labelBubbleScaleMul;
+                        int bubbleAlpha = (int) (alpha * (0.45f + 0.55f * t));
+                        if (p > 0) {
+                            bubbleAlpha = (int) (bubbleAlpha * appearGate);
+                            bubbleScale *= (0.75f + 0.25f * appearGate);
+                        }
+                        // above bubbles keep same alpha/scale as below (no extra fade)
+                        float bx, labelTx = 0, labelW = 0;
+                        String labelStr = null;
+                        float bScale = bubbleScale;
+                        float by = bubbleY;
+                        if (showNames && labelPaint != null && p < labelList.size()) {
+                            CharSequence lab = labelList.get(p);
+                            if (lab != null && lab.length() > 0) {
+                                labelStr = lab.toString();
+                                float tw = labelPaint.measureText(labelStr);
+                                float maxTw = AndroidUtilities.dp(180);
+                                if (tw > maxTw) {
+                                    int len = labelPaint.breakText(labelStr, true, maxTw, null);
+                                    if (len > 1) labelStr = labelStr.substring(0, len - 1) + "…";
+                                    tw = labelPaint.measureText(labelStr);
+                                }
+                                float textScaleMul = 0.92f + 0.08f * t;
+                                labelW = tw * textScaleMul;
+                                // right-aligned to screen edge: pillRight = x + 16*bScale
+                                bx = x + AndroidUtilities.dp(16) * bScale - (labelW + AndroidUtilities.dp(32) * bScale + AndroidUtilities.dp(10) * bScale);
+                                if (bx < AndroidUtilities.dp(8)) bx = AndroidUtilities.dp(8);
+                                labelTx = bx + AndroidUtilities.dp(16) * bScale + AndroidUtilities.dp(6) * bScale;
+                            } else {
+                                bx = x - AndroidUtilities.dp(18) - (p > 0 ? 0 : 0);
+                            }
+                        } else {
+                            bx = x;
+                        }
+                        if (showNames && labelStr != null) {
+                            // pill over message with soft shadow
+                            float pillLeft = bx - AndroidUtilities.dp(16) * bScale;
+                            float pillRight = labelTx + labelW + AndroidUtilities.dp(10) * bScale;
+                            float pillTop = by - AndroidUtilities.dp(14) * bScale;
+                            float pillBottom = by + AndroidUtilities.dp(14) * bScale;
+                            float pillRad = AndroidUtilities.dp(14) * bScale;
+                            Theme.applyServiceShaderMatrix(getMeasuredWidth(), AndroidUtilities.displaySize.y, 0, getY() + pillTop);
+                            path.rewind();
+                            AndroidUtilities.rectTmp.set((int) pillLeft, (int) pillTop, (int) pillRight, (int) pillBottom);
+                            path.addRoundRect(AndroidUtilities.rectTmp, pillRad, pillRad, Path.Direction.CW);
+                            Paint shadowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                            shadowPaint.setColor(0x22000000);
+                            for (int s = 3; s >= 1; s--) {
+                                float pad = AndroidUtilities.dp(s * 2);
+                                float a = (bubbleAlpha * (0.18f - s * 0.03f));
+                                if (a < 4) continue;
+                                shadowPaint.setAlpha((int) a);
+                                path.rewind();
+                                AndroidUtilities.rectTmp.set((int)(pillLeft - pad), (int)(pillTop - pad), (int)(pillRight + pad), (int)(pillBottom + pad));
+                                path.addRoundRect(AndroidUtilities.rectTmp, pillRad + pad, pillRad + pad, Path.Direction.CW);
+                                canvas.drawPath(path, shadowPaint);
+                            }
+                            path.rewind();
+                            AndroidUtilities.rectTmp.set((int) pillLeft, (int) pillTop, (int) pillRight, (int) pillBottom);
+                            path.addRoundRect(AndroidUtilities.rectTmp, pillRad, pillRad, Path.Direction.CW);
+                            int wasAlpha2 = chatActionBackgroundPaint.getAlpha();
+                            chatActionBackgroundPaint.setAlpha((int) (bubbleAlpha * 0.92f));
+                            canvas.drawPath(path, chatActionBackgroundPaint);
+                            chatActionBackgroundPaint.setAlpha(wasAlpha2);
+                        } else {
+                            AndroidUtilities.rectTmp.set((int)(bx - AndroidUtilities.dp(16) * bScale), (int)(by - AndroidUtilities.dp(16) * bScale), (int)(bx + AndroidUtilities.dp(16) * bScale), (int)(by + AndroidUtilities.dp(16) * bScale));
+                            Theme.applyServiceShaderMatrix(getMeasuredWidth(), AndroidUtilities.displaySize.y, 0, getY() + AndroidUtilities.rectTmp.top);
+                            path.rewind();
+                            path.addRoundRect(AndroidUtilities.rectTmp, AndroidUtilities.dp(16) * bScale, AndroidUtilities.dp(16) * bScale, Path.Direction.CW);
+                            int wasAlpha2 = chatActionBackgroundPaint.getAlpha();
+                            chatActionBackgroundPaint.setAlpha((int)(bubbleAlpha * 0.6f));
+                            canvas.drawPath(path, chatActionBackgroundPaint);
+                            chatActionBackgroundPaint.setAlpha(wasAlpha2);
+                        }
+                        if (d != null) {
+                            d.setAlpha(bubbleAlpha);
+                            int iw = d.getIntrinsicWidth() > 0 ? d.getIntrinsicWidth() : AndroidUtilities.dp(18);
+                            int ih = d.getIntrinsicHeight() > 0 ? d.getIntrinsicHeight() : AndroidUtilities.dp(18);
+                            float iconCx = showNames && labelStr != null ? bx : bx;
+                            d.setBounds((int)(iconCx - iw/2 * bScale), (int)(by - ih/2 * bScale), (int)(iconCx + iw/2 * bScale), (int)(by + ih/2 * bScale));
+                            d.draw(canvas);
+                            d.setAlpha(255);
+                        }
+                        if (showNames && labelStr != null) {
+                            labelPaint.setAlpha(bubbleAlpha);
+                            int shadowCol = isDark ? 0x66000000 : 0x66FFFFFF;
+                            int shadowA = (int) (bubbleAlpha * 0.42f);
+                            int sc = (shadowCol & 0x00FFFFFF) | (shadowA << 24);
+                            labelPaint.setShadowLayer(AndroidUtilities.dp(1.5f) * bScale, 0, AndroidUtilities.dp(1) * bScale, sc);
+                            // also scale text with bubble
+                            float prevSize = labelPaint.getTextSize();
+                            labelPaint.setTextSize(prevSize * (0.92f + 0.08f * t));
+                            float ty = by - (labelPaint.descent() + labelPaint.ascent()) / 2;
+                            canvas.drawText(labelStr, labelTx, ty, labelPaint);
+                            labelPaint.setTextSize(prevSize);
+                            labelPaint.clearShadowLayer();
+                        }
+                    }
+                } else {
+                    Drawable replyIconDrawable = getThemedDrawable(Theme.key_drawable_replyIcon);
+                    replyIconDrawable.setAlpha(alpha);
+                    replyIconDrawable.setBounds((int) (x - replyIconDrawable.getIntrinsicWidth() / 2 * scale), (int) (y - replyIconDrawable.getIntrinsicHeight() / 2 * scale), (int) (x + replyIconDrawable.getIntrinsicWidth() / 2 * scale), (int) (y + replyIconDrawable.getIntrinsicHeight() / 2 * scale));
+                    replyIconDrawable.draw(canvas);
+                    replyIconDrawable.setAlpha(255);
+                }
 
                 outlineActionBackgroundDarkenPaint.setColor(wasDarkenColor);
                 chatActionBackgroundDarkenPaint.setColor(wasDarkenColor);
@@ -5323,6 +5610,11 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                             slidingViewSetOffset(0);
                         }
                         slidingView = view;
+                        swipeBubbleSelected = OPTION_REPLY;
+                        bubblesAppearProgress = 0f;
+                        swipeVerticalOffset = 0;
+                        swipeDisplayOffset = 0;
+                        lastVibratedSelection = OPTION_REPLY;
                         MessageObject message = getSlidingMessageObject();
                         boolean allowReplyOnOpenTopic = canSendMessageToTopic(message);
                         if (
@@ -5377,13 +5669,51 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                         if (slidingView instanceof ChatMessageCell) {
                             setGroupTranslationX((ChatMessageCell) slidingView, dx);
                         }
+                        // Xenon: vertical swipe for other bubbles - require stronger pull
+                        if (zxc.iconic.xenon.NekoConfig.swipeOtherBubbles && Math.abs(dx) >= AndroidUtilities.dp(38)) {
+                            int verticalDy = (int) (e.getY() - startedTrackingY);
+                            swipeVerticalOffset = verticalDy;
+                        } else if (swipeBubbleSelected == OPTION_REPLY && swipeVerticalOffset == 0) {
+                            // keep empty - not yet activated vertical mode, stay at reply
+                        } else {
+                            // keep current vertical offset and selection while horizontally pulling back partially
+                            // reset only on finger release (ACTION_UP/CANCEL) when fully hidden
+                        }
                         invalidate();
                     }
                 } else if (slidingView != null && (e == null || e.getPointerId(0) == startedTrackingPointerId && (e.getAction() == MotionEvent.ACTION_CANCEL || e.getAction() == MotionEvent.ACTION_UP || e.getAction() == MotionEvent.ACTION_POINTER_UP))) {
+                    boolean swipeActedOuter = false;
                     if (e != null && e.getAction() != MotionEvent.ACTION_CANCEL && Math.abs(getSlidingNonAnimationTranslationX(false)) >= AndroidUtilities.dp(50)) {
                         MessageObject message = getSlidingMessageObject();
                         final boolean allowReplyOnOpenTopic = canSendMessageToTopic(message);
-                        if (
+                        swipeActedOuter = false;
+                        if (zxc.iconic.xenon.NekoConfig.swipeOtherBubbles && swipeBubbleSelected != OPTION_REPLY) {
+                            swipeActedOuter = true;
+                            MessageObject target = getSlidingMessageObject();
+                            if (target == null) {
+                                BulletinFactory.of(ChatActivity.this).createSimpleBulletin(R.raw.info, "No target").show();
+                            } else {
+                                selectedObject = target;
+                                selectedObjectGroup = getValidGroupedMessage(target);
+                                // caption edit helper used by OPTION_EDIT
+                                selectedObjectToEditCaption = null;
+                                if (selectedObjectGroup != null) {
+                                    int captions = 0;
+                                    for (int i = 0; i < selectedObjectGroup.messages.size(); i++) {
+                                        MessageObject mo2 = selectedObjectGroup.messages.get(i);
+                                        if (i == 0 || !TextUtils.isEmpty(mo2.caption)) selectedObjectToEditCaption = mo2;
+                                        if (!TextUtils.isEmpty(mo2.caption)) captions++;
+                                    }
+                                    if (captions >= 2) selectedObjectToEditCaption = null;
+                                }
+                                if (swipeBubbleSelected == OPTION_SAVE_TO_GALLERY) {
+                                    int saveOpt = (target.isPhoto() || target.isVideo()) ? OPTION_SAVE_TO_GALLERY : target.isMusic() || target.isDocument() ? OPTION_SAVE_TO_DOWNLOADS_OR_MUSIC : OPTION_SAVE_TO_GALLERY2;
+                                    processSelectedOption(saveOpt);
+                                } else {
+                                    processSelectedOption(swipeBubbleSelected);
+                                }
+                            }
+                        } else if (
                             bottomChannelButtonsLayout != null && bottomChannelButtonsLayout.getVisibility() == View.VISIBLE && !(bottomOverlayChatWaitsReply && allowReplyOnOpenTopic || message.wasJustSent) ||
                             currentChat != null && (
                                 ChatObject.isNotInChat(currentChat) && !isThreadChat() ||
@@ -5416,6 +5746,14 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                             showFieldPanelForReply(getSlidingMessageObject());
                         }
                     }
+                    if (!swipeActedOuter) {
+                        swipeVerticalOffset = 0;
+                        swipeBubbleSelected = OPTION_REPLY;
+                        lastVibratedSelection = OPTION_REPLY;
+                    } else {
+                        // keep selected action visible, do not snap back to reply
+                    }
+                    swipeVerticalTracking = false;
                     endTrackingX = slidingViewGetOffsetX();
                     if (endTrackingX == 0) {
                         slidingView = null;
@@ -5573,7 +5911,6 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                         }
                         invalidate();
                     }
-                    drawReplyButton(c);
                 }
 
                 if (pullingDownOffset != 0 && !isInPreviewMode() && !isInsideContainer && chatMode != MODE_SAVED && chatMode != MODE_SCHEDULED) {
@@ -5879,11 +6216,13 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                     drawChatBackgroundElements(canvas);
                     super.dispatchDraw(canvas);
                     drawChatForegroundElements(canvas);
+                    if (slidingView != null) drawReplyButton(canvas);
                     canvas.restoreToCount(restoreToCount);
                 } else {
                     drawChatBackgroundElements(canvas);
                     super.dispatchDraw(canvas);
                     drawChatForegroundElements(canvas);
+                    if (slidingView != null) drawReplyButton(canvas);
                 }
                 canvas.restore();
             }

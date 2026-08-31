@@ -54,6 +54,8 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
 
     private final int ignoreBlockedRow = rowId++;
     private final int quickForwardRow = rowId++;
+    private final int swipeOtherBubblesRow = rowId++;
+    private final int swipeBubbleShowNamesRow = rowId++;
     private final int hideKeyboardOnChatScrollRow = rowId++;
     private final int tryToOpenAllLinksInIVRow = rowId++;
     private final int disableJumpToNextRow = rowId++;
@@ -166,6 +168,10 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
         items.add(UItem.asHeader(LocaleController.getString(R.string.Chat)));
         items.add(UItem.asCheck(ignoreBlockedRow, LocaleController.getString(R.string.IgnoreBlocked), LocaleController.getString(R.string.IgnoreBlockedAbout)).slug("ignoreBlocked").setChecked(NekoConfig.ignoreBlocked));
         items.add(UItem.asCheck(quickForwardRow, LocaleController.getString(R.string.QuickForward)).slug("quickForward").setChecked(NekoConfig.quickForward));
+        items.add(UItem.asCheck(swipeOtherBubblesRow, "Show other bubbles when swiping message", "Swipe up/down on reply icon to switch between Reply/Edit/Delete").slug("swipeOtherBubbles").setChecked(NekoConfig.swipeOtherBubbles));
+        if (NekoConfig.swipeOtherBubbles) {
+            items.add(UItem.asCheck(swipeBubbleShowNamesRow, "Show names next to the bubbles", null).slug("swipeBubbleShowNames").setChecked(NekoConfig.swipeBubbleShowNames));
+        }
         items.add(UItem.asCheck(hideKeyboardOnChatScrollRow, LocaleController.getString(R.string.HideKeyboardOnChatScroll)).slug("hideKeyboardOnChatScroll").setChecked(NekoConfig.hideKeyboardOnChatScroll));
         items.add(UItem.asCheck(tryToOpenAllLinksInIVRow, LocaleController.getString(R.string.OpenAllLinksInInstantView)).slug("tryToOpenAllLinksInIV").setChecked(NekoConfig.tryToOpenAllLinksInIV));
         items.add(UItem.asCheck(disableJumpToNextRow, LocaleController.getString(R.string.DisableJumpToNextChannel)).slug("disableJumpToNext").setChecked(NekoConfig.disableJumpToNextChannel));
@@ -523,6 +529,17 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
             NekoConfig.toggleQuickForward();
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.quickForward);
+            }
+        } else if (id == swipeOtherBubblesRow) {
+            NekoConfig.toggleSwipeOtherBubbles();
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.swipeOtherBubbles);
+            }
+            listView.adapter.update(true);
+        } else if (id == swipeBubbleShowNamesRow) {
+            NekoConfig.toggleSwipeBubbleShowNames();
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.swipeBubbleShowNames);
             }
         } else if (id == reducedColorsRow) {
             NekoConfig.toggleReducedColors();
