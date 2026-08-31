@@ -22387,21 +22387,23 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                             for (MessageObject m : messages) if (m.getId() == pendingId) { found = m; break; }
                         }
                         if (found == null) found = target;
-                        int idx = messages.indexOf(found);
-                        if (idx >= 0 && chatAdapter != null && chatListView != null) {
-                            chatLayoutManager.scrollToPositionWithOffset(chatAdapter.messagesStartRow + idx, 0);
-                        } else {
-                            AndroidUtilities.runOnUIThread(() -> {
-                                MessageObject f2 = messagesDict[0].get(pendingId);
-                                if (f2 == null) for (MessageObject m : messages) if (m.getId() == pendingId) { f2 = m; break; }
-                                if (f2 != null) {
-                                    int idx2 = messages.indexOf(f2);
-                                    if (idx2 >= 0 && chatAdapter != null && chatListView != null) {
-                                        chatLayoutManager.scrollToPositionWithOffset(chatAdapter.messagesStartRow + idx2, 0);
-                                    }
+                                int idx = messages.indexOf(found);
+                                if (idx >= 0 && chatAdapter != null && chatListView != null) {
+                                    int yOffset = getScrollOffsetForMessage(found);
+                                    chatLayoutManager.scrollToPositionWithOffset(chatAdapter.messagesStartRow + idx, yOffset, false);
+                                } else {
+                                    AndroidUtilities.runOnUIThread(() -> {
+                                        MessageObject f2 = messagesDict[0].get(pendingId);
+                                        if (f2 == null) for (MessageObject m : messages) if (m.getId() == pendingId) { f2 = m; break; }
+                                        if (f2 != null) {
+                                            int idx2 = messages.indexOf(f2);
+                                            if (idx2 >= 0 && chatAdapter != null && chatListView != null) {
+                                                int yOffset2 = getScrollOffsetForMessage(f2);
+                                                chatLayoutManager.scrollToPositionWithOffset(chatAdapter.messagesStartRow + idx2, yOffset2, false);
+                                            }
+                                        }
+                                    }, 500);
                                 }
-                            }, 500);
-                        }
                     }, 250);
                 });
             }

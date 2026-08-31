@@ -1295,9 +1295,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
 
             if (hasCustomMentions()) {
                 if (!usernameOnly && needBotContext && dogPostion == 0) {
-                    int count = 0;
                     for (String rawUsername : NekoConfig.customMentionUsernames) {
-                        if (count >= 5) break;
                         String clean = rawUsername == null ? "" : rawUsername.trim().replace("@", "");
                         if (TextUtils.isEmpty(clean)) continue;
                         // check prefix using clean if we will need dummy fallback
@@ -1314,7 +1312,6 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
                             // photo null -> AvatarDrawable will show letter
                             newResult.add(dummy);
                             newMap.put(dummy.id, dummy);
-                            count++;
                             continue;
                         }
                         String username = null;
@@ -1344,7 +1341,6 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
                                 TLRPC.Chat c = (TLRPC.Chat) obj;
                                 newMap.put(-c.id, obj);
                             }
-                            count++;
                         } else if (prefixMatches) {
                             // Fallback: if resolved username doesn't match but clean does, still add dummy for visibility
                             TLRPC.TL_user dummy = new TLRPC.TL_user();
@@ -1353,7 +1349,6 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
                             dummy.username = clean;
                             newResult.add(dummy);
                             newMap.put(dummy.id, dummy);
-                            count++;
                         }
                     }
                 }

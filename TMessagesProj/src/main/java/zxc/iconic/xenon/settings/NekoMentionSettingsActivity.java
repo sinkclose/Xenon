@@ -22,7 +22,6 @@ import org.telegram.messenger.UserConfig;
 import org.telegram.tgnet.TLObject;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.Theme;
-import org.telegram.ui.Cells.TextCheckCell;
 import org.telegram.ui.Components.AvatarDrawable;
 import org.telegram.ui.Components.BackupImageView;
 import org.telegram.ui.Components.LayoutHelper;
@@ -38,14 +37,13 @@ import zxc.iconic.xenon.NekoConfig;
 public class NekoMentionSettingsActivity extends BaseNekoSettingsActivity {
 
     private static final int MENTION_BASE = 1000;
+    private static final int MENTION_ADD = 2000;
 
     private ArrayList<String> usernames;
     private static NekoMentionSettingsActivity currentInstance;
 
     public NekoMentionSettingsActivity() {
         usernames = new ArrayList<>(NekoConfig.customMentionUsernames);
-        while (usernames.size() < 5) usernames.add("");
-        if (usernames.size() > 5) usernames = new ArrayList<>(usernames.subList(0, 5));
         currentInstance = this;
     }
 
@@ -70,7 +68,6 @@ public class NekoMentionSettingsActivity extends BaseNekoSettingsActivity {
             }
             usernames.clear();
             usernames.addAll(reordered);
-            while (usernames.size() < 5) usernames.add("");
             ArrayList<String> toSave = new ArrayList<>();
             for (String s : usernames) if (!TextUtils.isEmpty(s)) toSave.add(s);
             NekoConfig.setCustomMentionUsernames(toSave);
@@ -92,24 +89,34 @@ public class NekoMentionSettingsActivity extends BaseNekoSettingsActivity {
         }
         adapter.whiteSectionStart();
         adapter.reorderSectionStart();
-        for (int i = 0; i < 5; i++) {
-            String uname = i < usernames.size() ? usernames.get(i) : "";
-            UItem it = MentionEditCellFactory.of(MENTION_BASE + i, uname);
-            it.text = uname;
+        if (usernames.isEmpty()) {
+            UItem it = MentionEditCellFactory.of(MENTION_BASE, "");
+            it.text = "";
             items.add(it);
+        } else {
+            for (int i = 0; i < usernames.size(); i++) {
+                String uname = usernames.get(i);
+                UItem it = MentionEditCellFactory.of(MENTION_BASE + i, uname);
+                it.text = uname;
+                items.add(it);
+            }
         }
         adapter.reorderSectionEnd();
         adapter.whiteSectionEnd();
         items.add(UItem.asShadow(null));
+        items.add(UItem.asButton(MENTION_ADD, R.drawable.msg_add, "Add username"));
+        items.add(UItem.asShadow("Tap Add to create more fields. No limit."));
     }
 
     @Override
     protected void onItemClick(UItem item, View view, int position, float x, float y) {
         int id = item.id;
-        if (id >= MENTION_BASE && id < MENTION_BASE + 100) {
+        if (id >= MENTION_BASE && id < MENTION_ADD) {
             if (view instanceof MentionEditCell) {
                 ((MentionEditCell) view).focusEditText();
             }
+        } else if (id == MENTION_ADD) {
+            addItem();
         }
     }
 
@@ -123,25 +130,49 @@ public class NekoMentionSettingsActivity extends BaseNekoSettingsActivity {
         return "mention_custom";
     }
 
+    void addItem() {
+        usernames.add("");
+        // save only non-empty, but keep UI list with empty placeholder
+        ArrayList<String> toSave = new ArrayList<>();
+        for (String s : usernames) if (!TextUtils.isEmpty(s)) toSave.add(s);
+        NekoConfig.setCustomMentionUsernames(toSave);
+        listView.adapter.update(true);
+        // scroll to last editable item
+        if (listView.getLayoutManager() != null) {
+            listView.post(() -> {
+                int pos = -1;
+                for (int i = 0; i < listView.adapter.getItemCount(); i++) {
+                    UItem it = listView.adapter.getItem(i);
+                    if (it != null && it.id >= MENTION_BASE && it.id < MENTION_ADD) pos = i;
+                }
+                if (pos >= 0) {
+                    listView.smoothScrollToPosition(pos);
+                    View v = listView.findViewByItemId(MENTION_BASE + usernames.size() - 1);
+                    if (v instanceof MentionEditCell) ((MentionEditCell) v).focusEditText();
+                }
+            });
+        }
+    }
+
     void removeItem(UItem item) {
         if (item == null) return;
-        // clear instead of removing, keep 5
-        item.text = "";
-        // find its index and clear
         int mentionIdx = -1;
         int idx = 0;
         for (int i = 0; i < listView.adapter.getItemCount(); i++) {
             UItem it = listView.adapter.getItem(i);
-            if (it != null && it.id >= MENTION_BASE && it.id < MENTION_BASE + 100) {
+            if (it != null && it.id >= MENTION_BASE && it.id < MENTION_ADD) {
                 if (it == item) { mentionIdx = idx; break; }
                 idx++;
             }
         }
         if (mentionIdx >= 0 && mentionIdx < usernames.size()) {
-            usernames.set(mentionIdx, "");
+            usernames.remove(mentionIdx);
             ArrayList<String> toSave = new ArrayList<>();
             for (String s : usernames) if (!TextUtils.isEmpty(s)) toSave.add(s);
             NekoConfig.setCustomMentionUsernames(toSave);
+            listView.adapter.update(true);
+        } else if (usernames.isEmpty()) {
+            // if we showed a placeholder empty item and it was deleted, ensure placeholder remains
             listView.adapter.update(true);
         }
     }
@@ -153,14 +184,13 @@ public class NekoMentionSettingsActivity extends BaseNekoSettingsActivity {
         ArrayList<String> newOrder = new ArrayList<>();
         for (int i = 0; i < listView.adapter.getItemCount(); i++) {
             UItem it = listView.adapter.getItem(i);
-            if (it != null && it.id >= MENTION_BASE && it.id < MENTION_BASE + 100) {
+            if (it != null && it.id >= MENTION_BASE && it.id < MENTION_ADD) {
                 String v = it.text != null ? it.text.toString().trim().replace("@", "") : "";
                 newOrder.add(v);
             }
         }
         usernames.clear();
         usernames.addAll(newOrder);
-        while (usernames.size() < 5) usernames.add("");
         ArrayList<String> toSave = new ArrayList<>();
         for (String s : usernames) if (!TextUtils.isEmpty(s)) toSave.add(s);
         NekoConfig.setCustomMentionUsernames(toSave);
@@ -211,64 +241,59 @@ public class NekoMentionSettingsActivity extends BaseNekoSettingsActivity {
             avatarDrawable = new AvatarDrawable();
             avatarDrawable.setTextSize(AndroidUtilities.dp(18));
 
-            // Use RelativeLayout to ensure EditText stretches to max between avatar and delete
-            android.widget.RelativeLayout container = new android.widget.RelativeLayout(context);
             int hMargin = zxc.iconic.xenon.helpers.M3SectionsHelper.isEnabled() ? 0 : 16;
+            LinearLayout container = new LinearLayout(context);
+            container.setOrientation(LinearLayout.HORIZONTAL);
+            container.setGravity(Gravity.CENTER_VERTICAL);
+            container.setBaselineAligned(false);
             addView(container, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 56, Gravity.CENTER_VERTICAL, hMargin, 0, hMargin, 0));
 
             dragHandle = new ImageView(context);
-            dragHandle.setId(View.generateViewId());
             Drawable dragDrawable = context.getResources().getDrawable(R.drawable.msg_reorder).mutate();
             dragDrawable.setColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon, resourcesProvider), PorterDuff.Mode.SRC_IN);
             dragHandle.setImageDrawable(dragDrawable);
             dragHandle.setPadding(AndroidUtilities.dp(8), AndroidUtilities.dp(8), AndroidUtilities.dp(8), AndroidUtilities.dp(8));
-            android.widget.RelativeLayout.LayoutParams dragLp = new android.widget.RelativeLayout.LayoutParams(AndroidUtilities.dp(40), AndroidUtilities.dp(40));
-            dragLp.addRule(android.widget.RelativeLayout.ALIGN_PARENT_LEFT);
-            dragLp.addRule(android.widget.RelativeLayout.CENTER_VERTICAL);
+            LinearLayout.LayoutParams dragLp = LayoutHelper.createLinear(40, 40, Gravity.CENTER_VERTICAL);
+            dragLp.width = AndroidUtilities.dp(40);
+            dragLp.height = AndroidUtilities.dp(40);
             container.addView(dragHandle, dragLp);
 
             avatarView = new BackupImageView(context);
-            avatarView.setId(View.generateViewId());
             avatarView.setRoundRadius(AndroidUtilities.dp(16));
-            android.widget.RelativeLayout.LayoutParams avatarLp = new android.widget.RelativeLayout.LayoutParams(AndroidUtilities.dp(32), AndroidUtilities.dp(32));
-            avatarLp.addRule(android.widget.RelativeLayout.RIGHT_OF, dragHandle.getId());
-            avatarLp.addRule(android.widget.RelativeLayout.CENTER_VERTICAL);
-            avatarLp.leftMargin = AndroidUtilities.dp(4);
-            avatarLp.rightMargin = AndroidUtilities.dp(8);
+            LinearLayout.LayoutParams avatarLp = LayoutHelper.createLinear(32, 32, Gravity.CENTER_VERTICAL, 4, 0, 8, 0);
+            avatarLp.width = AndroidUtilities.dp(32);
+            avatarLp.height = AndroidUtilities.dp(32);
             container.addView(avatarView, avatarLp);
-
-            deleteView = new ImageView(context);
-            deleteView.setId(View.generateViewId());
-            Drawable del = context.getResources().getDrawable(R.drawable.msg_close).mutate();
-            del.setColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon, resourcesProvider), PorterDuff.Mode.SRC_IN);
-            deleteView.setImageDrawable(del);
-            deleteView.setPadding(AndroidUtilities.dp(8), AndroidUtilities.dp(8), AndroidUtilities.dp(8), AndroidUtilities.dp(8));
-            android.widget.RelativeLayout.LayoutParams deleteLp = new android.widget.RelativeLayout.LayoutParams(AndroidUtilities.dp(40), AndroidUtilities.dp(40));
-            deleteLp.addRule(android.widget.RelativeLayout.ALIGN_PARENT_RIGHT);
-            deleteLp.addRule(android.widget.RelativeLayout.CENTER_VERTICAL);
-            container.addView(deleteView, deleteLp);
 
             editText = new EditText(context);
             editText.setHint("@username");
             editText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
             editText.setSingleLine(true);
-            editText.setHorizontallyScrolling(true);
             editText.setMaxLines(1);
             editText.setGravity(Gravity.CENTER_VERTICAL);
+            editText.setMinWidth(0);
+            editText.setMinimumWidth(0);
             Drawable bg = Theme.createRoundRectDrawable(AndroidUtilities.dp(8), Theme.getColor(Theme.key_windowBackgroundGray, resourcesProvider));
             editText.setBackground(bg);
             editText.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
             editText.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText, resourcesProvider));
             editText.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(9), AndroidUtilities.dp(12), AndroidUtilities.dp(9));
-            android.widget.RelativeLayout.LayoutParams editLp = new android.widget.RelativeLayout.LayoutParams(0, AndroidUtilities.dp(36));
-            editLp.addRule(android.widget.RelativeLayout.RIGHT_OF, avatarView.getId());
-            editLp.addRule(android.widget.RelativeLayout.LEFT_OF, deleteView.getId());
-            editLp.addRule(android.widget.RelativeLayout.CENTER_VERTICAL);
-            editLp.leftMargin = AndroidUtilities.dp(8);
+            // Ячейка растянута на всю ширину, EditText растянут весом, крестик строго с краю
+            LinearLayout.LayoutParams editLp = new LinearLayout.LayoutParams(0, AndroidUtilities.dp(36), 1f);
+            editLp.gravity = Gravity.CENTER_VERTICAL;
+            editLp.leftMargin = 0;
             editLp.rightMargin = AndroidUtilities.dp(8);
-            // width will be match_parent between avatar and delete via rules, height 36
-            editLp.width = android.widget.RelativeLayout.LayoutParams.MATCH_PARENT;
             container.addView(editText, editLp);
+
+            deleteView = new ImageView(context);
+            Drawable del = context.getResources().getDrawable(R.drawable.msg_close).mutate();
+            del.setColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon, resourcesProvider), PorterDuff.Mode.SRC_IN);
+            deleteView.setImageDrawable(del);
+            deleteView.setPadding(AndroidUtilities.dp(8), AndroidUtilities.dp(8), AndroidUtilities.dp(8), AndroidUtilities.dp(8));
+            LinearLayout.LayoutParams delLp = LayoutHelper.createLinear(40, 40, Gravity.CENTER_VERTICAL);
+            delLp.width = AndroidUtilities.dp(40);
+            delLp.height = AndroidUtilities.dp(40);
+            container.addView(deleteView, delLp);
 
             deleteView.setOnClickListener(v -> {
                 NekoMentionSettingsActivity act = NekoMentionSettingsActivity.getCurrentInstance();
@@ -276,7 +301,6 @@ public class NekoMentionSettingsActivity extends BaseNekoSettingsActivity {
                     act.removeItem(boundItem);
                 }
             });
-            container.addView(deleteView, LayoutHelper.createLinear(40, 40, Gravity.CENTER_VERTICAL));
 
             editText.addTextChangedListener(new TextWatcher() {
                 @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
