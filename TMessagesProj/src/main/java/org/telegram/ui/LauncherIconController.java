@@ -48,7 +48,8 @@ public class LauncherIconController {
         CLOUD("CloudIcon", R.color.ic_launcher_background, R.mipmap.icon_12_launcher_foreground, R.string.AppIconCloud),
         NEON("NeonIcon", R.mipmap.icon_13_launcher_background, R.mipmap.icon_13_launcher_foreground, R.string.AppIconNeon),
         MATERIAL("MaterialIcon", R.mipmap.icon_14_launcher_background, R.mipmap.icon_14_launcher_foreground, R.string.AppIconMaterial),
-        OSU("OsuIcon", R.color.ic_osu_background, R.mipmap.ic_osu_foreground, R.string.AppIconOsu);
+        OSU("OsuIcon", R.color.ic_osu_background, R.mipmap.ic_osu_foreground, R.string.AppIconOsu),
+        OSU_OLD("OldOsuIcon", R.color.ic_oldosu_launcher_background, R.mipmap.ic_oldosu_launcher_foreground, R.string.AppIconOsuOld);
 
         public final String key;
         public final int background;

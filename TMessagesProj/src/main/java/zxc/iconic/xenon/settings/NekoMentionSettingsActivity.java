@@ -278,7 +278,7 @@ public class NekoMentionSettingsActivity extends BaseNekoSettingsActivity {
             editText.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
             editText.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText, resourcesProvider));
             editText.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(9), AndroidUtilities.dp(12), AndroidUtilities.dp(9));
-            // Ячейка растянута на всю ширину, EditText растянут весом, крестик строго с краю
+            // cell stretched full width, EditText with weight, delete at edge
             LinearLayout.LayoutParams editLp = new LinearLayout.LayoutParams(0, AndroidUtilities.dp(36), 1f);
             editLp.gravity = Gravity.CENTER_VERTICAL;
             editLp.leftMargin = 0;

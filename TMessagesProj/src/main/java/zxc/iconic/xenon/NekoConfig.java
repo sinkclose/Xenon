@@ -304,6 +304,8 @@ public class NekoConfig {
     public static boolean wavyEnabled = true;
     public static boolean holdToOpenPopup = false;
     public static float popupHoldTime = 0.5f;
+    public static boolean swipeOtherBubbles = false;
+    public static boolean swipeBubbleShowNames = false;
 
     public static ArrayList<String> customMentionUsernames = new ArrayList<>();
     public static boolean hideCustomMentionButton = false;
@@ -521,6 +523,8 @@ public class NekoConfig {
             wavyEnabled = preferences.getBoolean("wavyEnabled", true);
             holdToOpenPopup = preferences.getBoolean("holdToOpenPopup", false);
             popupHoldTime = preferences.getFloat("popupHoldTime", 0.5f);
+            swipeOtherBubbles = preferences.getBoolean("swipeOtherBubbles", false);
+            swipeBubbleShowNames = preferences.getBoolean("swipeBubbleShowNames", false);
             String customMentionRaw = preferences.getString("customMentionUsernames", "");
             customMentionUsernames.clear();
             if (!TextUtils.isEmpty(customMentionRaw)) {
@@ -2083,6 +2087,22 @@ public class NekoConfig {
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("holdToOpenPopup", holdToOpenPopup);
+        editor.apply();
+    }
+
+    public static void toggleSwipeOtherBubbles() {
+        swipeOtherBubbles = !swipeOtherBubbles;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("swipeOtherBubbles", swipeOtherBubbles);
+        editor.apply();
+    }
+
+    public static void toggleSwipeBubbleShowNames() {
+        swipeBubbleShowNames = !swipeBubbleShowNames;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("swipeBubbleShowNames", swipeBubbleShowNames);
         editor.apply();
     }
 
