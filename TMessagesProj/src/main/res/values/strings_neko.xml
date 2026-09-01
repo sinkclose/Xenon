@@ -307,6 +307,7 @@
     <string name="AppIconNeon">Neon</string>
     <string name="AppIconMaterial">Material</string>
     <string name="AppIconOsu">osu!</string>
+    <string name="AppIconOsuOld">osu! old</string>
     <string name="RecentChats">Recent chats</string>
     <string name="ClearRecentChats">Clear recent chats</string>
     <string name="ClearRecentChatAlert">Do you want to clear your recent chats?</string>
