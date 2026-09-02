@@ -1914,6 +1914,9 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
                 if (child == null) {
                     child = findChildUnder(this, x, y, null);
                 }
+                if (child == chatAvatarContainer) {
+                    return super.dispatchTouchEvent(ev);
+                }
 
                 boolean contains = false;
                 contains |= glassDrawable != null && glassDrawable.getBounds().contains(x, y);

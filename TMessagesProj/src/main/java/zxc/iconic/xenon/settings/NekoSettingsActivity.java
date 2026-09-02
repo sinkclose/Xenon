@@ -41,7 +41,6 @@ import org.telegram.ui.Components.Bulletin;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.FragmentFloatingButton;
-import org.telegram.ui.Components.ItemOptions;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
@@ -50,7 +49,6 @@ import org.telegram.ui.ProfileActivity.SearchAdapter.SearchResult;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Locale;
 
 import me.vkryl.android.animator.BoolAnimator;
@@ -60,7 +58,7 @@ import zxc.iconic.xenon.accessibility.AccessibilitySettingsActivity;
 import zxc.iconic.xenon.helpers.ApkInstaller;
 import zxc.iconic.xenon.helpers.CloudSettingsHelper;
 import zxc.iconic.xenon.helpers.PasscodeHelper;
-import zxc.iconic.xenon.helpers.remote.ConfigHelper;
+
 
 public class NekoSettingsActivity extends BaseNekoSettingsActivity implements FactorAnimator.Target {
 
@@ -71,8 +69,6 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
 
     private final BoolAnimator animatorSearchPageVisible = new BoolAnimator(ANIMATOR_ID_SEARCH_PAGE_VISIBLE,
             this, CubicBezierInterpolator.EASE_OUT_QUINT, 350);
-
-    private final List<ConfigHelper.News> newsList = new ArrayList<>();
 
     private final int generalRow = rowId++;
     private final int appearanceRow = rowId++;
@@ -91,7 +87,6 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
     private final int sourceCodeRow = rowId++;
 
     private final int commitRow = rowId++;
-    private final int sponsorRow = 100;
 
     private ActionBarMenuItem syncItem;
     private final ArrayList<SearchResult> searchArray = createSearchArray();
@@ -210,15 +205,6 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
         items.add(UItem.asButton(forceUpdateRow, R.drawable.msg_download, LocaleController.getString(R.string.ForceUpdate)).slug("forceUpdate"));
         items.add(UItem.asShadow(null));
 
-        newsList.clear();
-        newsList.addAll(ConfigHelper.getNewsForSettings());
-        if (!newsList.isEmpty()) {
-            var newsId = 0;
-            for (var news : newsList) {
-                items.add(TextDetailSettingsCellFactory.of(sponsorRow + newsId++, news.title, news.summary));
-            }
-            items.add(UItem.asShadow(null));
-        }
         items.add(TextDetailSettingsCellFactory.of(commitRow, "Build commit", BuildConfig.GIT_COMMIT_SHORT));
     }
 
@@ -428,30 +414,7 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
                     BulletinFactory.of(NekoSettingsActivity.this).createErrorBulletin(error).show();
                 }
             }, true);
-        } else if (id >= sponsorRow) {
-            var news = newsList.get(id - sponsorRow);
-            Browser.openUrl(getParentActivity(), news.url);
         }
-    }
-
-    @Override
-    protected boolean onItemLongClick(UItem item, View view, int position, float x, float y) {
-        var id = item.id;
-        if (id >= sponsorRow) {
-            var news = newsList.get(id - sponsorRow);
-            if (news.id != null) {
-                ItemOptions.makeOptions(this, view)
-                        .setScrimViewBackground(listView.getClipBackground(view))
-                        .add(R.drawable.msg_cancel, LocaleController.getString(R.string.Hide), () -> {
-                            ConfigHelper.removeNews(news.id);
-                            listView.adapter.update(true);
-                        })
-                        .setMinWidth(190)
-                        .show();
-                return true;
-            }
-        }
-        return super.onItemLongClick(item, view, position, x, y);
     }
 
     @Override
