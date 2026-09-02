@@ -60,7 +60,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.function.IntConsumer;
 
-import tw.nekomimi.nekogram.helpers.PopupHelper;
+import zxc.iconic.xenon.helpers.PopupHelper;
 
 import zxc.iconic.xenon.NekoConfig;
 
@@ -433,10 +433,14 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
     }
 
     public void showPopup(List<? extends CharSequence> entries, int checkedIndex, UItem item, View itemView, IntConsumer listener) {
-        PopupHelper.show(entries, null, checkedIndex, this, itemView, i -> {
+        showPopup(entries, checkedIndex, item, itemView, listener, null);
+    }
+
+    public void showPopup(List<? extends CharSequence> entries, int checkedIndex, UItem item, View itemView, IntConsumer listener, Theme.ResourcesProvider provider) {
+        PopupHelper.show(entries, null, checkedIndex, getParentActivity(), itemView, i -> {
             item.textValue = entries.get(i);
             listener.accept(i);
-        });
+        }, provider);
     }
 
     @Override

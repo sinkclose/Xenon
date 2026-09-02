@@ -21,6 +21,7 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
+import org.telegram.ui.ActionBar.ActionBarMenuItem;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.RadioColorCell;
@@ -88,6 +89,8 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
     private final int hideCameraInMediaPickerRow = rowId++;
 
     private final int messageMenuRow = 100;
+
+    private ActionBarMenuItem resetItem;
 
     private final int customizeMentionMenuRow = rowId++;
 
@@ -740,7 +743,7 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
             resetButton.setBackground(Theme.AdaptiveRipple.createRect(Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider), Theme.multAlpha(Theme.getColor(Theme.key_windowBackgroundWhiteBlueHeader, resourcesProvider), .1f), 16));
             resetButton.setOnClickListener(v -> {
                 AndroidUtilities.updateViewVisibilityAnimated(resetButton, false, 0.5f, true);
-                var animator = ValueAnimator.ofFloat(sizeBar.currentValue, defaultValue);
+                var animator = ValueAnimator.ofFloat(sizeBar.getCurrentValue(), defaultValue);
                 animator.setDuration(150);
                 animator.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
                 animator.addUpdateListener(valueAnimator -> {
@@ -763,7 +766,6 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
             AndroidUtilities.updateViewVisibilityAnimated(resetButton, Float.compare(value, defaultValue) != 0, 0.5f, false);
         }
 
-        @Override
         public void run(float progress) {
             if (onDrag != null) onDrag.run(progress);
             AndroidUtilities.updateViewVisibilityAnimated(resetButton, Float.compare(progress, defaultValue) != 0, 0.5f, true);

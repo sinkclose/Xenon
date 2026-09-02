@@ -346,7 +346,7 @@ public class NekoGeneralSettingsActivity extends BaseNekoSettingsActivity {
             Translator.showTranslationProviderSelector(this, view, param -> {
                 item.textValue = getTranslatorExternalApp();
                 listView.adapter.notifyItemChanged(position, PARTIAL);
-            }, resourcesProvider);
+            });
         } else if (id == switchToAyuRow) {
             var activity = getParentActivity();
             if (activity == null) return;
@@ -481,7 +481,6 @@ public class NekoGeneralSettingsActivity extends BaseNekoSettingsActivity {
         if (translationTargetItem != null) {
             translationTargetItem.textValue = getTranslationTarget();
             notifyItemChanged(translationTargetRow, PARTIAL);
->>>>>>> nekogram/main:TMessagesProj/src/main/java/tw/nekomimi/nekogram/settings/NekoGeneralSettingsActivity.java
         }
     }
 

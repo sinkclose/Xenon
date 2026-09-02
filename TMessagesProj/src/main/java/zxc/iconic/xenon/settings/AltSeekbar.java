@@ -251,6 +251,10 @@ if (subtitle != null) {
         }
     }
 
+    public float getCurrentValue() {
+        return currentValue;
+    }
+
     public void setValue(float value) {
         currentValue = value;
         if (slider != null) {

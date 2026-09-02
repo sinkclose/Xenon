@@ -182,6 +182,9 @@ import zxc.iconic.xenon.helpers.NonIslandHelper;
 
 @SuppressWarnings("unchecked")
 public class SharedMediaLayout extends FrameLayout implements NotificationCenter.NotificationCenterDelegate, DialogCell.DialogCellDelegate, ForwardContext {
+
+    private final static boolean SHOW_CONTEXT_VIEW_AS_BUBBLE = true;
+
     public static final int TAB_PHOTOVIDEO = 0;
     public static final int TAB_FILES = 1;
     public static final int TAB_VOICE = 2;
@@ -3728,6 +3731,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
         addView(floatingDateView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP | Gravity.CENTER_HORIZONTAL, 0, (NonIslandHelper.tabBars() ? 36 : 48) + 4, 0, 0));
 
         if (!customTabs()) {
+            if (SHOW_CONTEXT_VIEW_AS_BUBBLE) {
             topPanelLayout = new DialogsActivityTopPanelLayout(context);
             topPanelLayout.setPadding(dp(11), dp(21), dp(11), dp(21));
 

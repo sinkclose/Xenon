@@ -404,28 +404,7 @@ final class XrayCoreEngine {
             return 0L;
         }
         try {
-            String tagSafe = safe(tag);
-            String linkSafe = safe(link);
-            String raw = controller.queryAllOutboundTrafficStats();
-            if (TextUtils.isEmpty(raw)) {
-                return 0L;
-            }
-            // Format: "tag,direction,value;tag,direction,value;..."
-            for (String entry : raw.split(";")) {
-                String trimmed = entry.trim();
-                if (TextUtils.isEmpty(trimmed)) {
-                    continue;
-                }
-                String[] parts = trimmed.split(",");
-                if (parts.length == 3 && parts[0].equals(tagSafe) && parts[1].equals(linkSafe)) {
-                    try {
-                        return Long.parseLong(parts[2].trim());
-                    } catch (NumberFormatException ignore) {
-                        return 0L;
-                    }
-                }
-            }
-            return 0L;
+            return controller.queryStats(safe(tag), safe(link));
         } catch (Throwable t) {
             FileLog.e(TAG + ": queryStats failed for tag=" + tag + " link=" + link, t);
             return 0L;

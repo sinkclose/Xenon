@@ -79,7 +79,6 @@ public class SettingsHelper {
                         return;
                 }
             }
-            }
         }
         callback.accept(fragment);
         var row = uri.getQueryParameter("r");

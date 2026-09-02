@@ -166,7 +166,6 @@ public class BackButtonMenuRecent {
             });
             options.addView(cell, LayoutHelper.createLinear(230, 48));
         }
-        }
 
         if (fromMainTabs) {
             options.addGapIf(options.getItemsCount() > 0);

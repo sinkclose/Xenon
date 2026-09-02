@@ -44,9 +44,9 @@ public class CloudStorageHelper extends AccountInstance {
         invokeWebViewCustomMethod(method, data, true, callback);
     }
 
-    private void invokeWebViewCustomMethod(String method, String data, boolean searchUser, Utilities.Callback2<String, String> callback) {
+    private void invokeWebViewCustomMethod(String method, String data, boolean searchUser, BiConsumer<String, String> callback) {
         if (callback != null) {
-            AndroidUtilities.runOnUIThread(() -> callback.run(null, "DISABLED"));
+            AndroidUtilities.runOnUIThread(() -> callback.accept(null, "DISABLED"));
         }
     }
 

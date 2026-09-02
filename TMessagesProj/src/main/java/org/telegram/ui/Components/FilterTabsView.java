@@ -123,8 +123,10 @@ public class FilterTabsView extends FrameLayout {
     public class Tab {
         public int id;
         public CharSequence title;
+        public CharSequence realTitle;
         public int titleWidth;
         public String emoticon;
+        public int iconWidth;
         public int counter;
         public boolean isDefault;
         public boolean isLocked;
@@ -132,13 +134,16 @@ public class FilterTabsView extends FrameLayout {
 
         public Tab(int i, CharSequence title, String emoticon, boolean noanimate) {
             this.id = i;
-            this.title = title;
+            this.title = NekoConfig.tabsTitleType != NekoConfig.TITLE_TYPE_ICON ? title : "";
+            this.realTitle = title;
             this.emoticon = emoticon;
             this.noanimate = noanimate;
         }
 
         public int getWidth(boolean store) {
+            iconWidth = FolderIconHelper.getTotalIconWidth();
             int width = titleWidth = (int) Math.ceil(HintView2.measureCorrectly(title, textPaint));
+            width += iconWidth;
             int c;
             if (store) {
                 c = delegate.getTabCounter(id);
@@ -168,10 +173,15 @@ public class FilterTabsView extends FrameLayout {
         }
 
         public boolean setTitle(String newTitle, ArrayList<TLRPC.MessageEntity> newEntities, boolean noanimate) {
-            if (TextUtils.equals(title, newTitle)) {
+            if (TextUtils.equals(realTitle, newTitle)) {
                 return false;
             }
-            title = text(newTitle, newEntities, emoticon);
+            realTitle = newTitle;
+            title = new SpannableStringBuilder(newTitle);
+            title = Emoji.replaceEmoji(title, textPaint.getFontMetricsInt(), false);
+//            MessageObject.addEntitiesToText(title, newEntities, false, false, false, true);
+            title = MessageObject.replaceAnimatedEmoji(title, newEntities, textPaint.getFontMetricsInt());
+            title = NekoConfig.tabsTitleType != NekoConfig.TITLE_TYPE_ICON ? title : "";
             this.noanimate = noanimate;
             return true;
         }
@@ -1322,22 +1332,11 @@ public class FilterTabsView extends FrameLayout {
         selectedTabId = -1;
     }
 
-    public CharSequence text(String t, ArrayList<TLRPC.MessageEntity> e, String emoticon)  {
+    public CharSequence text(String t, ArrayList<TLRPC.MessageEntity> e)  {
         CharSequence title = new SpannableStringBuilder(t);
         title = Emoji.replaceEmoji(title, textPaint.getFontMetricsInt(), false);
         title = MessageObject.replaceAnimatedEmoji(title, e, textPaint.getFontMetricsInt());
-        if (NekoConfig.tabsTitleType == NekoConfig.TITLE_TYPE_TEXT || emoticon == null) {
-            return title;
-        }
-        var builder = new SpannableStringBuilder(emoticon);
-        var span = new ColoredImageSpan(FolderIconHelper.getTabIcon(emoticon), ColoredImageSpan.ALIGN_CENTER);
-        span.setSize(FolderIconHelper.getIconWidth());
-        builder.setSpan(span, 0, emoticon.length(), SpannableStringBuilder.SPAN_EXCLUSIVE_EXCLUSIVE);
-        if (NekoConfig.tabsTitleType == NekoConfig.TITLE_TYPE_MIX) {
-            span.setWidth(FolderIconHelper.getIconWidth() + dp(5));
-            builder.append(title);
-        }
-        return builder;
+        return title;
     }
 
     public void addTab(int id, int stableId, String text, String emoticon, ArrayList<TLRPC.MessageEntity> entities, boolean noanimate, boolean isDefault, boolean isLocked) {
@@ -1352,10 +1351,10 @@ public class FilterTabsView extends FrameLayout {
             currentPosition = position;
         }
 
-        Tab tab = new Tab(id, text(text, entities, emoticon), emoticon, noanimate);
+        Tab tab = new Tab(id, text(text, entities), emoticon, noanimate);
         tab.isDefault = isDefault;
         tab.isLocked = isLocked;
-        allTabsWidth += tab.getWidth(true) + dp(TAB_PADDING_WIDTH);
+        allTabsWidth += tab.getWidth(true) + dp(FolderIconHelper.getPaddingTab());
         tabs.add(tab);
     }
 

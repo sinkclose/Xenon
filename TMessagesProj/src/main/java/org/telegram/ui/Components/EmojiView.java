@@ -171,7 +171,7 @@ import zxc.iconic.xenon.NekoConfig;
 
 import me.vkryl.android.animator.BoolAnimator;
 import me.vkryl.android.animator.FactorAnimator;
-import tw.nekomimi.nekogram.helpers.MessageHelper;
+import zxc.iconic.xenon.helpers.MessageHelper;
 
 @SuppressLint("ViewConstructor")
 public class EmojiView extends FrameLayout implements
