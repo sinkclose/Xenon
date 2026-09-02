@@ -206,6 +206,7 @@ public class FilterTabsView extends FrameLayout {
         private StaticLayout textLayout;
         private int textOffsetX;
         private String currentEmoticon;
+        private Drawable icon;
 
         public boolean animateChange;
         public float changeProgress;
@@ -217,6 +218,14 @@ public class FilterTabsView extends FrameLayout {
         float lastTextX;
         float animateFromTextX;
         boolean animateTextX;
+
+        String lastEmoticon;
+        float lastIconX;
+        float animateFromIconX;
+        boolean animateIconX;
+        private boolean animateIconChange;
+        private Drawable iconAnimateInDrawable;
+        private Drawable iconAnimateOutDrawable;
 
         boolean animateTabCounter;
         int lastTabCount = -1;
@@ -495,6 +504,48 @@ public class FilterTabsView extends FrameLayout {
                 }
             }
 
+            int folderIconX = 0;
+            if (NekoConfig.tabsTitleType != NekoConfig.TITLE_TYPE_TEXT) {
+                int emoticonSize = FolderIconHelper.getIconWidth();
+                if (!TextUtils.equals(currentTab.emoticon, currentEmoticon)) {
+                    currentEmoticon = currentTab.emoticon;
+                    android.graphics.Rect bounds = new android.graphics.Rect(0, 0, emoticonSize, emoticonSize);
+                    icon = getResources().getDrawable(FolderIconHelper.getTabIcon(currentTab.emoticon)).mutate();
+                    icon.setBounds(bounds);
+                }
+                icon.setTint(textPaint.getColor());
+                folderIconX = (int) ((getMeasuredWidth() - tabWidth) / 2f);
+                if (animateIconX) {
+                    folderIconX = (int) (folderIconX * changeProgress + animateFromIconX * (1f - changeProgress));
+                }
+                int iconY = (int) ((getMeasuredHeight() - emoticonSize) / 2f);
+                if (animateIconChange) {
+                    if (iconAnimateOutDrawable != null) {
+                        canvas.save();
+                        canvas.translate(folderIconX, iconY);
+                        int alpha = iconAnimateOutDrawable.getAlpha();
+                        iconAnimateOutDrawable.setAlpha((int) (alpha * (1f - changeProgress)));
+                        iconAnimateOutDrawable.draw(canvas);
+                        canvas.restore();
+                        iconAnimateOutDrawable.setAlpha(alpha);
+                    }
+                    if (iconAnimateInDrawable != null) {
+                        canvas.save();
+                        canvas.translate(folderIconX, iconY);
+                        int alpha = iconAnimateInDrawable.getAlpha();
+                        iconAnimateInDrawable.setAlpha((int) (alpha * changeProgress));
+                        iconAnimateInDrawable.draw(canvas);
+                        canvas.restore();
+                        iconAnimateInDrawable.setAlpha(alpha);
+                    }
+                } else {
+                    canvas.save();
+                    canvas.translate(folderIconX, iconY);
+                    icon.draw(canvas);
+                    canvas.restore();
+                }
+            }
+
             if (animateCounterEnter || counterText != null || showRemove && (isEditing || editingStartAnimationProgress != 0)) {
                 if (aBackgroundColorKey < 0) {
                     textCounterPaint.setColor(Theme.getColor(backgroundColorKey, resourcesProvider));
@@ -613,6 +664,8 @@ public class FilterTabsView extends FrameLayout {
             }
 
             lastTextX = textX;
+            lastIconX = folderIconX;
+            lastEmoticon = currentTab.emoticon;
             lastTabCount = currentTab.counter;
             lastTitleLayout = textLayout;
             lastTitle = currentText;
@@ -729,6 +782,25 @@ public class FilterTabsView extends FrameLayout {
                 changed = true;
             }
 
+            int iconX = (int) ((getMeasuredWidth() - tabWidth) / 2f);
+            if (iconX != lastIconX) {
+                animateIconX = true;
+                animateFromIconX = lastIconX;
+                changed = true;
+            }
+            if (lastEmoticon != null && !currentTab.emoticon.equals(lastEmoticon)) {
+                int emoticonWidth = FolderIconHelper.getIconWidth();
+                android.graphics.Rect bounds = new android.graphics.Rect(0, 0, emoticonWidth, emoticonWidth);
+                iconAnimateOutDrawable = getResources().getDrawable(FolderIconHelper.getTabIcon(lastEmoticon)).mutate();
+                iconAnimateInDrawable = getResources().getDrawable(FolderIconHelper.getTabIcon(currentTab.emoticon)).mutate();
+                iconAnimateOutDrawable.setBounds(bounds);
+                iconAnimateInDrawable.setBounds(bounds);
+                iconAnimateOutDrawable.setTint(textPaint.getColor());
+                iconAnimateInDrawable.setTint(textPaint.getColor());
+                animateIconChange = true;
+                changed = true;
+            }
+
             if (lastTitle != null && !currentTab.title.equals(lastTitle)) {
                 boolean animateOut;
                 CharSequence maxStr;
@@ -814,6 +886,8 @@ public class FilterTabsView extends FrameLayout {
             animateCounterChange = false;
             animateTextChange = false;
             animateTextX = false;
+            animateIconX = false;
+            animateIconChange = false;
             animateTabWidth = false;
             changeAnimator = null;
             invalidate();
