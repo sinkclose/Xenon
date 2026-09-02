@@ -21737,6 +21737,14 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         return getBackgroundDrawableLeft() + right;
     }
 
+    public int getLastDrawnBackgroundTop() {
+        return backgroundDrawableTop;
+    }
+
+    public int getLastDrawnBackgroundBottom() {
+        return backgroundDrawableBottom;
+    }
+
     public int getBackgroundDrawableTop() {
         int additionalTop = 0;
         if (currentPosition != null) {

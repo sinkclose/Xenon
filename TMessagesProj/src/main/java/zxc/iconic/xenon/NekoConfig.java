@@ -12,6 +12,8 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.BuildConfig;
 import org.telegram.messenger.FileLog;
+import org.telegram.messenger.LocaleController;
+import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.Theme;
 
 import java.util.ArrayList;
@@ -308,6 +310,10 @@ public class NekoConfig {
     public static float popupHoldTime = 0.5f;
     public static boolean swipeOtherBubbles = false;
     public static boolean swipeBubbleShowNames = false;
+    // New swipe actions system: ordered enabled keys, primary key
+    public static ArrayList<String> swipeEnabledActions = new ArrayList<>(java.util.Arrays.asList("reply"));
+    public static String swipePrimaryAction = "reply";
+    public static float swipeSwitchStepMul = 1.4f;
 
     public static ArrayList<String> customMentionUsernames = new ArrayList<>();
     public static boolean hideCustomMentionButton = false;
@@ -529,6 +535,19 @@ public class NekoConfig {
             popupHoldTime = preferences.getFloat("popupHoldTime", 0.5f);
             swipeOtherBubbles = preferences.getBoolean("swipeOtherBubbles", false);
             swipeBubbleShowNames = preferences.getBoolean("swipeBubbleShowNames", false);
+            String swipeEnabledRaw = preferences.getString("swipeEnabledActions", "reply");
+            swipeEnabledActions.clear();
+            if (!TextUtils.isEmpty(swipeEnabledRaw)) {
+                for (String s : swipeEnabledRaw.split(",")) {
+                    String t = s.trim();
+                    if (!TextUtils.isEmpty(t)) swipeEnabledActions.add(t);
+                }
+            }
+            if (swipeEnabledActions.isEmpty()) swipeEnabledActions.add("reply");
+            swipePrimaryAction = preferences.getString("swipePrimaryAction", "reply");
+            if (TextUtils.isEmpty(swipePrimaryAction)) swipePrimaryAction = "reply";
+            if (!swipeEnabledActions.contains(swipePrimaryAction)) swipePrimaryAction = swipeEnabledActions.get(0);
+            swipeSwitchStepMul = Math.max(1f, Math.min(3f, preferences.getFloat("swipeSwitchStepMul", 1.4f)));
             String customMentionRaw = preferences.getString("customMentionUsernames", "");
             customMentionUsernames.clear();
             if (!TextUtils.isEmpty(customMentionRaw)) {
@@ -2128,6 +2147,103 @@ public class NekoConfig {
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("swipeBubbleShowNames", swipeBubbleShowNames);
         editor.apply();
+    }
+
+    public static boolean isSwipeOtherBubblesEnabled() {
+        return swipeEnabledActions.size() > 1;
+    }
+
+    public static void setSwipeSwitchStepMul(float v) {
+        swipeSwitchStepMul = Math.max(1f, Math.min(3f, v));
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putFloat("swipeSwitchStepMul", swipeSwitchStepMul);
+        editor.apply();
+    }
+
+    private static void saveSwipeActions() {
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putString("swipeEnabledActions", TextUtils.join(",", swipeEnabledActions));
+        editor.putString("swipePrimaryAction", swipePrimaryAction);
+        editor.apply();
+        // keep legacy boolean for compatibility
+        swipeOtherBubbles = isSwipeOtherBubblesEnabled();
+        editor.putBoolean("swipeOtherBubbles", swipeOtherBubbles);
+        editor.apply();
+    }
+
+    public static void setSwipeEnabledActions(ArrayList<String> list) {
+        swipeEnabledActions.clear();
+        if (list != null) for (String s : list) if (!TextUtils.isEmpty(s)) swipeEnabledActions.add(s);
+        if (swipeEnabledActions.isEmpty()) swipeEnabledActions.add("reply");
+        if (!swipeEnabledActions.contains(swipePrimaryAction)) swipePrimaryAction = swipeEnabledActions.get(0);
+        saveSwipeActions();
+    }
+
+    public static void setSwipePrimaryAction(String key) {
+        if (TextUtils.isEmpty(key) || !swipeEnabledActions.contains(key)) return;
+        swipePrimaryAction = key;
+        saveSwipeActions();
+    }
+
+    public static void addSwipeAction(String key, int position) {
+        if (swipeEnabledActions.contains(key)) return;
+        if (position < 0 || position > swipeEnabledActions.size()) position = swipeEnabledActions.size();
+        swipeEnabledActions.add(position, key);
+        saveSwipeActions();
+    }
+
+    public static void removeSwipeAction(String key) {
+        if (!swipeEnabledActions.contains(key)) return;
+        int idx = swipeEnabledActions.indexOf(key);
+        boolean wasPrimary = key.equals(swipePrimaryAction);
+        swipeEnabledActions.remove(idx);
+        if (swipeEnabledActions.isEmpty()) swipeEnabledActions.add("reply");
+        if (wasPrimary) {
+            // transfer primary to neighbour above or below
+            int newIdx = Math.max(0, Math.min(idx, swipeEnabledActions.size() - 1));
+            if (idx > 0) newIdx = idx - 1;
+            else newIdx = 0;
+            swipePrimaryAction = swipeEnabledActions.get(newIdx);
+        }
+        saveSwipeActions();
+    }
+
+    public static void moveSwipeAction(int from, int to) {
+        if (from < 0 || from >= swipeEnabledActions.size() || to < 0 || to >= swipeEnabledActions.size()) return;
+        String v = swipeEnabledActions.remove(from);
+        swipeEnabledActions.add(to, v);
+        saveSwipeActions();
+    }
+
+    // All possible keys for disabled section (excluding dynamic reaction: placeholder)
+    public static java.util.List<String> getAllSwipeActionKeys() {
+        return java.util.Arrays.asList("reply","edit","delete","copy","forward","save","pin","select","translate","report","details","copyphoto","qr","openin","reaction");
+    }
+
+    public static String getSwipeActionTitle(String key) {
+        if (key.startsWith("reaction:")) {
+            return LocaleController.getString(R.string.SwipeActionReaction);
+        }
+        switch (key) {
+            case "reply": return LocaleController.getString(R.string.SwipeActionReply);
+            case "edit": return LocaleController.getString(R.string.SwipeActionEdit);
+            case "delete": return LocaleController.getString(R.string.SwipeActionDelete);
+            case "copy": return LocaleController.getString(R.string.SwipeActionCopy);
+            case "forward": return LocaleController.getString(R.string.SwipeActionForward);
+            case "save": return LocaleController.getString(R.string.SwipeActionSave);
+            case "pin": return LocaleController.getString(R.string.SwipeActionPin);
+            case "select": return LocaleController.getString(R.string.SwipeActionSelect);
+            case "translate": return LocaleController.getString(R.string.SwipeActionTranslate);
+            case "report": return LocaleController.getString(R.string.SwipeActionReport);
+            case "details": return LocaleController.getString(R.string.SwipeActionDetails);
+            case "copyphoto": return LocaleController.getString(R.string.SwipeActionCopyPhoto);
+            case "qr": return LocaleController.getString(R.string.SwipeActionQr);
+            case "openin": return LocaleController.getString(R.string.SwipeActionOpenIn);
+            case "reaction": return LocaleController.getString(R.string.SwipeActionReaction);
+            default: return key;
+        }
     }
 
     public static void setPopupHoldTime(float value) {
