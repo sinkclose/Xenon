@@ -14,13 +14,17 @@ import org.telegram.ui.LaunchActivity;
 import java.util.Locale;
 import java.util.function.Consumer;
 
+import zxc.iconic.xenon.helpers.PasscodeHelper;
+
 import zxc.iconic.xenon.settings.BaseNekoSettingsActivity;
 import zxc.iconic.xenon.settings.NekoAppearanceSettingsActivity;
 import zxc.iconic.xenon.settings.NekoChatSettingsActivity;
+import zxc.iconic.xenon.settings.NekoDonateActivity;
 import zxc.iconic.xenon.settings.NekoEmojiSettingsActivity;
 import zxc.iconic.xenon.settings.NekoExperimentalSettingsActivity;
 import zxc.iconic.xenon.settings.NekoGeneralSettingsActivity;
 import zxc.iconic.xenon.settings.NekoPasscodeSettingsActivity;
+import zxc.iconic.xenon.settings.NekoSettingsActivity;
 
 public class SettingsHelper {
 
@@ -35,37 +39,46 @@ public class SettingsHelper {
             return;
         }
         BaseNekoSettingsActivity fragment;
-        var segment = segments.get(1);
-        if (PasscodeHelper.getSettingsKey().equals(segment)) {
-            fragment = new NekoPasscodeSettingsActivity();
+        if (segments.size() == 1) {
+            fragment = new NekoSettingsActivity();
         } else {
-            switch (segment.toLowerCase(Locale.US)) {
-                case "appearance":
-                case "a":
-                    fragment = new NekoAppearanceSettingsActivity();
-                    break;
-                case "chat":
-                case "chats":
-                case "c":
-                    fragment = new NekoChatSettingsActivity();
-                    break;
-                case "experimental":
-                case "e":
-                    fragment = new NekoExperimentalSettingsActivity();
-                    break;
-                case "emoji":
-                    fragment = new NekoEmojiSettingsActivity();
-                    break;
-                case "general":
-                case "g":
-                    fragment = new NekoGeneralSettingsActivity();
-                    break;
-                case "update":
-                    LaunchActivity.instance.checkAppUpdate(true, progress);
-                    return;
-                default:
-                    unknown.run();
-                    return;
+            var segment = segments.get(1);
+            if (PasscodeHelper.getSettingsKey().equals(segment)) {
+                fragment = new NekoPasscodeSettingsActivity();
+            } else {
+                switch (segment.toLowerCase(Locale.US)) {
+                    case "appearance":
+                    case "a":
+                        fragment = new NekoAppearanceSettingsActivity();
+                        break;
+                    case "chat":
+                    case "chats":
+                    case "c":
+                        fragment = new NekoChatSettingsActivity();
+                        break;
+                    case "donate":
+                    case "d":
+                        fragment = new NekoDonateActivity();
+                        break;
+                    case "experimental":
+                    case "e":
+                        fragment = new NekoExperimentalSettingsActivity();
+                        break;
+                    case "emoji":
+                        fragment = new NekoEmojiSettingsActivity();
+                        break;
+                    case "general":
+                    case "g":
+                        fragment = new NekoGeneralSettingsActivity();
+                        break;
+                    case "update":
+                        LaunchActivity.instance.checkAppUpdate(true, progress);
+                        return;
+                    default:
+                        unknown.run();
+                        return;
+                }
+            }
             }
         }
         callback.accept(fragment);
@@ -74,8 +87,7 @@ public class SettingsHelper {
             row = uri.getQueryParameter("row");
         }
         if (!TextUtils.isEmpty(row)) {
-            var rowFinal = row;
-            AndroidUtilities.runOnUIThread(() -> fragment.scrollToRow(rowFinal, unknown));
+            fragment.scrollToRow(row, unknown);
         }
     }
 }

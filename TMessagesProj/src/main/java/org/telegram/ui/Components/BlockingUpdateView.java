@@ -25,13 +25,11 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.FileLoader;
-import org.telegram.messenger.FileLog;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.messenger.SharedConfig;
-import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.browser.Browser;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLRPC;
@@ -39,7 +37,6 @@ import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.spoilers.SpoilersTextView;
 import org.telegram.ui.Components.voip.CellFlickerDrawable;
 
-import java.io.File;
 import java.util.Locale;
 
 import zxc.iconic.xenon.helpers.ApkInstaller;
@@ -223,16 +220,7 @@ public class BlockingUpdateView extends FrameLayout implements NotificationCente
     }
 
     public boolean openApkInstall(Activity activity, TLRPC.Document document) {
-        boolean exists = false;
-        try {
-            File f = FileLoader.getInstance(UserConfig.selectedAccount).getPathToAttach(document, true);
-            if (exists = f.exists()) {
-                ApkInstaller.installUpdate(activity, SharedConfig.pendingAppUpdate.document);
-            }
-        } catch (Exception e) {
-            FileLog.e(e);
-        }
-        return exists;
+        return AndroidUtilities.openForView(document, true, activity);
     }
 
     private void showProgress(final boolean show) {

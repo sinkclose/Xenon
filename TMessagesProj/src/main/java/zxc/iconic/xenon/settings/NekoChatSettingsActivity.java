@@ -5,11 +5,13 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -19,7 +21,6 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
-import org.telegram.ui.ActionBar.ActionBarMenuItem;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.RadioColorCell;
@@ -30,6 +31,7 @@ import org.telegram.ui.Components.AnimatedTextView;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RecyclerListView;
+import org.telegram.ui.Components.ScaleStateListAnimator;
 import org.telegram.ui.Components.SeekBarView;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
@@ -45,9 +47,8 @@ import zxc.iconic.xenon.helpers.WhisperHelper;
 
 public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implements NotificationCenter.NotificationCenterDelegate {
 
-    private ActionBarMenuItem resetItem;
-
     private final int stickerSizeRow = rowId++;
+    private final int stickerPreviewRow = rowId++;
     private final int hideTimeOnStickerRow = rowId++;
     private final int showTimeHintRow = rowId++;
     private final int reducedColorsRow = rowId++;
@@ -154,10 +155,9 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
     protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
         items.add(StickerSizeCellFactory.of(stickerSizeRow, LocaleController.getString(R.string.StickerSize), NekoConfig.stickerSize, progress -> {
             NekoConfig.setStickerSize(progress);
-            if (progress != 14.0f && resetItem.getVisibility() != View.VISIBLE) {
-                AndroidUtilities.updateViewVisibilityAnimated(resetItem, true, 0.5f, true);
-            }
+            updateStickerCell();
         }).slug("stickerSize"));
+        items.add(StickerPreviewCellFactory.of(stickerPreviewRow));
         items.add(UItem.asCheck(hideTimeOnStickerRow, LocaleController.getString(R.string.HideTimeOnSticker)).slug("hideTimeOnSticker").setChecked(NekoConfig.hideTimeOnSticker));
         items.add(UItem.asCheck(showTimeHintRow, LocaleController.getString(R.string.ShowTimeHint), LocaleController.getString(R.string.ShowTimeHintDesc)).slug("showTimeHint").setChecked(NekoConfig.showTimeHint));
         items.add(UItem.asCheck(reducedColorsRow, LocaleController.getString(R.string.ReducedColors)).slug("reducedColors").setChecked(NekoConfig.reducedColors));
@@ -222,10 +222,8 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
         items.add(UItem.asCheck(autoPauseVideoRow, LocaleController.getString(R.string.AutoPauseVideo), LocaleController.getString(R.string.AutoPauseVideoAbout)).slug("autoPauseVideo").setChecked(NekoConfig.autoPauseVideo));
         items.add(UItem.asCheck(preferOriginalQualityRow, LocaleController.getString(R.string.PreferOriginalQuality), LocaleController.getString(R.string.PreferOriginalQualityDesc)).slug("preferOriginalQuality").setChecked(NekoConfig.preferOriginalQuality));
         items.add(TextSettingsCellFactory.of(cameraInVideoMessagesRow, LocaleController.getString(R.string.CameraInVideoMessages), switch (NekoConfig.cameraInVideoMessages) {
-            case NekoConfig.CAMERA_ASK ->
-                    LocaleController.getString(R.string.AskCamera);
-            case NekoConfig.CAMERA_REAR ->
-                    LocaleController.getString(R.string.RearCamera);
+            case NekoConfig.CAMERA_ASK -> LocaleController.getString(R.string.AskCamera);
+            case NekoConfig.CAMERA_REAR -> LocaleController.getString(R.string.RearCamera);
             default -> LocaleController.getString(R.string.FrontCamera);
         }).slug("cameraInVideoMessages"));
         items.add(UItem.asCheck(hideCameraInMediaPickerRow, LocaleController.getString(R.string.HideCameraInMediaPicker)).slug("hideCameraInMediaPicker").setChecked(NekoConfig.hideCameraInMediaPicker));
@@ -246,7 +244,6 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
         items.add(TextCheckbox2CellFactory.of(messageMenuRow + 2, LocaleController.getString(R.string.NoQuoteForward)).slug("showNoQuoteForward").setChecked(NekoConfig.showNoQuoteForward));
         items.add(TextCheckbox2CellFactory.of(messageMenuRow + 3, LocaleController.getString(R.string.AddToSavedMessages)).slug("showAddToSavedMessages").setChecked(NekoConfig.showAddToSavedMessages));
         items.add(TextCheckbox2CellFactory.of(messageMenuRow + 4, LocaleController.getString(R.string.AddToSavedMessagesInGroups)).slug("showAddToSavedMessagesInGroups").setChecked(NekoConfig.showAddToSavedMessagesInGroups));
-        items.add(TextCheckbox2CellFactory.of(messageMenuRow + 5, LocaleController.getString(R.string.Repeat)).slug("showRepeat").setChecked(NekoConfig.showRepeat));
         items.add(TextCheckbox2CellFactory.of(messageMenuRow + 5, LocaleController.getString(R.string.Repeat)).slug("showRepeat").setChecked(NekoConfig.showRepeat));
         items.add(TextCheckbox2CellFactory.of(messageMenuRow + 6, LocaleController.getString(R.string.Prpr)).slug("showPrPr").setChecked(NekoConfig.showPrPr));
         items.add(TextCheckbox2CellFactory.of(messageMenuRow + 7, LocaleController.getString(R.string.TranslateMessage)).slug("showTranslate").setChecked(NekoConfig.showTranslate));
@@ -281,9 +278,8 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
             types.add(NekoConfig.CAMERA_REAR);
             arrayList.add(LocaleController.getString(R.string.FrontCamera));
             types.add(NekoConfig.CAMERA_FRONT);
-            PopupHelper.show(arrayList, LocaleController.getString(R.string.CameraInVideoMessages), types.indexOf(NekoConfig.cameraInVideoMessages), getParentActivity(), view, i -> {
+            showPopup(arrayList, types.indexOf(NekoConfig.cameraInVideoMessages), item, view, i -> {
                 NekoConfig.setCameraInVideoMessages(types.get(i));
-                item.textValue = arrayList.get(i);
                 listView.adapter.notifyItemChanged(position, PARTIAL);
             }, resourcesProvider);
         } else if (id == hideCameraInMediaPickerRow) {
@@ -470,9 +466,8 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
                     types.add(String.valueOf(count));
                 }
             }
-            PopupHelper.show(types, LocaleController.getString(R.string.MaxRecentStickers), types.indexOf(String.valueOf(NekoConfig.maxRecentStickers)), getParentActivity(), view, i -> {
+            showPopup(types, types.indexOf(String.valueOf(NekoConfig.maxRecentStickers)), item, view, i -> {
                 NekoConfig.setMaxRecentStickers(Integer.parseInt(types.get(i)));
-                item.textValue = String.valueOf(NekoConfig.maxRecentStickers);
                 listView.adapter.notifyItemChanged(position, PARTIAL);
             }, resourcesProvider);
         } else if (id == blurPopupInChatRow) {
@@ -491,16 +486,14 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.hideTimeOnSticker);
             }
-            var stickerCell = listView.findViewByItemId(stickerSizeRow);
-            if (stickerCell != null) stickerCell.invalidate();
+            updateStickerCell();
         } else if (id == markdownParserRow) {
             ArrayList<String> arrayList = new ArrayList<>();
             arrayList.add("Xenon");
             arrayList.add("Telegram");
             boolean oldParser = NekoConfig.newMarkdownParser;
-            PopupHelper.show(arrayList, LocaleController.getString(R.string.MarkdownParser), NekoConfig.newMarkdownParser ? 0 : 1, getParentActivity(), view, i -> {
+            showPopup(arrayList, NekoConfig.newMarkdownParser ? 0 : 1, item, view, i -> {
                 NekoConfig.setNewMarkdownParser(i == 0);
-                item.textValue = arrayList.get(i);
                 listView.adapter.notifyItemChanged(position, PARTIAL);
                 if (oldParser != NekoConfig.newMarkdownParser) {
                     if (oldParser) {
@@ -512,7 +505,7 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
                     }
                     notifyItemChanged(markdown2Row);
                 }
-            }, resourcesProvider);
+            });
         } else if (id == markdownParseLinksRow) {
             NekoConfig.toggleMarkdownParseLinks();
             if (view instanceof TextCheckCell) {
@@ -529,8 +522,7 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.reducedColors);
             }
-            var stickerCell = listView.findViewByItemId(stickerSizeRow);
-            stickerCell.invalidate();
+            updateStickerCell();
         } else if (id == showTimeHintRow) {
             NekoConfig.toggleShowTimeHint();
             if (view instanceof TextCheckCell) {
@@ -545,11 +537,10 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
             types.add(NekoConfig.TRANSCRIBE_PREMIUM);
             arrayList.add(LocaleController.getString(R.string.TranscribeProviderWorkersAI));
             types.add(NekoConfig.TRANSCRIBE_WORKERSAI);
-            PopupHelper.show(arrayList, LocaleController.getString(R.string.TranscribeProviderShort), types.indexOf(NekoConfig.transcribeProvider), getParentActivity(), view, i -> {
+            showPopup(arrayList, types.indexOf(NekoConfig.transcribeProvider), item, view, i -> {
                 NekoConfig.setTranscribeProvider(types.get(i));
-                item.textValue = arrayList.get(i);
                 listView.adapter.notifyItemChanged(position, PARTIAL);
-            }, resourcesProvider);
+            });
         } else if (id == cfCredentialsRow) {
             WhisperHelper.showCfCredentialsDialog(this);
         } else if (id == preferOriginalQualityRow) {
@@ -636,6 +627,43 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
         return "c";
     }
 
+    private void updateStickerCell() {
+        var previewCell = listView.findViewByItemId(stickerPreviewRow);
+        if (previewCell != null) {
+            previewCell.invalidate();
+        }
+    }
+
+    private static class StickerPreviewCellFactory extends UItem.UItemFactory<StickerSizePreviewMessagesCell> {
+        static {
+            setup(new StickerPreviewCellFactory());
+        }
+
+        @Override
+        public StickerSizePreviewMessagesCell createView(Context context, RecyclerListView listView, int currentAccount, int classGuid, Theme.ResourcesProvider resourcesProvider) {
+            return new StickerSizePreviewMessagesCell(context, resourcesProvider);
+        }
+
+        @Override
+        public void bindView(View view, UItem item, boolean divider, UniversalAdapter adapter, UniversalRecyclerView listView) {
+            var messagesCell = (StickerSizePreviewMessagesCell) view;
+            var frameLayout = (FrameLayout) listView.getParent();
+            messagesCell.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+            messagesCell.setFragmentView(frameLayout);
+        }
+
+        public static UItem of(int id) {
+            var item = UItem.ofFactory(StickerPreviewCellFactory.class);
+            item.id = id;
+            return item;
+        }
+
+        @Override
+        public boolean isClickable() {
+            return false;
+        }
+    }
+
     private static class StickerSizeCellFactory extends UItem.UItemFactory<StickerSizeCell> {
         static {
             setup(new StickerSizeCellFactory());
@@ -643,16 +671,19 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
 
         @Override
         public StickerSizeCell createView(Context context, RecyclerListView listView, int currentAccount, int classGuid, Theme.ResourcesProvider resourcesProvider) {
-            return new StickerSizeCell(context, resourcesProvider);
+            return new StickerSizeCell(context, 14.0f, resourcesProvider);
         }
 
         @Override
         public void bindView(View view, UItem item, boolean divider, UniversalAdapter adapter, UniversalRecyclerView listView) {
             var cell = (StickerSizeCell) view;
-            var frameLayout = (FrameLayout) listView.getParent();
-            cell.setFragmentView(frameLayout);
             cell.setValue(item.floatValue);
-            cell.setOnDragListener((AltSeekbar.OnDrag) item.object);
+            cell.setOnDragListener(progress -> {
+                item.floatValue = progress;
+                if (item.object instanceof AltSeekbar.OnDrag) {
+                    ((AltSeekbar.OnDrag) item.object).run(progress);
+                }
+            });
         }
 
         public static UItem of(int id, String title, float value, AltSeekbar.OnDrag onDrag) {
@@ -681,15 +712,16 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
 
     private static class StickerSizeCell extends FrameLayout {
 
-        private final StickerSizePreviewMessagesCell messagesCell;
+        private final float defaultValue;
         private final AltSeekbar sizeBar;
+        private final ImageView resetButton;
 
         private AltSeekbar.OnDrag onDrag;
 
-        public StickerSizeCell(Context context, Theme.ResourcesProvider resourcesProvider) {
+        public StickerSizeCell(Context context, float defaultValue, Theme.ResourcesProvider resourcesProvider) {
             super(context);
 
-            setWillNotDraw(false);
+            this.defaultValue = defaultValue;
 
             sizeBar = new AltSeekbar(context, progress -> {
                 setValue(progress);
@@ -699,28 +731,42 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
             sizeBar.setDefaultValue(Math.round(NekoConfig.stickerSize));
             addView(sizeBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
-            messagesCell = new StickerSizePreviewMessagesCell(context, resourcesProvider);
-            messagesCell.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
-            addView(messagesCell, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.TOP, 0, 112, 0, 0));
+            resetButton = new ImageView(context);
+            resetButton.setContentDescription(LocaleController.getString(R.string.Reset));
+            resetButton.setImageResource(R.drawable.msg_reset);
+            resetButton.setColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteBlueHeader, resourcesProvider));
+            resetButton.setScaleType(ImageView.ScaleType.FIT_XY);
+            resetButton.setPadding(AndroidUtilities.dp(7), AndroidUtilities.dp(7), AndroidUtilities.dp(7), AndroidUtilities.dp(7));
+            resetButton.setBackground(Theme.AdaptiveRipple.createRect(Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider), Theme.multAlpha(Theme.getColor(Theme.key_windowBackgroundWhiteBlueHeader, resourcesProvider), .1f), 16));
+            resetButton.setOnClickListener(v -> {
+                AndroidUtilities.updateViewVisibilityAnimated(resetButton, false, 0.5f, true);
+                var animator = ValueAnimator.ofFloat(sizeBar.currentValue, defaultValue);
+                animator.setDuration(150);
+                animator.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
+                animator.addUpdateListener(valueAnimator -> {
+                    var floatValue = (float) valueAnimator.getAnimatedValue();
+                    if (onDrag != null) onDrag.run(floatValue);
+                    sizeBar.setValue(floatValue);
+                });
+                animator.start();
+            });
+            ScaleStateListAnimator.apply(resetButton);
+            addView(resetButton, LayoutHelper.createFrame(40 - 7, 40 - 7, Gravity.TOP | (LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT), 11, 7, 11, 0));
         }
 
         public void setOnDragListener(AltSeekbar.OnDrag onDrag) {
             this.onDrag = onDrag;
         }
 
-        public void setFragmentView(FrameLayout fragmentView) {
-            messagesCell.setFragmentView(fragmentView);
-        }
-
         public void setValue(float value) {
             sizeBar.setValue(value);
-            messagesCell.invalidate();
+            AndroidUtilities.updateViewVisibilityAnimated(resetButton, Float.compare(value, defaultValue) != 0, 0.5f, false);
         }
 
         @Override
-        public void invalidate() {
-            super.invalidate();
-            messagesCell.invalidate();
+        public void run(float progress) {
+            if (onDrag != null) onDrag.run(progress);
+            AndroidUtilities.updateViewVisibilityAnimated(resetButton, Float.compare(progress, defaultValue) != 0, 0.5f, true);
         }
     }
 

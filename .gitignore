@@ -18,4 +18,5 @@ sentry.properties
 context/
 docs/
 TMessagesProj/libs/libv2ray.aar
+TMessagesProj/jni/ffmpeg/build_android
 nul

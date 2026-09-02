@@ -1,32 +1,22 @@
 package zxc.iconic.xenon.helpers;
 
-import static org.telegram.messenger.AndroidUtilities.dp;
-
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.graphics.Canvas;
-import android.graphics.Paint;
 import android.net.Uri;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
-import android.view.ViewGroup;
-import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.StringRes;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
-import org.telegram.messenger.UserConfig;
-import org.telegram.messenger.UserObject;
-import org.telegram.messenger.Utilities;
 import org.telegram.ui.ActionBar.ActionBarMenuItem;
 import org.telegram.ui.ActionBar.ActionBarMenuSubItem;
 import org.telegram.ui.ActionBar.ActionBarPopupWindow;
@@ -36,35 +26,33 @@ import org.telegram.ui.ActionBar.BottomSheet;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.RadioColorCell;
 import org.telegram.ui.Components.AlertsCreator;
-import org.telegram.ui.Components.AvatarDrawable;
-import org.telegram.ui.Components.BackupImageView;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.ItemOptions;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RecyclerListView;
-import org.telegram.ui.LaunchActivity;
 import org.telegram.ui.Stories.recorder.ButtonWithCounterView;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.function.IntConsumer;
 
 import zxc.iconic.xenon.DatacenterPopupWrapper;
 import tw.nekomimi.nekogram.tlv.TlViewer;
 
 public class PopupHelper {
 
-    public static void show(List<? extends CharSequence> entries, String title, int checkedIndex, Context context, View itemView, Utilities.Callback<Integer> listener, Theme.ResourcesProvider resourcesProvider) {
+    public static void show(List<? extends CharSequence> entries, String title, int checkedIndex, BaseFragment fragment, View itemView, IntConsumer listener) {
         if (itemView == null) {
-            AlertDialog.Builder builder = new AlertDialog.Builder(context, resourcesProvider);
+            var context = fragment.getParentActivity();
+            var resourcesProvider = fragment.getResourceProvider();
+            var builder = new AlertDialog.Builder(context, resourcesProvider);
             builder.setTitle(title);
-            final LinearLayout linearLayout = new LinearLayout(context);
+            var linearLayout = new LinearLayout(context);
             linearLayout.setOrientation(LinearLayout.VERTICAL);
             builder.setView(linearLayout);
 
             for (int a = 0; a < entries.size(); a++) {
-                RadioColorCell cell = new RadioColorCell(context, resourcesProvider);
+                var cell = new RadioColorCell(context, resourcesProvider);
                 cell.setPadding(AndroidUtilities.dp(4), 0, AndroidUtilities.dp(4), 0);
                 cell.setTag(a);
                 cell.setTextAndValue(entries.get(a), checkedIndex == a);
@@ -73,17 +61,13 @@ public class PopupHelper {
                 cell.setOnClickListener(v -> {
                     Integer which = (Integer) v.getTag();
                     builder.getDismissRunnable().run();
-                    listener.run(which);
+                    listener.accept(which);
                 });
             }
             builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
-            builder.show();
+            fragment.showDialog(builder.create());
         } else {
-            ViewGroup container = (ViewGroup) itemView.getRootView();
-            if (container == null) {
-                return;
-            }
-            var popup = ItemOptions.makeOptions(container, resourcesProvider, itemView);
+            var popup = ItemOptions.makeOptions(fragment, itemView);
             var parent = itemView.getParent();
             if (parent instanceof RecyclerListView listView) {
                 popup.setScrimViewBackground(listView.getClipBackground(itemView));
@@ -92,7 +76,7 @@ public class PopupHelper {
             for (int i = 0; i < entries.size(); i++) {
                 var entry = entries.get(i);
                 var finalI = i;
-                popup.addChecked(checkedIndex == i, entry, () -> listener.run(finalI));
+                popup.addChecked(checkedIndex == i, entry, () -> listener.accept(finalI));
             }
             popup.show();
         }
@@ -155,85 +139,6 @@ public class PopupHelper {
             callback.run();
         });
         popupLayout.setParentWindow(popupWindow);
-    }
-
-    public static void fillAccountSelectorMenu(ItemOptions menu, int currentAccount, Context context, Theme.ResourcesProvider resourcesProvider) {
-        var accountNumbers = new ArrayList<Integer>();
-        for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-            if (PasscodeHelper.isAccountHidden(a)) continue;
-            if (UserConfig.getInstance(a).isClientActivated()) {
-                accountNumbers.add(a);
-            }
-        }
-        Collections.sort(accountNumbers, (o1, o2) -> {
-            long l1 = UserConfig.getInstance(o1).loginTime;
-            long l2 = UserConfig.getInstance(o2).loginTime;
-            if (l1 > l2) {
-                return 1;
-            } else if (l1 < l2) {
-                return -1;
-            }
-            return 0;
-        });
-        if (accountNumbers.size() > 1) {
-            menu.addGap();
-            for (int account : accountNumbers) {
-                var btn = createAccountView(account, currentAccount == account, context, resourcesProvider);
-                btn.setOnClickListener(v -> {
-                    if (currentAccount == account) return;
-                    menu.dismiss();
-                    if (LaunchActivity.instance != null) {
-                        LaunchActivity.instance.switchToAccount(account, true);
-                    }
-                });
-                menu.addView(btn, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
-            }
-        }
-    }
-
-    private static View createAccountView(int account, boolean selected, Context context, Theme.ResourcesProvider resourcesProvider) {
-        var btn = new LinearLayout(context);
-        btn.setOrientation(LinearLayout.HORIZONTAL);
-        btn.setBackground(Theme.createRadSelectorDrawable(Theme.getColor(Theme.key_listSelector, resourcesProvider), 0, 0));
-
-        var user = UserConfig.getInstance(account).getCurrentUser();
-
-        var avatarDrawable = new AvatarDrawable();
-        avatarDrawable.setInfo(user);
-
-        var avatarContainer = new FrameLayout(context) {
-            private final Paint selectedPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-
-            @Override
-            protected void dispatchDraw(@NonNull Canvas canvas) {
-                if (selected) {
-                    selectedPaint.setStyle(Paint.Style.STROKE);
-                    selectedPaint.setStrokeWidth(dp(1.33f));
-                    selectedPaint.setColor(Theme.getColor(Theme.key_featuredStickers_addButton, resourcesProvider));
-                    canvas.drawCircle(getWidth() / 2.0f, getHeight() / 2.0f, dp(16), selectedPaint);
-                }
-                super.dispatchDraw(canvas);
-            }
-        };
-        btn.addView(avatarContainer, LayoutHelper.createLinear(34, 34, Gravity.CENTER_VERTICAL, 12, 0, 0, 0));
-
-        var avatarView = new BackupImageView(context);
-        if (selected) {
-            avatarView.setScaleX(0.833f);
-            avatarView.setScaleY(0.833f);
-        }
-        avatarView.setRoundRadius(dp(16));
-        avatarView.getImageReceiver().setCurrentAccount(account);
-        avatarView.setForUserOrChat(user, avatarDrawable);
-        avatarContainer.addView(avatarView, LayoutHelper.createLinear(32, 32, Gravity.CENTER, 1, 1, 1, 1));
-
-        var textView = new TextView(context);
-        textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
-        textView.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, resourcesProvider));
-        textView.setText(UserObject.getUserName(user));
-        btn.addView(textView, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, Gravity.CENTER_VERTICAL, 14, 0, 14, 0));
-
-        return btn;
     }
 
     private static final Set<String> TELEGRAM_PACKAGES = Set.of("org.telegram.messenger", "org.telegram.messenger.web", "org.telegram.messenger.beta");

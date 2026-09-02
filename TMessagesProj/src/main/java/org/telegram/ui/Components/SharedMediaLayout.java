@@ -182,9 +182,6 @@ import zxc.iconic.xenon.helpers.NonIslandHelper;
 
 @SuppressWarnings("unchecked")
 public class SharedMediaLayout extends FrameLayout implements NotificationCenter.NotificationCenterDelegate, DialogCell.DialogCellDelegate, ForwardContext {
-
-    private final static boolean SHOW_CONTEXT_VIEW_AS_BUBBLE = true;
-
     public static final int TAB_PHOTOVIDEO = 0;
     public static final int TAB_FILES = 1;
     public static final int TAB_VOICE = 2;
@@ -1906,7 +1903,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
             optionsSearchImageView.setAnimation(R.raw.options_to_search, 24, 24);
             optionsSearchImageView.getAnimatedDrawable().multiplySpeed(2f);
             optionsSearchImageView.getAnimatedDrawable().setPlayInDirectionOfCustomEndFrame(true);
-            optionsSearchImageView.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_actionBarActionModeDefaultIcon), PorterDuff.Mode.MULTIPLY));
+            optionsSearchImageView.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_actionBarActionModeDefaultIcon), PorterDuff.Mode.SRC_IN));
             optionsSearchImageView.setVisibility(GONE);
             actionBar.addView(optionsSearchImageView, LayoutHelper.createFrame(48, 56, Gravity.RIGHT | Gravity.BOTTOM));
         }
@@ -2868,6 +2865,10 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
             layoutManager.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
                 @Override
                 public int getSpanSize(int position) {
+                    return Math.min(getSpanSizeInternal(position), mediaPage.layoutManager.getSpanCount());
+                }
+
+                private int getSpanSizeInternal(int position) {
                     final int columnsCount = mediaColumnsCount[isAnyStoryPageType(mediaPage.selectedType) ? 1 : 0];
                     if (mediaPage.listView.getAdapter() == photoVideoAdapter) {
                         if (photoVideoAdapter.getItemViewType(position) == 2) {
@@ -3727,14 +3728,13 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
         addView(floatingDateView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP | Gravity.CENTER_HORIZONTAL, 0, (NonIslandHelper.tabBars() ? 36 : 48) + 4, 0, 0));
 
         if (!customTabs()) {
-            if (SHOW_CONTEXT_VIEW_AS_BUBBLE) {
-                topPanelLayout = new DialogsActivityTopPanelLayout(context);
-                topPanelLayout.setPadding(dp(11), dp(21), dp(11), dp(21));
+            topPanelLayout = new DialogsActivityTopPanelLayout(context);
+            topPanelLayout.setPadding(dp(11), dp(21), dp(11), dp(21));
 
-                BlurredBackgroundDrawable topPanelLayoutBackground = iBlur3FactoryLiquidGlass.create(topPanelLayout, BlurredBackgroundProviderImpl.topPanel(resourcesProvider));
-                topPanelLayoutBackground.setRadius(dp(24));
-                topPanelLayoutBackground.setPadding(dp(7));
-                topPanelLayout.setBlurredBackground(topPanelLayoutBackground);
+            BlurredBackgroundDrawable topPanelLayoutBackground = iBlur3FactoryLiquidGlass.create(topPanelLayout, BlurredBackgroundProviderImpl.topPanel(resourcesProvider));
+            topPanelLayoutBackground.setRadius(dp(24));
+            topPanelLayoutBackground.setPadding(dp(7));
+            topPanelLayout.setBlurredBackground(topPanelLayoutBackground);
 
                 fragmentContextViewWrapper = new FrameLayout(context);
                 topPanelLayout.addView(fragmentContextViewWrapper);
@@ -3769,8 +3769,8 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                         topPanelLayout.setViewVisible(fragmentContextViewWrapper, visibility == VISIBLE);
                     }
                 };
-                fragmentContextView.isInsideBubble = true;
                 fragmentContextViewWrapper.addView(fragmentContextView);
+                topPanelLayout.setCallFragmentContextView(fragmentContextView);
                 addView(topPanelLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP, 0, NonIslandHelper.tabBars() ? 36 : (48 -14), 0, 0));
                 if (NonIslandHelper.tabBars()) {
                     topPanelLayout.inu_blurHelper = zxc.iconic.xenon.helpers.BlurBehindHelper.create(topPanelLayout, sizeNotifierFrameLayout, Theme.key_windowBackgroundWhite);
@@ -3779,6 +3779,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
             } else {
                 addView(fragmentContextView = new FragmentContextView(context, parent, this, false, resourcesProvider), LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 38, Gravity.TOP | Gravity.LEFT, 0, NonIslandHelper.tabBars() ? 36 : 48, 0, 0));
             }
+
             fragmentContextView.setDelegate((start, show) -> {
                 if (!start) {
                     requestLayout();
@@ -3845,6 +3846,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                     }
                 }
             };
+            searchTagsList.setBlurredFactory(iBlur3FactoryLiquidGlass, BlurredBackgroundProviderImpl.topPanel(resourcesProvider));
             searchTagsList.setShown(0f);
             addView(searchTagsList, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 38, Gravity.LEFT | Gravity.TOP, 0, 4, 0, 0));
                 addView(actionModeLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, NonIslandHelper.tabBars() ? 36 : 48, Gravity.LEFT | Gravity.TOP));

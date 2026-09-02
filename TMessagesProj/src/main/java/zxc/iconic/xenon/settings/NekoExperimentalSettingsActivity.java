@@ -43,6 +43,7 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
     private final int useCamera2ApiRow = rowId++;
 
     private final int downloadSpeedBoostRow = rowId++;
+    private final int localCustomEmojiRow = rowId++;
     private final int keepFormattingRow = rowId++;
     private final int forceFontWeightFallbackRow = rowId++;
     private final int contentRestrictionRow = rowId++;
@@ -74,6 +75,7 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
                 default -> LocaleController.getString(R.string.DownloadSpeedBoostAverage);
             }).slug("downloadSpeedBoost"));
         }
+        items.add(UItem.asCheck(localCustomEmojiRow, LocaleController.getString(R.string.LocalCustomEmoji)).slug("localCustomEmoji").setChecked(NekoConfig.localCustomEmoji));
         items.add(UItem.asCheck(keepFormattingRow, LocaleController.getString(R.string.TranslationKeepFormatting)).slug("keepFormatting").setChecked(NekoConfig.keepFormatting));
         items.add(UItem.asCheck(forceFontWeightFallbackRow, LocaleController.getString(R.string.ForceFontWeightFallback)).slug("forceFontWeightFallback").setChecked(NekoConfig.forceFontWeightFallback));
         if (Extra.isDirectApp()) {
@@ -243,9 +245,8 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
             types.add(NekoConfig.BOOST_AVERAGE);
             arrayList.add(LocaleController.getString(R.string.DownloadSpeedBoostExtreme));
             types.add(NekoConfig.BOOST_EXTREME);
-            PopupHelper.show(arrayList, LocaleController.getString(R.string.DownloadSpeedBoost), types.indexOf(NekoConfig.downloadSpeedBoost), getParentActivity(), view, i -> {
+            showPopup(arrayList, types.indexOf(NekoConfig.downloadSpeedBoost), item, view, i -> {
                 NekoConfig.setDownloadSpeedBoost(types.get(i));
-                item.textValue = arrayList.get(i);
                 listView.adapter.notifyItemChanged(position, PARTIAL);
             }, resourcesProvider);
         } else if (id == contentRestrictionRow) {
@@ -263,6 +264,11 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
             NekoConfig.toggleKeepFormatting();
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.keepFormatting);
+            }
+        } else if (id == localCustomEmojiRow) {
+            NekoConfig.toggleLocalCustomEmoji();
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.localCustomEmoji);
             }
         }
     }

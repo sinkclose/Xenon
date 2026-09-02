@@ -66,6 +66,7 @@ import org.telegram.tgnet.TLRPC;
 import org.telegram.tgnet.Vector;
 import org.telegram.tgnet.tl.TL_account;
 import org.telegram.tgnet.tl.TL_bots;
+import org.telegram.tgnet.tl.TL_ephemeral;
 import org.telegram.tgnet.tl.TL_iv;
 import org.telegram.tgnet.tl.TL_update;
 import org.telegram.ui.ActionBar.BaseFragment;
@@ -115,6 +116,7 @@ import java.util.regex.Pattern;
 import zxc.iconic.xenon.NekoConfig;
 import zxc.iconic.xenon.helpers.EntitiesHelper;
 import zxc.iconic.xenon.helpers.MessageFilterHelper;
+import zxc.iconic.xenon.helpers.MessageHelper;
 
 @SuppressWarnings("unchecked")
 public class MediaDataController extends BaseController {
@@ -6482,9 +6484,9 @@ public class MediaDataController extends BaseController {
                             }
                         }
                         if (!ephemeralIds.isEmpty()) {
-                            ArrayList<TLRPC.EphemeralMessage> ephemeralMessages = getMessagesStorage().getEphemeralMessagesInternal(dialogId, ephemeralIds);
+                            ArrayList<TL_ephemeral.EphemeralMessage> ephemeralMessages = getMessagesStorage().getEphemeralMessagesInternal(dialogId, ephemeralIds);
                             if (ephemeralMessages != null) {
-                                for (TLRPC.EphemeralMessage ephemeralMessage : ephemeralMessages) {
+                                for (TL_ephemeral.EphemeralMessage ephemeralMessage : ephemeralMessages) {
                                     TLRPC.Message convetedEphemeralMessage = EphemeralMessagesHelper.convertEphemeralToFakeDefault(ephemeralMessage);
                                     MessagesStorage.addUsersAndChatsFromMessage(convetedEphemeralMessage, usersToLoad, chatsToLoad, null);
                                     result.add(convetedEphemeralMessage);
@@ -6935,8 +6937,17 @@ public class MediaDataController extends BaseController {
         }
         for (int i = 0; i < entities.size(); ++i) {
             TLRPC.MessageEntity messageEntity = entities.get(i);
-            if (messageEntity instanceof TLRPC.TL_messageEntityCustomEmoji) {
-                TLRPC.TL_messageEntityCustomEmoji entity = (TLRPC.TL_messageEntityCustomEmoji) messageEntity;
+            if (messageEntity instanceof TLRPC.TL_messageEntityCustomEmoji || messageEntity instanceof TLRPC.TL_messageEntityTextUrl urlEntity) {
+                TLRPC.TL_messageEntityCustomEmoji entity;
+                if (messageEntity instanceof TLRPC.TL_messageEntityTextUrl urlEntity) {
+                    var parsed = MessageHelper.parseLocalCustomEmoji(spannable, urlEntity);
+                    if (parsed == null) {
+                        continue;
+                    }
+                    entity = parsed;
+                } else {
+                    entity = (TLRPC.TL_messageEntityCustomEmoji) messageEntity;
+                }
 
                 int start = messageEntity.offset;
                 int end = messageEntity.offset + messageEntity.length;
@@ -7713,7 +7724,7 @@ public class MediaDataController extends BaseController {
                 req.no_webpage = draftMessage.no_webpage;
                 req.reply_to = draftMessage.reply_to;
                 req.suggested_post = draftMessage.suggested_post;
-                req.entities = draftMessage.entities;
+                req.entities = getMessageHelper().replaceCustomEmojis(dialogId, draftMessage.entities);
                 if (draftMessage.rich_message != null) {
                     req.rich_message = toInputRichMessage(draftMessage.rich_message);
                 }
@@ -8290,7 +8301,7 @@ public class MediaDataController extends BaseController {
                 mid = cursor.intValue(0);
             }
             cursor.dispose();
-            if (mid >= message.id) {
+            if (mid >= message.id && !MessageObject.isEphemeralMessageId(mid) && !MessageObject.isEphemeralMessageId(message.id)) {
                 return;
             }
 

@@ -1,19 +1,27 @@
 package zxc.iconic.xenon.helpers;
 
+import androidx.annotation.NonNull;
+
 import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 
 import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.Utilities;
 
+import java.lang.reflect.Type;
 import java.util.HashMap;
+import java.util.Map;
+import java.util.function.BiConsumer;
 
 public class CloudStorageHelper extends AccountInstance {
 
     private static final CloudStorageHelper[] Instance = new CloudStorageHelper[UserConfig.MAX_ACCOUNT_COUNT];
 
-    private final Gson gson = new Gson();
+    private static final Type STRING_MAP_TYPE = new TypeToken<Map<String, String>>() {
+    }.getType();
+    private static final Gson GSON = new Gson();
 
     public CloudStorageHelper(int num) {
         super(num);
@@ -32,7 +40,7 @@ public class CloudStorageHelper extends AccountInstance {
         return localInstance;
     }
 
-    private void invokeWebViewCustomMethod(String method, String data, Utilities.Callback2<String, String> callback) {
+    private void invokeWebViewCustomMethod(String method, String data, @NonNull BiConsumer<String, String> callback) {
         invokeWebViewCustomMethod(method, data, true, callback);
     }
 
@@ -42,53 +50,52 @@ public class CloudStorageHelper extends AccountInstance {
         }
     }
 
-    public void setItem(String key, String value, Utilities.Callback2<String, String> callback) {
-        HashMap<String, String> map = new HashMap<>();
+    public void setItem(String key, String value, @NonNull BiConsumer<String, String> callback) {
+        Map<String, String> map = new HashMap<>();
         map.put("key", key);
         map.put("value", value);
-        invokeWebViewCustomMethod("saveStorageValue", gson.toJson(map), callback);
+        invokeWebViewCustomMethod("saveStorageValue", GSON.toJson(map), callback);
     }
 
-    public void getItem(String key, Utilities.Callback2<String, String> callback) {
+    public void getItem(String key, @NonNull BiConsumer<String, String> callback) {
         getItems(new String[]{key}, (res, error) -> {
-            if (error == null) {
-                callback.run(res.get(key), null);
+            if (res != null) {
+                callback.accept(res.get(key), null);
             } else {
-                callback.run(null, error);
+                callback.accept(null, error);
             }
         });
     }
 
-    public void getItems(String[] keys, Utilities.Callback2<HashMap<String, String>, String> callback) {
-        HashMap<String, String[]> map = new HashMap<>();
+    public void getItems(String[] keys, @NonNull BiConsumer<Map<String, String>, String> callback) {
+        Map<String, String[]> map = new HashMap<>();
         map.put("keys", keys);
-        invokeWebViewCustomMethod("getStorageValues", gson.toJson(map), (res, error) -> {
+        invokeWebViewCustomMethod("getStorageValues", GSON.toJson(map), (res, error) -> {
             if (error == null) {
-                //noinspection unchecked
-                callback.run(gson.fromJson(res, HashMap.class), null);
+                callback.accept(GSON.fromJson(res, STRING_MAP_TYPE), null);
             } else {
-                callback.run(null, error);
+                callback.accept(null, error);
             }
         });
     }
 
-    public void removeItem(String key, Utilities.Callback2<String, String> callback) {
+    public void removeItem(String key, @NonNull BiConsumer<String, String> callback) {
         removeItems(new String[]{key}, callback);
     }
 
-    public void removeItems(String[] keys, Utilities.Callback2<String, String> callback) {
-        HashMap<String, String[]> map = new HashMap<>();
+    public void removeItems(String[] keys, @NonNull BiConsumer<String, String> callback) {
+        Map<String, String[]> map = new HashMap<>();
         map.put("keys", keys);
-        invokeWebViewCustomMethod("deleteStorageValues", gson.toJson(map), callback);
+        invokeWebViewCustomMethod("deleteStorageValues", GSON.toJson(map), callback);
     }
 
-    public void getKeys(Utilities.Callback2<String[], String> callback) {
+    public void getKeys(BiConsumer<String[], String> callback) {
         invokeWebViewCustomMethod("getStorageKeys", "{}", (res, error) -> {
             if (error == null) {
-                String[] keys = gson.fromJson(res, String[].class);
-                callback.run(keys, null);
+                String[] keys = GSON.fromJson(res, String[].class);
+                callback.accept(keys, null);
             } else {
-                callback.run(null, error);
+                callback.accept(null, error);
             }
         });
     }

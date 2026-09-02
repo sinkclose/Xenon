@@ -56,6 +56,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
     private final int disableGooeyAvatarAnimationRow = rowId++;
     private final int gooeyAvatarOffsetRow = rowId++;
     private final int keepUnreadChatsOnTopRow = rowId++;
+    private final int miniSenderAvatarRow = rowId++;
     private final int keepUnreadArchivedOnTopRow = rowId++;
     private final int smoothlyMoveChatsRow = rowId++;
     private final int material3SwitchesRow = rowId++;
@@ -119,6 +120,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
                 progress -> NekoConfig.setGooeyAvatarOffset(Math.round(progress)));
         items.add(SeekbarCellFactory.of(gooeyAvatarOffsetRow, offsetConfig, NekoConfig.gooeyAvatarOffset).slug("gooeyAvatarOffset"));
         items.add(UItem.asCheck(keepUnreadChatsOnTopRow, LocaleController.getString(R.string.KeepUnreadChatsOnTop)).setChecked(NekoConfig.keepUnreadChatsOnTop).slug("keepUnreadChatsOnTop"));
+        items.add(UItem.asCheck(miniSenderAvatarRow, LocaleController.getString(R.string.MiniSenderAvatar)).setChecked(NekoConfig.miniSenderAvatar).slug("miniSenderAvatar"));
         if (NekoConfig.keepUnreadChatsOnTop) {
             items.add(UItem.asCheck(keepUnreadArchivedOnTopRow, LocaleController.getString(R.string.KeepUnreadArchivedOnTop)).setChecked(NekoConfig.keepUnreadArchivedOnTop).slug("keepUnreadArchivedOnTop"));
         }
@@ -264,6 +266,11 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
             }
             showRestartBulletin();
             listView.adapter.update(true);
+        } else if (id == miniSenderAvatarRow) {
+            NekoConfig.toggleMiniSenderAvatar();
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.miniSenderAvatar);
+            }
         } else if (id == keepUnreadArchivedOnTopRow) {
             NekoConfig.toggleKeepUnreadArchivedOnTop();
             if (view instanceof TextCheckCell) {

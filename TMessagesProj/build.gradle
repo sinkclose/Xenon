@@ -1,5 +1,4 @@
 import org.gradle.internal.os.OperatingSystem
-import tw.nekomimi.nekogram.tlv.GenerateTlReadersTask
 
 import java.nio.file.Paths
 import java.util.zip.ZipFile
@@ -7,6 +6,26 @@ import java.util.zip.ZipFile
 plugins {
     id 'com.android.library'
     id 'org.lsposed.lsparanoid'
+    id 'org.telegram.lottie-meta'
+    id 'tw.nekomimi.nekogram.tl-readers'
+    id 'idea'
+}
+
+tlReaders {
+    schemaDir = file("$rootDir/TMessagesProj_AppTests/tlscheme")
+    tlrpcFile = file("$projectDir/src/main/java/org/telegram/tgnet/TLRPC.java")
+}
+
+idea {
+    module {
+        excludeDirs += [
+                file('jni/third_party'),
+                file('jni/ffmpeg'),
+                file('jni/tlottie'),
+                file('jni/boringssl'),
+                file('jni/sqlite')
+        ]
+    }
 }
 
 def libv2rayFile = file("$projectDir/libs/libv2ray.aar")
@@ -90,7 +109,7 @@ dependencies {
     implementation 'androidx.activity:activity:1.13.0'
     implementation 'androidx.collection:collection:1.6.0'
     implementation 'com.google.android.material:material:1.13.0'
-    implementation 'androidx.fragment:fragment:1.8.9'
+    implementation 'androidx.fragment:fragment:1.9.0'
     implementation 'androidx.core:core:1.19.0'
     implementation 'androidx.palette:palette:1.0.0'
     implementation 'androidx.exifinterface:exifinterface:1.4.2'
@@ -101,6 +120,7 @@ dependencies {
 
     implementation 'com.google.android.gms:play-services-cast-framework:22.3.1'
     implementation 'androidx.mediarouter:mediarouter:1.8.1'
+    implementation 'com.google.zxing:core:3.5.4'
 
     implementation 'androidx.car.app:app:1.7.0'
     implementation 'androidx.car.app:app-projected:1.7.0'
@@ -108,7 +128,8 @@ dependencies {
 
     compileOnly 'org.checkerframework:checker-qual:2.5.2'
     compileOnly 'org.checkerframework:checker-compat-qual:2.5.0'
-    implementation 'com.google.firebase:firebase-messaging:25.1.1'
+    implementation 'com.google.firebase:firebase-messaging:25.1.2'
+    implementation 'com.google.firebase:firebase-appindexing:20.0.0'
     implementation 'com.google.android.gms:play-services-maps:20.0.0'
     implementation 'com.google.android.gms:play-services-auth:21.6.0'
     implementation 'com.google.android.gms:play-services-vision:20.1.3'
@@ -119,9 +140,9 @@ dependencies {
         exclude group: 'com.android.support', module: 'support-annotations'
     }
     implementation 'com.google.mlkit:language-id:17.0.6'
-    implementation 'com.android.billingclient:billing:7.1.1'
+    implementation 'com.android.billingclient:billing:9.1.0'
     implementation 'com.google.code.gson:gson:2.14.0'
-    implementation ('com.google.guava:guava:33.6.0-android') {
+    implementation ('com.google.guava:guava:33.7.1-android') {
         exclude group: 'com.google.code.findbugs', module: 'jsr305'
         exclude group: 'org.checkerframework', module: 'checker-compat-qual'
         exclude group: 'org.checkerframework', module: 'checker-qual'
@@ -139,7 +160,10 @@ dependencies {
     implementation "io.noties.markwon:ext-tables:4.6.2"
     implementation "io.noties.markwon:html:4.6.2"
     implementation "io.noties.markwon:inline-parser:4.6.2"
-    implementation "io.noties.markwon:ext-latex:4.6.2"
+    implementation("io.noties.markwon:ext-latex:4.6.2") {
+        exclude group: 'ru.noties', module: 'jlatexmath-android'
+    }
+    api project(':jlatexmath')
 
 //    implementation 'com.google.mlkit:translate:17.0.3'
 
@@ -153,10 +177,10 @@ dependencies {
     }
 
     implementation 'androidx.browser:browser:1.10.0'
-    implementation 'app.nekogram.gifski:gifski:1.0.1'
+    implementation 'app.nekogram.gifski:gifski:1.0.2'
     implementation 'app.nekogram.translator:translator:1.6.1'
     implementation 'com.jaredrummler:truetypeparser-light:1.0.0'
-    implementation 'com.squareup.okhttp3:okhttp:5.4.0'
+    implementation 'com.squareup.okhttp3:okhttp:5.5.0'
     implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:6.1'
     implementation 'org.apache.commons:commons-text:1.15.0'
 }
@@ -253,6 +277,7 @@ android {
             buildConfigField("String","VERSION_NAME","\"${APP_VERSION_NAME}\"")
             buildConfigField("long", "BUILD_VERSION", "${TG_APP_VERSION_CODE}")
             buildConfigField("String","BUILD_VERSION_STRING","\"${TG_APP_VERSION_NAME}\"")
+            buildConfigField("boolean", "DEBUG_VERSION", "false")
             buildConfigField("boolean", "DEBUG_PRIVATE_VERSION", "false")
             buildConfigField("String", "GIT_COMMIT_HASH", "\"${resolvedGitHash}\"")
             buildConfigField("String", "GIT_COMMIT_SHORT", "\"${resolvedGitShort}\"")
@@ -269,6 +294,7 @@ android {
             buildConfigField("String","VERSION_NAME","\"${APP_VERSION_NAME}\"")
             buildConfigField("long", "BUILD_VERSION", "${TG_APP_VERSION_CODE}")
             buildConfigField("String","BUILD_VERSION_STRING","\"${TG_APP_VERSION_NAME}\"")
+            buildConfigField("boolean", "DEBUG_VERSION", "false")
             buildConfigField("boolean", "DEBUG_PRIVATE_VERSION", "false")
             buildConfigField("String", "GIT_COMMIT_HASH", "\"${resolvedGitHash}\"")
             buildConfigField("String", "GIT_COMMIT_SHORT", "\"${resolvedGitShort}\"")
@@ -307,21 +333,6 @@ android {
         }
         vectorDrawables {
             generatedDensities = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi']
-        }
-    }
-}
-
-
-androidComponents {
-    onVariants(selector().all()) { variant ->
-        var javaSource = variant.sources.java
-        if (javaSource) {
-            var task = project.tasks.register("generateTlReaders${variant.name.capitalize()}", GenerateTlReadersTask) {
-                schemaDir = file("$rootDir/TMessagesProj_AppTests/tlscheme")
-                tlrpcFile = file("$projectDir/src/main/java/org/telegram/tgnet/TLRPC.java")
-                outputFile = "tw/nekomimi/nekogram/tlv/TlReaders.java"
-            }
-            javaSource.addGeneratedSourceDirectory(task, GenerateTlReadersTask::getOutputFolder)
         }
     }
 }

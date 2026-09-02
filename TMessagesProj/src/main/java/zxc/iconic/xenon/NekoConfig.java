@@ -144,6 +144,9 @@ public class NekoConfig {
     public static boolean disableVoiceMessageAutoPlay = false;
     public static boolean unmuteVideosWithVolumeButtons = true;
     public static boolean disableMarkdownByDefault = false;
+    public static boolean localCustomEmoji = false;
+    public static boolean miniSenderAvatar = false;
+    public static boolean hideBottomNavigationBar = false;
     public static boolean hideTimeOnSticker = false;
     public static boolean showOriginal = true;
     public static boolean newMarkdownParser = true;
@@ -395,6 +398,9 @@ public class NekoConfig {
             doubleTapOutAction = preferences.getInt("doubleTapOutAction", doubleTapInAction);
             restrictedLanguages = preferences.getStringSet("restrictedLanguages", null);
             disableMarkdownByDefault = preferences.getBoolean("disableMarkdownByDefault", false);
+            localCustomEmoji = preferences.getBoolean("localCustomEmoji", false);
+            miniSenderAvatar = preferences.getBoolean("miniSenderAvatar", false);
+            hideBottomNavigationBar = preferences.getBoolean("hideBottomNavigationBar", false);
             showRPCError = preferences.getBoolean("showRPCError", false);
             enableSaveDeletedMessages = preferences.getBoolean("enableSaveDeletedMessages", false);
             hideTimeOnSticker = preferences.getBoolean("hideTimeOnSticker", false);
@@ -1134,6 +1140,30 @@ public class NekoConfig {
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("disableMarkdownByDefault", disableMarkdownByDefault);
+        editor.apply();
+    }
+
+    public static void toggleLocalCustomEmoji() {
+        localCustomEmoji = !localCustomEmoji;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("localCustomEmoji", localCustomEmoji);
+        editor.apply();
+    }
+
+    public static void toggleMiniSenderAvatar() {
+        miniSenderAvatar = !miniSenderAvatar;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("miniSenderAvatar", miniSenderAvatar);
+        editor.apply();
+    }
+
+    public static void toggleHideBottomNavigationBar() {
+        hideBottomNavigationBar = !hideBottomNavigationBar;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("hideBottomNavigationBar", hideBottomNavigationBar);
         editor.apply();
     }
 
