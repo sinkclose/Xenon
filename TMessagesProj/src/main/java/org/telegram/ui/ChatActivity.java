@@ -38,6 +38,7 @@ import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.BitmapShader;
+import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorMatrix;
@@ -1114,13 +1115,84 @@ public class ChatActivity extends BaseFragment implements
     private View slidingView;
     // Xenon: swipe bubbles vertical menu (Reply/Edit/Delete)
     private int swipeBubbleSelected = OPTION_REPLY;
+    private String swipeBubbleSelectedKey = "reply";
     private float swipeVerticalOffset = 0;
     private float swipeVerticalStartY = 0;
     private boolean swipeVerticalTracking = false;
     private int lastVibratedSelection = 0;
+    private String lastVibratedKey = "reply";
     private float swipeDisplayOffset = 0;
     private android.animation.ValueAnimator swipeOffsetAnimator;
     private float bubblesAppearProgress = 0f;
+    private final ImageReceiver swipeReactionImageReceiver = new ImageReceiver();
+    private String swipeReactionImageReceiverKey;
+    private long bubblesAppearStartTime;
+    private long bubblesDisappearStartTime;
+    private android.graphics.Picture swipePillsPicture;
+    private boolean swipePillsActive;
+    private View swipePillsOverlayView;
+    private float pillStackShiftCurrent;
+
+    private void clearSwipePillsOverlay() {
+        if (swipePillsActive) {
+            swipePillsActive = false;
+            swipePillsPicture = null;
+            if (swipePillsOverlayView != null) swipePillsOverlayView.invalidate();
+        }
+    }
+    private boolean bubblesShown;
+    private int swipePointerScreenY;
+    private int swipeEdgeDir;
+    private long swipeEdgeNextAdvance;
+    private float swipeEdgeAccumOffset;
+    private long swipeEdgeEnterTime;
+    private long swipeManualLockUntil;
+    private boolean swipeManualWasFrozen;
+    private long swipeAutoPausedUntil;
+    private int swipeEdgeTopBound;
+    private int swipeEdgeBottomBound;
+    private boolean swipeAutoScrolling;
+
+    private boolean isSwipeReactionKey(String k) { return k != null && k.startsWith("reaction:"); }
+    private int getSwipeOptionForKey(String k) {
+        if (k == null) return OPTION_REPLY;
+        switch (k) {
+            case "reply": return OPTION_REPLY;
+            case "edit": return OPTION_EDIT;
+            case "delete": return OPTION_DELETE;
+            case "copy": return OPTION_COPY;
+            case "forward": return OPTION_FORWARD;
+            case "save": return OPTION_SAVE_MESSAGE;
+            case "pin": return OPTION_PIN;
+            case "select": return OPTION_SELECT;
+            case "translate": return OPTION_TRANSLATE;
+            case "report": return OPTION_REPORT_CHAT;
+            case "details": return OPTION_DETAILS;
+            case "copyphoto": return OPTION_COPY_PHOTO;
+            case "qr": return OPTION_QR;
+            case "openin": return OPTION_OPEN_IN;
+            default: if (isSwipeReactionKey(k)) return 1000; return OPTION_REPLY;
+        }
+    }
+    private String getSwipeKeyForOption(int opt) {
+        switch (opt) {
+            case OPTION_REPLY: return "reply";
+            case OPTION_EDIT: return "edit";
+            case OPTION_DELETE: return "delete";
+            case OPTION_COPY: return "copy";
+            case OPTION_FORWARD: return "forward";
+            case OPTION_SAVE_TO_GALLERY: case OPTION_SAVE_TO_GALLERY2: case OPTION_SAVE_TO_DOWNLOADS_OR_MUSIC: return "save";
+            case OPTION_PIN: case OPTION_UNPIN: return "pin";
+            case OPTION_SELECT: return "select";
+            case OPTION_TRANSLATE: return "translate";
+            case OPTION_REPORT_CHAT: return "report";
+            case OPTION_DETAILS: return "details";
+            case OPTION_COPY_PHOTO: return "copyphoto";
+            case OPTION_QR: return "qr";
+            case OPTION_OPEN_IN: return "openin";
+            default: return "reply";
+        }
+    }
 
     private final float[] tmpOverlayPos = new float[2];
     private float[] computeArticleOverlayPos(View overlay) {
@@ -5176,8 +5248,8 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                 boolean visible = translationX <= -AndroidUtilities.dp(20);
                 float endVisibleValue = visible ? springMultiplier : 0;
                 if (endVisibleValue != slidingDrawableVisibilitySpring.getSpring().getFinalPosition()) {
-                    float hs = visible ? 130f : 900f;
-                    float hd = visible ? 0.94f : 0.95f;
+                    float hs = visible ? 130f : 320f;
+                    float hd = visible ? 0.94f : 0.92f;
                     slidingDrawableVisibilitySpring.getSpring().setStiffness(hs).setDampingRatio(hd);
                     slidingDrawableVisibilitySpring.getSpring().setFinalPosition(endVisibleValue);
                     if (!slidingDrawableVisibilitySpring.isRunning()) {
@@ -5188,7 +5260,8 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                 float rawIconProgress = slidingDrawableVisibilityProgress.getValue() / springMultiplier;
                 float hideFactor = 1f;
                 if (translationX > -AndroidUtilities.dp(20)) {
-                    hideFactor = Math.max(0f, Math.min(1f, (-translationX) / (float) AndroidUtilities.dp(20)));
+                    hideFactor = Math.max(0f, Math.min(1f, (-translationX) / (float) AndroidUtilities.dp(22)));
+                    hideFactor = AndroidUtilities.decelerateInterpolator.getInterpolation(hideFactor);
                 }
                 float iconProgress = rawIconProgress * hideFactor;
                 MessageObject slidingMsg = getSlidingMessageObject();
@@ -5322,28 +5395,14 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                 }
 
                 int alpha = (int) (iconProgress * 0xFF);
-                if (zxc.iconic.xenon.NekoConfig.swipeOtherBubbles && slidingView != null && iconProgress > 0) {
-                    Drawable replyIcon = getThemedDrawable(Theme.key_drawable_replyIcon);
-                    Drawable editIcon;
-                    Drawable deleteIcon;
-                    Drawable copyIcon;
-                    Drawable forwardIcon;
-                    Drawable saveIcon;
-                    Drawable pinIcon;
-                    Drawable selectIcon;
-                    Drawable translateIcon;
-                    try { editIcon = getContext().getResources().getDrawable(R.drawable.msg_edit).mutate(); } catch (Exception e) { editIcon = replyIcon; }
-                    try { deleteIcon = getContext().getResources().getDrawable(R.drawable.msg_delete).mutate(); } catch (Exception e) { deleteIcon = replyIcon; }
-                    try { copyIcon = getContext().getResources().getDrawable(R.drawable.msg_copy).mutate(); } catch (Exception e) { copyIcon = replyIcon; }
-                    try { forwardIcon = getContext().getResources().getDrawable(R.drawable.msg_forward).mutate(); } catch (Exception e) { forwardIcon = replyIcon; }
-                    try { saveIcon = getContext().getResources().getDrawable(R.drawable.msg_saved).mutate(); } catch (Exception e) { saveIcon = replyIcon; }
-                    try { pinIcon = getContext().getResources().getDrawable(R.drawable.msg_pin).mutate(); } catch (Exception e) { pinIcon = replyIcon; }
-                    try { selectIcon = getContext().getResources().getDrawable(R.drawable.msg_select).mutate(); } catch (Exception e) { selectIcon = replyIcon; }
-                    try { translateIcon = getContext().getResources().getDrawable(R.drawable.msg_translate).mutate(); } catch (Exception e) { translateIcon = replyIcon; }
+                if (zxc.iconic.xenon.NekoConfig.isSwipeOtherBubblesEnabled() && slidingView != null && iconProgress > 0) {
                     MessageObject mo = getSlidingMessageObject();
-                    // Build bubbles exactly from popup menu for this message
-                    java.util.ArrayList<Drawable> iconList = new java.util.ArrayList<>();
-                    java.util.ArrayList<Integer> idxList = new java.util.ArrayList<>();
+                    java.util.ArrayList<String> enabledKeys = new java.util.ArrayList<>(zxc.iconic.xenon.NekoConfig.swipeEnabledActions);
+                    String primaryKey = zxc.iconic.xenon.NekoConfig.swipePrimaryAction;
+                    if (!enabledKeys.contains(primaryKey)) primaryKey = enabledKeys.isEmpty() ? "reply" : enabledKeys.get(0);
+                    java.util.ArrayList<Integer> popupOptsForFilter = new java.util.ArrayList<>();
+                    java.util.ArrayList<Integer> popupIconsForFilter = new java.util.ArrayList<>();
+                    java.util.ArrayList<CharSequence> popupItemsForFilter = new java.util.ArrayList<>();
                     if (mo != null) {
                         MessageObject prevSel = selectedObject;
                         MessageObject.GroupedMessages prevGroup = selectedObjectGroup;
@@ -5351,82 +5410,208 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                         selectedObject = mo;
                         selectedObjectGroup = getValidGroupedMessage(mo);
                         selectedObjectToEditCaption = null;
-                        java.util.ArrayList<Integer> popupIconsRes = new java.util.ArrayList<>();
-                        java.util.ArrayList<CharSequence> popupItemsTmp = new java.util.ArrayList<>();
-                        java.util.ArrayList<Integer> popupOpts = new java.util.ArrayList<>();
-                        try { fillMessageMenu(mo, popupIconsRes, popupItemsTmp, popupOpts); } catch (Exception ignore) {}
+                        try { fillMessageMenu(mo, popupIconsForFilter, popupItemsForFilter, popupOptsForFilter); } catch (Exception ignore) {}
                         selectedObject = prevSel;
                         selectedObjectGroup = prevGroup;
                         selectedObjectToEditCaption = prevCaption;
-                        if (popupOpts.isEmpty()) {
-                            popupOpts.add(OPTION_REPLY);
-                            popupIconsRes.add(R.drawable.menu_reply);
+                    } else {
+                        popupOptsForFilter.add(OPTION_REPLY);
+                    }
+                    java.util.ArrayList<String> filteredKeys = new java.util.ArrayList<>();
+                    for (String k : enabledKeys) {
+                        if (isSwipeReactionKey(k)) {
+                            String emo = k.substring(9);
+                            boolean isAnimated = emo.startsWith("animated_");
+                            TLRPC.TL_availableReaction ar = null;
+                            if (!isAnimated) ar = org.telegram.messenger.MediaDataController.getInstance(currentAccount).getReactionsMap().get(emo);
+                            boolean available = true;
+                            if (ar != null && ar.premium && !getUserConfig().isPremium()) available = false;
+                            if (mo != null && !mo.canSetReaction()) available = false;
+                            if (available && !isAnimated && currentChat != null && chatInfo != null) {
+                                try { available = org.telegram.messenger.ChatObject.reactionIsAvailable(chatInfo, emo); } catch (Exception ignore) {}
+                            }
+                            if (available) filteredKeys.add(k);
+                        } else {
+                            if (k.equals("select")) {
+                                // Telegram only adds SELECT when holdToOpenPopup is true, but swipe can select any message
+                                if (mo != null && !mo.isSponsored()) filteredKeys.add(k);
+                                continue;
+                            }
+                            int opt = getSwipeOptionForKey(k);
+                            boolean contains = false;
+                            if (k.equals("save")) {
+                                contains = popupOptsForFilter.contains(OPTION_SAVE_TO_GALLERY) || popupOptsForFilter.contains(OPTION_SAVE_TO_GALLERY2) || popupOptsForFilter.contains(OPTION_SAVE_TO_DOWNLOADS_OR_MUSIC) || popupOptsForFilter.contains(OPTION_SAVE_TO_GALLERY_STICKER) || popupOptsForFilter.contains(OPTION_SAVE_MESSAGE) || popupOptsForFilter.contains(OPTION_ADD_TO_GIFS);
+                            } else if (k.equals("pin")) {
+                                contains = popupOptsForFilter.contains(OPTION_PIN) || popupOptsForFilter.contains(OPTION_UNPIN);
+                            } else {
+                                contains = popupOptsForFilter.contains(opt);
+                            }
+                            if (contains) filteredKeys.add(k);
                         }
-                        for (int i = 0; i < popupOpts.size(); i++) {
-                            int res = i < popupIconsRes.size() ? popupIconsRes.get(i) : R.drawable.menu_reply;
-                            Drawable d;
-                            try { d = getContext().getResources().getDrawable(res).mutate(); } catch (Exception e) { d = replyIcon; }
+                    }
+                    if (filteredKeys.isEmpty()) filteredKeys.add("reply");
+                    String effectivePrimary = primaryKey;
+                    if (!filteredKeys.contains(effectivePrimary)) {
+                        if (filteredKeys.contains("reply")) effectivePrimary = "reply";
+                        else effectivePrimary = filteredKeys.get(0);
+                    }
+                    int primaryFilteredIdx = filteredKeys.indexOf(effectivePrimary);
+                    java.util.ArrayList<Drawable> iconList = new java.util.ArrayList<>();
+                    java.util.ArrayList<Integer> idxList = new java.util.ArrayList<>();
+                    java.util.ArrayList<CharSequence> labelList = new java.util.ArrayList<>();
+                    java.util.ArrayList<String> keyList = new java.util.ArrayList<>();
+                    for (String k : filteredKeys) {
+                        Drawable d = null;
+                        int opt = getSwipeOptionForKey(k);
+                        if (isSwipeReactionKey(k)) {
+                            String emo = k.substring(9);
+                            if (emo.startsWith("animated_")) {
+                                try {
+                                    long docId = Long.parseLong(emo.substring(9));
+                                    org.telegram.ui.Components.AnimatedEmojiDrawable ae = org.telegram.ui.Components.AnimatedEmojiDrawable.make(currentAccount, org.telegram.ui.Components.AnimatedEmojiDrawable.CACHE_TYPE_KEYBOARD, docId);
+                                    d = ae;
+                                } catch (Exception e) { d = getThemedDrawable(Theme.key_drawable_replyIcon); }
+                            } else {
+                                d = null;
+                            }
+                        } else {
+                            int res = 0;
+                            switch (k) {
+                                case "reply": res = R.drawable.menu_reply; break;
+                                case "edit": res = R.drawable.msg_edit; break;
+                                case "delete": res = R.drawable.msg_delete; break;
+                                case "copy": res = R.drawable.msg_copy; break;
+                                case "forward": res = R.drawable.msg_forward; break;
+                                case "save": res = R.drawable.msg_saved; break;
+                                case "pin": res = R.drawable.msg_pin; break;
+                                case "select": res = R.drawable.msg_select; break;
+                                case "translate": res = R.drawable.msg_translate; break;
+                                case "report": res = R.drawable.msg_report; break;
+                                case "details": res = R.drawable.msg_info; break;
+                                case "copyphoto": res = R.drawable.msg_copy; break;
+                                case "qr": res = R.drawable.msg_qrcode; break;
+                                case "openin": res = R.drawable.msg_openin; break;
+                            }
+                            try { d = getContext().getResources().getDrawable(res).mutate(); } catch (Exception e) { d = getThemedDrawable(Theme.key_drawable_replyIcon); }
                             if (d != null) {
                                 int col = isDark ? 0xFFFFFFFF : 0xFF1A1A1A;
                                 d.setColorFilter(new android.graphics.PorterDuffColorFilter(col, android.graphics.PorterDuff.Mode.SRC_IN));
                             }
-                            iconList.add(d);
-                            idxList.add(popupOpts.get(i));
                         }
-                    } else {
-                        iconList.add(replyIcon); idxList.add(OPTION_REPLY);
+                        iconList.add(d);
+                        idxList.add(opt);
+                        keyList.add(k);
+                        CharSequence lbl;
+                        if (isSwipeReactionKey(k)) lbl = LocaleController.getString(R.string.SwipeActionReaction);
+                        else lbl = zxc.iconic.xenon.NekoConfig.getSwipeActionTitle(k);
+                        labelList.add(lbl);
                     }
-                    // labels for names mode
-                    java.util.ArrayList<CharSequence> labelList = new java.util.ArrayList<>();
-                    if (mo != null) {
-                        MessageObject prevSel2 = selectedObject;
-                        MessageObject.GroupedMessages prevGroup2 = selectedObjectGroup;
-                        MessageObject prevCaption2 = selectedObjectToEditCaption;
-                        selectedObject = mo;
-                        selectedObjectGroup = getValidGroupedMessage(mo);
-                        selectedObjectToEditCaption = null;
-                        java.util.ArrayList<Integer> tmpIcons = new java.util.ArrayList<>();
-                        java.util.ArrayList<CharSequence> tmpItems = new java.util.ArrayList<>();
-                        java.util.ArrayList<Integer> tmpOpts = new java.util.ArrayList<>();
-                        try { fillMessageMenu(mo, tmpIcons, tmpItems, tmpOpts); } catch (Exception ignore) {}
-                        selectedObject = prevSel2;
-                        selectedObjectGroup = prevGroup2;
-                        selectedObjectToEditCaption = prevCaption2;
-                        if (tmpOpts.size() == idxList.size()) {
-                            for (int i = 0; i < tmpOpts.size(); i++) labelList.add(tmpItems.get(i) != null ? tmpItems.get(i) : "");
-                        } else {
-                            for (int i = 0; i < idxList.size(); i++) labelList.add("");
-                        }
-                    } else {
-                        labelList.add("Reply");
-                    }
-                    while (labelList.size() < idxList.size()) labelList.add("");
                     int count = iconList.size();
                     float spacing = AndroidUtilities.dp(36);
-                    float _taEarly = (Math.abs(translationX) >= AndroidUtilities.dp(48) && iconProgress > 0.82f) ? 1f : 0f;
-                    bubblesAppearProgress += (_taEarly - bubblesAppearProgress) * 0.045f;
-                    if (Math.abs(_taEarly - bubblesAppearProgress) > 0.005f) invalidate(); else bubblesAppearProgress = _taEarly;
-                    // only allow pulling up (negative), not down beyond top
-                    float maxDy = (count - 1) * spacing;
-                    float clampedDy = Math.max(-maxDy, Math.min(0, swipeVerticalOffset));
-                    float raw = -clampedDy / spacing;
-                    int newSelPos;
-                    if (idxList.size() > 1 && swipeBubbleSelected == idxList.get(0) && raw < 0.85f) {
-                        newSelPos = 0;
+                    // selection needs more finger travel than the visual spacing between pills
+                    float switchStep = spacing * Math.max(1f, Math.min(3f, zxc.iconic.xenon.NekoConfig.swipeSwitchStepMul));
+                    float _taEarly = (Math.abs(translationX) >= AndroidUtilities.dp(36) && iconProgress > 0.7f) ? 1f : 0f;
+                    if (_taEarly > 0f) {
+                        if (bubblesDisappearStartTime != 0) {
+                            // re-crossed the threshold mid-fade-out: resume the fade-in from the
+                            // current gate instead of snapping back to full alpha
+                            long disEl = System.currentTimeMillis() - bubblesDisappearStartTime;
+                            float g = Math.max(0f, 1f - disEl / 160f);
+                            bubblesDisappearStartTime = 0;
+                            bubblesAppearStartTime = System.currentTimeMillis() - (long) (g * 140f);
+                        } else if (bubblesAppearStartTime == 0) {
+                            bubblesAppearStartTime = System.currentTimeMillis();
+                        }
+                        bubblesShown = true;
                     } else {
-                        newSelPos = Math.round(raw);
+                        bubblesAppearStartTime = 0;
+                        if (bubblesShown && bubblesDisappearStartTime == 0) bubblesDisappearStartTime = System.currentTimeMillis();
+                        if (bubblesShown && bubblesDisappearStartTime != 0 && System.currentTimeMillis() - bubblesDisappearStartTime >= 160) {
+                            bubblesShown = false;
+                            bubblesDisappearStartTime = 0;
+                            // pills are invisible now - reset frozen state so nothing snaps later
+                            swipeVerticalOffset = 0;
+                            swipeEdgeAccumOffset = 0;
+                            swipeEdgeDir = 0;
+                            swipeEdgeEnterTime = 0;
+                            swipeManualLockUntil = 0;
+                            swipeManualWasFrozen = false;
+                            swipeAutoPausedUntil = 0;
+                            pillStackShiftCurrent = 0f;
+                            swipeDisplayOffset = 0;
+                            swipeBubbleSelected = OPTION_REPLY;
+                            swipeBubbleSelectedKey = "reply";
+                            lastVibratedSelection = OPTION_REPLY;
+                            lastVibratedKey = "reply";
+                        }
+                    }
+                    bubblesAppearProgress = _taEarly;
+                    long appearElapsed = bubblesAppearStartTime == 0 ? 0 : System.currentTimeMillis() - bubblesAppearStartTime;
+                    long disappearElapsed = bubblesDisappearStartTime == 0 ? 0 : System.currentTimeMillis() - bubblesDisappearStartTime;
+                    if (_taEarly > 0f && appearElapsed < (count - 1) * 60L + 250L) invalidate();
+                    else if (bubblesShown) invalidate();
+                    int aboveCount = primaryFilteredIdx;
+                    int belowCount = count - primaryFilteredIdx - 1;
+                    float maxUp = belowCount * switchStep;
+                    float maxDown = aboveCount * switchStep;
+                    // edge auto-advance: finger held at screen edge keeps stepping selection
+                    if (swipePointerScreenY > 0) {
+                        int edgeZone = AndroidUtilities.dp(28);
+                        int bottomBound = swipeEdgeBottomBound > 0 ? swipeEdgeBottomBound : AndroidUtilities.displaySize.y;
+                        int topBound = swipeEdgeBottomBound > 0 ? swipeEdgeTopBound : 0;
+                        boolean atBottom = swipePointerScreenY >= bottomBound - edgeZone;
+                        boolean atTop = swipePointerScreenY <= topBound + AndroidUtilities.statusBarHeight + edgeZone;
+                        float rawNow = -Math.max(-maxUp, Math.min(maxDown, swipeVerticalOffset)) / switchStep;
+                        int curPos = Math.max(0, Math.min(count - 1, primaryFilteredIdx + Math.round(rawNow)));
+                        int dir = 0;
+                        if (atBottom && curPos > 0) dir = 1; // bottom edge -> keep selecting bubbles above
+                        else if (atTop && curPos < count - 1) dir = -1; // top edge -> keep selecting bubbles below
+                        long nowMs = System.currentTimeMillis();
+                        if (dir == 0) {
+                            swipeEdgeDir = 0;
+                            swipeAutoScrolling = false;
+                        } else {
+                            if (swipeEdgeEnterTime == 0) swipeEdgeEnterTime = nowMs;
+                            swipeEdgeDir = dir;
+                            // first step 0.5s after the finger entered the edge zone, then every 0.5s
+                            // (while frozen nothing moves at all)
+                            if (nowMs - swipeEdgeEnterTime >= 500 && nowMs >= swipeEdgeNextAdvance && nowMs >= swipeAutoPausedUntil && nowMs >= swipeManualLockUntil) {
+                                swipeEdgeAccumOffset += dir * switchStep;
+                                swipeVerticalOffset += dir * switchStep;
+                                swipeEdgeNextAdvance = nowMs + 500;
+                                swipeManualLockUntil = nowMs + 500;
+                                swipeAutoScrolling = true;
+                                invalidate();
+                            } else {
+                                invalidate();
+                            }
+                        }
+                    }
+                    float clampedDy = Math.max(-maxUp, Math.min(maxDown, swipeVerticalOffset));
+                    float raw = -clampedDy / switchStep;
+                    int newSelPos;
+                    String primaryKeyCheck = filteredKeys.get(primaryFilteredIdx);
+                    int primaryOptCheck = getSwipeOptionForKey(primaryKeyCheck);
+                    boolean isPrimarySelected = swipeBubbleSelectedKey.equals(primaryKeyCheck) || swipeBubbleSelected == primaryOptCheck;
+                    if (count > 1 && isPrimarySelected && Math.abs(raw) < 0.85f) {
+                        newSelPos = primaryFilteredIdx;
+                    } else {
+                        newSelPos = primaryFilteredIdx + Math.round(raw);
                     }
                     newSelPos = Math.max(0, Math.min(count - 1, newSelPos));
-                    if (bubblesAppearProgress < 0.02f) newSelPos = 0;
+                    if (bubblesAppearProgress < 0.02f) newSelPos = primaryFilteredIdx;
                     int newSel = idxList.get(newSelPos);
-                    if (newSel != swipeBubbleSelected) {
+                    String newKey = keyList.get(newSelPos);
+                    if (newSel != swipeBubbleSelected || !newKey.equals(swipeBubbleSelectedKey)) {
                         swipeBubbleSelected = newSel;
-                        if (lastVibratedSelection != newSel) {
+                        swipeBubbleSelectedKey = newKey;
+                        if (lastVibratedSelection != newSel || !newKey.equals(lastVibratedKey)) {
                             try { performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING); } catch (Exception ignore) {}
                             lastVibratedSelection = newSel;
+                            lastVibratedKey = newKey;
                         }
                         // spring overshoot
-                        float target = -newSelPos * spacing;
+                        float target = -(newSelPos - primaryFilteredIdx) * spacing;
                         if (swipeOffsetAnimator != null) swipeOffsetAnimator.cancel();
                         swipeOffsetAnimator = android.animation.ValueAnimator.ofFloat(swipeDisplayOffset, target);
                         swipeOffsetAnimator.setDuration(260);
@@ -5435,15 +5620,17 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                         swipeOffsetAnimator.start();
                     }
                     // snap with ease + subtle drag while scrolling
-                    float targetOffset = -newSelPos * spacing;
+                    float targetOffset = -(newSelPos - primaryFilteredIdx) * spacing;
                     // subtle up/down while dragging between snaps
-                    float dragRemainder = clampedDy + newSelPos * spacing;
-                    float dragOffset = dragRemainder * 0.22f;
+                    // remainder measured in switchStep units so the selected pill stays exactly
+                    // centered no matter how far the stack is clamped
+                    float dragRemainder = clampedDy + (newSelPos - primaryFilteredIdx) * switchStep;
+                    float dragOffset = dragRemainder * 0.22f * (spacing / switchStep);
                     swipeDisplayOffset += (targetOffset - swipeDisplayOffset) * 0.32f;
                     if (Math.abs(targetOffset - swipeDisplayOffset) < 0.5f) swipeDisplayOffset = targetOffset;
                     else if (count > 1) invalidate();
                     // show names + right-aligned pills over message
-                    boolean showNames = zxc.iconic.xenon.NekoConfig.swipeOtherBubbles && zxc.iconic.xenon.NekoConfig.swipeBubbleShowNames;
+                    boolean showNames = zxc.iconic.xenon.NekoConfig.isSwipeOtherBubblesEnabled() && zxc.iconic.xenon.NekoConfig.swipeBubbleShowNames;
                     Paint labelPaint = null;
                     float labelBubbleScaleMul = 1f;
                     float labelTextSize = AndroidUtilities.dp(12);
@@ -5461,30 +5648,93 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                             labelBubbleScaleMul = 0.9f;
                         }
                     }
+                    // Xenon: the pill stack is anchored to the BUBBLE center. Bubble bounds come
+                    // from the last drawn frame (correct even for grouped/album cells).
+                    float pillY = y;
+                    int bubbleCenterLocal = Integer.MIN_VALUE;
+                    if (slidingView instanceof ChatMessageCell) {
+                        ChatMessageCell slidingCell = (ChatMessageCell) slidingView;
+                        int bubbleTopLocal = slidingCell.getLastDrawnBackgroundTop();
+                        int bubbleBottomLocal = slidingCell.getLastDrawnBackgroundBottom();
+                        if (bubbleBottomLocal <= bubbleTopLocal) {
+                            bubbleTopLocal = slidingCell.getBackgroundDrawableTop();
+                            bubbleBottomLocal = slidingCell.getBackgroundDrawableBottom();
+                        }
+                        if (bubbleBottomLocal > bubbleTopLocal) {
+                            bubbleCenterLocal = (bubbleTopLocal + bubbleBottomLocal) / 2;
+                            pillY = slidingView.getTop() + bubbleCenterLocal;
+                        }
+                    }
+                    float pillShiftTarget = 0f;
+                    if (count > 1 && bubbleCenterLocal != Integer.MIN_VALUE) {
+                        int[] cellLocTmp = new int[2];
+                        slidingView.getLocationOnScreen(cellLocTmp);
+                        float bubbleScreenY = cellLocTmp[1] + bubbleCenterLocal;
+                        float topLimit = AndroidUtilities.statusBarHeight + AndroidUtilities.dp(28);
+                        float bottomLimit = AndroidUtilities.displaySize.y - AndroidUtilities.dp(72);
+                        if (swipePillsOverlayView != null) {
+                            int[] ovLocTmp = new int[2];
+                            swipePillsOverlayView.getLocationOnScreen(ovLocTmp);
+                            // draw pills in the overlay's own space from real on-screen positions -
+                            // no dependence on the list canvas matrix/clip
+                            pillY = bubbleScreenY - ovLocTmp[1];
+                            topLimit = ovLocTmp[1] + AndroidUtilities.statusBarHeight + AndroidUtilities.dp(28);
+                            bottomLimit = ovLocTmp[1] + swipePillsOverlayView.getHeight() - AndroidUtilities.dp(72);
+                        }
+                        pillShiftTarget = Math.max(topLimit, Math.min(bottomLimit, bubbleScreenY)) - bubbleScreenY;
+                        if (Math.abs(pillShiftTarget - pillStackShiftCurrent) > 0.5f) {
+                            pillStackShiftCurrent += (pillShiftTarget - pillStackShiftCurrent) * 0.35f;
+                            invalidate();
+                        } else {
+                            pillStackShiftCurrent = pillShiftTarget;
+                        }
+                    } else {
+                        pillStackShiftCurrent = 0f;
+                    }
+                    // Xenon: record pills into an offscreen picture so the overlay can draw them over the interface
+                    // (single-bubble stack keeps drawing on the list canvas exactly as before)
+                    android.graphics.Picture pillPicture = null;
+                    Canvas mainPillCanvas = canvas;
+                    if (count > 1 && swipePillsOverlayView != null) {
+                        pillPicture = new android.graphics.Picture();
+                        Canvas pc = pillPicture.beginRecording(getWidth(), getHeight());
+                        // pills are already recorded in overlay-local coordinates -> identity matrix
+                        canvas = pc;
+                        swipePillsActive = true;
+                    }
+                    boolean disappearing = bubblesShown && bubblesDisappearStartTime != 0;
+                    float disappearGate = disappearing ? Math.max(0f, 1f - disappearElapsed / 160f) : 1f;
                     for (int p = 0; p < count; p++) {
                         Drawable d = iconList.get(p);
-                        float bubbleY = y + p * spacing + swipeDisplayOffset + dragOffset;
-                        float appearGate = 1f;
-                        if (p > 0) {
-                            float staggerStep = count > 2 ? 0.68f / (count - 1) : 0.18f;
-                            float stagger = (p - 1) * staggerStep;
-                            appearGate = Math.max(0f, Math.min(1f, (bubblesAppearProgress * 1.75f - stagger) / 0.62f));
-                            if (appearGate < 0.02f) continue;
+                        float bubbleY = pillY + (p - primaryFilteredIdx) * spacing + swipeDisplayOffset + dragOffset;
+                        float appearGate;
+                        if (disappearing) {
+                            appearGate = disappearGate;
+                        } else if (bubblesShown) {
+                            appearGate = Math.max(0f, Math.min(1f, appearElapsed / 140f));
+                            if (p != primaryFilteredIdx) {
+                                float distFromPrimary = Math.abs(p - primaryFilteredIdx);
+                                float appearDelay = distFromPrimary * 60f;
+                                float fadeIn = 140f;
+                                appearGate = Math.max(0f, Math.min(1f, (appearElapsed - appearDelay) / fadeIn));
+                            }
+                        } else {
+                            continue;
                         }
-                        float dist = Math.abs(bubbleY - y) / spacing;
+                        if (appearGate <= 0f) continue;
+                        float dist = Math.abs(bubbleY - pillY) / spacing;
                         float t = 1f - Math.min(1f, dist);
                         t = t * t;
                         float bubbleScale = scale * (0.78f + 0.22f * t) * labelBubbleScaleMul;
-                        int bubbleAlpha = (int) (alpha * (0.45f + 0.55f * t));
-                        if (p > 0) {
-                            bubbleAlpha = (int) (bubbleAlpha * appearGate);
-                            bubbleScale *= (0.75f + 0.25f * appearGate);
-                        }
+                        int bubbleAlpha = alpha;
+                        bubbleAlpha = (int) (bubbleAlpha * appearGate);
+                        bubbleAlpha = (int) (bubbleAlpha * (0.6f + 0.4f * t));
+                        bubbleScale *= (0.75f + 0.25f * appearGate);
                         // above bubbles keep same alpha/scale as below (no extra fade)
                         float bx, labelTx = 0, labelW = 0;
                         String labelStr = null;
                         float bScale = bubbleScale;
-                        float by = bubbleY;
+                        float by = bubbleY + pillStackShiftCurrent;
                         if (showNames && labelPaint != null && p < labelList.size()) {
                             CharSequence lab = labelList.get(p);
                             if (lab != null && lab.length() > 0) {
@@ -5520,20 +5770,10 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                             AndroidUtilities.rectTmp.set((int) pillLeft, (int) pillTop, (int) pillRight, (int) pillBottom);
                             path.addRoundRect(AndroidUtilities.rectTmp, pillRad, pillRad, Path.Direction.CW);
                             Paint shadowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-                            shadowPaint.setColor(0x22000000);
-                            for (int s = 3; s >= 1; s--) {
-                                float pad = AndroidUtilities.dp(s * 2);
-                                float a = (bubbleAlpha * (0.18f - s * 0.03f));
-                                if (a < 4) continue;
-                                shadowPaint.setAlpha((int) a);
-                                path.rewind();
-                                AndroidUtilities.rectTmp.set((int)(pillLeft - pad), (int)(pillTop - pad), (int)(pillRight + pad), (int)(pillBottom + pad));
-                                path.addRoundRect(AndroidUtilities.rectTmp, pillRad + pad, pillRad + pad, Path.Direction.CW);
-                                canvas.drawPath(path, shadowPaint);
-                            }
-                            path.rewind();
-                            AndroidUtilities.rectTmp.set((int) pillLeft, (int) pillTop, (int) pillRight, (int) pillBottom);
-                            path.addRoundRect(AndroidUtilities.rectTmp, pillRad, pillRad, Path.Direction.CW);
+                            shadowPaint.setColor(0x33000000);
+                            shadowPaint.setAlpha((int) (bubbleAlpha * 0.4f));
+                            shadowPaint.setMaskFilter(new BlurMaskFilter(AndroidUtilities.dp(8), BlurMaskFilter.Blur.NORMAL));
+                            canvas.drawPath(path, shadowPaint);
                             int wasAlpha2 = chatActionBackgroundPaint.getAlpha();
                             chatActionBackgroundPaint.setAlpha((int) (bubbleAlpha * 0.92f));
                             canvas.drawPath(path, chatActionBackgroundPaint);
@@ -5548,7 +5788,35 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                             canvas.drawPath(path, chatActionBackgroundPaint);
                             chatActionBackgroundPaint.setAlpha(wasAlpha2);
                         }
-                        if (d != null) {
+                        String curKey = keyList.get(p);
+                        boolean isReactionStatic = isSwipeReactionKey(curKey) && !curKey.substring(9).startsWith("animated_");
+                        if (isReactionStatic) {
+                            String emo = curKey.substring(9);
+                            TLRPC.TL_availableReaction ar = MediaDataController.getInstance(currentAccount).getReactionsMap().get(emo);
+                            if (ar != null) {
+                                if (swipeReactionImageReceiver.getParentView() != this) {
+                                    swipeReactionImageReceiver.setParentView(this);
+                                }
+                                if (!emo.equals(swipeReactionImageReceiverKey)) {
+                                    swipeReactionImageReceiverKey = emo;
+                                    SvgHelper.SvgDrawable svgThumb = DocumentObject.getSvgThumb(ar.static_icon, Theme.key_windowBackgroundGray, 1.0f);
+                                    swipeReactionImageReceiver.setImage(ImageLocation.getForDocument(ar.center_icon), "40_40_lastreactframe", svgThumb, "webp", ar, 1);
+                                }
+                                int isize = (int) (AndroidUtilities.dp(22) * bScale);
+                                swipeReactionImageReceiver.setImageCoords((int) (bx - isize / 2f), (int) (by - isize / 2f), isize, isize);
+                                swipeReactionImageReceiver.setAlpha(bubbleAlpha / 255f);
+                                swipeReactionImageReceiver.draw(canvas);
+                                if (!swipeReactionImageReceiver.hasImageLoaded()) invalidate();
+                            } else {
+                                Paint emoPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                                emoPaint.setTextSize(AndroidUtilities.dp(18) * bScale);
+                                emoPaint.setTextAlign(Paint.Align.CENTER);
+                                emoPaint.setAlpha(bubbleAlpha);
+                                float ey = by - (emoPaint.descent() + emoPaint.ascent()) / 2;
+                                float ex = showNames && labelStr != null ? bx : bx;
+                                canvas.drawText(emo, ex, ey, emoPaint);
+                            }
+                        } else if (d != null) {
                             d.setAlpha(bubbleAlpha);
                             int iw = d.getIntrinsicWidth() > 0 ? d.getIntrinsicWidth() : AndroidUtilities.dp(18);
                             int ih = d.getIntrinsicHeight() > 0 ? d.getIntrinsicHeight() : AndroidUtilities.dp(18);
@@ -5572,7 +5840,16 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                             labelPaint.clearShadowLayer();
                         }
                     }
+                    if (pillPicture != null) {
+                        pillPicture.endRecording();
+                        canvas = mainPillCanvas;
+                        swipePillsPicture = pillPicture;
+                        swipePillsOverlayView.invalidate();
+                    } else {
+                        clearSwipePillsOverlay();
+                    }
                 } else {
+                    clearSwipePillsOverlay();
                     Drawable replyIconDrawable = getThemedDrawable(Theme.key_drawable_replyIcon);
                     replyIconDrawable.setAlpha(alpha);
                     replyIconDrawable.setBounds((int) (x - replyIconDrawable.getIntrinsicWidth() / 2 * scale), (int) (y - replyIconDrawable.getIntrinsicHeight() / 2 * scale), (int) (x + replyIconDrawable.getIntrinsicWidth() / 2 * scale), (int) (y + replyIconDrawable.getIntrinsicHeight() / 2 * scale));
@@ -5596,10 +5873,26 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                         }
                         slidingView = view;
                         swipeBubbleSelected = OPTION_REPLY;
+                        swipeBubbleSelectedKey = zxc.iconic.xenon.NekoConfig.swipePrimaryAction;
+                        if (!zxc.iconic.xenon.NekoConfig.swipeEnabledActions.contains(swipeBubbleSelectedKey)) swipeBubbleSelectedKey = "reply";
+                        swipeBubbleSelected = getSwipeOptionForKey(swipeBubbleSelectedKey);
                         bubblesAppearProgress = 0f;
+                        bubblesAppearStartTime = 0;
+                        bubblesShown = false;
+                        bubblesDisappearStartTime = 0;
                         swipeVerticalOffset = 0;
                         swipeDisplayOffset = 0;
-                        lastVibratedSelection = OPTION_REPLY;
+                        pillStackShiftCurrent = 0f;
+                        swipeEdgeAccumOffset = 0;
+                        swipeEdgeEnterTime = 0;
+                        swipeManualLockUntil = 0;
+                        swipeManualWasFrozen = false;
+                        swipeAutoPausedUntil = 0;
+                        swipeAutoScrolling = false;
+                        swipePointerScreenY = (int) e.getRawY();
+                        swipeEdgeDir = 0;
+                        lastVibratedSelection = swipeBubbleSelected;
+                        lastVibratedKey = swipeBubbleSelectedKey;
                         MessageObject message = getSlidingMessageObject();
                         boolean allowReplyOnOpenTopic = canSendMessageToTopic(message);
                         if (
@@ -5655,10 +5948,44 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                             setGroupTranslationX((ChatMessageCell) slidingView, dx);
                         }
                         // Xenon: vertical swipe for other bubbles - require stronger pull
-                        if (zxc.iconic.xenon.NekoConfig.swipeOtherBubbles && Math.abs(dx) >= AndroidUtilities.dp(38)) {
-                            int verticalDy = (int) (e.getY() - startedTrackingY);
-                            swipeVerticalOffset = verticalDy;
-                        } else if (swipeBubbleSelected == OPTION_REPLY && swipeVerticalOffset == 0) {
+                        if (zxc.iconic.xenon.NekoConfig.isSwipeOtherBubblesEnabled() && Math.abs(dx) >= AndroidUtilities.dp(38)) {
+                            int rawY = (int) e.getRawY();
+                            int edgeZone = AndroidUtilities.dp(28);
+                            // use real window bounds on screen: displaySize does not match getRawY() space
+                            View decor = getParentActivity() != null ? getParentActivity().getWindow().getDecorView() : null;
+                            if (decor != null) {
+                                int[] loc = new int[2];
+                                decor.getLocationOnScreen(loc);
+                                swipeEdgeTopBound = loc[1];
+                                swipeEdgeBottomBound = loc[1] + decor.getHeight();
+                            }
+                            boolean inEdgeZone = rawY >= swipeEdgeBottomBound - edgeZone || rawY <= swipeEdgeTopBound + AndroidUtilities.statusBarHeight + edgeZone;
+                            long nowMs = System.currentTimeMillis();
+                            if (inEdgeZone) {
+                                if (swipeEdgeEnterTime == 0) swipeEdgeEnterTime = nowMs;
+                            } else {
+                                swipeEdgeEnterTime = 0;
+                                // manual pull pauses auto-advance for 0.5s
+                                swipeAutoPausedUntil = nowMs + 500;
+                                // while auto-scroll is active, a pull freezes everything for 0.5s
+                                if (swipeAutoScrolling) {
+                                    swipeManualLockUntil = Math.max(swipeManualLockUntil, nowMs + 500);
+                                    swipeManualWasFrozen = true;
+                                }
+                            }
+                            if (nowMs < swipeManualLockUntil) {
+                                // frozen: selection must not change at all for 0.5s
+                                swipeManualWasFrozen = true;
+                            } else {
+                                if (swipeManualWasFrozen) {
+                                    swipeManualWasFrozen = false;
+                                    startedTrackingY = (int) (e.getY() - (swipeVerticalOffset - swipeEdgeAccumOffset));
+                                }
+                                int verticalDy = (int) (e.getY() - startedTrackingY);
+                                swipeVerticalOffset = verticalDy + swipeEdgeAccumOffset;
+                            }
+                            swipePointerScreenY = rawY;
+                        } else if (swipeBubbleSelectedKey.equals("reply") && swipeVerticalOffset == 0) {
                             // keep empty - not yet activated vertical mode, stay at reply
                         } else {
                             // keep current vertical offset and selection while horizontally pulling back partially
@@ -5672,15 +5999,22 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                         MessageObject message = getSlidingMessageObject();
                         final boolean allowReplyOnOpenTopic = canSendMessageToTopic(message);
                         swipeActedOuter = false;
-                        if (zxc.iconic.xenon.NekoConfig.swipeOtherBubbles && swipeBubbleSelected != OPTION_REPLY) {
+                        if (zxc.iconic.xenon.NekoConfig.isSwipeOtherBubblesEnabled() && !swipeBubbleSelectedKey.equals("reply")) {
                             swipeActedOuter = true;
                             MessageObject target = getSlidingMessageObject();
                             if (target == null) {
                                 BulletinFactory.of(ChatActivity.this).createSimpleBulletin(R.raw.info, "No target").show();
+                            } else if (isSwipeReactionKey(swipeBubbleSelectedKey)) {
+                                String emo = swipeBubbleSelectedKey.substring(9);
+                                boolean isAnimated = emo.startsWith("animated_");
+                                org.telegram.ui.Components.Reactions.ReactionsLayoutInBubble.VisibleReaction vr = new org.telegram.ui.Components.Reactions.ReactionsLayoutInBubble.VisibleReaction();
+                                if (isAnimated) {
+                                    try { vr.documentId = Long.parseLong(emo.substring(9)); vr.emojicon = null; } catch (Exception ex) { vr.emojicon = emo; }
+                                } else vr.emojicon = emo;
+                                selectReaction(null, target, null, null, 0, 0, vr, true, false, true, false);
                             } else {
                                 selectedObject = target;
                                 selectedObjectGroup = getValidGroupedMessage(target);
-                                // caption edit helper used by OPTION_EDIT
                                 selectedObjectToEditCaption = null;
                                 if (selectedObjectGroup != null) {
                                     int captions = 0;
@@ -5732,13 +6066,21 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                         }
                     }
                     if (!swipeActedOuter) {
-                        swipeVerticalOffset = 0;
-                        swipeBubbleSelected = OPTION_REPLY;
-                        lastVibratedSelection = OPTION_REPLY;
+                        if (!bubblesShown) {
+                            swipeVerticalOffset = 0;
+                            swipeBubbleSelected = OPTION_REPLY;
+                            swipeBubbleSelectedKey = "reply";
+                            lastVibratedSelection = OPTION_REPLY;
+                            lastVibratedKey = "reply";
+                        }
+                        // bubbles shown: keep everything frozen so pills fade out in place, no snap back to reply
                     } else {
                         // keep selected action visible, do not snap back to reply
                     }
                     swipeVerticalTracking = false;
+                    swipePointerScreenY = 0;
+                    swipeEdgeDir = 0;
+                    swipeEdgeAccumOffset = 0;
                     endTrackingX = slidingViewGetOffsetX();
                     if (endTrackingX == 0) {
                         slidingView = null;
@@ -6202,12 +6544,14 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                     super.dispatchDraw(canvas);
                     drawChatForegroundElements(canvas);
                     if (slidingView != null) drawReplyButton(canvas);
+                    else clearSwipePillsOverlay();
                     canvas.restoreToCount(restoreToCount);
                 } else {
                     drawChatBackgroundElements(canvas);
                     super.dispatchDraw(canvas);
                     drawChatForegroundElements(canvas);
                     if (slidingView != null) drawReplyButton(canvas);
+                    else clearSwipePillsOverlay();
                 }
                 canvas.restore();
             }
@@ -8869,6 +9213,20 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
 
         contentView.addView(roundVideoRecordBackground, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
         contentView.addView(chatInputViewsContainer, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+
+        // Xenon: topmost overlay so swipe action pills draw over actionbar/input interface
+        swipePillsOverlayView = new View(context) {
+            @Override
+            protected void onDraw(Canvas canvas) {
+                if (swipePillsActive && swipePillsPicture != null) {
+                    swipePillsPicture.draw(canvas);
+                }
+            }
+        };
+        swipePillsOverlayView.setEnabled(false);
+        swipePillsOverlayView.setWillNotDraw(false);
+        swipePillsOverlayView.setElevation(100f);
+        contentView.addView(swipePillsOverlayView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
         if (chatMode != MODE_EDIT_BUSINESS_LINK) {
             chatActivityEnterView.checkChannelRights();
@@ -34600,19 +34958,30 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         switch (option) {
             case OPTION_SELECT: {
                 closeMenu();
-                BaseCell cell = findMessageCell(selectedObject.getId(), true);
+                // the action mode must exist and be visible BEFORE the row is selected:
+                // showActionMode() no-ops when actionBar.createActionMode() was never created,
+                // and updateVisibleRows only applies checkmarks while action mode is showed
+                createActionMode();
+                if (chatActivityEnterView != null && chatActivityEnterView.getVisibility() == View.VISIBLE) {
+                    ArrayList<View> views = new ArrayList<>();
+                    if (mentionContainer != null && mentionContainer.getVisibility() == View.VISIBLE)
+                        views.add(mentionContainer);
+                    actionBar.showActionMode(true, null, null, views.toArray(new View[0]), new boolean[]{false, true, true}, null, 0);
+                } else {
+                    actionBar.showActionMode(true, null, null, null, null, null, 0);
+                }
+                // don't require the cell to be fully visible - a partially clipped cell
+                // (under the top padding / behind the keyboard) must still be selectable
+                BaseCell cell = findMessageCell(selectedObject.getId(), false);
                 if (cell != null) {
                     processRowSelect(cell, false, 0, 0);
-                    if (chatActivityEnterView != null && chatActivityEnterView.getVisibility() == View.VISIBLE) {
-                        ArrayList<View> views = new ArrayList<>();
-                        if (mentionContainer != null && mentionContainer.getVisibility() == View.VISIBLE)
-                            views.add(mentionContainer);
-                        actionBar.showActionMode(true, null, null, views.toArray(new View[0]), new boolean[]{false, true, true}, null, 0);
-                    } else {
-                        actionBar.showActionMode(true, null, null, null, null, null, 0);
-                    }
-                    chatLayoutManager.setCanScrollVertically(true);
+                } else {
+                    // cell not attached - select the message object directly
+                    addToSelectedMessages(selectedObject, false);
+                    updateActionModeTitle();
+                    updateVisibleRows();
                 }
+                chatLayoutManager.setCanScrollVertically(true);
                 return;
             }
             case OPTION_RETRY: {

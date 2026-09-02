@@ -601,5 +601,26 @@
     <string name="RotateShape">Вращать форму</string>
     <string name="RotationSpeed">Скорость вращения</string>
     <string name="SquareBase">Квадратная основа</string>
+    <string name="OtherSwipeActions">Другие действия свайпа</string>
+    <string name="OtherSwipeActionsInfo">Свайп в сторону — ответ, затем свайп вверх/вниз для переключения действий. Долгое нажатие на включённом действии делает его основным (“primary”).</string>
+    <string name="ShowNamesNextToBubbles">Показывать названия рядом с бабблами</string>
+    <string name="EnabledActions">Включённые действия</string>
+    <string name="DisabledActions">Отключённые действия</string>
+    <string name="SwipeActionPrimary">primary</string>
+    <string name="SwipeActionReply">Ответ</string>
+    <string name="SwipeActionEdit">Редактировать</string>
+    <string name="SwipeActionDelete">Удалить</string>
+    <string name="SwipeActionCopy">Копировать</string>
+    <string name="SwipeActionForward">Переслать</string>
+    <string name="SwipeActionSave">Сохранить</string>
+    <string name="SwipeActionPin">Закрепить</string>
+    <string name="SwipeActionSelect">Выделить</string>
+    <string name="SwipeActionTranslate">Перевести</string>
+    <string name="SwipeActionReport">Жалоба</string>
+    <string name="SwipeActionDetails">Детали</string>
+    <string name="SwipeActionCopyPhoto">Копировать фото</string>
+    <string name="SwipeActionQr">QR</string>
+    <string name="SwipeActionOpenIn">Открыть в</string>
+    <string name="SwipeActionReaction">Реакция</string>
 </resources>
 
