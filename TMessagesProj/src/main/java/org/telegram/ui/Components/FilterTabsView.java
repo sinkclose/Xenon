@@ -507,7 +507,7 @@ public class FilterTabsView extends FrameLayout {
             int folderIconX = 0;
             if (NekoConfig.tabsTitleType != NekoConfig.TITLE_TYPE_TEXT) {
                 int emoticonSize = FolderIconHelper.getIconWidth();
-                if (!TextUtils.equals(currentTab.emoticon, currentEmoticon)) {
+                if (icon == null || !TextUtils.equals(currentTab.emoticon, currentEmoticon)) {
                     currentEmoticon = currentTab.emoticon;
                     android.graphics.Rect bounds = new android.graphics.Rect(0, 0, emoticonSize, emoticonSize);
                     icon = getResources().getDrawable(FolderIconHelper.getTabIcon(currentTab.emoticon)).mutate();
@@ -788,7 +788,7 @@ public class FilterTabsView extends FrameLayout {
                 animateFromIconX = lastIconX;
                 changed = true;
             }
-            if (lastEmoticon != null && !currentTab.emoticon.equals(lastEmoticon)) {
+            if (lastEmoticon != null && currentTab.emoticon != null && !currentTab.emoticon.equals(lastEmoticon)) {
                 int emoticonWidth = FolderIconHelper.getIconWidth();
                 android.graphics.Rect bounds = new android.graphics.Rect(0, 0, emoticonWidth, emoticonWidth);
                 iconAnimateOutDrawable = getResources().getDrawable(FolderIconHelper.getTabIcon(lastEmoticon)).mutate();
