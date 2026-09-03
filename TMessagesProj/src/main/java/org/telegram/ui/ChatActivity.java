@@ -19034,12 +19034,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         protected void dispatchDraw(Canvas canvas) {
             chatActivityEnterView.checkAnimation();
             updateChatListViewTopPadding();
-            if (invalidateMessagesVisiblePart || (chatListItemAnimator != null && chatListItemAnimator.isRunning())) {
+            if (invalidateMessagesVisiblePart) {
                 invalidateMessagesVisiblePart = false;
                 updateMessagesVisiblePart(false);
-            }
-            if (chatListItemAnimator != null && chatListItemAnimator.isRunning()) {
-                invalidateMergedVisibleBlurredPositionsAndSources(BLUR_INVALIDATE_FLAG_SCROLL);
             }
             updateTextureViewPosition(false, false);
             updatePagedownButtonsPosition();

@@ -88,6 +88,9 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable {
     }
 
     public void setFadeHeight(int fadeHeight, boolean opacity) {
+        if (this.fadeHeight == fadeHeight && this.opacity == opacity) {
+            return;
+        }
         this.fadeHeight = fadeHeight;
         this.opacity = opacity;
         maskFadeGradientPaint.setShader(shader = opaqueFade ? createGradientOpaque(Color.BLACK) : createGradient(Color.BLACK, opacity));
