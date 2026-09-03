@@ -5539,8 +5539,13 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                         }
                         bubblesShown = true;
                     } else {
+                        if (bubblesShown && bubblesDisappearStartTime == 0) {
+                            long appearElapsedBefore = bubblesAppearStartTime == 0 ? 0 : System.currentTimeMillis() - bubblesAppearStartTime;
+                            float appearGateBefore = Math.max(0f, Math.min(1f, appearElapsedBefore / 140f));
+                            // start fade-out from current appear alpha, not from 1 - prevents sharp flash when pulling back before appear finishes
+                            bubblesDisappearStartTime = System.currentTimeMillis() - (long) ((1f - appearGateBefore) * 160f);
+                        }
                         bubblesAppearStartTime = 0;
-                        if (bubblesShown && bubblesDisappearStartTime == 0) bubblesDisappearStartTime = System.currentTimeMillis();
                         if (bubblesShown && bubblesDisappearStartTime != 0 && System.currentTimeMillis() - bubblesDisappearStartTime >= 160) {
                             bubblesShown = false;
                             bubblesDisappearStartTime = 0;
@@ -5686,7 +5691,7 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                         slidingView.getLocationOnScreen(cellLocTmp);
                         float bubbleScreenY = cellLocTmp[1] + bubbleCenterLocal;
                         float topLimit = AndroidUtilities.statusBarHeight + AndroidUtilities.dp(28);
-                        float bottomLimit = AndroidUtilities.displaySize.y - AndroidUtilities.dp(72);
+                        float bottomLimit = AndroidUtilities.displaySize.y - AndroidUtilities.dp(72) - AndroidUtilities.dp(72);
                         if (swipePillsOverlayView != null) {
                             int[] ovLocTmp = new int[2];
                             swipePillsOverlayView.getLocationOnScreen(ovLocTmp);
@@ -5694,9 +5699,13 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                             // no dependence on the list canvas matrix/clip
                             pillY = bubbleScreenY - ovLocTmp[1];
                             topLimit = ovLocTmp[1] + AndroidUtilities.statusBarHeight + AndroidUtilities.dp(28);
-                            bottomLimit = ovLocTmp[1] + swipePillsOverlayView.getHeight() - AndroidUtilities.dp(72);
+                            bottomLimit = ovLocTmp[1] + swipePillsOverlayView.getHeight() - AndroidUtilities.dp(72) - AndroidUtilities.dp(72);
                         }
-                        pillShiftTarget = Math.max(topLimit, Math.min(bottomLimit, bubbleScreenY)) - bubbleScreenY;
+                        // keep primary pill on screen; when bubble is on screen - pills centered on bubble,
+                        // otherwise primary clamped to top/bottom edge with small margin
+                        float minShift = topLimit - bubbleScreenY;
+                        float maxShift = bottomLimit - bubbleScreenY;
+                        pillShiftTarget = Math.max(minShift, Math.min(maxShift, 0f));
                         if (Math.abs(pillShiftTarget - pillStackShiftCurrent) > 0.5f) {
                             pillStackShiftCurrent += (pillShiftTarget - pillStackShiftCurrent) * 0.35f;
                             invalidate();
