@@ -322,9 +322,338 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
 
     private long shownAt;
 
+    private boolean shouldReplaceWithSheet() {
+        return zxc.iconic.xenon.NekoConfig.replaceDialogsWithSheet && progressViewStyle == 0;
+    }
+
+    private boolean shouldReplaceWithMaterial() {
+        return zxc.iconic.xenon.NekoConfig.material3Dialogs && progressViewStyle == 0;
+    }
+
+    // internal helper for AlertDialog.show() path (via create()+BaseFragment.showDialog)
+    private boolean tryShowAsReplacement() {
+        if (shouldReplaceWithSheet()) {
+            showAsBottomSheetInternal(null, null);
+            return true;
+        }
+        if (shouldReplaceWithMaterial()) {
+            showAsMaterialDialogInternal(null, null);
+            return true;
+        }
+        return false;
+    }
+
+    private void showAsBottomSheetInternal(OnDismissListener externalDismiss1, OnDismissListener externalDismiss2) {
+        showAsBottomSheetInternal(externalDismiss1, externalDismiss2, new boolean[3]);
+    }
+
+    private void showAsBottomSheetInternal(OnDismissListener externalDismiss1, OnDismissListener externalDismiss2, boolean[] red) {
+        Context context = getContext();
+        Theme.ResourcesProvider rp = resourcesProvider;
+        OnDismissListener dialogDismissListener = onDismissListener;
+        // externalDismiss1 is sheetDismissListener from Builder, externalDismiss2 is onDismissListener override
+        BottomSheet sheet = new BottomSheet(context, true, false, rp) {
+            @Override
+            public void dismissInternal() {
+                super.dismissInternal();
+                if (dialogDismissListener != null) {
+                    dialogDismissListener.onDismiss(AlertDialog.this);
+                }
+                if (externalDismiss1 != null) {
+                    externalDismiss1.onDismiss(AlertDialog.this);
+                }
+                if (externalDismiss2 != null) {
+                    externalDismiss2.onDismiss(AlertDialog.this);
+                }
+            }
+        };
+
+        LinearLayout contentView = new LinearLayout(context);
+        contentView.setOrientation(LinearLayout.VERTICAL);
+        contentView.setPadding(dp(24), dp(16), dp(24), dp(8));
+
+        if (topView != null) {
+            AndroidUtilities.removeFromParent(topView);
+            contentView.addView(topView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, dp(12)));
+        }
+
+        if (title != null) {
+            TextView titleView = new TextView(context);
+            titleView.setText(title);
+            titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
+            titleView.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, rp));
+            titleView.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"));
+            titleView.setPadding(0, 0, 0, dp(8));
+            contentView.addView(titleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        }
+
+        if (subtitle != null) {
+            TextView subtitleView = new TextView(context);
+            subtitleView.setText(subtitle);
+            subtitleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+            subtitleView.setTextColor(Theme.getColor(Theme.key_dialogTextGray3, rp));
+            subtitleView.setPadding(0, 0, 0, dp(8));
+            contentView.addView(subtitleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        }
+
+        if (aboveMessageView != null) {
+            AndroidUtilities.removeFromParent(aboveMessageView);
+            contentView.addView(aboveMessageView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, dp(12)));
+        }
+
+        if (message != null) {
+            TextView messageView = new TextView(context);
+            messageView.setText(message);
+            messageView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
+            messageView.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, rp));
+            messageView.setPadding(0, 0, 0, dp(16));
+            contentView.addView(messageView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        }
+
+        if (customView != null) {
+            AndroidUtilities.removeFromParent(customView);
+            contentView.addView(customView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, dp(12)));
+        }
+
+        if (items != null) {
+            for (int a = 0; a < items.length; a++) {
+                if (items[a] == null) continue;
+                AlertDialogCell cell = new AlertDialogCell(context, rp);
+                cell.setTextAndIcon(items[a], itemIcons != null ? itemIcons[a] : 0);
+                cell.setTag(a);
+                contentView.addView(cell, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 50));
+                cell.setOnClickListener(v -> {
+                    sheet.dismiss();
+                    if (onClickListener != null) {
+                        onClickListener.onClick(AlertDialog.this, (Integer) v.getTag());
+                    }
+                });
+            }
+        }
+
+        if (bottomView != null) {
+            AndroidUtilities.removeFromParent(bottomView);
+            contentView.addView(bottomView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, dp(12)));
+        }
+
+        boolean hasPos = positiveButtonText != null;
+        boolean hasNeg = negativeButtonText != null;
+        boolean hasNeg2 = negative2ButtonText != null;
+        boolean hasNeu = neutralButtonText != null;
+        if (hasPos || hasNeg || hasNeg2 || hasNeu) {
+            LinearLayout buttonsLayout = new LinearLayout(context);
+            buttonsLayout.setOrientation(verticalButtons ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
+            buttonsLayout.setGravity(verticalButtons ? Gravity.START : Gravity.END);
+            int btnColor = Theme.getColor(Theme.key_dialogButton, rp);
+            int redColor = getThemedColor(Theme.key_text_RedBold);
+
+            if (hasNeg) {
+                TextView negBtn = new TextView(context);
+                negBtn.setText(negativeButtonText);
+                negBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
+                boolean isRed = red != null && red.length > 1 && red[1];
+                negBtn.setTextColor(isRed ? redColor : btnColor);
+                negBtn.setGravity(Gravity.CENTER);
+                negBtn.setPadding(dp(16), dp(10), dp(16), dp(10));
+                negBtn.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector, rp), 2));
+                negBtn.setOnClickListener(v -> {
+                    sheet.dismiss();
+                    if (negativeButtonListener != null) {
+                        negativeButtonListener.onClick(AlertDialog.this, AlertDialog.BUTTON_NEGATIVE);
+                    }
+                });
+                buttonsLayout.addView(negBtn, LayoutHelper.createLinear(verticalButtons ? LayoutHelper.MATCH_PARENT : LayoutHelper.WRAP_CONTENT, 48, 0, 0, 0, 0));
+            }
+            if (hasNeg2) {
+                TextView neg2Btn = new TextView(context);
+                neg2Btn.setText(negative2ButtonText);
+                neg2Btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
+                neg2Btn.setTextColor(btnColor);
+                neg2Btn.setGravity(Gravity.CENTER);
+                neg2Btn.setPadding(dp(16), dp(10), dp(16), dp(10));
+                neg2Btn.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector, rp), 2));
+                neg2Btn.setOnClickListener(v -> {
+                    sheet.dismiss();
+                    if (negative2ButtonListener != null) {
+                        negative2ButtonListener.onClick(AlertDialog.this, AlertDialog.BUTTON_NEGATIVE_2);
+                    }
+                });
+                buttonsLayout.addView(neg2Btn, LayoutHelper.createLinear(verticalButtons ? LayoutHelper.MATCH_PARENT : LayoutHelper.WRAP_CONTENT, 48, 0, 0, 0, 0));
+            }
+            if (hasNeu) {
+                TextView neuBtn = new TextView(context);
+                neuBtn.setText(neutralButtonText);
+                neuBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
+                boolean isRed = red != null && red.length > 2 && red[2];
+                neuBtn.setTextColor(isRed ? redColor : btnColor);
+                neuBtn.setGravity(Gravity.CENTER);
+                neuBtn.setPadding(dp(16), dp(10), dp(16), dp(10));
+                neuBtn.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector, rp), 2));
+                neuBtn.setOnClickListener(v -> {
+                    sheet.dismiss();
+                    if (neutralButtonListener != null) {
+                        neutralButtonListener.onClick(AlertDialog.this, AlertDialog.BUTTON_NEUTRAL);
+                    }
+                });
+                buttonsLayout.addView(neuBtn, LayoutHelper.createLinear(verticalButtons ? LayoutHelper.MATCH_PARENT : LayoutHelper.WRAP_CONTENT, 48, 0, 0, 0, 0));
+            }
+            if (hasPos) {
+                TextView posBtn = new TextView(context);
+                posBtn.setText(positiveButtonText);
+                posBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
+                boolean isRed = red != null && red.length > 0 && red[0];
+                posBtn.setTextColor(isRed ? redColor : btnColor);
+                posBtn.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"));
+                posBtn.setGravity(Gravity.CENTER);
+                posBtn.setPadding(dp(16), dp(10), dp(16), dp(10));
+                posBtn.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector, rp), 2));
+                posBtn.setOnClickListener(v -> {
+                    sheet.dismiss();
+                    if (positiveButtonListener != null) {
+                        positiveButtonListener.onClick(AlertDialog.this, AlertDialog.BUTTON_POSITIVE);
+                    }
+                });
+                buttonsLayout.addView(posBtn, LayoutHelper.createLinear(verticalButtons ? LayoutHelper.MATCH_PARENT : LayoutHelper.WRAP_CONTENT, 48, 0, 0, 0, 0));
+            }
+            contentView.addView(buttonsLayout, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        }
+
+        ScrollView scrollView = new ScrollView(context);
+        scrollView.addView(contentView);
+
+        sheet.setCustomView(scrollView);
+        sheet.show();
+    }
+
+    private void showAsMaterialDialogInternal(OnDismissListener externalDismiss1, OnDismissListener externalDismiss2) {
+        showAsMaterialDialogInternalWithRed(null, externalDismiss1, externalDismiss2);
+    }
+
+    private boolean showAsMaterialDialogInternalWithRed(boolean[] red, OnDismissListener externalDismiss1, OnDismissListener externalDismiss2) {
+        // fallback for 4 buttons
+        if (neutralButtonText != null && negative2ButtonText != null) {
+            return false;
+        }
+        Context context = getContext();
+        Theme.ResourcesProvider rp = resourcesProvider;
+
+        OnDismissListener dialogDismissListener = onDismissListener;
+
+        Context themedContext = new ContextThemeWrapper(context, com.google.android.material.R.style.Theme_Material3_DayNight);
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(
+                themedContext,
+                com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog);
+
+        if (title != null) builder.setTitle(title);
+        if (subtitle != null) {
+            CharSequence fullMsg = message != null ? TextUtils.concat(subtitle, "\n\n", message) : subtitle;
+            builder.setMessage(fullMsg);
+        } else if (message != null) builder.setMessage(message);
+        if (customView != null) {
+            AndroidUtilities.removeFromParent(customView);
+            builder.setView(customView);
+        }
+        if (items != null) {
+            builder.setItems(items, (d, which) -> {
+                if (onClickListener != null) onClickListener.onClick(AlertDialog.this, which);
+            });
+        }
+        if (positiveButtonText != null) {
+            builder.setPositiveButton(positiveButtonText, (d, w) -> {
+                if (positiveButtonListener != null)
+                    positiveButtonListener.onClick(AlertDialog.this, AlertDialog.BUTTON_POSITIVE);
+            });
+        }
+        if (negativeButtonText != null) {
+            builder.setNegativeButton(negativeButtonText, (d, w) -> {
+                if (negativeButtonListener != null)
+                    negativeButtonListener.onClick(AlertDialog.this, AlertDialog.BUTTON_NEGATIVE);
+            });
+        }
+        if (neutralButtonText != null) {
+            builder.setNeutralButton(neutralButtonText, (d, w) -> {
+                if (neutralButtonListener != null)
+                    neutralButtonListener.onClick(AlertDialog.this, AlertDialog.BUTTON_NEUTRAL);
+            });
+        } else if (negative2ButtonText != null) {
+            builder.setNeutralButton(negative2ButtonText, (d, w) -> {
+                if (negative2ButtonListener != null)
+                    negative2ButtonListener.onClick(AlertDialog.this, AlertDialog.BUTTON_NEGATIVE_2);
+            });
+        }
+
+        builder.setOnDismissListener(d -> {
+            if (dialogDismissListener != null)
+                dialogDismissListener.onDismiss(AlertDialog.this);
+            if (externalDismiss1 != null)
+                externalDismiss1.onDismiss(AlertDialog.this);
+            if (externalDismiss2 != null)
+                externalDismiss2.onDismiss(AlertDialog.this);
+        });
+
+        androidx.appcompat.app.AlertDialog dialog = builder.show();
+
+        int bgColor = Theme.getColor(Theme.key_dialogBackground, rp);
+        int textColor = Theme.getColor(Theme.key_dialogTextBlack, rp);
+        int buttonColor = Theme.getColor(Theme.key_dialogButton, rp);
+
+        if (dialog.getWindow() != null) {
+            int maxWidth;
+            if (AndroidUtilities.isTablet()) {
+                if (AndroidUtilities.isSmallTablet()) {
+                    maxWidth = dp(446);
+                } else {
+                    maxWidth = dp(496);
+                }
+            } else {
+                maxWidth = dp(356);
+            }
+            int calculatedWidth = AndroidUtilities.displaySize.x - dp(56);
+            dialog.getWindow().setLayout(Math.min(maxWidth, calculatedWidth), WindowManager.LayoutParams.WRAP_CONTENT);
+
+            com.google.android.material.shape.MaterialShapeDrawable bg = new com.google.android.material.shape.MaterialShapeDrawable();
+            bg.setShapeAppearanceModel(com.google.android.material.shape.ShapeAppearanceModel.builder()
+                    .setAllCornerSizes(new com.google.android.material.shape.AbsoluteCornerSize(AndroidUtilities.dp(28)))
+                    .build());
+            bg.setFillColor(android.content.res.ColorStateList.valueOf(bgColor));
+            dialog.getWindow().setBackgroundDrawable(bg);
+        }
+
+        int titleId = context.getResources().getIdentifier("alertTitle", "id", "android");
+        TextView titleView = titleId != 0 ? dialog.findViewById(titleId) : null;
+        if (titleView != null) titleView.setTextColor(textColor);
+        int messageId = context.getResources().getIdentifier("message", "id", "android");
+        TextView messageView = messageId != 0 ? dialog.findViewById(messageId) : null;
+        if (messageView != null) messageView.setTextColor(textColor);
+
+        if (red != null) {
+            int[] btnIds = {DialogInterface.BUTTON_POSITIVE, DialogInterface.BUTTON_NEGATIVE, DialogInterface.BUTTON_NEUTRAL};
+            for (int btnId : btnIds) {
+                TextView button = (TextView) dialog.getButton(btnId);
+                if (button == null) continue;
+                int idx = (-btnId) - 1;
+                if (idx >= 0 && idx < red.length && red[idx]) {
+                    button.setTextColor(getThemedColor(Theme.key_text_RedBold));
+                } else {
+                    button.setTextColor(buttonColor);
+                }
+            }
+        } else {
+            int[] btnIds = {DialogInterface.BUTTON_POSITIVE, DialogInterface.BUTTON_NEGATIVE, DialogInterface.BUTTON_NEUTRAL};
+            for (int btnId : btnIds) {
+                TextView button = (TextView) dialog.getButton(btnId);
+                if (button != null) button.setTextColor(buttonColor);
+            }
+        }
+        return true;
+    }
+
     @Override
     public void show() {
         if (!AndroidUtilities.isSafeToShow(getContext())) return;
+        if (tryShowAsReplacement()) {
+            return;
+        }
         dismissed = false;
         super.show();
         if (progressViewContainer != null && progressViewStyle == ALERT_TYPE_SPINNER) {
@@ -1927,13 +2256,13 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
         }
 
         public AlertDialog show() {
-            if (zxc.iconic.xenon.NekoConfig.replaceDialogsWithSheet && alertDialog.progressViewStyle == 0 && alertDialog.items == null && alertDialog.itemIcons == null) {
-                showAsBottomSheet();
+            if (alertDialog.shouldReplaceWithSheet()) {
+                alertDialog.showAsBottomSheetInternal(sheetDismissListener, null, red);
                 return alertDialog;
             }
-            if (zxc.iconic.xenon.NekoConfig.material3Dialogs && alertDialog.progressViewStyle == 0 && alertDialog.items == null && alertDialog.itemIcons == null) {
-                showAsMaterialDialog();
-                return alertDialog;
+            if (alertDialog.shouldReplaceWithMaterial()) {
+                boolean shown = alertDialog.showAsMaterialDialogInternalWithRed(red, sheetDismissListener, null);
+                if (shown) return alertDialog;
             }
             alertDialog.show();
             for (int i = 0; i < red.length; i++) {
@@ -1946,215 +2275,13 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
             return alertDialog;
         }
 
-                private void showAsBottomSheet() {
-            Context context = alertDialog.getContext();
-            Theme.ResourcesProvider rp = alertDialog.resourcesProvider;
-
-            OnDismissListener dialogDismissListener = sheetDismissListener;
-            BottomSheet sheet = new BottomSheet(context, true, false, rp) {
-                @Override
-                public void dismissInternal() {
-                    super.dismissInternal();
-                    if (alertDialog.onDismissListener != null) {
-                        alertDialog.onDismissListener.onDismiss(alertDialog);
-                    }
-                    if (dialogDismissListener != null) {
-                        dialogDismissListener.onDismiss(alertDialog);
-                    }
-                }
-            };
-
-            LinearLayout contentView = new LinearLayout(context);
-            contentView.setOrientation(LinearLayout.VERTICAL);
-            contentView.setPadding(dp(24), dp(16), dp(24), dp(8));
-
-            if (alertDialog.title != null) {
-                TextView titleView = new TextView(context);
-                titleView.setText(alertDialog.title);
-                titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
-                titleView.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, rp));
-                titleView.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"));
-                titleView.setPadding(0, 0, 0, dp(8));
-                contentView.addView(titleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
-            }
-
-            if (alertDialog.customView != null) {
-                AndroidUtilities.removeFromParent(alertDialog.customView);
-                contentView.addView(alertDialog.customView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, dp(12)));
-            }
-
-            if (alertDialog.message != null) {
-                TextView messageView = new TextView(context);
-                messageView.setText(alertDialog.message);
-                messageView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
-                messageView.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, rp));
-                messageView.setPadding(0, 0, 0, dp(16));
-                contentView.addView(messageView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
-            }
-
-            boolean hasPos = alertDialog.positiveButtonText != null;
-            boolean hasNeg = alertDialog.negativeButtonText != null;
-            boolean hasNeu = alertDialog.neutralButtonText != null;
-            if (hasPos || hasNeg || hasNeu) {
-                LinearLayout buttonsLayout = new LinearLayout(context);
-                buttonsLayout.setOrientation(LinearLayout.HORIZONTAL);
-                buttonsLayout.setGravity(Gravity.END);
-                int btnColor = Theme.getColor(Theme.key_dialogButton, rp);
-
-                if (hasNeg) {
-                    TextView negBtn = new TextView(context);
-                    negBtn.setText(alertDialog.negativeButtonText);
-                    negBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
-                    negBtn.setTextColor(btnColor);
-                    negBtn.setGravity(Gravity.CENTER);
-                    negBtn.setPadding(dp(16), dp(10), dp(16), dp(10));
-                    negBtn.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector, rp), 2));
-                    negBtn.setOnClickListener(v -> {
-                        sheet.dismiss();
-                        if (alertDialog.negativeButtonListener != null) {
-                            alertDialog.negativeButtonListener.onClick(alertDialog, AlertDialog.BUTTON_NEGATIVE);
-                        }
-                    });
-                    buttonsLayout.addView(negBtn, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, 48, 0, 0, 0, 0));
-                }
-                if (hasNeu) {
-                    TextView neuBtn = new TextView(context);
-                    neuBtn.setText(alertDialog.neutralButtonText);
-                    neuBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
-                    neuBtn.setTextColor(btnColor);
-                    neuBtn.setGravity(Gravity.CENTER);
-                    neuBtn.setPadding(dp(16), dp(10), dp(16), dp(10));
-                    neuBtn.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector, rp), 2));
-                    neuBtn.setOnClickListener(v -> {
-                        sheet.dismiss();
-                        if (alertDialog.neutralButtonListener != null) {
-                            alertDialog.neutralButtonListener.onClick(alertDialog, AlertDialog.BUTTON_NEUTRAL);
-                        }
-                    });
-                    buttonsLayout.addView(neuBtn, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, 48, 0, 0, 0, 0));
-                }
-                if (hasPos) {
-                    TextView posBtn = new TextView(context);
-                    posBtn.setText(alertDialog.positiveButtonText);
-                    posBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
-                    posBtn.setTextColor(btnColor);
-                    posBtn.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"));
-                    posBtn.setGravity(Gravity.CENTER);
-                    posBtn.setPadding(dp(16), dp(10), dp(16), dp(10));
-                    posBtn.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector, rp), 2));
-                    posBtn.setOnClickListener(v -> {
-                        sheet.dismiss();
-                        if (alertDialog.positiveButtonListener != null) {
-                            alertDialog.positiveButtonListener.onClick(alertDialog, AlertDialog.BUTTON_POSITIVE);
-                        }
-                    });
-                    for (int i = 0; i < red.length; i++) {
-                        if (red[i] && -(i + 1) == AlertDialog.BUTTON_POSITIVE) {
-                            posBtn.setTextColor(alertDialog.getThemedColor(Theme.key_text_RedBold));
-                            break;
-                        }
-                    }
-                    buttonsLayout.addView(posBtn, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, 48, 0, 0, 0, 0));
-                }
-                contentView.addView(buttonsLayout, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
-            }
-
-            ScrollView scrollView = new ScrollView(context);
-            scrollView.addView(contentView);
-
-            sheet.setCustomView(scrollView);
-            sheet.show();
+        // kept for compatibility, delegate to AlertDialog instance
+        private void showAsBottomSheet() {
+            alertDialog.showAsBottomSheetInternal(sheetDismissListener, null);
         }
 
         private void showAsMaterialDialog() {
-            Context context = alertDialog.getContext();
-            Theme.ResourcesProvider rp = alertDialog.resourcesProvider;
-
-            OnDismissListener dialogDismissListener = sheetDismissListener;
-
-            Context themedContext = new ContextThemeWrapper(context, com.google.android.material.R.style.Theme_Material3_DayNight);
-            MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(
-                    themedContext,
-                    com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog);
-
-            if (alertDialog.title != null) builder.setTitle(alertDialog.title);
-            if (alertDialog.message != null) builder.setMessage(alertDialog.message);
-            if (alertDialog.customView != null) {
-                AndroidUtilities.removeFromParent(alertDialog.customView);
-                builder.setView(alertDialog.customView);
-            }
-            if (alertDialog.positiveButtonText != null) {
-                builder.setPositiveButton(alertDialog.positiveButtonText, (d, w) -> {
-                    if (alertDialog.positiveButtonListener != null)
-                        alertDialog.positiveButtonListener.onClick(alertDialog, AlertDialog.BUTTON_POSITIVE);
-                });
-            }
-            if (alertDialog.negativeButtonText != null) {
-                builder.setNegativeButton(alertDialog.negativeButtonText, (d, w) -> {
-                    if (alertDialog.negativeButtonListener != null)
-                        alertDialog.negativeButtonListener.onClick(alertDialog, AlertDialog.BUTTON_NEGATIVE);
-                });
-            }
-            if (alertDialog.neutralButtonText != null) {
-                builder.setNeutralButton(alertDialog.neutralButtonText, (d, w) -> {
-                    if (alertDialog.neutralButtonListener != null)
-                        alertDialog.neutralButtonListener.onClick(alertDialog, AlertDialog.BUTTON_NEUTRAL);
-                });
-            }
-
-            builder.setOnDismissListener(d -> {
-                if (alertDialog.onDismissListener != null)
-                    alertDialog.onDismissListener.onDismiss(alertDialog);
-                if (dialogDismissListener != null)
-                    dialogDismissListener.onDismiss(alertDialog);
-            });
-
-            androidx.appcompat.app.AlertDialog dialog = builder.show();
-
-            int bgColor = Theme.getColor(Theme.key_dialogBackground, rp);
-            int textColor = Theme.getColor(Theme.key_dialogTextBlack, rp);
-            int buttonColor = Theme.getColor(Theme.key_dialogButton, rp);
-
-            if (dialog.getWindow() != null) {
-                int maxWidth;
-                if (AndroidUtilities.isTablet()) {
-                    if (AndroidUtilities.isSmallTablet()) {
-                        maxWidth = dp(446);
-                    } else {
-                        maxWidth = dp(496);
-                    }
-                } else {
-                    maxWidth = dp(356);
-                }
-                int calculatedWidth = AndroidUtilities.displaySize.x - dp(56);
-                dialog.getWindow().setLayout(Math.min(maxWidth, calculatedWidth), WindowManager.LayoutParams.WRAP_CONTENT);
-
-                com.google.android.material.shape.MaterialShapeDrawable bg = new com.google.android.material.shape.MaterialShapeDrawable();
-                bg.setShapeAppearanceModel(com.google.android.material.shape.ShapeAppearanceModel.builder()
-                        .setAllCornerSizes(new com.google.android.material.shape.AbsoluteCornerSize(AndroidUtilities.dp(28)))
-                        .build());
-                bg.setFillColor(android.content.res.ColorStateList.valueOf(bgColor));
-                dialog.getWindow().setBackgroundDrawable(bg);
-            }
-
-            int titleId = context.getResources().getIdentifier("alertTitle", "id", "android");
-            TextView titleView = titleId != 0 ? dialog.findViewById(titleId) : null;
-            if (titleView != null) titleView.setTextColor(textColor);
-            int messageId = context.getResources().getIdentifier("message", "id", "android");
-            TextView messageView = messageId != 0 ? dialog.findViewById(messageId) : null;
-            if (messageView != null) messageView.setTextColor(textColor);
-
-            int[] btnIds = {DialogInterface.BUTTON_POSITIVE, DialogInterface.BUTTON_NEGATIVE, DialogInterface.BUTTON_NEUTRAL};
-            for (int btnId : btnIds) {
-                TextView button = (TextView) dialog.getButton(btnId);
-                if (button == null) continue;
-                int idx = (-btnId) - 1;
-                if (idx >= 0 && idx < red.length && red[idx]) {
-                    button.setTextColor(alertDialog.getThemedColor(Theme.key_text_RedBold));
-                } else {
-                    button.setTextColor(buttonColor);
-                }
-            }
+            alertDialog.showAsMaterialDialogInternal(sheetDismissListener, null);
         }
 
         public Runnable getDismissRunnable() {
