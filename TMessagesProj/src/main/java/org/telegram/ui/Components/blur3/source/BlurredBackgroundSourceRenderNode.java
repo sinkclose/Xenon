@@ -63,21 +63,15 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
         "    if (radius < 0.5) {\n" +
         "        return inputTexture.eval(coord);\n" +
         "    }\n" +
-        "    int h = samples / 2;\n" +
-        "    float stride = radius / float(h);\n" +
-        "    float sigma = float(h) / 2.0;\n" +
+        "    int radiusInt = int(ceil(radius));\n" +
         "    half4 result = half4(0.0);\n" +
         "    float totalWeight = 0.0;\n" +
-        "    for (int i = -15; i <= 15; i++) {\n" +
-        "        if (abs(float(i)) > float(h)) continue;\n" +
-        "        for (int j = -15; j <= 15; j++) {\n" +
-        "            if (abs(float(j)) > float(h)) continue;\n" +
-        "            float weight = exp(-(float(i * i + j * j)) / (2.0 * sigma * sigma));\n" +
-        "            float2 sampleCoord = coord + float2(float(i) * stride, float(j) * stride);\n" +
-        "            sampleCoord = clamp(sampleCoord, float2(0.0, 0.0), float2(textureWidth, textureHeight));\n" +
-        "            result += inputTexture.eval(sampleCoord) * half4(weight);\n" +
-        "            totalWeight += weight;\n" +
-        "        }\n" +
+        "    for (int i = -40; i <= 40; i++) {\n" +
+        "        if (abs(i) > radiusInt) break;\n" +
+        "        float2 offset = float2(0.0, float(i));\n" +
+        "        float weight = 1.0 - abs(float(i)) / (radius + 1.0);\n" +
+        "        result += inputTexture.eval(coord + offset) * half4(weight);\n" +
+        "        totalWeight += weight;\n" +
         "    }\n" +
         "    return result / half4(totalWeight);\n" +
         "}";

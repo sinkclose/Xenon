@@ -306,6 +306,8 @@
     <string name="AppIconCloud">Cloud</string>
     <string name="AppIconNeon">Neon</string>
     <string name="AppIconMaterial">Material</string>
+    <string name="AppIconOsu">osu!</string>
+    <string name="AppIconOsuOld">osu! old</string>
     <string name="RecentChats">Recent chats</string>
     <string name="ClearRecentChats">Clear recent chats</string>
     <string name="ClearRecentChatAlert">Do you want to clear your recent chats?</string>
@@ -603,6 +605,27 @@
     <string name="IOSAnimation">iOS animation</string>
     <string name="FadeAnimation">Fade animation</string>
     <string name="FadeTransitionSpeed">Fade transition speed (ms)</string>
+    <string name="OtherSwipeActions">Other swipe actions</string>
+    <string name="OtherSwipeActionsInfo">Swipe sideways to reply, then swipe up/down to switch actions. Long press an enabled action to make it primary (shows as “primary”).</string>
+    <string name="ShowNamesNextToBubbles">Show names next to the bubbles</string>
+    <string name="EnabledActions">Enabled actions</string>
+    <string name="DisabledActions">Disabled actions</string>
+    <string name="SwipeActionPrimary">primary</string>
+    <string name="SwipeActionReply">Reply</string>
+    <string name="SwipeActionEdit">Edit</string>
+    <string name="SwipeActionDelete">Delete</string>
+    <string name="SwipeActionCopy">Copy</string>
+    <string name="SwipeActionForward">Forward</string>
+    <string name="SwipeActionSave">Save</string>
+    <string name="SwipeActionPin">Pin</string>
+    <string name="SwipeActionSelect">Select</string>
+    <string name="SwipeActionTranslate">Translate</string>
+    <string name="SwipeActionReport">Report</string>
+    <string name="SwipeActionDetails">Details</string>
+    <string name="SwipeActionCopyPhoto">Copy Photo</string>
+    <string name="SwipeActionQr">QR</string>
+    <string name="SwipeActionOpenIn">Open In</string>
+    <string name="SwipeActionReaction">Reaction</string>
 </resources>
 
 

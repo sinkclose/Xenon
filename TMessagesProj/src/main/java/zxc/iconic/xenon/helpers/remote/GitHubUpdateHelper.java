@@ -51,6 +51,10 @@ public class GitHubUpdateHelper {
      * while the <i>tag</i> uses this dash form.
      */
     public static final String POSRAL_TAG_PREFIX = "posral-";
+    /**
+     * Value of {@link org.telegram.messenger.BuildConfig#BUILD_CHANNEL} that selects the posral stream.
+     */
+    public static final String CHANNEL_POSRAL = "posral";
     private static final Gson GSON = new Gson();
 
     private GitHubUpdateHelper() {
@@ -171,8 +175,9 @@ public class GitHubUpdateHelper {
     public static void checkForUpdates(UpdateCallback callback, boolean force) {
         new Thread(() -> {
             try {
-                FileLog.d(TAG + (force ? ": force checking for updates..." : ": checking for updates..."));
-                GitHubRelease release = fetchLatestRelease();
+                boolean posral = CHANNEL_POSRAL.equalsIgnoreCase(BuildConfig.BUILD_CHANNEL);
+                FileLog.d(TAG + (force ? ": force checking for updates..." : ": checking for updates...") + " (channel=" + BuildConfig.BUILD_CHANNEL + ", posral=" + posral + ")");
+                GitHubRelease release = posral ? fetchLatestPrefixedRelease(POSRAL_TAG_PREFIX) : fetchLatestRelease();
                 if (release == null || TextUtils.isEmpty(release.tagName)) {
                     FileLog.d(TAG + ": release is null or has no tag");
                     AndroidUtilities.runOnUIThread(callback::onNoUpdate);

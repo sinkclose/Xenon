@@ -9349,43 +9349,6 @@ private boolean hasImportantUnread(TLRPC.Dialog dialog) {
         if ((messages == null || messages.isEmpty()) && taskId == 0) {
             return;
         }
-        int ayuDeletedMessagesCount = 0;
-        if (!scheduled && !quickReplies && NekoConfig.enableSaveDeletedMessages && messages != null && !messages.isEmpty()) {
-            var ayuCtrl = zxc.iconic.xenon.deleted.XenonDeletedMessagesController.getInstance();
-            if (DialogObject.isEncryptedDialog(dialogId) || taskId != 0 || cacheOnly) {
-                final ArrayList<Integer> messagesCopy = new ArrayList<>(messages);
-                final long dialogIdFinal = dialogId;
-                getMessagesStorage().getStorageQueue().postRunnable(() -> {
-                    var invalidate = new ArrayList<Integer>();
-                    for (int a = 0; a < messagesCopy.size(); a++) {
-                        int msgId = messagesCopy.get(a);
-                        if (zxc.iconic.xenon.deleted.XenonDeletedState.isDeletePermitted(dialogIdFinal, msgId)) {
-                            continue;
-                        }
-                        MessageObject obj = dialogMessagesByIds.get(msgId);
-                        if (obj != null && obj.messageOwner != null) {
-                            invalidate.add(msgId);
-                            ayuCtrl.onMessageDeleted(obj.messageOwner, dialogIdFinal, currentAccount);
-                        }
-                    }
-                    AndroidUtilities.runOnUIThread(() -> {
-                        getNotificationCenter().postNotificationName(NotificationCenter.messagesDeletedNotification, dialogIdFinal, invalidate);
-                    });
-                });
-            } else {
-                ArrayList<Integer> permittedForAyuDeletion = new ArrayList<>();
-                for (var msgId : messages) {
-                    if (zxc.iconic.xenon.deleted.XenonDeletedState.isDeletePermitted(dialogId, msgId)) {
-                        permittedForAyuDeletion.add(msgId);
-                    }
-                }
-                var existingMessageIds = ayuCtrl.getExistingMessageIds(dialogId, permittedForAyuDeletion, currentAccount);
-                if (!existingMessageIds.isEmpty()) {
-                    Utilities.globalQueue.postRunnable(() -> ayuCtrl.deleteMessages(dialogId, existingMessageIds, currentAccount));
-                    ayuDeletedMessagesCount = existingMessageIds.size();
-                }
-            }
-        }
         ArrayList<Integer> toSend = null;
         long channelId;
         if (taskId == 0) {
@@ -9437,10 +9400,6 @@ private boolean hasImportantUnread(TLRPC.Dialog dialog) {
             }
         }
         if (cacheOnly) {
-            return;
-        }
-
-        if (messages != null && messages.size() == ayuDeletedMessagesCount) {
             return;
         }
 
@@ -21354,33 +21313,6 @@ private boolean hasImportantUnread(TLRPC.Dialog dialog) {
             for (int a = 0, size = deletedMessages.size(); a < size; a++) {
                 long key = deletedMessages.keyAt(a);
                 ArrayList<Integer> arrayList = deletedMessages.valueAt(a);
-                if (NekoConfig.enableSaveDeletedMessages && arrayList != null) {
-                    var ctrl = zxc.iconic.xenon.deleted.XenonDeletedMessagesController.getInstance();
-                    var savedIds = new ArrayList<Integer>();
-                    for (int b = 0; b < arrayList.size(); b++) {
-                        int msgId = arrayList.get(b);
-                        if (zxc.iconic.xenon.deleted.XenonDeletedState.isDeletePermitted(key, msgId)) {
-                            continue;
-                        }
-                        MessageObject obj = dialogMessagesByIds.get(msgId);
-                        if (obj != null && obj.messageOwner != null) {
-                            ctrl.onMessageDeleted(obj.messageOwner, key, currentAccount);
-                            savedIds.add(msgId);
-                        }
-                    }
-                    if (!savedIds.isEmpty()) {
-                        for (int savedMsgId : savedIds) {
-                            MessageObject savedObj = dialogMessagesByIds.get(savedMsgId);
-                            if (savedObj != null) {
-                                savedObj.messageOwner.ayuDeleted = true;
-                            }
-                        }
-                        arrayList.removeAll(savedIds);
-                        AndroidUtilities.runOnUIThread(() -> {
-                            getNotificationCenter().postNotificationName(NotificationCenter.messagesDeletedNotification, key, savedIds);
-                        });
-                    }
-                }
                 if (arrayList != null && !arrayList.isEmpty()) {
                     getMessagesStorage().getStorageQueue().postRunnable(() -> {
                         ArrayList<Long> dialogIds = getMessagesStorage().markMessagesAsDeleted(key, arrayList, false, true, 0, 0);
