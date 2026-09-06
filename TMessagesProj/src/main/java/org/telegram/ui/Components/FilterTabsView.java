@@ -420,7 +420,16 @@ public class FilterTabsView extends FrameLayout {
             if (Md3FilterTabsHelper.isEnabled()) {
                 float selectionProgress;
                 if (manualScrollingToPosition != -1) {
-                    selectionProgress = currentTab.id == selectedTabId ? 1f : 0f;
+                    // Finger-driven swipe: selectTabWithId() feeds continuous progress in [0, 0.5]
+                    // until the selection commits at 0.5 (see selectTabWithId). Blend the first
+                    // half here, the md3 transition animator continues from 0.5.
+                    if (currentPosition == FilterTabsView.this.currentPosition) {
+                        selectionProgress = 1f - animatingIndicatorProgress;
+                    } else if (currentPosition == manualScrollingToPosition) {
+                        selectionProgress = animatingIndicatorProgress;
+                    } else {
+                        selectionProgress = 0f;
+                    }
                 } else if (md3TransitionProgress < 1 && md3PrevPosition != -1) {
                     if (currentPosition == md3PrevPosition) {
                         selectionProgress = 1f - md3TransitionProgress;
@@ -443,9 +452,8 @@ public class FilterTabsView extends FrameLayout {
                 Md3FilterTabsHelper.drawTabBackground(canvas, getMeasuredWidth(), getMeasuredHeight(), currentPosition, getTabsCount(), selectionProgress, Theme.getColor(activeTextColorKey, resourcesProvider), Theme.getColor(unactiveTextColorKey, resourcesProvider), Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider));
                 int activeColor = Theme.getColor(activeTextColorKey, resourcesProvider);
                 int inactiveColor = Theme.getColor(unactiveTextColorKey, resourcesProvider);
-                int color = selectionProgress >= 0.5f
-                        ? (ColorUtils.calculateLuminance(activeColor) < 0.5f ? 0xffffffff : 0xff000000)
-                        : inactiveColor;
+                int activeContentColor = ColorUtils.calculateLuminance(activeColor) < 0.5f ? 0xffffffff : 0xff000000;
+                int color = ColorUtils.blendARGB(inactiveColor, activeContentColor, selectionProgress);
                 textPaint.setColor(color);
                 emojiColorFilter = new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN);
             }
@@ -1822,12 +1830,14 @@ public class FilterTabsView extends FrameLayout {
             manualScrollingToId = -1;
             if (Md3FilterTabsHelper.isEnabled() && currentPosition != position) {
                 md3PrevPosition = currentPosition;
-                md3TransitionProgress = 0f;
+                // The finger-driven half (0 -> 0.5) was already blended in onDraw,
+                // continue the transition from 0.5 for a seamless handoff.
+                md3TransitionProgress = 0.5f;
                 if (md3TransitionAnimator != null) {
                     md3TransitionAnimator.cancel();
                 }
-                md3TransitionAnimator = ValueAnimator.ofFloat(0f, 1f);
-                md3TransitionAnimator.setDuration(320);
+                md3TransitionAnimator = ValueAnimator.ofFloat(0.5f, 1f);
+                md3TransitionAnimator.setDuration(160);
                 md3TransitionAnimator.setInterpolator(interpolator);
                 md3TransitionAnimator.addUpdateListener(animator -> {
                     md3TransitionProgress = (float) animator.getAnimatedValue();
