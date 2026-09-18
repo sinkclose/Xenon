@@ -400,16 +400,13 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
             isKeyboardVisible = usableViewHeight - (rect.bottom - rect.top) > 0;
             if (waitingForKeyboardCloseRunnable != null && !containerView.isKeyboardVisible && !containerViewBack.isKeyboardVisible) {
                 AndroidUtilities.cancelRunOnUIThread(waitingForKeyboardCloseRunnable);
-                if (NekoConfig.removeChatDelay) {
-                    // Avoid triggering startLayoutAnimation() mid-layout-pass which causes
-                    // a missed first frame or a visual "jump" at animation start.
-                    final Runnable run = waitingForKeyboardCloseRunnable;
-                    waitingForKeyboardCloseRunnable = null;
-                    containerView.post(run);
-                } else {
-                    waitingForKeyboardCloseRunnable.run();
-                    waitingForKeyboardCloseRunnable = null;
-                }
+                // NOTE: run synchronously, like upstream. The continuation self-guards on
+                // field identity (waitingForKeyboardCloseRunnable != this -> drop), so it
+                // must run while the field still points at it. Deferring it via post()
+                // after nulling the field (or reposting without nulling) silently drops
+                // the transition's second half every time: stuck fragments, leftover boxes.
+                waitingForKeyboardCloseRunnable.run();
+                waitingForKeyboardCloseRunnable = null;
             }
         }
 
@@ -2179,21 +2176,14 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
 
     @Override
     public boolean presentFragment(NavigationParams params) {
-        if (waitingForKeyboardCloseRunnable != null || delayedOpenAnimationRunnable != null) {
-            if (waitingForKeyboardCloseRunnable != null) {
-                AndroidUtilities.cancelRunOnUIThread(waitingForKeyboardCloseRunnable);
-                waitingForKeyboardCloseRunnable = null;
-            }
-            if (delayedOpenAnimationRunnable != null) {
-                AndroidUtilities.cancelRunOnUIThread(delayedOpenAnimationRunnable);
-                if (NekoConfig.removeChatDelay && containerView != null) {
-                    containerView.removeCallbacks(delayedOpenAnimationRunnable);
-                }
-                delayedOpenAnimationRunnable = null;
-            }
-            transitionAnimationInProgress = false;
-        }
-
+        // NOTE: do NOT cancel waitingForKeyboardCloseRunnable / delayedOpenAnimationRunnable
+        // here. A pending keyboard-close continuation belongs to an in-flight close
+        // transition (transitionAnimationInProgress is true while it pends), and the
+        // checkTransitionAnimation() guard below already blocks presenting until that
+        // transition fully completes. Cancelling it silently drops the close's second
+        // half (startLayoutAnimation(false, ...) never runs) and, if the guard then
+        // still refuses to present, leaves the UI frozen mid-transition: an empty box
+        // with a stale scrim/background fill that never goes away.
         if (predictiveBackInProgress) {
             cancelAndResetAnimations();
         }

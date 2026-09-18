@@ -444,6 +444,9 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
         boolean hasNeu = neutralButtonText != null;
         if (hasPos || hasNeg || hasNeg2 || hasNeu) {
             LinearLayout buttonsLayout = new LinearLayout(context);
+            // Keep AlertDialog.getButtonsLayout()/getButton() working in sheet mode,
+            // otherwise callers like BoostDialogs.applyDialogStyle() NPE (buttonsLayout == null).
+            AlertDialog.this.buttonsLayout = buttonsLayout;
             buttonsLayout.setOrientation(verticalButtons ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
             buttonsLayout.setGravity(verticalButtons ? Gravity.START : Gravity.END);
             int btnColor = Theme.getColor(Theme.key_dialogButton, rp);
@@ -451,6 +454,7 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
 
             if (hasNeg) {
                 TextView negBtn = new TextView(context);
+                negBtn.setTag(Dialog.BUTTON_NEGATIVE);
                 negBtn.setText(negativeButtonText);
                 negBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
                 boolean isRed = red != null && red.length > 1 && red[1];
@@ -468,6 +472,7 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
             }
             if (hasNeg2) {
                 TextView neg2Btn = new TextView(context);
+                neg2Btn.setTag(AlertDialog.BUTTON_NEGATIVE_2);
                 neg2Btn.setText(negative2ButtonText);
                 neg2Btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
                 neg2Btn.setTextColor(btnColor);
@@ -484,6 +489,7 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
             }
             if (hasNeu) {
                 TextView neuBtn = new TextView(context);
+                neuBtn.setTag(Dialog.BUTTON_NEUTRAL);
                 neuBtn.setText(neutralButtonText);
                 neuBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
                 boolean isRed = red != null && red.length > 2 && red[2];
@@ -501,6 +507,7 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
             }
             if (hasPos) {
                 TextView posBtn = new TextView(context);
+                posBtn.setTag(Dialog.BUTTON_POSITIVE);
                 posBtn.setText(positiveButtonText);
                 posBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
                 boolean isRed = red != null && red.length > 0 && red[0];
@@ -647,6 +654,34 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
                 if (button != null) button.setTextColor(buttonColor);
             }
         }
+        // Keep legacy AlertDialog API working in material mode to avoid NPEs in
+        // callers that access getButtonsLayout()/getButton() after show().
+        FrameLayout compatButtonsLayout = new FrameLayout(context);
+        compatButtonsLayout.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        if (positiveButtonText != null) {
+            TextView tv = new TextView(context);
+            tv.setTag(Dialog.BUTTON_POSITIVE);
+            tv.setText(positiveButtonText);
+            compatButtonsLayout.addView(tv);
+        }
+        if (negativeButtonText != null) {
+            TextView tv = new TextView(context);
+            tv.setTag(Dialog.BUTTON_NEGATIVE);
+            tv.setText(negativeButtonText);
+            compatButtonsLayout.addView(tv);
+        }
+        if (neutralButtonText != null) {
+            TextView tv = new TextView(context);
+            tv.setTag(Dialog.BUTTON_NEUTRAL);
+            tv.setText(neutralButtonText);
+            compatButtonsLayout.addView(tv);
+        } else if (negative2ButtonText != null) {
+            TextView tv = new TextView(context);
+            tv.setTag(AlertDialog.BUTTON_NEGATIVE_2);
+            tv.setText(negative2ButtonText);
+            compatButtonsLayout.addView(tv);
+        }
+        buttonsLayout = compatButtonsLayout;
         return true;
     }
 

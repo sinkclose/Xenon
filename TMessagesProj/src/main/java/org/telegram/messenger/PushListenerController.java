@@ -90,6 +90,9 @@ public class PushListenerController {
                     AndroidUtilities.runOnUIThread(() -> MessagesController.getInstance(currentAccount).registerForPush(pushType, token));
                 }
             }
+            // Token state changed (issued or failed): re-evaluate keep-alive service mode.
+            // Healthy FCM -> drop the battery-hungry service; failure -> fall back to it.
+            ApplicationLoader.startPushService();
         });
     }
 

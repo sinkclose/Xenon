@@ -28,6 +28,7 @@ import android.os.Handler;
 import android.os.PowerManager;
 import android.os.SystemClock;
 import android.telephony.TelephonyManager;
+import android.text.TextUtils;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
@@ -444,16 +445,11 @@ public class ApplicationLoader extends Application {
     }
 
     public static void startPushService() {
-        if (zxc.iconic.xenon.NekoConfig.optimizedPushService) {
-            // Low-power mode: MTProto push connection only, no foreground service.
+        if (NekoConfig.optimizedPushService || isFcmPushHealthy()) {
+            // FCM delivers pushes, keeping the process alive only wastes battery.
+            // Low-power mode: MTProto push connection only, no keep-alive service.
             // Process can be killed by the OS. FCM wakes it up when a push arrives.
-            applicationContext.stopService(new Intent(applicationContext, NotificationsService.class));
-            for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-                if (UserConfig.getInstance(a).isClientActivated()) {
-                    MessagesController.getNotificationsSettings(a).edit().putBoolean("pushConnection", true).apply();
-                    ConnectionsManager.getInstance(a).setPushConnectionEnabled(true);
-                }
-            }
+            stopPushServiceAndEnablePushConnection();
             return;
         }
         SharedPreferences preferences = MessagesController.getGlobalNotificationsSettings();
@@ -471,6 +467,36 @@ public class ApplicationLoader extends Application {
             }
         } else {
             applicationContext.stopService(new Intent(applicationContext, NotificationsService.class));
+        }
+    }
+
+    /**
+     * FCM token is issued and Play Services are available: the system will wake
+     * us up on incoming pushes, so the keep-alive service would only waste battery.
+     * Any "__...__" pushStringStatus value means registration failed or is pending.
+     */
+    private static boolean isFcmPushHealthy() {
+        try {
+            if (applicationLoaderInstance == null || !getPushProvider().hasServices()) {
+                return false;
+            }
+            String pushString = SharedConfig.pushString;
+            return !TextUtils.isEmpty(pushString) && !pushString.startsWith("__");
+        } catch (Throwable ignore) {
+            return false;
+        }
+    }
+
+    private static void stopPushServiceAndEnablePushConnection() {
+        try {
+            applicationContext.stopService(new Intent(applicationContext, NotificationsService.class));
+        } catch (Throwable ignore) {
+        }
+        for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+            if (UserConfig.getInstance(a).isClientActivated()) {
+                MessagesController.getNotificationsSettings(a).edit().putBoolean("pushConnection", true).apply();
+                ConnectionsManager.getInstance(a).setPushConnectionEnabled(true);
+            }
         }
     }
 

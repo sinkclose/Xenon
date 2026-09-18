@@ -1,21 +1,36 @@
 name: Build
 
+# Отменяем устаревшие прогоны на той же ветке, чтобы пуши подряд
+# не копились в очереди и не выглядели как "зависший" workflow.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [ "main", "dev", "ci", "ayu-features" ]
-    paths-ignore:
-      - '**.md'
-      - '.github/**'
-      - '!.github/workflows/build.yml'
+    # NOTE: '!' negation is only supported in `paths`, NOT in `paths-ignore`
+    # (silently dropped there) — that's why a workflow-only push used to skip
+    # the build. Include everything, drop docs and .github, then re-include
+    # this file so workflow changes are still validated by CI.
+    paths:
+      - '**'
+      - '!**.md'
+      - '!.github/**'
+      - '.github/workflows/build.yml'
   pull_request:
     branches: [ "main", "dev" ]
-    paths-ignore:
-      - '**.md'
+    paths:
+      - '**'
+      - '!**.md'
+      - '!.github/**'
+      - '.github/workflows/build.yml'
   workflow_call:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     permissions:
       id-token: write
       attestations: write
@@ -40,7 +55,7 @@ jobs:
           echo "Downloading libv2ray.aar from: $URL"
 
           mkdir -p TMessagesProj/libs
-          curl -L --fail --retry 3 --retry-delay 3 "$URL" -o "$LIB_PATH"
+          curl -L --fail --retry 3 --retry-delay 3 --connect-timeout 20 --max-time 900 "$URL" -o "$LIB_PATH"
 
           if [ ! -s "$LIB_PATH" ]; then
             echo "Downloaded libv2ray.aar is empty"
@@ -80,7 +95,7 @@ jobs:
           mkdir -p ~/.gradle
           echo 'org.gradle.caching=true' >> ~/.gradle/gradle.properties
           echo 'org.gradle.parallel=true' >> ~/.gradle/gradle.properties
-          echo 'org.gradle.jvmargs=-Xmx56g -Dfile.encoding=UTF-8 -XX:+UseParallelGC' >> ~/.gradle/gradle.properties
+          echo 'org.gradle.jvmargs=-Xmx10g -Dfile.encoding=UTF-8 -XX:+UseParallelGC' >> ~/.gradle/gradle.properties
           echo 'android.native.buildOutput=verbose' >> ~/.gradle/gradle.properties
 
       - name: Configure Signing
@@ -137,11 +152,15 @@ jobs:
             -PgitCommitDate=$GIT_DATE \
             -PbuildChannel=$CHANNEL
 
+      # Attest every APK + AAB produced by both gradle tasks above. Must run
+      # AFTER bundleRelease, otherwise .aab artifacts are never attested.
       - name: Attest
         if: github.event_name != 'pull_request'
         uses: actions/attest@v4
         with:
-          subject-path: '${{ github.workspace }}/TMessagesProj_App/build/outputs'
+          subject-path: |
+            ${{ github.workspace }}/TMessagesProj_App/build/outputs/**/*.apk
+            ${{ github.workspace }}/TMessagesProj_App/build/outputs/**/*.aab
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
@@ -152,6 +171,7 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ayu-features')
     permissions:
       contents: write
@@ -244,8 +264,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   telegram:
-    needs: [build, release]
+    # Зависим только от build: артефакт качаем напрямую, а ссылка на релиз
+    # детерминирована (тег = short hash). Иначе при медленном/упавшем release
+    # TG-уведомление ждёт его или скипается вместе с ним — выглядит как зависший workflow.
+    needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v6
@@ -328,7 +352,7 @@ jobs:
             fi
           done
 
-          curl --fail --silent --show-error \
+          curl --fail --silent --show-error --connect-timeout 15 --max-time 120 --retry 2 \
             --data-urlencode "chat_id=${TG_CHAT_ID}" \
             --data-urlencode "text=${MSG}" \
             --data-urlencode "parse_mode=HTML" \
@@ -353,7 +377,7 @@ jobs:
             caption+="🔑 <code>${sha}</code>"
 
             echo "Sending ${name} (${size})..."
-            curl --fail --silent --show-error \
+            curl --fail --silent --show-error --connect-timeout 15 --max-time 600 --retry 2 \
               --form "chat_id=${TG_CHAT_ID}" \
               --form "document=@${apk}" \
               --form "caption=${caption}" \

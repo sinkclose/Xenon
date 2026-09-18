@@ -674,10 +674,16 @@ public class BoostDialogs {
     }
 
     public static void applyDialogStyle(AlertDialog dialog, boolean defaultMarginTop) {
+        if (dialog == null) {
+            return;
+        }
         dialog.setTextSize(20, 14);
         dialog.setMessageLineSpacing(2.5f);
         if (!defaultMarginTop) {
-            ((ViewGroup.MarginLayoutParams) dialog.getButtonsLayout().getLayoutParams()).topMargin = AndroidUtilities.dp(-14);
+            ViewGroup buttonsLayout = dialog.getButtonsLayout();
+            if (buttonsLayout != null && buttonsLayout.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+                ((ViewGroup.MarginLayoutParams) buttonsLayout.getLayoutParams()).topMargin = AndroidUtilities.dp(-14);
+            }
         }
     }
 

@@ -533,7 +533,7 @@
     <string name="EnablePushService">Background service</string>
     <string name="EnablePushServiceDesc">Keep the app alive in the background to keep receiving updates and capturing deleted messages</string>
     <string name="OptimizedPushService">Optimized push service</string>
-    <string name="OptimizedPushServiceDesc">Try if you don\'t receive notifications. Enables a low-power push connection without a persistent notification.</string>
+    <string name="OptimizedPushServiceDesc">Always use the low-power push connection. When off, the mode is picked automatically: low-power while push registration works, background service otherwise.</string>
     <string name="ClearDatabase">Clear database</string>
     <string name="ClearDatabaseDesc">Removes all saved deleted messages and edit history.</string>
     <string name="ClearDatabaseConfirm">All saved deleted messages and edit history will be permanently removed. Continue?</string>

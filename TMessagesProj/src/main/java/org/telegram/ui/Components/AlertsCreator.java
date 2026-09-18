@@ -8337,8 +8337,13 @@ public class AlertsCreator {
         }
         TextView neutralButton = (TextView) dialog.getButton(DialogInterface.BUTTON_NEUTRAL);
         if (neutralButton != null) {
-            dialog.getButtonsLayout().setPadding(dp(12), dp(0), dp(8), dp(12));
-            ((ViewGroup.MarginLayoutParams) dialog.getButtonsLayout().getLayoutParams()).topMargin = dp(-8);
+            android.view.ViewGroup buttonsLayout = dialog.getButtonsLayout();
+            if (buttonsLayout != null) {
+                buttonsLayout.setPadding(dp(12), dp(0), dp(8), dp(12));
+                if (buttonsLayout.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+                    ((ViewGroup.MarginLayoutParams) buttonsLayout.getLayoutParams()).topMargin = dp(-8);
+                }
+            }
             neutralButton.setTextColor(Theme.getColor(Theme.key_text_RedBold));
         }
     }
