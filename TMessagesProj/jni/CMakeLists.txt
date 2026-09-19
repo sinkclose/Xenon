@@ -172,26 +172,6 @@ if (${ANDROID_ABI} STREQUAL "arm64-v8a")
         PROPERTIES COMPILE_OPTIONS "-march=armv8.5-a+i8mm+sve2")
 endif()
 
-if (${ANDROID_ABI} STREQUAL "armeabi-v7a" OR ${ANDROID_ABI} STREQUAL "arm64-v8a")
-    target_compile_definitions(${NATIVE_LIB} PUBLIC
-            LIBYUV_NEON OPUS_HAVE_RTCD OPUS_ARM_ASM)
-
-    target_sources(${NATIVE_LIB} PRIVATE
-            opus/celt/arm/celt_neon_intr.c
-            opus/celt/arm/pitch_neon_intr.c
-            opus/silk/arm/NSQ_neon.c
-            opus/silk/arm/arm_silk_map.c
-            opus/silk/arm/LPC_inv_pred_gain_neon_intr.c
-            opus/silk/arm/NSQ_del_dec_neon_intr.c
-            opus/silk/arm/biquad_alt_neon_intr.c
-            opus/silk/fixed/arm/warped_autocorrelation_FIX_neon_intr.c
-            )
-
-elseif(${ANDROID_ABI} STREQUAL "x86")
-    target_compile_definitions(${NATIVE_LIB} PUBLIC
-            x86fix)
-endif()
-
 target_sources(${NATIVE_LIB} PRIVATE
 
         third_party/xiph/opusfile/src/info.c

@@ -1906,7 +1906,12 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
-        if (chatAvatarContainer != null && glassMode) {
+        // Custom glass pill only gates touches while it is actually on screen.
+        // When search / action mode is open, stock hides the avatar container and
+        // the pill geometry changes, so the bounds check must not swallow touches
+        // meant for the search field, menu or back button (e.g. taps on the chat
+        // title area while searching were silently dropped).
+        if (chatAvatarContainer != null && glassMode && chatAvatarContainer.getVisibility() == VISIBLE && !isSearchFieldVisible && !actionModeVisible && searchFactor <= 0f && getActionModeFactor() <= 0f) {
             if (ev.getAction() == MotionEvent.ACTION_DOWN) {
                 final int x = (int) ev.getX();
                 final int y = (int) ev.getY();
