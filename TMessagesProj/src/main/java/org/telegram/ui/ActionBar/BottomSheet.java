@@ -1636,6 +1636,20 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
     }
 
     @RequiresApi(api = Build.VERSION_CODES.S)
+    private void setGpuBlurRadius(View view, float radius) {
+        if (radius <= 0f) {
+            view.setRenderEffect(null);
+            return;
+        }
+        try {
+            view.setRenderEffect(RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP));
+        } catch (IllegalArgumentException e) {
+            view.setRenderEffect(null);
+            FileLog.e(e);
+        }
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.S)
     private void attachBlurView(Bitmap bitmap, int radius, int bw, int bh, int captureDh, boolean skipFadeIn) {
         blurOverlayBitmap = bitmap;
         ImageView imageView = new ImageView(getContext());
@@ -1649,13 +1663,11 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
         boolean disableBlur = zxc.iconic.xenon.NekoConfig.disableBlurBs;
         float targetBlur = disableBlur ? 0f : radius * 8f;
         if (skipFadeIn) {
-            imageView.setRenderEffect(RenderEffect.createBlurEffect(targetBlur, targetBlur, Shader.TileMode.CLAMP));
+            setGpuBlurRadius(imageView, targetBlur);
         } else if (zxc.iconic.xenon.NekoConfig.blurSmoothly && !disableBlur) {
-            imageView.setRenderEffect(RenderEffect.createBlurEffect(0f, 0f, Shader.TileMode.CLAMP));
+            setGpuBlurRadius(imageView, 0f);
         } else {
-            imageView.setRenderEffect(RenderEffect.createBlurEffect(
-                    targetBlur, targetBlur, Shader.TileMode.CLAMP
-            ));
+            setGpuBlurRadius(imageView, targetBlur);
         }
         if (container != null) {
             container.post(() -> {
@@ -1670,9 +1682,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
                         animator.addUpdateListener(a -> {
                             if (blurOverlayView != null) {
                                 float val = (float) a.getAnimatedValue();
-                                blurOverlayView.setRenderEffect(RenderEffect.createBlurEffect(
-                                        val, val, Shader.TileMode.CLAMP
-                                ));
+                                setGpuBlurRadius(blurOverlayView, val);
                             }
                         });
                         animator.start();
@@ -1747,9 +1757,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
     public void applyBlurRadius(int radius) {
         if (blurOverlayView != null) {
             float blur = zxc.iconic.xenon.NekoConfig.disableBlurBs ? 0f : radius * 8f;
-            blurOverlayView.setRenderEffect(RenderEffect.createBlurEffect(
-                    blur, blur, Shader.TileMode.CLAMP
-            ));
+            setGpuBlurRadius(blurOverlayView, blur);
         }
     }
 
@@ -2210,9 +2218,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
                 reverseBlurAnim.addUpdateListener(a -> {
                     if (blurOverlayView != null) {
                         float val = (float) a.getAnimatedValue();
-                        blurOverlayView.setRenderEffect(RenderEffect.createBlurEffect(
-                                val, val, Shader.TileMode.CLAMP
-                        ));
+                        setGpuBlurRadius(blurOverlayView, val);
                     }
                 });
                 blurOverlayView.animate()
@@ -2728,9 +2734,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
         if (blurOverlayView != null) {
             if (zxc.iconic.xenon.NekoConfig.blurSmoothly && Build.VERSION.SDK_INT >= 31) {
                 float targetBlur = zxc.iconic.xenon.NekoConfig.disableBlurBs ? 0f : zxc.iconic.xenon.NekoConfig.blurOverlayRadius * 8f;
-                blurOverlayView.setRenderEffect(RenderEffect.createBlurEffect(
-                        targetBlur * (1f - p), targetBlur * (1f - p), Shader.TileMode.CLAMP
-                ));
+                setGpuBlurRadius(blurOverlayView, targetBlur * (1f - p));
             }
             blurOverlayView.setAlpha(1f - p);
         }
@@ -2931,4 +2935,3 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
         return BulletinFactory.of(topBulletinContainer, resourcesProvider);
     }
 }
-
