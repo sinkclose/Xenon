@@ -374,10 +374,10 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
             previewAvatar.setLayoutParams(lp);
         }
         if (avatarRight) {
-            previewAvatar.setRightTextInset(AndroidUtilities.dp(140));
+            previewAvatar.setRightTextInset(AndroidUtilities.dp(16));
             previewAvatar.setRightAnchorView(previewMoreItem);
         } else if (textOnlyPill) {
-            previewAvatar.setRightTextInset(AndroidUtilities.dp(92));
+            previewAvatar.setRightTextInset(AndroidUtilities.dp(16));
             previewAvatar.setRightAnchorView(null);
         } else {
             previewAvatar.setRightTextInset(0);

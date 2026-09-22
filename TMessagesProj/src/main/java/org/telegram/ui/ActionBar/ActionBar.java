@@ -2196,6 +2196,10 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         }
     }
 
+    public float getSearchFactor() {
+        return searchFactor;
+    }
+
     public void checkAvatarContainerWidth(boolean animated) {
         if (chatAvatarContainer == null) {
             return;
@@ -2367,6 +2371,14 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
                 glassDrawable.setBounds(0, 0, getWidth(), getHeight());
             } else {
                 glassDrawable.setBounds(left, t, right, b);
+            }
+            // Fade the centered chat pill out while searching (searchFactor is
+            // animated 0->1 with ease-out over ~0.3s) and restore it on exit.
+            // Back/menu glass stays visible.
+            if (chatAvatarContainer != null && !inu_nonIsland && searchFactor > 0f) {
+                glassDrawable.setAlpha((int) (255 * (1f - searchFactor)));
+            } else {
+                glassDrawable.setAlpha(255);
             }
             glassDrawable.draw(canvas);
         }

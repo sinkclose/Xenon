@@ -432,8 +432,46 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         canvas.restore();
     }
 
+    /**
+     * True when the avatar stands apart from the text pill (avatar right/left
+     * with a centered title, or avatar right with a plain header). In that
+     * case it must not ride the pill's press-bounce scale toward the center.
+     */
+    private boolean isAvatarSeparateFromPill() {
+        return textOnlyPill || avatarPlacement == zxc.iconic.xenon.NekoConfig.AVATAR_PLACEMENT_RIGHT;
+    }
+
     @Override
     protected boolean drawChild(@NonNull Canvas canvas, View child, long drawingTime) {
+        final boolean avatarChild = child == avatarImageView || child == communityItem || child == timeItem || child == starBgItem || child == starFgItem;
+        final boolean unbounceAvatarChild = avatarChild && isAvatarSeparateFromPill();
+        float bounceScale = 1f;
+        if (unbounceAvatarChild) {
+            // dispatchDraw scales the whole container around the pill pivot:
+            // cancel it for the detached avatar (and its corner badges) so it stays put.
+            bounceScale = bounce.getScale(.02f);
+            if (bounceScale != 1f && bounceScale > 0f) {
+                canvas.save();
+                canvas.scale(1f / bounceScale, 1f / bounceScale, getPivotX(), getHeight() - ActionBar.getCurrentActionBarHeight() / 2f);
+            } else {
+                bounceScale = 1f;
+            }
+        }
+        // Fade the avatar (and its badges) with the search transition, using
+        // the same live factor as the pill glass. Pure function of the factor:
+        // no extra animator, so it can't desync and resets by itself.
+        float searchFade = 1f;
+        if (avatarChild && actionBar != null) {
+            final float searchFactor = actionBar.getSearchFactor();
+            if (searchFactor > 0f) {
+                searchFade = Math.max(0f, 1f - searchFactor);
+            }
+        }
+        final boolean fadeAvatar = searchFade < 1f;
+        if (fadeAvatar) {
+            canvas.saveLayerAlpha(child.getX(), child.getY(), child.getX() + child.getWidth(), child.getY() + child.getHeight(), (int) (255 * searchFade));
+        }
+        boolean result;
         if (child == avatarImageView) {
             final boolean hasTimer = timeItem != null && timeItem.getVisibility() == VISIBLE;
             final boolean hasCommunity = communityItem != null && communityItem.getVisibility() == VISIBLE;
@@ -441,7 +479,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
                 AndroidUtilities.rectTmp.set(child.getX(), child.getY(), child.getX() + child.getWidth(), child.getY() + child.getHeight());
                 AndroidUtilities.rectTmp.inset(-dp(3), -dp(3));
                 canvas.saveLayer(AndroidUtilities.rectTmp, null);
-                final boolean b = super.drawChild(canvas, child, drawingTime);
+                result = super.drawChild(canvas, child, drawingTime);
                 if (hasTimer) {
                     final float cx = timeItem.getX() + timeItem.getWidth() / 2f;
                     final float cy = timeItem.getY() + timeItem.getHeight() / 2f;
@@ -455,10 +493,19 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
                     canvas.drawCircle(cx, cy, r, Theme.PAINT_CLEAR);
                 }
                 canvas.restore();
-                return b;
+            } else {
+                result = super.drawChild(canvas, child, drawingTime);
             }
+        } else {
+            result = super.drawChild(canvas, child, drawingTime);
         }
-        return super.drawChild(canvas, child, drawingTime);
+        if (fadeAvatar) {
+            canvas.restore();
+        }
+        if (unbounceAvatarChild && bounceScale != 1f) {
+            canvas.restore();
+        }
+        return result;
     }
 
     public boolean ignoreTouches;
@@ -1035,7 +1082,10 @@ final boolean avatarVisible = avatarImageView.getVisibility() == VISIBLE;
 
     public void setCommunityItemVisible(boolean visible) {
         if (communityItem != null) {
-            communityItem.setVisibility(visible && !avatarImageIsHidden ? VISIBLE : GONE);
+            // The arrow is a badge on the avatar corner: without a visible
+            // avatar (e.g. comments with right placement fallback) it would
+            // float between the back button and the pill.
+            communityItem.setVisibility(visible && !avatarImageIsHidden && hasVisibleAvatar() ? VISIBLE : GONE);
         }
     }
 

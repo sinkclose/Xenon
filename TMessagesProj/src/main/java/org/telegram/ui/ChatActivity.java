@@ -5018,20 +5018,27 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
             actionBar.setForcedMenuMinWidth(dp(46));
         }
         if (avatarRight) {
-            avatarContainer.setRightTextInset(AndroidUtilities.dp(140));
-            if (avatarContainer.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
-                ((ViewGroup.MarginLayoutParams) avatarContainer.getLayoutParams()).rightMargin = AndroidUtilities.dp(6);
-            }
             if (headerItem != null) {
+                avatarContainer.setRightTextInset(AndroidUtilities.dp(16));
+                if (avatarContainer.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+                    ((ViewGroup.MarginLayoutParams) avatarContainer.getLayoutParams()).rightMargin = AndroidUtilities.dp(6);
+                }
                 avatarContainer.setRightAnchorView(headerItem);
                 View iconView = headerItem.getIconView();
                 if (iconView != null) {
                     iconView.setVisibility(View.INVISIBLE);
                 }
                 actionBar.inu_avatarRightBigger = NekoConfig.biggerAvatar;
+            } else {
+                // No header slot at the right (e.g. comments): hide the avatar
+                // instead of leaving it stuck half off-screen at the edge.
+                avatarContainer.getAvatarImageView().setVisibility(View.GONE);
+                avatarContainer.setCommunityItemVisible(false);
+                avatarContainer.setRightAnchorView(null);
+                avatarContainer.setRightTextInset(AndroidUtilities.dp(16));
             }
         } else if (textOnlyPill) {
-            avatarContainer.setRightTextInset(AndroidUtilities.dp(92));
+            avatarContainer.setRightTextInset(AndroidUtilities.dp(16));
         }
 
         chatInputViewsContainer = new ChatInputViewsContainer(context);
