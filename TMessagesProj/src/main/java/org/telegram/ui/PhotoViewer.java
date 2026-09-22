@@ -17947,7 +17947,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                             animators.add(ObjectAnimator.ofFloat(photoCropView, View.ALPHA, 0, 1.0f));
                         }
                         animatorSet.playTogether(animators);
-                        animatorSet.setDuration(200);
+                        animatorSet.setDuration(350);
+                        animatorSet.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
                         animatorSet.addListener(new AnimatorListenerAdapter() {
                             @Override
                             public void onAnimationEnd(Animator animation) {
@@ -18603,7 +18604,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                     }
                 };
 
-                animatorSet.setDuration(200);
+                animatorSet.setDuration(350);
+                animatorSet.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
                 animatorSet.addListener(new AnimatorListenerAdapter() {
                     @Override
                     public void onAnimationEnd(Animator animation) {
@@ -18666,7 +18668,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                         }
                     }
                 };
-                animatorSet.setDuration(200);
+                animatorSet.setDuration(350);
+                animatorSet.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
                 animatorSet.addListener(new AnimatorListenerAdapter() {
                     @Override
                     public void onAnimationEnd(Animator animation) {
