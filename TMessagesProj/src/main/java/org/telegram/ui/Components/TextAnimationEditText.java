@@ -52,6 +52,10 @@ public class TextAnimationEditText extends EditTextCaption {
 
     private static final PathInterpolator bezier = new PathInterpolator(0.47f, 0f, 0f, 1f);
 
+    // Max grapheme clusters that get an appearance animation per change burst;
+    // anything larger (a paste) would create hundreds of spans for one event.
+    private static final int MAX_ANIM_CHARS = 50;
+
     private final ArrayList<CharAnim> charAnims = new ArrayList<>();
     private final ArrayList<DeletedCharAnim> deletedCharAnims = new ArrayList<>();
     private final Paint animPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -87,14 +91,25 @@ public class TextAnimationEditText extends EditTextCaption {
         addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-                if (!NekoConfig.textAnimationEnabled) return;
+                if (!NekoConfig.textAnimationEnabled) {
+                    // Kill-switch: drop pending animations immediately and unhide
+                    // their text — pending transparency spans must never survive
+                    // a disabled animation feature.
+                    if (!charAnims.isEmpty()) {
+                        finishAllCharAnims();
+                    }
+                    return;
+                }
                 if (count > 0) {
                     if (after < count) {
                         backspacePulseActive = true;
                         backspacePulseTime = SystemClock.elapsedRealtime();
                     }
                     if (start == 0 && count == s.length()) {
-                        charAnims.clear();
+                        // The whole text is about to be replaced. Remove every
+                        // transparency span from the old text first — spans must
+                        // never outlive the CharAnim entries that own them.
+                        finishAllCharAnims();
                         deletedCharAnims.clear();
                         return;
                     }
@@ -122,7 +137,14 @@ public class TextAnimationEditText extends EditTextCaption {
 
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
-                if (!NekoConfig.textAnimationEnabled) return;
+                if (!NekoConfig.textAnimationEnabled) {
+                    // Kill-switch: same as in beforeTextChanged — finish pending
+                    // animations so no hidden character can outlive them.
+                    if (!charAnims.isEmpty()) {
+                        finishAllCharAnims();
+                    }
+                    return;
+                }
                 if (count > 0) {
                     for (int i = start; i < start + count && i < s.length(); i++) {
                         char c = s.charAt(i);
@@ -136,29 +158,44 @@ public class TextAnimationEditText extends EditTextCaption {
                     }
                 }
                 if (s.length() == 0) {
-                    charAnims.clear();
-                    deletedCharAnims.clear();
+                    finishAllCharAnims();
                     return;
                 }
+                Editable editable = s instanceof Editable ? (Editable) s : null;
                 Iterator<CharAnim> it = charAnims.iterator();
                 while (it.hasNext()) {
                     CharAnim anim = it.next();
                     if (anim.index >= start && anim.index < start + before) {
+                        // The text this anim was hiding is being replaced. The span
+                        // can survive the replacement attached to LIVE text
+                        // (autocorrect / composition updates replace only part of
+                        // its range), so remove it here — otherwise those characters
+                        // stay invisible forever.
+                        removeAnimSpan(editable, anim);
                         it.remove();
-                        continue; // already removed — don't call it.remove() again below
+                        continue;
                     } else if (anim.index >= start) {
                         int shift = count - before;
                         anim.index += shift;
                         anim.endIndex += shift;
+                    } else if (anim.endIndex > start) {
+                        // The span starts before the change and reaches into it:
+                        // after the change its range mixes old and new text while
+                        // index/endIndex would desync from the span's real bounds.
+                        // Kill the anim entirely — the text just appears instantly.
+                        removeAnimSpan(editable, anim);
+                        it.remove();
+                        continue;
                     }
                     if (anim.index >= s.length()) {
+                        removeAnimSpan(editable, anim);
                         it.remove();
                     }
                 }
-                if (count > 0 && s instanceof Editable) {
-                    Editable editable = (Editable) s;
+                if (count > 0 && editable != null) {
                     long now = System.currentTimeMillis();
-                    for (int i = start; i < start + count; ) {
+                    int created = 0;
+                    for (int i = start; i < start + count && created < MAX_ANIM_CHARS; ) {
                         if (i >= s.length()) break;
                         // Determine grapheme cluster length: handle surrogate pairs and
                         // ZWJ sequences so emoji don't split into two \uFFFD replacement chars.
@@ -177,6 +214,7 @@ public class TextAnimationEditText extends EditTextCaption {
                         anim.span = span;
                         editable.setSpan(span, i, spanEnd, Editable.SPAN_EXCLUSIVE_EXCLUSIVE);
                         i += clusterLen;
+                        created++;
                     }
                     invalidate();
                 }
@@ -196,6 +234,51 @@ public class TextAnimationEditText extends EditTextCaption {
                 }
             }
         });
+    }
+
+    /**
+     * Removes the transparency span owned by a {@link CharAnim} from the given
+     * Editable. Every path that drops a CharAnim without letting its animation
+     * finish MUST call this — a surviving span keeps the text it covers drawn
+     * as fully transparent (invisible) forever.
+     */
+    private void removeAnimSpan(Editable editable, CharAnim anim) {
+        if (editable != null && anim != null && anim.span != null
+                && editable.getSpanStart(anim.span) >= 0) {
+            editable.removeSpan(anim.span);
+        }
+        if (anim != null) {
+            anim.span = null;
+        }
+    }
+
+    /**
+     * Instantly finishes all in-flight appearance animations: removes every
+     * transparency span from the current text and clears the animation state.
+     * Called from the kill-switch paths (feature toggled off, whole-text
+     * replacement, detach) so no character can stay hidden.
+     */
+    private void finishAllCharAnims() {
+        if (charAnims.isEmpty()) {
+            deletedCharAnims.clear();
+            return;
+        }
+        Editable editable = getText();
+        for (CharAnim anim : charAnims) {
+            removeAnimSpan(editable, anim);
+        }
+        charAnims.clear();
+        deletedCharAnims.clear();
+        invalidate();
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        // The field and its Editable can outlive detach and be re-attached later
+        // (e.g. the shared chat input field). Never leave transparency spans
+        // behind — the text they cover would be drawn invisible after re-attach.
+        finishAllCharAnims();
     }
 
     @Override
@@ -468,7 +551,15 @@ public class TextAnimationEditText extends EditTextCaption {
     }
 
     private void drawCharAnimations(Canvas canvas) {
-        if (!NekoConfig.textAnimationEnabled || (charAnims.isEmpty() && deletedCharAnims.isEmpty())) return;
+        if (!NekoConfig.textAnimationEnabled) {
+            // Kill-switch: pending transparency spans must be dropped right now,
+            // or the characters they hide stay invisible forever.
+            if (!charAnims.isEmpty()) {
+                finishAllCharAnims();
+            }
+            return;
+        }
+        if (charAnims.isEmpty() && deletedCharAnims.isEmpty()) return;
         Layout layout = getLayout();
         if (layout == null) return;
 
@@ -508,6 +599,9 @@ public class TextAnimationEditText extends EditTextCaption {
             while (it.hasNext()) {
                 CharAnim anim = it.next();
                 if (anim.index >= text.length()) {
+                    // The text shrank below this anim — its span is still attached
+                    // to whatever text now lives at that offset, so remove it.
+                    removeAnimSpan(getText(), anim);
                     it.remove();
                     continue;
                 }

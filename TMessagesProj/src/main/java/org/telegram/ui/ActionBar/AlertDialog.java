@@ -339,8 +339,10 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
             return true;
         }
         if (shouldReplaceWithMaterial()) {
-            showAsMaterialDialogInternal(null, null);
-            return true;
+            // Propagate the result: dialogs with 4 buttons (neutral + negative2)
+            // are not supported by the material replacement and must fall back
+            // to the regular AlertDialog instead of being silently dropped.
+            return showAsMaterialDialogInternalWithRed(null, null, null);
         }
         return false;
     }

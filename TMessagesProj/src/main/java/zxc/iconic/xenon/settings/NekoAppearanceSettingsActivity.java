@@ -68,7 +68,6 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
     private final int nonIslandTabBarsRow = rowId++;
     private final int nonIslandGlobalSearchRow = rowId++;
     private final int material3BottomNavigationBarRow = rowId++;
-    private final int md3PlayerSeekBarRow = rowId++;
     private final int md3FoldersRow = rowId++;
     private final int material3DialogsRow = rowId++;
     private final int avatarShapeRow = rowId++;
@@ -135,7 +134,6 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         items.add(UItem.asCheck(m3SectionsStyleRow, LocaleController.getString(R.string.ListItems)).setChecked(NekoConfig.m3SectionsStyle).slug("m3SectionsStyle"));
         items.add(UItem.asCheck(materialSlidersRow, LocaleController.getString(R.string.MaterialSliders)).setChecked(NekoConfig.materialSliders).slug("materialSliders"));
         items.add(UItem.asCheck(material3BottomNavigationBarRow, LocaleController.getString(R.string.BottomNavigationBar)).setChecked(NekoConfig.material3BottomNavigationBar).slug("material3BottomNavigationBar"));
-        items.add(InfoCheckCellFactory.of(md3PlayerSeekBarRow, LocaleController.getString(R.string.PlayerSeekBar), NekoConfig.md3PlayerSeekBar, () -> showPlayerSeekBarInfo()).slug("md3PlayerSeekBar"));
         items.add(UItem.asCheck(md3FoldersRow, LocaleController.getString(R.string.Md3Folders)).setChecked(NekoConfig.md3Folders).slug("md3Folders"));
         items.add(InfoCheckCellFactory.of(loadingIndicatorsRow, LocaleController.getString(R.string.LoadingIndicators), NekoConfig.wavyEnabled, () -> showLoadingIndicatorsInfo()).slug("loadingIndicators"));
         items.add(InfoCheckCellFactory.of(material3DialogsRow, LocaleController.getString(R.string.Material3Dialogs), NekoConfig.material3Dialogs, () -> showDialogsInfo()).slug("material3Dialogs"));
@@ -351,12 +349,6 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
                 ((TextCheckCell) view).setChecked(NekoConfig.material3BottomNavigationBar);
             }
             parentLayout.rebuildAllFragmentViews(false, false);
-        } else if (id == md3PlayerSeekBarRow) {
-            NekoConfig.toggleMd3PlayerSeekBar();
-            if (view instanceof InfoCheckCell) {
-                ((InfoCheckCell) view).setChecked(NekoConfig.md3PlayerSeekBar);
-            }
-            listView.adapter.update(true);
         } else if (id == material3DialogsRow) {
             if (!NekoConfig.material3Dialogs && NekoConfig.replaceDialogsWithSheet) {
                 showMaterial3DialogsConflictBulletin();
@@ -567,103 +559,6 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
             if (button == null) continue;
             button.setTextColor(buttonColor);
         }
-    }
-
-    private void showPlayerSeekBarInfo() {
-        if (getParentActivity() == null) return;
-        org.telegram.ui.ActionBar.BottomSheet sheet = new org.telegram.ui.ActionBar.BottomSheet(getParentActivity(), false, resourcesProvider);
-        sheet.setTitle(LocaleController.getString(R.string.PlayerSeekBar));
-
-        LinearLayout container = new LinearLayout(getParentActivity());
-        container.setOrientation(LinearLayout.VERTICAL);
-        container.setPadding(AndroidUtilities.dp(24), AndroidUtilities.dp(16), AndroidUtilities.dp(24), AndroidUtilities.dp(24));
-
-        View defaultBar = new View(getParentActivity()) {
-            private final org.telegram.ui.Components.VideoPlayerSeekBar seekBar;
-            {
-                int bg = Theme.getColor(Theme.key_player_progressBackground, resourcesProvider);
-                int cache = Theme.getColor(Theme.key_player_progressCachedBackground, resourcesProvider);
-                int progress = Theme.getColor(Theme.key_player_progress, resourcesProvider);
-                seekBar = new org.telegram.ui.Components.VideoPlayerSeekBar(this);
-                seekBar.setHorizontalPadding(AndroidUtilities.dp(2));
-                seekBar.setColors(bg, cache, progress, progress, progress, progress);
-                seekBar.setProgress(0.5f, false);
-                seekBar.setBufferedProgress(0.85f);
-                seekBar.setPlaying(true);
-                setWillNotDraw(false);
-            }
-            @Override
-            protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-                super.onSizeChanged(w, h, oldw, oldh);
-                seekBar.setSize(w, h);
-                seekBar.setProgress(0.5f, false);
-            }
-            @Override
-            protected void onDraw(Canvas canvas) {
-                super.onDraw(canvas);
-                boolean saved = zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar;
-                zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar = false;
-                seekBar.draw(canvas, this);
-                zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar = saved;
-                invalidate();
-            }
-        };
-        defaultBar.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, AndroidUtilities.dp(48)));
-        container.addView(defaultBar);
-
-        TextView defaultLabel = new TextView(getParentActivity());
-        defaultLabel.setText("Telegram");
-        defaultLabel.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-        defaultLabel.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2, resourcesProvider));
-        defaultLabel.setGravity(Gravity.CENTER);
-        defaultLabel.setPadding(0, 0, 0, AndroidUtilities.dp(16));
-        defaultLabel.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
-        container.addView(defaultLabel);
-
-        View md3Bar = new View(getParentActivity()) {
-            private final org.telegram.ui.Components.VideoPlayerSeekBar seekBar;
-            {
-                int bg = Theme.getColor(Theme.key_player_progressBackground, resourcesProvider);
-                int cache = Theme.getColor(Theme.key_player_progressCachedBackground, resourcesProvider);
-                int progress = Theme.getColor(Theme.key_player_progress, resourcesProvider);
-                seekBar = new org.telegram.ui.Components.VideoPlayerSeekBar(this);
-                seekBar.setHorizontalPadding(AndroidUtilities.dp(2));
-                seekBar.setColors(bg, cache, progress, progress, progress, progress);
-                seekBar.setProgress(0.5f, false);
-                seekBar.setBufferedProgress(0.85f);
-                seekBar.setPlaying(true);
-                seekBar.setTransitionProgress(0f);
-                setWillNotDraw(false);
-            }
-            @Override
-            protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-                super.onSizeChanged(w, h, oldw, oldh);
-                seekBar.setSize(w, h);
-                seekBar.setProgress(0.5f, false);
-            }
-            @Override
-            protected void onDraw(Canvas canvas) {
-                super.onDraw(canvas);
-                boolean saved = zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar;
-                zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar = true;
-                seekBar.draw(canvas, this);
-                zxc.iconic.xenon.NekoConfig.md3PlayerSeekBar = saved;
-                invalidate();
-            }
-        };
-        md3Bar.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, AndroidUtilities.dp(48)));
-        container.addView(md3Bar);
-
-        TextView md3Label = new TextView(getParentActivity());
-        md3Label.setText("Material Design 3");
-        md3Label.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-        md3Label.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2, resourcesProvider));
-        md3Label.setGravity(Gravity.CENTER);
-        md3Label.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
-        container.addView(md3Label);
-
-        sheet.setCustomView(container);
-        sheet.show();
     }
 
     private void showChatHeadersInfo() {

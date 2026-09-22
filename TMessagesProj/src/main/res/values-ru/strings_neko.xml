@@ -591,7 +591,6 @@
     <string name="FadeTransitionSpeed">Скорость затухания (мс)</string>
     <string name="MaterialSliders">Слайдеры</string>
     <string name="BottomNavigationBar">Нижняя панель навигации</string>
-    <string name="PlayerSeekBar">Полоска проигрывателя</string>
     <string name="Md3Folders">Папки (WIP)</string>
     <string name="Material3Dialogs">Диалоги</string>
     <string name="AvatarShapesHeader">Формы</string>
