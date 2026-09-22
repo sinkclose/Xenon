@@ -938,7 +938,7 @@ final boolean avatarVisible = avatarImageView.getVisibility() == VISIBLE;
                 actionBar.setContainerLayoutPillWidth(pillWidth);
             }
             final int titleWidth = titleTextView.getDrawnWidth();
-            final int titleFadeShift = titleTextView.getDrawnWidth() < (int) titleTextView.getExactWidth() ? dp(8) : 0;
+            final int titleFadeShift = titleTextView.isTextTruncated() ? dp(8) : 0;
             final View subTextView = getSubtitleTextView();
             final int subWidth;
             if (subTextView != null && subTextView.getVisibility() != GONE) {
@@ -952,7 +952,7 @@ final boolean avatarVisible = avatarImageView.getVisibility() == VISIBLE;
             } else {
                 subWidth = 0;
             }
-            final int subFadeShift = subtitleTextView != null && subtitleTextView.getDrawnWidth() < (int) subtitleTextView.getExactWidth() ? dp(8) : 0;
+            final int subFadeShift = subtitleTextView != null && subtitleTextView.isTextTruncated() ? dp(8) : 0;
             titleL = Math.max(leftPadding, pillLeft + (pillWidth - titleWidth) / 2 + titleFadeShift);
             subtitleL = subTextView != null && subTextView.getVisibility() != GONE ? Math.max(leftPadding, pillLeft + (pillWidth - subWidth) / 2 + subFadeShift) : titleL;
         } else {

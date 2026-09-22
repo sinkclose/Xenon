@@ -553,15 +553,24 @@ public class SimpleTextView extends View implements Drawable.Callback {
     }
 
     public int getDrawnWidth() {
-        int visibleTextWidth = textWidth;
-        if (getMeasuredWidth() > 0) {
-            int maxVisibleWidth = getMeasuredWidth() - getPaddingLeft() - getPaddingRight() - minusWidth;
-            visibleTextWidth = Math.min(visibleTextWidth, Math.max(0, maxVisibleWidth));
-        }
-        return (leftDrawable != null && !leftDrawableOutside ? drawablePadding + leftDrawable.getIntrinsicWidth() : 0)
-            + visibleTextWidth
-            + (rightDrawableOutside && rightDrawable != null ? drawablePadding + (int) (rightDrawable.getIntrinsicWidth() * rightDrawableScale) : 0)
+        int leftInsideWidth = (leftDrawable != null && !leftDrawableOutside ? drawablePadding + leftDrawable.getIntrinsicWidth() : 0);
+        int outsideWidth = (rightDrawableOutside && rightDrawable != null ? drawablePadding + (int) (rightDrawable.getIntrinsicWidth() * rightDrawableScale) : 0)
             + (rightDrawableOutside && rightDrawable2 != null ? drawablePadding + (int) (rightDrawable2.getIntrinsicWidth() * rightDrawableScale) : 0);
+        if (getMeasuredWidth() > 0) {
+            int maxVisibleWidth = Math.max(0, getMeasuredWidth() - getPaddingLeft() - getPaddingRight() - minusWidth);
+            // When the text overflows, outside drawables are clamped inside the view
+            // (see onDraw) and don't extend its visual width. Counting them on top
+            // of the clamped text made centered pills too wide and shifted the title left.
+            if (leftInsideWidth + textWidth + outsideWidth > maxVisibleWidth) {
+                return maxVisibleWidth;
+            }
+            return leftInsideWidth + textWidth + outsideWidth;
+        }
+        return leftInsideWidth + textWidth + outsideWidth;
+    }
+
+    public boolean isTextTruncated() {
+        return textDoesNotFit;
     }
 
     public int getRightDrawableWidth() {
