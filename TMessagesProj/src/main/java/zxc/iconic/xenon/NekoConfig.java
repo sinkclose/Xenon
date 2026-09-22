@@ -298,7 +298,6 @@ public class NekoConfig {
     public static boolean disableGlassGlare = true;
     public static boolean disableScrimBlur = false;
     public static boolean material3BottomNavigationBar = false;
-    public static boolean md3PlayerSeekBar = false;
     public static boolean md3Folders = false;
     public static int avatarShape = 0;
     public static boolean avatarShapeInChatList = true;
@@ -524,7 +523,6 @@ public class NekoConfig {
             }
             disableScrimBlur = preferences.getBoolean("disableScrimBlur", false);
             material3BottomNavigationBar = preferences.getBoolean("material3BottomNavigationBar", false);
-            md3PlayerSeekBar = preferences.getBoolean("md3PlayerSeekBar", false);
             md3Folders = preferences.getBoolean("md3Folders", false);
             avatarShape = preferences.getInt("avatarShape", 0);
             avatarShapeInChatList = preferences.getBoolean("avatarShapeInChatList", true);
@@ -2008,14 +2006,6 @@ public class NekoConfig {
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("material3BottomNavigationBar", material3BottomNavigationBar);
-        editor.apply();
-    }
-
-    public static void toggleMd3PlayerSeekBar() {
-        md3PlayerSeekBar = !md3PlayerSeekBar;
-        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
-        SharedPreferences.Editor editor = preferences.edit();
-        editor.putBoolean("md3PlayerSeekBar", md3PlayerSeekBar);
         editor.apply();
     }
 

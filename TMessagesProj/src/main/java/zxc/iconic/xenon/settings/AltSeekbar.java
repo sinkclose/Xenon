@@ -151,7 +151,9 @@ if (subtitle != null) {
             MaterialSliderUiHelper.applyThemeColors(materialSlider);
             materialSlider.setValueFrom(min);
             materialSlider.setValueTo(max);
-            if (step > 1) {
+            if (step > 1 && (max - min) % step == 0) {
+                // A step that is not a factor of the range would make BaseSlider
+                // throw IllegalStateException at layout time.
                 materialSlider.setStepSize(step);
             }
             materialSlider.addOnChangeListener((slider, value, fromUser) -> {
@@ -159,7 +161,8 @@ if (subtitle != null) {
                 if (fromUser) {
                     onDrag.run(value);
                 }
-                int newRounded = step > 1 ? Math.round(value / step) * step : Math.round(value);
+                // Keep the displayed value consistent with the discrete slider ticks.
+                int newRounded = step > 1 ? min + Math.round((value - min) / (float) step) * step : Math.round(value);
                 if (newRounded != roundedValue) {
                     roundedValue = newRounded;
                     updateText();
@@ -190,7 +193,15 @@ if (subtitle != null) {
     }
 
     public void setStep(int step) {
-        this.step = step;
+        this.step = Math.max(1, step);
+        if (slider != null) {
+            // The material Slider is created in the constructor, but SeekbarCell.bind()
+            // calls setStep() afterwards, so the step must be applied here too.
+            // A step that is not a factor of the range would make BaseSlider throw
+            // IllegalStateException at layout time, so keep it continuous then.
+            float effectiveStep = this.step > 1 && (max - min) % this.step == 0 ? this.step : 0f;
+            slider.setStepSize(effectiveStep);
+        }
     }
 
     private void showInputDialog(Context context, String title) {
@@ -256,13 +267,30 @@ if (subtitle != null) {
     }
 
     public void setValue(float value) {
+        // Clamp into [min, max]. The material Slider does NOT clamp on its own:
+        // BaseSlider validates values at layout time and throws IllegalStateException
+        // for values outside [valueFrom, valueTo] (crash, silent app restart).
+        if (value < min) {
+            value = min;
+        } else if (value > max) {
+            value = max;
+        }
         currentValue = value;
+        float snapped = value;
+        if (step > 1) {
+            // Snap to the nearest step tick relative to min; discrete material
+            // sliders also throw IllegalStateException for off-tick values.
+            snapped = min + Math.round((value - min) / (float) step) * step;
+            if (snapped > max) {
+                snapped = min + (float) Math.floor((max - min) / (double) step) * step;
+            }
+        }
         if (slider != null) {
-            slider.setValue(value);
+            slider.setValue(snapped);
         } else if (seekBarView != null) {
             seekBarView.setProgress((value - min) / (float) (max - min));
         }
-        int newRounded = step > 1 ? Math.round(currentValue / step) * step : Math.round(currentValue);
+        int newRounded = step > 1 ? Math.round(snapped) : Math.round(currentValue);
         if (newRounded != roundedValue) {
             roundedValue = newRounded;
             updateText();

@@ -144,7 +144,6 @@
     <string name="Switches">Switches</string>
     <string name="MaterialSliders">Sliders</string>
     <string name="BottomNavigationBar">Bottom navigation bar</string>
-    <string name="PlayerSeekBar">Player seek bar</string>
     <string name="Md3Folders">Folder (WIP)</string>
     <string name="Material3Dialogs">Dialogs</string>
     <string name="Material3DialogsConflict">Disable \"%1$s\" to enable \"%2$s\"</string>
