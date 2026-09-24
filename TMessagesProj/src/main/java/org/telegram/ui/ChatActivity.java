@@ -296,7 +296,6 @@ import org.telegram.ui.Components.chat.WallpaperBitmapProvider;
 import org.telegram.ui.Components.blur3.source.BlurredBackgroundSource;
 import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceBitmap;
 import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode;
-import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceColor;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
 import org.telegram.ui.Components.chat.layouts.ChatActivityFadeView;
 import org.telegram.ui.Components.chat.layouts.ChatActivitySideControlsButtonsLayout;
@@ -449,8 +448,11 @@ public class ChatActivity extends BaseFragment implements
     private final @NonNull BlurredBackgroundSourceWrapped navbarContentSourceWallpaper;
     private final @NonNull BlurredBackgroundDrawableViewFactory navbarContentDrawableFactory;
 
+    private final @NonNull BlurredBackgroundSourceWrapped navbarContentSourceWallpaperSharp;
+    private final @NonNull BlurredBackgroundDrawableViewFactory dimWallpaperDrawableFactory;
+    private Drawable lastWallpaperDrawable;
+
     private final @Nullable BlurredBackgroundSourceRenderNode fadeBlurSource;
-    private final @Nullable BlurredBackgroundSourceColor fadeBlurUnderSource;
     private final @Nullable BlurredBackgroundDrawableViewFactory fadeBlurFactory;
     private OnPostDrawView fadeBlurCaptureView;
     private final RectF fadeBlurCaptureRect = new RectF();
@@ -2913,6 +2915,8 @@ public class ChatActivity extends BaseFragment implements
         super(args);
 
         navbarContentSourceWallpaper = new BlurredBackgroundSourceWrapped();
+        navbarContentSourceWallpaperSharp = new BlurredBackgroundSourceWrapped();
+        dimWallpaperDrawableFactory = new BlurredBackgroundDrawableViewFactory(navbarContentSourceWallpaperSharp);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SharedConfig.chatBlurEnabled()) {
             scrollableViewNoiseSuppressor = new DownscaleScrollableNoiseSuppressor();
 
@@ -2949,22 +2953,22 @@ public class ChatActivity extends BaseFragment implements
         }
         navbarContentDrawableFactory = new BlurredBackgroundDrawableViewFactory(navbarContentSourceWallpaper);
         navbarContentDrawableFactory.setLinkedViewsRef(glassAttachedViews);
+        dimWallpaperDrawableFactory.setLinkedViewsRef(glassAttachedViews);
         glassBackgroundDrawableFactory.setLinkedViewsRef(glassAttachedViews);
         glassBackgroundDrawableFactoryFrosted.setLinkedViewsRef(glassAttachedViews);
         scrimBlur3Factory.setLinkedViewsRef(new ReferenceList<>());
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && NekoConfig.blurredFadeView) {
-            fadeBlurUnderSource = new BlurredBackgroundSourceColor();
             fadeBlurSource = new BlurredBackgroundSourceRenderNode(null);
-            fadeBlurSource.setUnderSource(fadeBlurUnderSource);
+            fadeBlurSource.setUnderSource(navbarContentSourceWallpaper);
             fadeBlurFactory = new BlurredBackgroundDrawableViewFactory(fadeBlurSource);
         } else {
-            fadeBlurUnderSource = null;
             fadeBlurSource = null;
             fadeBlurFactory = null;
         }
 
         navbarContentDrawableFactory.setLinkedDrawablesRef(glassAttachedDrawables);
+        dimWallpaperDrawableFactory.setLinkedDrawablesRef(glassAttachedDrawables);
         glassBackgroundDrawableFactory.setLinkedDrawablesRef(glassAttachedDrawables);
         glassBackgroundDrawableFactoryFrosted.setLinkedDrawablesRef(glassAttachedDrawables);
         scrimBlur3Factory.setLinkedDrawablesRef(glassAttachedDrawables);
@@ -4974,6 +4978,7 @@ if (feedIntegration != null) {
         glassBackgroundDrawableFactory.setSourceRootView(viewPositionWatcher, parentView);
         glassBackgroundDrawableFactoryFrosted.setSourceRootView(viewPositionWatcher, parentView);
         navbarContentDrawableFactory.setSourceRootView(viewPositionWatcher, parentView);
+        dimWallpaperDrawableFactory.setSourceRootView(viewPositionWatcher, parentView);
         scrimBlur3Factory.setSourceRootView(viewPositionWatcher, parentView);
         if (fadeBlurFactory != null) {
             fadeBlurFactory.setSourceRootView(viewPositionWatcher, parentView);
@@ -8119,19 +8124,14 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
 
         chatActivityFadeView = new ChatActivityFadeView(context);
         if (fadeBlurFactory != null) {
-            chatActivityFadeView.setup(fadeBlurFactory);
+            chatActivityFadeView.setup(fadeBlurFactory, dimWallpaperDrawableFactory);
             chatActivityFadeView.setOpaqueFade(true);
-        } else {
-            chatActivityFadeView.setup(NekoConfig.blurredFadeView ? glassBackgroundDrawableFactoryFrosted : navbarContentDrawableFactory);
-        }
-        if (NekoConfig.material3ChatHeaders || fadeBlurFactory != null) {
             chatActivityFadeView.setFadeHeightTop(dp(48), false);
-        } else {
-            chatActivityFadeView.setFadeHeightTop(dp(48));
-        }
-        if (fadeBlurFactory != null) {
             chatActivityFadeView.setFadeHeightBottom(dp(48), false);
         } else {
+            // Stock behavior: plain wallpaper fade, no blur/dim extras.
+            chatActivityFadeView.setup(navbarContentDrawableFactory);
+            chatActivityFadeView.setFadeHeightTop(dp(48));
             chatActivityFadeView.setFadeHeightBottom(dp(48));
         }
         contentView.addView(chatActivityFadeView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
@@ -18681,9 +18681,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             shouldHaveLightNavigationBarIcons = navigationBarBrightness <= 0.9f;
 
             navbarContentSourceWallpaper.setSource(source);
+            navbarContentSourceWallpaperSharp.setSource(wallpaperBitmapProvider.updateSharpSourceFromBackgroundViewDrawable(drawable));
             if (chatActivityFadeView != null) {
                 chatActivityFadeView.invalidate();
             }
+            invalidateFadeBlur();
             if (chatInputViewsContainer != null) {
                 chatInputViewsContainer.invalidate();
             }
@@ -19693,10 +19695,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
             int heightSize = allHeight;
 
-            if (navbarContentSourceWallpaper.getSource() instanceof BlurredBackgroundSourceBitmap) {
-                ((BlurredBackgroundSourceBitmap) navbarContentSourceWallpaper.getSource())
-                    .setParentSize(widthSize, heightSize, 0);
-            }
+            wallpaperBitmapProvider.setParentSize(widthSize, heightSize, 0);
             if (lastWidth != widthSize) {
                 globalIgnoreLayout = false;
                 lastWidth = widthMeasureSpec;
@@ -49376,6 +49375,12 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
         fadeHeight += dp(36 + 7) * getHashtagTabsShownT();
 
+        if (fadeBlurFactory == null) {
+            // Stock behavior when blurred fade is off: plain wallpaper fade.
+            chatActivityFadeView.setFadeZoneTop((int) fadeHeight);
+            return;
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlur) {
             final int boundary = actionBar.getMeasuredHeight();
             chatActivityFadeView.setFadeZoneTop(boundary + dp(48));
@@ -49385,13 +49390,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             return;
         }
 
-        if (NekoConfig.material3ChatHeaders && fadeBlurFactory == null) {
-            fadeHeight += dp(16);
-            chatActivityFadeView.setFadeTopAlpha(230);
-        } else {
-            chatActivityFadeView.setFadeTopAlpha(255);
-        }
-
+        chatActivityFadeView.setFadeTopAlpha(255);
         chatActivityFadeView.setDimFadeZoneTop(-1);
         chatActivityFadeView.setFadeZoneTop((int) fadeHeight);
     }
@@ -50180,8 +50179,22 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (Color.alpha(wallpaperColor) < 255) {
             wallpaperColor = ColorUtils.setAlphaComponent(wallpaperColor, 255);
         }
-        if (fadeBlurUnderSource != null) {
-            fadeBlurUnderSource.setColor(wallpaperColor);
+        // The background drawable instance may stay the same while the wallpaper
+        // image finishes loading inside it (first chat open), so refresh sources
+        // from the current drawable on every capture instead of relying only on
+        // onUpdateBackgroundDrawable. Both update calls are memoized/early-out
+        // when nothing changed.
+        final Drawable bgDrawable = contentView.getBackgroundImage();
+        if (bgDrawable != null && (bgDrawable != lastWallpaperDrawable || bgDrawable instanceof ChatBackgroundDrawable)) {
+            lastWallpaperDrawable = bgDrawable;
+            final BlurredBackgroundSource freshSource = wallpaperBitmapProvider.updateSourceFromBackgroundViewDrawable(bgDrawable);
+            if (freshSource != null) {
+                navbarContentSourceWallpaper.setSource(freshSource);
+            }
+            final BlurredBackgroundSource freshSharpSource = wallpaperBitmapProvider.updateSharpSourceFromBackgroundViewDrawable(bgDrawable);
+            if (freshSharpSource != null) {
+                navbarContentSourceWallpaperSharp.setSource(freshSharpSource);
+            }
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlur) {
             final int pixelation = Math.max(2, NekoConfig.blurredFadePixelation);
@@ -50197,6 +50210,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
         Canvas c = fadeBlurSource.beginRecording(fw, fh);
         c.drawColor(wallpaperColor);
+        navbarContentSourceWallpaper.draw(c, 0, 0, fw, fh);
         contentView.drawList(c, fadeBlurCaptureRect);
         fadeBlurSource.endRecording();
         chatActivityFadeView.setDimColor(wallpaperColor);

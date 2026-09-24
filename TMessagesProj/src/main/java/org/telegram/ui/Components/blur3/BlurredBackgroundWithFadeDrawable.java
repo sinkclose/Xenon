@@ -53,6 +53,7 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable {
     private boolean opaqueFade;
     private int dimAlpha = 0;
     private int dimColor = Color.BLACK;
+    private BlurredBackgroundDrawable dimDrawable;
     private int dimFadeZoneTop = -1;
     private final Paint dimGradientPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private Shader dimGradientShader;
@@ -66,6 +67,13 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable {
         if (this.dimColor != color) {
             this.dimColor = color;
             dimGradientShader = null;
+        }
+    }
+
+    public void setDimDrawable(BlurredBackgroundDrawable dimDrawable) {
+        this.dimDrawable = dimDrawable;
+        if (dimDrawable != null && !getBounds().isEmpty()) {
+            dimDrawable.setBounds(getBounds());
         }
     }
 
@@ -109,6 +117,9 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable {
     protected void onBoundsChange(@NonNull Rect bounds) {
         super.onBoundsChange(bounds);
         drawable.setBounds(bounds);
+        if (dimDrawable != null) {
+            dimDrawable.setBounds(bounds);
+        }
     }
 
     private final Paint colorStaticPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -214,16 +225,26 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable {
         canvas.drawRect(0, - offset, bounds.width(), bounds.height() - offset, maskFadeGradientPaint);
         canvas.restoreToCount(save);
         if (dimAlpha > 0) {
-            final int color = ColorUtils.setAlphaComponent(dimColor, dimAlpha);
-            if (dimGradientShader == null || dimGradientLast != color) {
-                dimGradientLast = color;
-                dimGradientShader = opaqueFade ? createGradientOpaque(color) : createGradient(color, opacity);
-                dimGradientPaint.setShader(dimGradientShader);
+            if (dimDrawable != null) {
+                // Dim layer shows the wallpaper itself: global transparency comes
+                // from the dimming strength slider, fade shape from the same mask.
+                final int saveDim = canvas.saveLayerAlpha(bounds.left, bounds.top, bounds.right, bounds.bottom, dimAlpha);
+                dimDrawable.draw(canvas);
+                canvas.translate(bounds.left, bounds.top + offset);
+                canvas.drawRect(0, -offset, bounds.width(), bounds.height() - offset, maskFadeGradientPaint);
+                canvas.restoreToCount(saveDim);
+            } else {
+                final int color = ColorUtils.setAlphaComponent(dimColor, dimAlpha);
+                if (dimGradientShader == null || dimGradientLast != color) {
+                    dimGradientLast = color;
+                    dimGradientShader = opaqueFade ? createGradientOpaque(color) : createGradient(color, opacity);
+                    dimGradientPaint.setShader(dimGradientShader);
+                }
+                matrixTmp.set(matrix);
+                matrixTmp.postTranslate(bounds.left, dimFadeZoneTop > 0 ? dimFadeZoneTop + fadeHeight : bounds.top + offset);
+                dimGradientShader.setLocalMatrix(matrixTmp);
+                canvas.drawRect(bounds, dimGradientPaint);
             }
-            matrixTmp.set(matrix);
-            matrixTmp.postTranslate(bounds.left, dimFadeZoneTop > 0 ? dimFadeZoneTop + fadeHeight : bounds.top + offset);
-            dimGradientShader.setLocalMatrix(matrixTmp);
-            canvas.drawRect(bounds, dimGradientPaint);
         }
     }
 

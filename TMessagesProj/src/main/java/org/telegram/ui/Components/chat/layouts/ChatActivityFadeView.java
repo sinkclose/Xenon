@@ -44,17 +44,28 @@ public class ChatActivityFadeView extends View implements Theme.Colorable {
 
 
     public void setup(BlurredBackgroundDrawableViewFactory factory) {
-        setup(factory, null);
+        setup(factory, null, null);
     }
 
     public void setup(BlurredBackgroundDrawableViewFactory factory, BlurredBackgroundColorProvider colorProvider) {
-        fadeDrawableTop = createEdgeDrawable(factory, colorProvider, true);
-        fadeDrawableBottom = createEdgeDrawable(factory, colorProvider, false);
+        setup(factory, null, colorProvider);
     }
 
-    private Drawable createEdgeDrawable(BlurredBackgroundDrawableViewFactory factory, BlurredBackgroundColorProvider colorProvider, boolean top) {
+    public void setup(BlurredBackgroundDrawableViewFactory factory, BlurredBackgroundDrawableViewFactory dimFactory) {
+        setup(factory, dimFactory, null);
+    }
+
+    public void setup(BlurredBackgroundDrawableViewFactory factory, BlurredBackgroundDrawableViewFactory dimFactory, BlurredBackgroundColorProvider colorProvider) {
+        fadeDrawableTop = createEdgeDrawable(factory, dimFactory, colorProvider, true);
+        fadeDrawableBottom = createEdgeDrawable(factory, dimFactory, colorProvider, false);
+    }
+
+    private Drawable createEdgeDrawable(BlurredBackgroundDrawableViewFactory factory, BlurredBackgroundDrawableViewFactory dimFactory, BlurredBackgroundColorProvider colorProvider, boolean top) {
         BlurredBackgroundDrawable source = factory.create(this).setColorProvider(colorProvider);
         BlurredBackgroundWithFadeDrawable drawable = new BlurredBackgroundWithFadeDrawable(source);
+        if (dimFactory != null) {
+            drawable.setDimDrawable(dimFactory.create(this));
+        }
         drawable.setFadeHeight(top ? -dp(30) : dp(30), true);
         return drawable;
     }
@@ -141,11 +152,15 @@ public class ChatActivityFadeView extends View implements Theme.Colorable {
     }
 
     public void setDimColor(int color) {
+        setDimColor(color, color);
+    }
+
+    public void setDimColor(int topColor, int bottomColor) {
         if (fadeDrawableTop instanceof BlurredBackgroundWithFadeDrawable) {
-            ((BlurredBackgroundWithFadeDrawable) fadeDrawableTop).setDimColor(color);
+            ((BlurredBackgroundWithFadeDrawable) fadeDrawableTop).setDimColor(topColor);
         }
         if (fadeDrawableBottom instanceof BlurredBackgroundWithFadeDrawable) {
-            ((BlurredBackgroundWithFadeDrawable) fadeDrawableBottom).setDimColor(color);
+            ((BlurredBackgroundWithFadeDrawable) fadeDrawableBottom).setDimColor(bottomColor);
         }
     }
     

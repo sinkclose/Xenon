@@ -21,6 +21,7 @@ public class WallpaperBitmapProvider {
 
     private final BlurredBackgroundSourceColor sourceColor = new BlurredBackgroundSourceColor();
     private final BlurredBackgroundSourceBitmap sourceBitmap = new BlurredBackgroundSourceBitmap();
+    private final BlurredBackgroundSourceBitmap sourceBitmapSharp = new BlurredBackgroundSourceBitmap();
 
     private static final Rect tmpRect = new Rect();
 
@@ -89,6 +90,44 @@ public class WallpaperBitmapProvider {
         return sourceBitmap;
     }
 
+    /**
+     * Same as {@link #updateSourceFromBackgroundViewDrawable} but keeps the raw
+     * (not pre-blurred) bitmap. Used for layers that must show clean wallpapers,
+     * e.g. the fade dim layer. Falls back to the blurred source for drawables
+     * without a direct bitmap.
+     */
+    public BlurredBackgroundSource updateSharpSourceFromBackgroundViewDrawable(
+        Drawable drawable
+    ) {
+        if (drawable instanceof ColorDrawable) {
+            final int color = ((ColorDrawable) drawable).getColor();
+            sourceColor.setColor(color);
+            return sourceColor;
+        }
+
+        if (drawable instanceof MotionBackgroundDrawable) {
+            final MotionBackgroundDrawable motionDrawable = (MotionBackgroundDrawable) drawable;
+            if (motionDrawable.getIntensity() < 0) {
+                sourceColor.setColor(Color.BLACK);
+                return sourceColor;
+            }
+            sourceBitmapSharp.setBitmap(motionDrawable.getBitmap());
+            return sourceBitmapSharp;
+        }
+
+        if (drawable instanceof BitmapDrawable) {
+            sourceBitmapSharp.setBitmap(((BitmapDrawable) drawable).getBitmap());
+            return sourceBitmapSharp;
+        }
+
+        if (drawable instanceof ChatBackgroundDrawable) {
+            ChatBackgroundDrawable chatDrawable = (ChatBackgroundDrawable) drawable;
+            return updateSharpSourceFromBackgroundViewDrawable(chatDrawable.getDrawable(false));
+        }
+
+        return updateSourceFromBackgroundViewDrawable(drawable);
+    }
+
     public int getNavigationBarColor(BlurredBackgroundSource source) {
         if (source instanceof BlurredBackgroundSourceColor) {
             return ((BlurredBackgroundSourceColor) source).getColor();
@@ -124,9 +163,14 @@ public class WallpaperBitmapProvider {
     }
 
     private final BitmapMemoizedMetadata<Bitmap> blurredFromBitmap = new BitmapMemoizedMetadata<>(WallpaperBitmapProvider::blurBitmap);
+
     private final BitmapMemoizedMetadata<Integer> navbarColorFromBitmap = new BitmapMemoizedMetadata<>(WallpaperBitmapProvider::averageBottomColor);
     private final BitmapMemoizedMetadata<Integer> statusBarColorFromBitmap = new BitmapMemoizedMetadata<>(WallpaperBitmapProvider::averageTopColor);
 
+    public void setParentSize(int width, int height, int actionBarHeight) {
+        sourceBitmap.setParentSize(width, height, actionBarHeight);
+        sourceBitmapSharp.setParentSize(width, height, actionBarHeight);
+    }
 
     // Advanced/unified wallpaper blur cache. Memoised by (bitmap, generationId)
     // like the stock cache. The radius it was generated with is tracked
