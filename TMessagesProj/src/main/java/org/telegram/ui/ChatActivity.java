@@ -50121,11 +50121,17 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             if (!fadeBlurContinuousUpdating) {
                 return;
             }
-            // Re-capture only when the view tree actually redrew since the previous
-            // capture. When nothing on screen changes the recorded blur snapshot is
-            // still valid, so the chat must not be forced to render at the display
-            // refresh rate forever.
-            if (fadeBlurCaptureView == null || fadeBlurCaptureView.getPreDrawCount() != lastFadeBlurCaptureDrawCount) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlur) {
+                // Pre-"fix chatactivity lags" updating for the progressive fade
+                // only: re-capture continuously (rate-limited inside
+                // invalidateFadeBlur by progressiveFadeBlurRefreshRate), so no
+                // stale ghosts remain. Glass throttling is untouched.
+                invalidateFadeBlur();
+            } else if (fadeBlurCaptureView == null || fadeBlurCaptureView.getPreDrawCount() != lastFadeBlurCaptureDrawCount) {
+                // Re-capture only when the view tree actually redrew since the previous
+                // capture. When nothing on screen changes the recorded blur snapshot is
+                // still valid, so the chat must not be forced to render at the display
+                // refresh rate forever.
                 invalidateFadeBlur();
             }
             Choreographer.getInstance().postFrameCallback(this);

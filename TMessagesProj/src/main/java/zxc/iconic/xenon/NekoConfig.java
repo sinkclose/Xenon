@@ -906,7 +906,11 @@ public class NekoConfig {
     }
 
     public static void toggleProgressiveFadeBlurOtherActivities() {
-        progressiveFadeBlurOtherActivities = !progressiveFadeBlurOtherActivities;
+        setProgressiveFadeBlurOtherActivities(!progressiveFadeBlurOtherActivities);
+    }
+
+    public static void setProgressiveFadeBlurOtherActivities(boolean value) {
+        progressiveFadeBlurOtherActivities = value;
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("progressiveFadeBlurOtherActivities", progressiveFadeBlurOtherActivities);

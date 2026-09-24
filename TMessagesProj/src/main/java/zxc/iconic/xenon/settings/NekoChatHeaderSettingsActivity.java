@@ -79,10 +79,12 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
         items.add(UItem.asCheck(centerHeaderRow, LocaleController.getString(R.string.CenterChatHeader)).setChecked(NekoConfig.centerChatHeader).slug("centerHeader"));
         items.add(UItem.asCheck(biggerAvatarRow, "Bigger avatar").setChecked(NekoConfig.biggerAvatar).slug("biggerAvatar"));
         items.add(UItem.asCheck(blurredFadeViewRow, LocaleController.getString(R.string.BlurredFadeView)).setChecked(NekoConfig.blurredFadeView).slug("blurredFadeView"));
-        items.add(UItem.asCheck(progressiveFadeBlurOtherActivitiesRow,
-                LocaleController.getString(R.string.ProgressiveFadeBlurOtherActivities),
-                LocaleController.getString(R.string.ProgressiveFadeBlurOtherActivitiesInfo))
-                .setChecked(NekoConfig.progressiveFadeBlurOtherActivities).slug("progressiveFadeBlurOtherActivities"));
+        if (NekoConfig.progressiveFadeBlur) {
+            items.add(UItem.asCheck(progressiveFadeBlurOtherActivitiesRow,
+                    LocaleController.getString(R.string.ProgressiveFadeBlurOtherActivities),
+                    LocaleController.getString(R.string.ProgressiveFadeBlurOtherActivitiesInfo))
+                    .setChecked(NekoConfig.progressiveFadeBlurOtherActivities).slug("progressiveFadeBlurOtherActivities"));
+        }
         if (NekoConfig.blurredFadeView) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 items.add(UItem.asCheck(progressiveFadeBlurRow, LocaleController.getString(R.string.ProgressiveFadeBlur)).setChecked(NekoConfig.progressiveFadeBlur).slug("progressiveFadeBlur"));
@@ -203,6 +205,9 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
             NekoConfig.toggleProgressiveFadeBlur();
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.progressiveFadeBlur);
+            }
+            if (!NekoConfig.progressiveFadeBlur && NekoConfig.progressiveFadeBlurOtherActivities) {
+                NekoConfig.setProgressiveFadeBlurOtherActivities(false);
             }
             if (listView != null && listView.adapter != null) {
                 listView.adapter.update(true);

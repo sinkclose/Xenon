@@ -4,6 +4,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.SystemClock;
+import android.view.Choreographer;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
@@ -34,6 +35,20 @@ public class ProgressiveFadeBlurController {
     private boolean flipped;
     private boolean continuousUpdating;
     private boolean updateAtScreenRefreshRate;
+    private final Choreographer.FrameCallback frameCallback = new Choreographer.FrameCallback() {
+        @Override
+        public void doFrame(long frameTimeNanos) {
+            if (!continuousUpdating) {
+                return;
+            }
+            try {
+                parent.invalidate();
+            } catch (Exception e) {
+                FileLog.e(e);
+            }
+            Choreographer.getInstance().postFrameCallback(this);
+        }
+    };
     private int drawCount;
     private int lastProcessedDrawCount = -1;
     private final ViewTreeObserver.OnPreDrawListener drawCountListener = new ViewTreeObserver.OnPreDrawListener() {
@@ -159,10 +174,18 @@ public class ProgressiveFadeBlurController {
             return;
         }
         continuousUpdating = true;
-        // In screen-refresh-rate mode updates are fully event-driven: captures are
-        // requested from real draw passes (see invalidate) and skip themselves when
-        // nothing on screen changes, so no continuous loop is needed.
-        if (!updateAtScreenRefreshRate) {
+        if (updateAtScreenRefreshRate && NekoConfig.progressiveFadeBlur) {
+            // Pre-"fix chatactivity lags" updating: drive redraws every frame so
+            // the progressive fade never goes stale (e.g. folders swipe in the
+            // chats menu). Only when progressive blur is enabled; otherwise the
+            // event-driven behavior below stays as is.
+            Choreographer.getInstance().removeFrameCallback(frameCallback);
+            Choreographer.getInstance().postFrameCallback(frameCallback);
+        } else if (!updateAtScreenRefreshRate) {
+            // In screen-refresh-rate mode with progressive off updates stay fully
+            // event-driven: captures are requested from real draw passes (see
+            // invalidate) and skip themselves when nothing on screen changes, so
+            // no continuous loop is needed.
             fadeView.removeCallbacks(updateRunnable);
             fadeView.post(updateRunnable);
         }
@@ -171,6 +194,7 @@ public class ProgressiveFadeBlurController {
     public void stopContinuousUpdates() {
         continuousUpdating = false;
         fadeView.removeCallbacks(updateRunnable);
+        Choreographer.getInstance().removeFrameCallback(frameCallback);
     }
 
     public void addCaptureView(View view) {
@@ -198,7 +222,9 @@ public class ProgressiveFadeBlurController {
         // scheduled by that record itself, the captured content is unchanged: skip
         // re-recording and do not invalidate again, so an idle screen stops rendering
         // instead of looping record -> redraw -> record at the display refresh rate.
-        if (drawCount == lastProcessedDrawCount) {
+        // Skipped when progressive blur is enabled: pre-"fix chatactivity lags"
+        // behavior re-captures (throttled below) so no stale ghosts remain.
+        if (!NekoConfig.progressiveFadeBlur && drawCount == lastProcessedDrawCount) {
             return;
         }
         final int fw = captureView.getWidth();

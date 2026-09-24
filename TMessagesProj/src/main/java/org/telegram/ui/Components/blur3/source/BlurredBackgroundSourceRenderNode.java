@@ -11,6 +11,7 @@ import android.os.Build;
 
 import androidx.annotation.RequiresApi;
 
+import org.telegram.messenger.FileLog;
 import org.telegram.ui.Components.blur3.DownscaleScrollableNoiseSuppressor;
 import org.telegram.ui.Components.blur3.RenderNodeWithHash;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
@@ -34,6 +35,8 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
     private float lastBlurRadius = -1f;
 
     private RuntimeShader progressiveShader;
+    private boolean progressiveShaderFailed;
+    private int progressiveShaderSamples = -1;
     private float progressiveMaxRadius = -1f;
     private int progressiveWidth = -1;
     private int progressiveHeight = -1;
@@ -41,7 +44,15 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
     private float progressiveFadeZoneBottomFraction = -1f;
     private int progressiveSamples = -1;
 
-    private static final String PROGRESSIVE_BLUR_SHADER =
+    // Loop bounds must be compile-time constants in AGSL and there is no
+    // abs(int) overload plus dynamic break/continue is unsafe on some drivers
+    // (used to crash RuntimeShader creation), so the kernel size is baked into
+    // the generated source from the samples setting (3..25, odd). Taps spread
+    // with stride across the full radius: more samples = denser taps = no dots
+    // at strong blur. Recompiled only when the sample count changes.
+    private static String buildProgressiveBlurShader(int samples) {
+        final int h = Math.max(1, Math.min(12, samples / 2));
+        return
         "uniform shader inputTexture;\n" +
         "uniform float maxRadius;\n" +
         "uniform float textureWidth;\n" +
@@ -63,18 +74,24 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
         "    if (radius < 0.5) {\n" +
         "        return inputTexture.eval(coord);\n" +
         "    }\n" +
-        "    int radiusInt = int(ceil(radius));\n" +
+        "    float stride = radius / " + h + ".0;\n" +
+        "    float2 texSize = float2(textureWidth, textureHeight);\n" +
         "    half4 result = half4(0.0);\n" +
         "    float totalWeight = 0.0;\n" +
-        "    for (int i = -40; i <= 40; i++) {\n" +
-        "        if (abs(i) > radiusInt) break;\n" +
-        "        float2 offset = float2(0.0, float(i));\n" +
-        "        float weight = 1.0 - abs(float(i)) / (radius + 1.0);\n" +
-        "        result += inputTexture.eval(coord + offset) * half4(weight);\n" +
-        "        totalWeight += weight;\n" +
+        "    for (int i = -" + h + "; i <= " + h + "; i++) {\n" +
+        "        float fi = float(i);\n" +
+        "        float wx = 1.0 - abs(fi) / " + (h + 1) + ".0;\n" +
+        "        for (int j = -" + h + "; j <= " + h + "; j++) {\n" +
+        "            float fj = float(j);\n" +
+        "            float weight = wx * (1.0 - abs(fj) / " + (h + 1) + ".0);\n" +
+        "            float2 sc = clamp(coord + float2(fi * stride, fj * stride), float2(0.0, 0.0), texSize);\n" +
+        "            result += inputTexture.eval(sc) * half4(weight);\n" +
+        "            totalWeight += weight;\n" +
+        "        }\n" +
         "    }\n" +
         "    return result / half4(totalWeight);\n" +
         "}";
+    }
 
     @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
     public void setProgressiveBlur(float maxRadius, int sourceWidth, int sourceHeight, float fadeZoneTopFraction, float fadeZoneBottomFraction, int samples) {
@@ -89,8 +106,20 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
         progressiveFadeZoneTopFraction = topFraction;
         progressiveFadeZoneBottomFraction = bottomFraction;
         progressiveSamples = sampleCount;
-        if (progressiveShader == null) {
-            progressiveShader = new RuntimeShader(PROGRESSIVE_BLUR_SHADER);
+        if (progressiveShaderFailed) {
+            return;
+        }
+        if (progressiveShader == null || progressiveShaderSamples != sampleCount) {
+            try {
+                progressiveShader = new RuntimeShader(buildProgressiveBlurShader(sampleCount));
+                progressiveShaderSamples = sampleCount;
+            } catch (RuntimeException e) {
+                // A shader compile error must never crash the app (e.g. the
+                // abs(int) AGSL crash): fall back to unblurred rendering.
+                FileLog.e(e);
+                progressiveShaderFailed = true;
+                return;
+            }
         }
         progressiveShader.setFloatUniform("maxRadius", maxRadius);
         progressiveShader.setFloatUniform("textureWidth", (float) sourceWidth);
