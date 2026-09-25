@@ -66,7 +66,7 @@ public class FragmentSearchField extends FrameLayout implements FactorAnimator.T
     private boolean closeButtonForcedVisible;
     public final TextAnimationEditText editText;
     private BlurredBackgroundDrawable blurredBackgroundDrawable;
-    public zxc.iconic.xenon.helpers.BlurBehindHelper inu_blurHelper;
+    public zxc.iconic.xenon.helpers.BlurBehindHelper blurHelper;
 
     public FragmentSearchField(Context context, Theme.ResourcesProvider resourcesProvider) {
         super(context);
@@ -184,8 +184,8 @@ public class FragmentSearchField extends FrameLayout implements FactorAnimator.T
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
         canvas.save();
-        if (inu_blurHelper != null) inu_blurHelper.draw(canvas);
-        if (inu_blurHelper == null && bg != null) {
+        if (blurHelper != null) blurHelper.draw(canvas);
+        if (blurHelper == null && bg != null) {
             bg.setBounds(
                 getPaddingLeft(),
                 getPaddingTop(),

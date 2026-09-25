@@ -610,7 +610,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         org.telegram.ui.ActionBar.ActionBar m3ActionBar = new org.telegram.ui.ActionBar.ActionBar(getParentActivity(), resourcesProvider);
         m3ActionBar.setOccupyStatusBar(false);
         m3ActionBar.setTitle("");
-        m3ActionBar.inu_m3ChatHeader = true;
+        m3ActionBar.m3ChatHeader = true;
         m3ActionBar.setupGlass(factory, colorProvider, false);
         ChatAvatarContainer m3Avatar = new ChatAvatarContainer(getParentActivity(), null, false, resourcesProvider);
         m3Avatar.setOccupyStatusBar(false);

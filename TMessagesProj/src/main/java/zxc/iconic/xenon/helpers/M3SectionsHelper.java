@@ -57,16 +57,16 @@ public class M3SectionsHelper {
 
     public static void markMerged(View view, boolean withPrev, boolean withNext) {
         if (!isEnabled()) return;
-        view.setTag(org.telegram.messenger.R.id.inu_merge_with_prev, withPrev ? Boolean.TRUE : null);
-        view.setTag(org.telegram.messenger.R.id.inu_merge_with_next, withNext ? Boolean.TRUE : null);
+        view.setTag(org.telegram.messenger.R.id.merge_with_prev, withPrev ? Boolean.TRUE : null);
+        view.setTag(org.telegram.messenger.R.id.merge_with_next, withNext ? Boolean.TRUE : null);
     }
 
     private static boolean isMergedWithPrev(View view) {
-        return view.getTag(org.telegram.messenger.R.id.inu_merge_with_prev) == Boolean.TRUE;
+        return view.getTag(org.telegram.messenger.R.id.merge_with_prev) == Boolean.TRUE;
     }
 
     private static boolean isMergedWithNext(View view) {
-        return view.getTag(org.telegram.messenger.R.id.inu_merge_with_next) == Boolean.TRUE;
+        return view.getTag(org.telegram.messenger.R.id.merge_with_next) == Boolean.TRUE;
     }
 
     private static float getOuterR() {

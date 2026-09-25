@@ -1678,7 +1678,7 @@ public class FilterTabsView extends FrameLayout {
     }
 
     private final Path clipPath = new Path();
-    public zxc.iconic.xenon.helpers.BlurBehindHelper inu_blurHelper;
+    public zxc.iconic.xenon.helpers.BlurBehindHelper blurHelper;
 
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
@@ -1691,7 +1691,7 @@ public class FilterTabsView extends FrameLayout {
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
         if (Md3FilterTabsHelper.isEnabled()) {
-            if (inu_blurHelper != null) {
+            if (blurHelper != null) {
                 canvas.save();
                 canvas.clipRect(0, 0, getMeasuredWidth(), getMeasuredHeight());
                 super.dispatchDraw(canvas);
@@ -1701,8 +1701,8 @@ public class FilterTabsView extends FrameLayout {
             super.dispatchDraw(canvas);
             return;
         }
-        if (inu_blurHelper != null) {
-            inu_blurHelper.draw(canvas);
+        if (blurHelper != null) {
+            blurHelper.draw(canvas);
             super.dispatchDraw(canvas);
             return;
         }

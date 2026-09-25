@@ -84,7 +84,7 @@ public class NonIslandHelper {
         if (Md3FilterTabsHelper.isEnabled()) return;
         tabsView.setBlurredBackground(null);
         tabsView.setBackground(null);
-        tabsView.inu_blurHelper = new BlurBehindHelper(tabsView, contentView, Theme.key_windowBackgroundWhite);
+        tabsView.blurHelper = new BlurBehindHelper(tabsView, contentView, Theme.key_windowBackgroundWhite);
         tabsView.setPadding(0, 0, 0, 0);
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) tabsView.getLayoutParams();
         if (lp == null) return;
@@ -96,7 +96,7 @@ public class NonIslandHelper {
     public static void applyGlobalSearchBar(FragmentSearchField field, SizeNotifierFrameLayout contentView) {
         if (!globalSearch()) return;
         field.setupBlurredBackground(null);
-        field.inu_blurHelper = new BlurBehindHelper(field, contentView, Theme.key_windowBackgroundWhite);
+        field.blurHelper = new BlurBehindHelper(field, contentView, Theme.key_windowBackgroundWhite);
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) field.getLayoutParams();
         if (lp != null) {
             lp.leftMargin = 0;
@@ -122,7 +122,7 @@ public class NonIslandHelper {
         if (!globalSearch()) return;
         layout.setBlurredBackground(null);
         layout.setBackground(null);
-        layout.inu_blurHelper = new BlurBehindHelper(layout, contentView, Theme.key_windowBackgroundWhite);
+        layout.blurHelper = new BlurBehindHelper(layout, contentView, Theme.key_windowBackgroundWhite);
         layout.setPadding(0, 0, 0, 0);
         layout.setTranslationY(-AndroidUtilities.dp(4f));
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) layout.getLayoutParams();

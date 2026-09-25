@@ -60,7 +60,7 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
     private final RLottieImageView imageView;
     private BackupImageView backupImageView;
     private Theme.ResourcesProvider resourcesProvider;
-    public int inu_radiusOverride = -1;
+    public int radiusOverride = -1;
     private final Paint paintCounterBackground = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final AnimatedTextView.AnimatedTextDrawable counter;
 

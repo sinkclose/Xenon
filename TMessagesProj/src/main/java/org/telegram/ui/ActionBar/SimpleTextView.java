@@ -327,6 +327,34 @@ public class SimpleTextView extends View implements Drawable.Callback {
         return size;
     }
 
+    /** Width taken by the inside-left drawable (e.g. typing dots), 0 if none. */
+    public int getLeftInsideWidth() {
+        if (leftDrawable != null && !leftDrawableOutside) {
+            return drawablePadding + leftDrawable.getIntrinsicWidth();
+        }
+        return 0;
+    }
+
+    /** Width of the outside-left drawable: drawn outside the view, not part of getDrawnWidth(). */
+    public int getLeftOutsideWidth() {
+        if (leftDrawable != null && leftDrawableOutside) {
+            return drawablePadding + leftDrawable.getIntrinsicWidth();
+        }
+        return 0;
+    }
+
+    /** Width of the outside-right drawables: drawn outside the view, not part of getDrawnWidth(). */
+    public int getRightOutsideWidth() {
+        int width = 0;
+        if (rightDrawable != null && rightDrawableOutside) {
+            width += drawablePadding + (int) (rightDrawable.getIntrinsicWidth() * rightDrawableScale);
+        }
+        if (rightDrawable2 != null && rightDrawableOutside) {
+            width += drawablePadding + (int) (rightDrawable2.getIntrinsicWidth() * rightDrawableScale);
+        }
+        return width;
+    }
+
     public TextPaint getPaint() {
         return textPaint;
     }

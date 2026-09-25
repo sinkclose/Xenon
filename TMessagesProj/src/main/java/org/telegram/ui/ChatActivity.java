@@ -530,7 +530,7 @@ public class ChatActivity extends BaseFragment implements
     private ChatBigEmptyView bigEmptyView;
     private ArrayList<View> actionModeViews = new ArrayList<>();
     public ChatAvatarContainer avatarContainer;
-    private boolean inuAvatarRight;
+    private boolean avatarOnRight;
     private AnimatedTextView selectedMessagesCountTextView;
     private RecyclerListView.OnItemClickListener mentionsOnItemClickListener;
     private SuggestEmojiView suggestEmojiPanel;
@@ -1524,7 +1524,7 @@ public class ChatActivity extends BaseFragment implements
     public void showHeaderItem(boolean show) {
         if (show) {
             if (chatActivityEnterView.hasText() && TextUtils.isEmpty(chatActivityEnterView.getSlowModeTimer())) {
-                if (inuAvatarRight) {
+                if (avatarOnRight) {
                     if (attachItem != null) {
                         attachItem.setVisibility(View.GONE);
                     }
@@ -2394,7 +2394,7 @@ public class ChatActivity extends BaseFragment implements
                 suggestEmojiPanel.onTextSelectionChanged(start, end);
             }
             if (end - start > 0) {
-                if (inuAvatarRight) {
+                if (avatarOnRight) {
                     editTextStart = start;
                     editTextEnd = end;
                     return;
@@ -2557,7 +2557,7 @@ public class ChatActivity extends BaseFragment implements
                 editTextItem.setVisibility(View.GONE);
             }
             if (TextUtils.isEmpty(chatActivityEnterView.getSlowModeTimer())) {
-                if (inuAvatarRight) {
+                if (avatarOnRight) {
                     if (headerItem != null) {
                         headerItem.setVisibility(View.VISIBLE);
                     }
@@ -4998,8 +4998,8 @@ if (feedIntegration != null) {
 
         contentView.setOccupyStatusBar(!inBubbleMode && !isInsideContainer && !inPreviewMode);
 
-actionBar.inu_nonIsland = NonIslandHelper.chatElements();
-        actionBar.inu_m3ChatHeader = NekoConfig.material3ChatHeaders && !NonIslandHelper.chatElements();
+actionBar.nonIsland = NonIslandHelper.chatElements();
+        actionBar.m3ChatHeader = NekoConfig.material3ChatHeaders && !NonIslandHelper.chatElements();
         final int avatarPlacement;
         if (NonIslandHelper.chatElements()) {
             avatarPlacement = NekoConfig.AVATAR_PLACEMENT_LEFT;
@@ -5011,9 +5011,9 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
         final boolean centeredPill = NekoConfig.centerChatHeader && !NonIslandHelper.chatElements();
         final boolean textOnlyPill = centeredPill && avatarPlacement != NekoConfig.AVATAR_PLACEMENT_CENTER;
         final boolean avatarRight = avatarPlacement == NekoConfig.AVATAR_PLACEMENT_RIGHT && !NonIslandHelper.chatElements() && avatarContainer.hasVisibleAvatar();
-        inuAvatarRight = avatarRight;
-        actionBar.inu_centerChatHeader = centeredPill && avatarPlacement == NekoConfig.AVATAR_PLACEMENT_CENTER;
-        actionBar.inu_textOnlyPill = textOnlyPill;
+        avatarOnRight = avatarRight;
+        actionBar.centerChatHeader = centeredPill && avatarPlacement == NekoConfig.AVATAR_PLACEMENT_CENTER;
+        actionBar.textOnlyPill = textOnlyPill;
         avatarContainer.setAvatarPlacement(avatarPlacement);
         avatarContainer.setTextOnlyPill(textOnlyPill);
         actionBar.setupGlass(
@@ -5041,7 +5041,7 @@ actionBar.inu_nonIsland = NonIslandHelper.chatElements();
                 if (iconView != null) {
                     iconView.setVisibility(View.INVISIBLE);
                 }
-                actionBar.inu_avatarRightBigger = NekoConfig.biggerAvatar;
+                actionBar.avatarRightBigger = NekoConfig.biggerAvatar;
             } else {
                 // No header slot at the right (e.g. comments): hide the avatar
                 // instead of leaving it stuck half off-screen at the edge.
@@ -19722,11 +19722,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 }
                 if (showSearchAsIcon || showAudioCallAsIcon || UserObject.isBotForumWithEditableTopics(currentUser)) {
                     if (avatarContainer != null && avatarContainer.getLayoutParams() != null) {
-                        ((ViewGroup.MarginLayoutParams) avatarContainer.getLayoutParams()).rightMargin = inuAvatarRight ? AndroidUtilities.dp(6) : AndroidUtilities.dp(chatMode == MODE_SAVED ? 52 : 92);
+                        ((ViewGroup.MarginLayoutParams) avatarContainer.getLayoutParams()).rightMargin = avatarOnRight ? AndroidUtilities.dp(6) : AndroidUtilities.dp(chatMode == MODE_SAVED ? 52 : 92);
                     }
                 } else {
                     if (avatarContainer != null && avatarContainer.getLayoutParams() != null) {
-                        ((ViewGroup.MarginLayoutParams) avatarContainer.getLayoutParams()).rightMargin = inuAvatarRight ? AndroidUtilities.dp(6) : AndroidUtilities.dp(52);
+                        ((ViewGroup.MarginLayoutParams) avatarContainer.getLayoutParams()).rightMargin = avatarOnRight ? AndroidUtilities.dp(6) : AndroidUtilities.dp(52);
                     }
                 }
                 if (showSearchAsIcon) {
@@ -49319,12 +49319,12 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             return;
         }
 
-        final boolean inu_prevHadBubble = inputIslandHeightCurrent > 0;
+        final boolean prevHadBubble = inputIslandHeightCurrent > 0;
         inputIslandHeightCurrent = calculateInputIslandHeight(false);
         inputIslandHeightTarget = calculateInputIslandHeight(true);
 
         chatInputViewsContainer.setInputBubbleHeight(inputIslandHeightCurrent);
-        if (NonIslandHelper.chatElements() && inu_prevHadBubble != (inputIslandHeightCurrent > 0)) {
+        if (NonIslandHelper.chatElements() && prevHadBubble != (inputIslandHeightCurrent > 0)) {
             checkSystemBarColors();
         }
         updatePagedownButtonsPosition();

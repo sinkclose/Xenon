@@ -805,7 +805,7 @@ public class ChatEditActivity extends BaseFragment implements ImageUpdater.Image
             setAvatarCell.setOnClickListener(v -> {
                 openSetPhotoAlert();
             });
-            setAvatarCell.inu_m3IconSize = zxc.iconic.xenon.helpers.M3SectionsHelper.isEnabled() ? 48 : 0;
+            setAvatarCell.m3IconSize = zxc.iconic.xenon.helpers.M3SectionsHelper.isEnabled() ? 48 : 0;
             settingsContainer.addView(setAvatarCell, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
         }
 

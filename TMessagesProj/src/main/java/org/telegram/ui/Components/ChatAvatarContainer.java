@@ -101,9 +101,17 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     private int avatarPlacement = zxc.iconic.xenon.NekoConfig.AVATAR_PLACEMENT_LEFT;
     private int rightTextInset = 0;
     private boolean textOnlyPill = false;
+    // True (uncapped) subtitle width from the last measure, before the pill
+    // fade constraint below narrows the view. The width animator's target must
+    // be computed from it, otherwise the pill deadlocks at the small size.
+    private int lastFullSubtitleWidth = -1;
     private boolean biggerAvatar = false;
     private View rightAnchorView;
     private int lastRightAvatarLeft = Integer.MIN_VALUE;
+    // Avatar offset from the live pill right edge, remembered while the anchor
+    // is valid. Lets the avatar ride the pill through search/action-mode
+    // transitions (anchor GONE) with zero jumps on open and close.
+    private int lastAvatarPillDelta = Integer.MIN_VALUE;
     StatusDrawable currentTypingDrawable;
 
     private int lastWidth = -1;
@@ -457,18 +465,22 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
                 bounceScale = 1f;
             }
         }
-        // Fade the avatar (and its badges) with the search transition, using
-        // the same live factor as the pill glass. Pure function of the factor:
-        // no extra animator, so it can't desync and resets by itself.
+        // Fade the content with the search transition, using the same live
+        // factor as the pill glass. Pure function of the factor: no extra
+        // animator, so it can't desync and resets by itself. Title/subtitle
+        // fade together with the avatar, otherwise they linger and visibly
+        // recenter in the expanding pill while searching.
+        final boolean textChild = child == titleTextView || child == subtitleTextView || child == animatedSubtitleTextView
+            || child == titleTextLargerCopyView.get() || child == subtitleTextLargerCopyView.get();
         float searchFade = 1f;
-        if (avatarChild && actionBar != null) {
+        if ((avatarChild || textChild) && actionBar != null) {
             final float searchFactor = actionBar.getSearchFactor();
             if (searchFactor > 0f) {
                 searchFade = Math.max(0f, 1f - searchFactor);
             }
         }
-        final boolean fadeAvatar = searchFade < 1f;
-        if (fadeAvatar) {
+        final boolean fadeChild = searchFade < 1f;
+        if (fadeChild) {
             canvas.saveLayerAlpha(child.getX(), child.getY(), child.getX() + child.getWidth(), child.getY() + child.getHeight(), (int) (255 * searchFade));
         }
         boolean result;
@@ -499,7 +511,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         } else {
             result = super.drawChild(canvas, child, drawingTime);
         }
-        if (fadeAvatar) {
+        if (fadeChild) {
             canvas.restore();
         }
         if (unbounceAvatarChild && bounceScale != 1f) {
@@ -715,6 +727,21 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         subtitleTextView.setTag(subtitle);
     }
 
+    /**
+     * Live pill width for the centered (textOnly) header: tracks the animated
+     * width every frame, so the texts stay glued to the live center and never
+     * slide on screen — the pill breathes around static texts. Frozen at the
+     * target while searching (or action mode), so the fading content doesn't
+     * recenter mid-transition.
+     */
+    private int getLivePillWidth(int targetPillWidth) {
+        if (actionBar != null && (actionBar.getSearchFactor() > 0f || actionBar.getActionModeFactor() > 0f)) {
+            return targetPillWidth;
+        }
+        final int realPillWidth = actionBar != null ? actionBar.getCurrentChatPillWidth() : 0;
+        return realPillWidth > 0 ? realPillWidth : targetPillWidth;
+    }
+
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         final int width = MeasureSpec.getSize(widthMeasureSpec);
@@ -723,7 +750,9 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         final int availableWidth = (rightAvatar || textOnlyPill)
             ? Math.max(0, width - rightTextInset - dp(16))
             : width - dp((avatarVisible ? 54 : 0) + 16);
-        avatarImageView.measure(MeasureSpec.makeMeasureSpec(dp(avatarSizeInDp) - 2, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(avatarSizeInDp) - 2, MeasureSpec.EXACTLY));
+        // Right placement: avatar is 7% smaller.
+        final int avatarMeasurePx = rightAvatar ? (int) ((dp(avatarSizeInDp) - 2) * 0.93f) : dp(avatarSizeInDp) - 2;
+        avatarImageView.measure(MeasureSpec.makeMeasureSpec(avatarMeasurePx, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(avatarMeasurePx, MeasureSpec.EXACTLY));
         final int maxTextWidth;
         if (textOnlyPill) {
             int pillMaxWidth = actionBar != null ? actionBar.getCenteredPillMaxWidth() : Integer.MAX_VALUE;
@@ -734,6 +763,21 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         titleTextView.measure(MeasureSpec.makeMeasureSpec(maxTextWidth, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(dp(24 + 8), MeasureSpec.AT_MOST));
         if (subtitleTextView != null) {
             subtitleTextView.measure(MeasureSpec.makeMeasureSpec(maxTextWidth, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.AT_MOST));
+            if (textOnlyPill) {
+                // Remember the true (uncapped) width before the fade constraint
+                // below narrows the view (see lastFullSubtitleWidth).
+                lastFullSubtitleWidth = subtitleTextView.getDrawnWidth();
+                // Centered pill: the subtitle view is full-width, so a status longer
+                // than the pill overflows it with a hard cut and never engages the
+                // gradient fade. Constrain the view to the live pill width when the
+                // text doesn't fit, so it truncates and fades at the pill edge.
+                final int targetPillWidth = (int) (getVisualWidth() * 1.05f) + dp(8) + dp(12);
+                final int pillWidth = getLivePillWidth(targetPillWidth);
+                final int subPillSpec = pillWidth - dp(32);
+                if (subPillSpec > 0 && lastFullSubtitleWidth + subtitleTextView.getLeftOutsideWidth() + subtitleTextView.getRightOutsideWidth() + dp(10) > subPillSpec) {
+                    subtitleTextView.measure(MeasureSpec.makeMeasureSpec(subPillSpec, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.AT_MOST));
+                }
+            }
         } else if (animatedSubtitleTextView != null) {
             animatedSubtitleTextView.measure(MeasureSpec.makeMeasureSpec(maxTextWidth, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.AT_MOST));
         }
@@ -924,7 +968,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         final boolean rightPlacement = avatarPlacement == zxc.iconic.xenon.NekoConfig.AVATAR_PLACEMENT_RIGHT && avatarImageView.getVisibility() == VISIBLE;
         int viewTop;
         if (rightPlacement) {
-            viewTop = (actionBarHeight - (dp(42) - 2) - 2) / 2 + (occupyStatusBar ? AndroidUtilities.statusBarHeight : 0);
+            viewTop = (actionBarHeight - avatarImageView.getMeasuredHeight() - 2) / 2 + (occupyStatusBar ? AndroidUtilities.statusBarHeight : 0);
         } else {
             viewTop = (actionBarHeight - avatarImageView.getMeasuredHeight() - 2) / 2 + (occupyStatusBar ? AndroidUtilities.statusBarHeight : 0);
         }
@@ -937,21 +981,69 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
             subtitleTop = viewTop + dp(glassMode ? 23.66f : 24);
         }
 
-final boolean avatarVisible = avatarImageView.getVisibility() == VISIBLE;
+        final boolean avatarVisible = avatarImageView.getVisibility() == VISIBLE;
         final boolean rightAvatar = avatarPlacement == zxc.iconic.xenon.NekoConfig.AVATAR_PLACEMENT_RIGHT && avatarVisible;
         final boolean textOnly = textOnlyPill && avatarVisible;
+        // Centered pill geometry, hoisted so the right-avatar fallback below
+        // can glue to the live pill edge when its anchor is gone (search).
+        final int pillLeft = leftPadding - dp(6) - dp(3);
+        final int targetPillWidth = textOnlyPill ? (int) (getVisualWidth() * 1.05f) + dp(8) + dp(12) : 0;
+        final int pillWidth = textOnlyPill ? getLivePillWidth(targetPillWidth) : 0;
+        if (textOnlyPill && actionBar != null && !actionBar.isChatAvatarContainerWidthAnimating()
+                && actionBar.getSearchFactor() <= 0f && actionBar.getActionModeFactor() <= 0f) {
+            // The animator reads drawn widths synchronously on setText, possibly
+            // before the fresh text is measured (or while it is capped by the
+            // fade constraint), so it can miss the resize and the pill deadlocks
+            // at the old size. Recompute the target from the just-measured full
+            // widths and kick it when it diverged.
+            final float trueSubWidth;
+            if (subtitleTextView != null) {
+                trueSubWidth = (lastFullSubtitleWidth >= 0 ? lastFullSubtitleWidth : subtitleTextView.getDrawnWidth())
+                        + subtitleTextView.getLeftOutsideWidth() + subtitleTextView.getRightOutsideWidth();
+            } else if (animatedSubtitleTextView != null) {
+                trueSubWidth = animatedSubtitleTextView.getDrawable().getCurrentWidth();
+            } else {
+                trueSubWidth = 0;
+            }
+            final int trueVisual = (int) Math.max(titleTextView.getDrawnWidth(), trueSubWidth) + dp(22);
+            final int trueWidth = Math.min(actionBar.getCenteredPillMaxWidth() - dp(12), (int) (trueVisual * 1.05f) + dp(8));
+            if ((int) actionBar.getChatAvatarContainerWidthTarget() != trueWidth) {
+                actionBar.checkAvatarContainerWidth(true);
+            }
+        }
         final int avatarLeft;
         final int badgeBase;
         int avatarTop = 1 + viewTop + dp(0.3f);
         if (rightAvatar) {
-            int[] anchor = anchorCenterInParent();
+            // While searching (or action mode) the anchor is GONE and the pill
+            // geometry is frozen: ignore even a valid anchor and ride the pill,
+            // so the avatar never jumps on open nor snaps back on close.
+            final boolean avatarTransitioning = actionBar != null && (actionBar.getSearchFactor() > 0f || actionBar.getActionModeFactor() > 0f);
+            int[] anchor = avatarTransitioning ? null : anchorCenterInParent();
             android.view.ViewGroup.MarginLayoutParams lp = (android.view.ViewGroup.MarginLayoutParams) getLayoutParams();
             if (anchor != null) {
                 avatarLeft = anchor[0] - avatarImageView.getMeasuredWidth() / 2 - lp.leftMargin;
                 avatarTop = anchor[1] - avatarImageView.getMeasuredHeight() / 2 + dp(0.3f);
                 lastRightAvatarLeft = avatarLeft;
+                if (textOnlyPill) {
+                    lastAvatarPillDelta = avatarLeft - (pillLeft + pillWidth);
+                }
+            } else if (textOnlyPill && lastAvatarPillDelta != Integer.MIN_VALUE) {
+                avatarLeft = pillLeft + pillWidth + lastAvatarPillDelta;
+                avatarTop = 1 + (actionBarHeight - avatarImageView.getMeasuredHeight() - 2) / 2 + (occupyStatusBar ? AndroidUtilities.statusBarHeight : 0) + dp(0.3f);
+                if (rightAnchorView != null && !rightAnchorView.isLaidOut()) {
+                    post(() -> requestLayout());
+                }
             } else {
-                avatarLeft = lastRightAvatarLeft != Integer.MIN_VALUE ? lastRightAvatarLeft : getWidth() + dp(3);
+                if (lastRightAvatarLeft != Integer.MIN_VALUE) {
+                    avatarLeft = lastRightAvatarLeft;
+                } else if (textOnlyPill) {
+                    // Never anchored (e.g. anchor gone the whole time): align to
+                    // the live pill edge instead of jumping off-screen.
+                    avatarLeft = pillLeft + pillWidth - avatarImageView.getMeasuredWidth() - dp(3);
+                } else {
+                    avatarLeft = getWidth() + dp(3);
+                }
                 avatarTop = 1 + (actionBarHeight - avatarImageView.getMeasuredHeight() - 2) / 2 + (occupyStatusBar ? AndroidUtilities.statusBarHeight : 0) + dp(0.3f);
                 if (rightAnchorView != null && !rightAnchorView.isLaidOut()) {
                     post(() -> requestLayout());
@@ -975,11 +1067,8 @@ final boolean avatarVisible = avatarImageView.getVisibility() == VISIBLE;
         final int subtitleL;
         final int pillRight;
         if (textOnlyPill) {
-            final int pillLeft = leftPadding - dp(6) - dp(3);
-            final int targetPillWidth = getVisualWidth() + dp(12);
-            final int realPillWidth = actionBar != null ? actionBar.getCurrentChatPillWidth() : 0;
-            final boolean pillAnimating = actionBar != null && actionBar.isChatAvatarContainerWidthAnimating();
-            final int pillWidth = realPillWidth > 0 && !pillAnimating ? realPillWidth : targetPillWidth;
+            // pillLeft/pillWidth hoisted above (live width: tracks the width
+            // animation every frame, frozen while searching).
             pillRight = pillLeft + pillWidth;
             if (actionBar != null) {
                 actionBar.setContainerLayoutPillWidth(pillWidth);
@@ -999,9 +1088,13 @@ final boolean avatarVisible = avatarImageView.getVisibility() == VISIBLE;
             } else {
                 subWidth = 0;
             }
-            final int subFadeShift = subtitleTextView != null && subtitleTextView.isTextTruncated() ? dp(8) : 0;
-            titleL = Math.max(leftPadding, pillLeft + (pillWidth - titleWidth) / 2 + titleFadeShift);
-            subtitleL = subTextView != null && subTextView.getVisibility() != GONE ? Math.max(leftPadding, pillLeft + (pillWidth - subWidth) / 2 + subFadeShift) : titleL;
+            titleL = pillLeft + (pillWidth - titleWidth) / 2 + titleFadeShift;
+            // Center the whole block: text plus status symbols at the start/end
+            // (typing dots, end icons), which aren't part of getDrawnWidth().
+            final int subLeftOut = subtitleTextView != null ? subtitleTextView.getLeftOutsideWidth() : 0;
+            final int subRightOut = subtitleTextView != null ? subtitleTextView.getRightOutsideWidth() : 0;
+            final int subTotalW = subWidth + subLeftOut + subRightOut;
+            subtitleL = subTextView != null && subTextView.getVisibility() != GONE ? pillLeft + (pillWidth - subTotalW) / 2 + subLeftOut : titleL;
         } else {
             titleL = l;
             subtitleL = l;
@@ -1052,7 +1145,10 @@ final boolean avatarVisible = avatarImageView.getVisibility() == VISIBLE;
     }
 
     private int[] anchorCenterInParent() {
-        if (rightAnchorView == null || !rightAnchorView.isLaidOut()) return null;
+        // A GONE/INVISIBLE anchor (e.g. headerItem hidden while searching) must
+        // not resolve: following it mid-transition teleports the avatar (e.g. to
+        // the left) instead of keeping it glued to the pill.
+        if (rightAnchorView == null || !rightAnchorView.isLaidOut() || rightAnchorView.getVisibility() != VISIBLE) return null;
         int x = rightAnchorView.getLeft();
         int y = rightAnchorView.getTop();
         ViewParent actionBar = getParent();
@@ -1331,6 +1427,10 @@ final boolean avatarVisible = avatarImageView.getVisibility() == VISIBLE;
                 }
             }
         }
+        // The status drawable (typing dots, etc.) changes the subtitle width:
+        // resize the pill for it, otherwise the dots hang outside the pill.
+        checkActionBar(true);
+        requestLayout();
     }
 
     public void updateSubtitle() {
@@ -2006,7 +2106,7 @@ final boolean avatarVisible = avatarImageView.getVisibility() == VISIBLE;
             width = Math.max(width, titleTextView.getDrawnWidth());
         }
         if (subtitleTextView != null) {
-            width = Math.max(width, subtitleTextView.getDrawnWidth());
+            width = Math.max(width, textOnlyPill && lastFullSubtitleWidth >= 0 ? lastFullSubtitleWidth + subtitleTextView.getLeftOutsideWidth() + subtitleTextView.getRightOutsideWidth() : subtitleTextView.getDrawnWidth());
         } else if (animatedSubtitleTextView != null) {
             width = Math.max(width, animatedSubtitleTextView.getDrawable().getCurrentWidth());
         }

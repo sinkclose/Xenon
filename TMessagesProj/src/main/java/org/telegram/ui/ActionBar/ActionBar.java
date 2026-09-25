@@ -94,11 +94,11 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     private BlurredBackgroundDrawable glassDrawable;
     private BlurredBackgroundDrawable glassDrawableBack;
     private BlurredBackgroundDrawable glassDrawableMenu;
-    public boolean inu_nonIsland;
-    public boolean inu_m3ChatHeader;
-    public boolean inu_centerChatHeader;
-    public boolean inu_textOnlyPill;
-    public boolean inu_avatarRightBigger;
+    public boolean nonIsland;
+    public boolean m3ChatHeader;
+    public boolean centerChatHeader;
+    public boolean textOnlyPill;
+    public boolean avatarRightBigger;
     private INavigationLayout.BackButtonState backButtonState = INavigationLayout.BackButtonState.BACK;
     public ImageView backButtonImageView;
     private BackupImageView avatarSearchImageView;
@@ -227,14 +227,14 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         glassMode = true;
         glassModeIsForum = isForum;
 
-        final int glassRadius = inu_nonIsland ? 0 : 23;
-        final int glassPadding = inu_nonIsland ? 0 : 6;
+        final int glassRadius = nonIsland ? 0 : 23;
+        final int glassPadding = nonIsland ? 0 : 6;
 
         glassDrawable = factory.create(this)
             .setColorProvider(colorProvider)
             .setRadius(dp(glassRadius))
             .setPadding(dp(glassPadding));
-        if (!inu_nonIsland) {
+        if (!nonIsland) {
             if (isForum) {
                 glassDrawable.setRadius(dp(18.33f), dp(23), dp(23), dp(18.33f));
             } else {
@@ -253,12 +253,12 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             .setPadding(dp(glassPadding));
 
         if (menu != null) {
-            menu.setTranslationX(inu_nonIsland ? 0 : -dp(10));
-            menu.setGlassMode(!inu_nonIsland);
+            menu.setTranslationX(nonIsland ? 0 : -dp(10));
+            menu.setGlassMode(!nonIsland);
         }
         if (actionMode != null) {
-            actionMode.setTranslationX(inu_nonIsland ? 0 : -dp(10));
-            actionMode.setGlassMode(!inu_nonIsland);
+            actionMode.setTranslationX(nonIsland ? 0 : -dp(10));
+            actionMode.setGlassMode(!nonIsland);
         }
         if (backButtonImageView != null) {
             backButtonImageView.setTranslationX(dp(2));
@@ -784,7 +784,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
                 }
             }
         };
-        actionMode.setTranslationX(glassMode && !inu_nonIsland ? -dp(10) : 0);
+        actionMode.setTranslationX(glassMode && !nonIsland ? -dp(10) : 0);
         actionMode.setGlassMode(glassMode);
         actionMode.isActionMode = true;
         actionMode.setClickable(true);
@@ -2207,11 +2207,11 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
         final boolean hasAvatar = chatAvatarContainer.hasVisibleAvatar();
         int visualWidth = chatAvatarContainer.getVisualWidth();
-        if (hasAvatar && !inu_centerChatHeader && !inu_textOnlyPill) {
+        if (hasAvatar && !centerChatHeader && !textOnlyPill) {
             visualWidth = Math.max(visualWidth, dp(192));
         }
 
-        final int width = Math.min(getCenteredPillMaxWidth() - dp(12), visualWidth);
+        final int width = Math.min(getCenteredPillMaxWidth() - dp(12), (int) (visualWidth * 1.05f) + dp(8));
         if (animated) {
             if (animatorAvatarContainerWidth.getToFactor() != width) {
                 animatorAvatarContainerWidth.animateTo(width);
@@ -2224,7 +2224,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
     public int getCenteredPillMaxWidth() {
         int maxWidth = getMeasuredWidth() - dp(6 + 46 + 6 + 6 + 46 + 6);
-        if (inu_textOnlyPill && chatAvatarContainer != null) {
+        if (textOnlyPill && chatAvatarContainer != null) {
             int avatarRight = chatAvatarContainer.getAvatarRightEdge();
             if (avatarRight > 0) {
                 maxWidth = Math.min(maxWidth, getMeasuredWidth() - 2 * (avatarRight + dp(8)));
@@ -2241,6 +2241,12 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
     @Override
     public void onFactorChanged(int id, float factor, float fraction, FactorAnimator callee) {
+        if (chatAvatarContainer != null && animatorAvatarContainerWidth.isAnimating()) {
+            // The centered pill width is animating (e.g. status text changed):
+            // re-layout every frame so title/subtitle track the live width and
+            // stay glued to the screen center while the pill breathes around them.
+            chatAvatarContainer.requestLayout();
+        }
         invalidate();
     }
 
@@ -2253,6 +2259,10 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
     public boolean isChatAvatarContainerWidthAnimating() {
         return animatorAvatarContainerWidth.isAnimating();
+    }
+
+    public float getChatAvatarContainerWidthTarget() {
+        return animatorAvatarContainerWidth.getToFactor();
     }
 
     public void setContainerLayoutPillWidth(int pillWidth) {
@@ -2277,7 +2287,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         final int rightDefault = getWidth() - rightOffset;
         final int widthDefault = rightDefault - leftDefault;
         int result = lerp(Math.min(widthDefault, (int) animatorAvatarContainerWidth.getFactor() + p * 2), widthDefault, Math.max(searchFactor, getActionModeFactor()));
-        if (inu_textOnlyPill) {
+        if (textOnlyPill) {
             int avatarRight = chatAvatarContainer.getAvatarRightEdge();
             if (avatarRight > 0) {
                 result = Math.min(result, getWidth() - 2 * (avatarRight + dp(8)));
@@ -2345,7 +2355,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         final int left, right;
         if (chatAvatarContainer != null) {
             final int width = getCurrentChatPillWidth();
-            if (inu_centerChatHeader || inu_textOnlyPill) {
+            if (centerChatHeader || textOnlyPill) {
                 left = (getWidth() - width) / 2;
             } else {
                 left = (rightDefault + leftDefault - width) / 2;
@@ -2357,7 +2367,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
                 + p + dp(3);
             chatPillWidth = width;
             chatAvatarContainer.setTranslationX(containerTrans);
-            chatAvatarContainer.setAvatarOffset(inu_textOnlyPill ? -containerTrans : 0);
+            chatAvatarContainer.setAvatarOffset(textOnlyPill ? -containerTrans : 0);
             if (!animatorAvatarContainerWidth.isAnimating() && chatPillWidth != lastContainerLayoutPillWidth) {
                 chatAvatarContainer.requestLayout();
             }
@@ -2366,8 +2376,8 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             right = rightDefault;
         }
 
-        if (glassDrawable != null && !glassOnlyBack && !inu_m3ChatHeader) {
-            if (inu_nonIsland) {
+        if (glassDrawable != null && !glassOnlyBack && !m3ChatHeader) {
+            if (nonIsland) {
                 glassDrawable.setBounds(0, 0, getWidth(), getHeight());
             } else {
                 glassDrawable.setBounds(left, t, right, b);
@@ -2375,18 +2385,18 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             // Fade the centered chat pill out while searching (searchFactor is
             // animated 0->1 with ease-out over ~0.3s) and restore it on exit.
             // Back/menu glass stays visible.
-            if (chatAvatarContainer != null && !inu_nonIsland && searchFactor > 0f) {
+            if (chatAvatarContainer != null && !nonIsland && searchFactor > 0f) {
                 glassDrawable.setAlpha((int) (255 * (1f - searchFactor)));
             } else {
                 glassDrawable.setAlpha(255);
             }
             glassDrawable.draw(canvas);
         }
-        if (glassDrawableBack != null && hasBackButton && !inu_nonIsland) {
+        if (glassDrawableBack != null && hasBackButton && !nonIsland) {
             glassDrawableBack.setBounds(0, t, s + p * 2, b);
             glassDrawableBack.draw(canvas);
         }
-        if (glassDrawableMenu != null && menuWidth > 0 && !inu_nonIsland && !glassOnlyBack && !doNotDrawGlassMenu && !inu_avatarRightBigger) {
+        if (glassDrawableMenu != null && menuWidth > 0 && !nonIsland && !glassOnlyBack && !doNotDrawGlassMenu && !avatarRightBigger) {
             glassDrawableMenu.setBounds(getWidth() - Math.max(s, menuWidth) - p * 2, t, getWidth(), b);
             glassDrawableMenu.setAlpha(hasForcedMenuWidth ? 255 : (int) (255 * animatorHasMenuItems.getFloatValue()));
             glassDrawableMenu.draw(canvas);

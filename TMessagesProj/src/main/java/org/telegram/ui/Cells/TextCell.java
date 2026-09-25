@@ -60,7 +60,7 @@ public class TextCell extends FrameLayout {
     private boolean needDivider;
     public int offsetFromImage = 58;
     public int heightDp = 50;
-    public int inu_m3IconSize;
+    public int m3IconSize;
     public int imageLeft = 21;
     private boolean inDialogs;
     private boolean prioritizeTitleOverValue;

@@ -3678,7 +3678,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             actionBar.setAddToContainer(false);
             actionBar.setCastShadows(false);
             actionBar.setClipContent(true);
-            actionBar.inu_nonIsland = NonIslandHelper.tabBars();
+            actionBar.nonIsland = NonIslandHelper.tabBars();
         //}
         actionBar.setTitleActionRunnable(() -> {
             if (initialDialogsType != DIALOGS_TYPE_WIDGET) {

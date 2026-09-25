@@ -450,11 +450,11 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
         backgroundDrawable.setCallback(this);
     }
 
-    public boolean inu_nonIsland;
-    public zxc.iconic.xenon.helpers.BlurBehindHelper inu_blurBehindHelper;
-    public void inu_makeNonIsland(zxc.iconic.xenon.helpers.BlurBehindHelper blurBehindHelper) {
-        inu_nonIsland = true;
-        inu_blurBehindHelper = blurBehindHelper;
+    public boolean nonIsland;
+    public zxc.iconic.xenon.helpers.BlurBehindHelper blurBehindHelper;
+    public void makeNonIsland(zxc.iconic.xenon.helpers.BlurBehindHelper blurBehindHelper) {
+        nonIsland = true;
+        blurBehindHelper = blurBehindHelper;
         setPadding(0, 0, 0, 0);
         setClipToPadding(false);
         tabsContainer.setPadding(0, 0, 0, 0);
@@ -471,7 +471,7 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
     private final AnimatedFloat open = new AnimatedFloat(this, 420, CubicBezierInterpolator.EASE_OUT_QUINT);
 
     private void checkBoundsAndClipping() {
-        if (inu_nonIsland) return;
+        if (nonIsland) return;
         final float rectT = this.rectT.set(1f);
         rect.set(getPaddingLeft(), 0, getMeasuredWidth() - getPaddingRight(), getMeasuredHeight());
         rect.inset(dp(7), dp(7));
@@ -710,10 +710,10 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
 
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
-        if (inu_nonIsland) {
+        if (nonIsland) {
             canvas.save();
             canvas.translate(getScrollX(), 0);
-            inu_blurBehindHelper.draw(canvas);
+            blurBehindHelper.draw(canvas);
             canvas.restore();
             super.dispatchDraw(canvas);
             return;
@@ -736,7 +736,7 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
 
     private boolean isOpen = true;
     public void setOpen(boolean open) {
-        if (inu_nonIsland) return;
+        if (nonIsland) return;
         if (open == isOpen) return;
 
         isOpen = open;

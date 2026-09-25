@@ -2611,13 +2611,13 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                 currentAttachLayout.onButtonsTranslationYUpdated();
             }
 
-            private final zxc.iconic.xenon.helpers.BlurBehindHelper inu_blurHelper = NonIslandHelper.tabBars()
+            private final zxc.iconic.xenon.helpers.BlurBehindHelper blurHelper = NonIslandHelper.tabBars()
                 ? zxc.iconic.xenon.helpers.BlurBehindHelper.create(this, sizeNotifierFrameLayout, Theme.key_dialogBackground, false, NonIslandHelper.ATTACH_TAB_SHADOW_DP, 0f)
                 : null;
 
             @Override
             protected void dispatchDraw(@NonNull Canvas canvas) {
-                if (inu_blurHelper != null) inu_blurHelper.draw(canvas);
+                if (blurHelper != null) blurHelper.draw(canvas);
                 super.dispatchDraw(canvas);
             }
         };

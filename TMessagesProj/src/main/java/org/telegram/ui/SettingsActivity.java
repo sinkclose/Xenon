@@ -1222,7 +1222,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         }
 
         public static class Background extends Drawable {
-            public int inu_monetColor;
+            public int monetColor;
             private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
             private final Paint strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             private LinearGradient gradient, strokeGradient;

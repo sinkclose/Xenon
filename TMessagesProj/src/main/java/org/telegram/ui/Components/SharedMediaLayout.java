@@ -3777,7 +3777,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                 topPanelLayout.setCallFragmentContextView(fragmentContextView);
                 addView(topPanelLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP, 0, NonIslandHelper.tabBars() ? 36 : (48 -14), 0, 0));
                 if (NonIslandHelper.tabBars()) {
-                    topPanelLayout.inu_blurHelper = zxc.iconic.xenon.helpers.BlurBehindHelper.create(topPanelLayout, sizeNotifierFrameLayout, Theme.key_windowBackgroundWhite);
+                    topPanelLayout.blurHelper = zxc.iconic.xenon.helpers.BlurBehindHelper.create(topPanelLayout, sizeNotifierFrameLayout, Theme.key_windowBackgroundWhite);
                     topPanelLayout.setPadding(0, 0, 0, 0);
                 }
             } else {
@@ -3805,7 +3805,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                 addView(scrollSlidingTextTabStrip, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.LEFT | Gravity.TOP));
                 if (NonIslandHelper.tabBars()) {
                     scrollSlidingTextTabStrip.setLayoutParams(LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 36, Gravity.LEFT | Gravity.TOP, 0, 0, 0, 0));
-                    scrollSlidingTextTabStrip.inu_makeNonIsland(zxc.iconic.xenon.helpers.BlurBehindHelper.create(scrollSlidingTextTabStrip, sizeNotifierFrameLayout, Theme.key_windowBackgroundWhite));
+                    scrollSlidingTextTabStrip.makeNonIsland(zxc.iconic.xenon.helpers.BlurBehindHelper.create(scrollSlidingTextTabStrip, sizeNotifierFrameLayout, Theme.key_windowBackgroundWhite));
                 }
             }
             searchTagsList = new SearchTagsList(getContext(), profileActivity, profileActivity.getCurrentAccount(), includeSavedDialogs() ? 0 : dialog_id, resourcesProvider) {
@@ -11632,7 +11632,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
 
         @Override
         protected void dispatchDraw(@NonNull Canvas canvas) {
-            if (inu_nonIsland) { super.dispatchDraw(canvas); return; }
+            if (nonIsland) { super.dispatchDraw(canvas); return; }
             if (backgroundColor != Color.TRANSPARENT) {
                 if (backgroundPaint == null) {
                     backgroundPaint = new Paint();

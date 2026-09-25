@@ -329,7 +329,7 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
         previewActionBar.setTitle("");
         previewM3 = NekoConfig.material3ChatHeaders;
         previewCenter = NekoConfig.centerChatHeader;
-        previewActionBar.inu_m3ChatHeader = previewM3;
+        previewActionBar.m3ChatHeader = previewM3;
         previewActionBar.setupGlass(factory, colorProvider, false);
 
         previewAvatar = new ChatAvatarContainer(getContext(), null, false, resourcesProvider) {
@@ -368,8 +368,8 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
         int placement = effectivePlacement();
         boolean textOnlyPill = previewCenter && placement != NekoConfig.AVATAR_PLACEMENT_CENTER;
         boolean avatarRight = placement == NekoConfig.AVATAR_PLACEMENT_RIGHT;
-        previewActionBar.inu_centerChatHeader = previewCenter && placement == NekoConfig.AVATAR_PLACEMENT_CENTER;
-        previewActionBar.inu_textOnlyPill = textOnlyPill;
+        previewActionBar.centerChatHeader = previewCenter && placement == NekoConfig.AVATAR_PLACEMENT_CENTER;
+        previewActionBar.textOnlyPill = textOnlyPill;
         previewAvatar.setAvatarPlacement(placement);
         previewAvatar.setTextOnlyPill(textOnlyPill);
         previewActionBar.setChatAvatarContainer(previewCenter ? previewAvatar : null);
@@ -392,7 +392,7 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
             previewMoreItem.getIconView().setVisibility(avatarRight ? View.INVISIBLE : View.VISIBLE);
         }
         if (previewMoreItem != null) {
-            previewActionBar.inu_avatarRightBigger = avatarRight && NekoConfig.biggerAvatar;
+            previewActionBar.avatarRightBigger = avatarRight && NekoConfig.biggerAvatar;
         }
         previewAvatar.setTranslationX(0);
         if (!previewCenter) {
@@ -413,7 +413,7 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
         if (previewActionBar == null || previewAvatar == null || previewContainer == null) return;
         previewM3 = NekoConfig.material3ChatHeaders;
         previewCenter = NekoConfig.centerChatHeader;
-        previewActionBar.inu_m3ChatHeader = previewM3;
+        previewActionBar.m3ChatHeader = previewM3;
         previewAvatar.setM3HeaderMode(previewM3);
         previewAvatar.setBiggerAvatar(NekoConfig.biggerAvatar);
         applyPreviewPlacement();

@@ -29,7 +29,7 @@ public class DialogsActivityTopPanelLayout extends AnimatedLinearLayout {
     }
 
     BlurredBackgroundDrawable backgroundDrawable;
-    public zxc.iconic.xenon.helpers.BlurBehindHelper inu_blurHelper;
+    public zxc.iconic.xenon.helpers.BlurBehindHelper blurHelper;
 
     public void setBlurredBackground(BlurredBackgroundDrawable background) {
         backgroundDrawable = background;
@@ -103,8 +103,8 @@ public class DialogsActivityTopPanelLayout extends AnimatedLinearLayout {
     protected void dispatchDraw(@NonNull Canvas canvas) {
         if (getMetadata().getTotalVisibility() == 0) return;
 
-        if (inu_blurHelper != null) {
-            inu_blurHelper.draw(canvas, (int) getAnimatedHeightWithPadding(0), (int) (getMetadata().getTotalVisibility() * 255));
+        if (blurHelper != null) {
+            blurHelper.draw(canvas, (int) getAnimatedHeightWithPadding(0), (int) (getMetadata().getTotalVisibility() * 255));
         } else if (backgroundDrawable != null) {
             backgroundDrawable.draw(canvas);
         }

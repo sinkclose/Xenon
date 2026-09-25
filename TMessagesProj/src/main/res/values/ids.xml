@@ -88,8 +88,8 @@
 
     <item name="dragging" type="id"/>
 
-    <item name="inu_merge_with_prev" type="id"/>
-    <item name="inu_merge_with_next" type="id"/>
+    <item name="merge_with_prev" type="id"/>
+    <item name="merge_with_next" type="id"/>
     <item name="tag_view_on_post_draw_state" type="id" />
     <item name="tag_view_on_post_draw_root_state" type="id" />
 </resources>
