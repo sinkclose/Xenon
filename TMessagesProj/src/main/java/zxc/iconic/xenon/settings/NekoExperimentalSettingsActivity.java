@@ -54,6 +54,7 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
 
     private final int deleteAccountRow = rowId++;
     private final int buildInfoRow = rowId++;
+    private final int logcatRow = rowId++;
 
     @Override
     protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
@@ -97,6 +98,7 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.Channel)));
         items.add(TextSettingsCellFactory.of(buildInfoRow, NekoConfig.getChannelName(), "").slug("channelInfo"));
+        items.add(TextSettingsCellFactory.of(logcatRow, "Logcat", "").slug("logcat"));
         items.add(UItem.asShadow(null));
     }
 
@@ -133,6 +135,8 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
             }
         } else if (id == xrayProxySettingsRow) {
             presentFragment(new NekoXrayProxyHubActivity());
+        } else if (id == logcatRow) {
+            presentFragment(new NekoLogcatActivity());
         } else if (false) {
             var builder = new AlertDialog.Builder(getParentActivity(), resourcesProvider);
             var message = new TextView(getParentActivity());

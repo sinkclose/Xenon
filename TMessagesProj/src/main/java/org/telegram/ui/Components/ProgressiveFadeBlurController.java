@@ -127,7 +127,9 @@ public class ProgressiveFadeBlurController {
         }
         this.fadeZoneTop = fadeZoneTop;
         fadeView.setFadeZoneTop(fadeZoneTop);
-        fadeView.setDimFadeZoneTop(fadeZoneTop);
+        // NOTE: dim keeps the default zone (-1) so its gradient aligns with the
+        // fade mask. Forcing it to fadeZoneTop pushes the whole dim gradient
+        // below the drawable bounds (flipped geometry), making dim invisible.
     }
 
     public void setTopOffset(int topOffset) {
@@ -214,6 +216,8 @@ public class ProgressiveFadeBlurController {
         background = color;
     }
 
+    private long lastDebugLogTime;
+
     public void invalidate() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || source.inRecording() || SizeNotifierFrameLayout.drawingBlur) {
             return;
@@ -268,6 +272,30 @@ public class ProgressiveFadeBlurController {
         // mistaken for a content change on the next draw pass.
         lastProcessedDrawCount = drawCount + 1;
         fadeView.invalidate();
+        // TEMP DEBUG: black fade investigation, remove after.
+        final long nowDbg = SystemClock.uptimeMillis();
+        if (nowDbg - lastDebugLogTime > 2000) {
+            lastDebugLogTime = nowDbg;
+            int childCount = captureView instanceof ViewGroup ? ((ViewGroup) captureView).getChildCount() : -1;
+            int listChildren = -1;
+            if (captureView instanceof ViewGroup) {
+                ViewGroup vg = (ViewGroup) captureView;
+                for (int i = 0; i < vg.getChildCount(); i++) {
+                    View ch = vg.getChildAt(i);
+                    if (ch instanceof androidx.recyclerview.widget.RecyclerView) {
+                        listChildren = ((androidx.recyclerview.widget.RecyclerView) ch).getChildCount();
+                    }
+                }
+            }
+            android.util.Log.d("ProgFadeDBG", "invalidate fw=" + fw + " fh=" + fh
+                + " fadeZoneTop=" + fadeZoneTop + " fadeZoneBottom=" + fadeZoneBottom + " topOffset=" + topOffset
+                + " color=" + Integer.toHexString(color) + " bg=" + Integer.toHexString(background)
+                + " capture=" + captureView.getWidth() + "x" + captureView.getHeight()
+                + " captureKids=" + childCount + " listKids=" + listChildren
+                + " extra=" + additionalCaptureViews.size()
+                + " dimEnabled=" + dimEnabled + " dimming=" + NekoConfig.blurredFadeDimming
+                + " strength=" + NekoConfig.blurredFadeDimStrength);
+        }
     }
 
     private void drawCapturedView(Canvas c, View view) {

@@ -20,8 +20,29 @@ import zxc.iconic.xenon.helpers.MainTabsUiHelper;
 import zxc.iconic.xenon.helpers.NonIslandHelper;
 
 public class BlurredBackgroundProviderImpl {
+    private static boolean useBlackWhiteTint() {
+        return zxc.iconic.xenon.NekoConfig.advancedGlassTintBlackWhite;
+    }
+
+    private static int blackWhiteBase(boolean isDark, float alpha) {
+        return Theme.multAlpha(isDark ? Color.BLACK : Color.WHITE, alpha);
+    }
+
+    /**
+     * Resolve a glass tint: pure black/white when the B/W toggle is on
+     * (no accent mixing, so the switch is actually visible), otherwise the
+     * given primary theme color with the user-controlled accent tint applied.
+     */
+    private static int glassTint(int themeColor, Theme.ResourcesProvider r, boolean isDark, float alpha) {
+        if (useBlackWhiteTint()) {
+            return blackWhiteBase(isDark, alpha);
+        }
+        return tintWithAccent(Theme.multAlpha(themeColor, alpha), r);
+    }
+
     public static BlurredBackgroundProvider mainTabs(Theme.ResourcesProvider resourcesProvider) {
         if (MainTabsUiHelper.isMaterial3NavigationBar()) {
+            // No liquid glass on the Material3 nav bar — plain theme color, no B/W tint.
             return new BlurredBackgroundProviderBuilder(resourcesProvider)
                 .setBackgroundColor((r, isDark) -> {
                     final float alpha = 0.76f;
@@ -37,6 +58,9 @@ public class BlurredBackgroundProviderImpl {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
             .setBackgroundColor((r, isDark) -> {
                 final float alpha = glassTintAlpha(LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.86f : 0.82f);
+                if (useBlackWhiteTint()) {
+                    return blackWhiteBase(isDark, alpha);
+                }
                 final int colorBg = Theme.getColor(Theme.key_windowBackgroundWhite, r);
                 final int colorTarget = Theme.getColor(Theme.key_glass_targetMainTabs, r);
                 return tintWithAccent(solveSrcColor(colorBg, colorTarget, alpha), r);
@@ -53,6 +77,9 @@ public class BlurredBackgroundProviderImpl {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
             .setBackgroundColor((r, isDark) -> {
                 final float alpha = glassTintAlpha(LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.86f : 0.82f);
+                if (useBlackWhiteTint()) {
+                    return blackWhiteBase(isDark, alpha);
+                }
                 final int colorBg = Theme.getColor(Theme.key_windowBackgroundWhite, r);
                 final int colorTarget = Theme.getColor(Theme.key_glass_targetMainTopPanel, r);
                 return tintWithAccent(solveSrcColor(colorBg, colorTarget, alpha), r);
@@ -69,6 +96,9 @@ public class BlurredBackgroundProviderImpl {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
                 .setBackgroundColor((r, isDark) -> {
                     final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.85f : 0.76f;
+                    if (useBlackWhiteTint()) {
+                        return blackWhiteBase(isDark, alpha);
+                    }
                     final int colorBg = Theme.getColor(Theme.key_windowBackgroundWhite, r);
                     return Theme.multAlpha(colorBg, alpha);
                 })
@@ -100,6 +130,8 @@ public class BlurredBackgroundProviderImpl {
     }
 
     public static BlurredBackgroundProvider messageMenuBackground(Theme.ResourcesProvider resourcesProvider) {
+        // Message popup menus run on the scrim bitmap factory with no liquid
+        // glass effect — plain theme color, no B/W tint.
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
                 .setBackgroundColor((r, isDark) -> {
                     if (!LiteMode.isEnabled(LiteMode.FLAG_CHAT_BLUR)) {
@@ -116,6 +148,8 @@ public class BlurredBackgroundProviderImpl {
     }
 
     public static BlurredBackgroundProvider scrimMenuBackground(Theme.ResourcesProvider resourcesProvider) {
+        // Scrim popups are blur-only (bitmap factory, no liquid glass) — keep
+        // the original theme tint, no B/W override.
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
             .setBackgroundColor((r, isDark) ->
                 tintWithAccent(Theme.multAlpha(Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground), glassTintAlpha(isDark ? 0.85f : 0.76f)), r))
@@ -128,6 +162,7 @@ public class BlurredBackgroundProviderImpl {
     }
 
     public static BlurredBackgroundProvider scrimMenuBackgroundSoft(Theme.ResourcesProvider resourcesProvider) {
+        // Blur-only scrim surface — original theme tint, no B/W override.
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
             .setBackgroundColor((r, isDark) -> {
                 final int colorBg = Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground, r);
@@ -148,8 +183,7 @@ public class BlurredBackgroundProviderImpl {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
                 .setBackgroundColor((r, isDark) -> {
                     final float alpha = glassTintAlpha(LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.85f : 0.76f);
-                    final int colorBg = Theme.getColor(Theme.key_windowBackgroundWhite, r);
-                    return tintWithAccent(Theme.multAlpha(colorBg, alpha), r);
+                    return glassTint(Theme.getColor(Theme.key_windowBackgroundWhite, r), r, isDark, alpha);
                 })
                 .setStrokeColorTop(0x17000000, 0x17FFFFFF)
                 .setStrokeColorBottom(0x17000000, 0x17FFFFFF)
@@ -173,10 +207,16 @@ public class BlurredBackgroundProviderImpl {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
                 .setBackgroundColor((r, isDark) -> {
                     if (!checkBlurEnabled(resourcesProvider)) {
+                        if (useBlackWhiteTint()) {
+                            return isDark ? Color.BLACK : Color.WHITE;
+                        }
                         return ColorUtils.setAlphaComponent(Theme.getColor(Theme.key_chat_messagePanelBackground, r), 255);
                     }
 
                     final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.85f : 0.76f;
+                    if (useBlackWhiteTint()) {
+                        return blackWhiteBase(isDark, alpha);
+                    }
                     final int colorBg = Theme.getColor(Theme.key_chat_messagePanelBackground, r);
                     return Theme.multAlpha(colorBg, alpha);
                 })
@@ -192,13 +232,15 @@ public class BlurredBackgroundProviderImpl {
         BlurredBackgroundProviderBuilder b = new BlurredBackgroundProviderBuilder(resourcesProvider)
                 .setBackgroundColor((r, isDark) -> {
                     if (!checkBlurEnabled(resourcesProvider)) {
+                        if (useBlackWhiteTint()) {
+                            return isDark ? Color.BLACK : Color.WHITE;
+                        }
                         return ColorUtils.setAlphaComponent(Theme.getColor(isDark ?
                             Theme.key_actionBarDefault : Theme.key_chat_topPanelBackground, r), 255);
                     }
 
                     final float alpha = !NonIslandHelper.chatElements() && LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.85f : 0.76f;
-                    final int colorBg = Theme.getColor(Theme.key_chat_topPanelBackground, r);
-                    return tintWithAccent(Theme.multAlpha(colorBg, alpha), r);
+                    return glassTint(Theme.getColor(Theme.key_chat_topPanelBackground, r), r, isDark, alpha);
                 });
         if (!NonIslandHelper.chatElements()) {
             b.setStrokeColorTop(0xFFFFFFFF, 0x28FFFFFF)
@@ -213,19 +255,16 @@ public class BlurredBackgroundProviderImpl {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
                 .setBackgroundColor((r, isDark) -> {
                     final float alpha = glassTintAlpha(LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.90f : 0.86f);
-                    if (zxc.iconic.xenon.NekoConfig.advancedGlassTintBlackWhite) {
-                        // Override the theme-based tint with a neutral black/white base:
-                        // black in dark theme, white in light theme. tintWithAccent still
-                        // mixes the accent into the RGB channels afterwards (gated on
-                        // advanced glass + tintPercent slider), so the surface keeps a
-                        // natural tone instead of a flat wash. The slider controls how
-                        // strongly the tint is applied downstream in the render node.
-                        return tintWithAccent(Theme.multAlpha(isDark ? Color.BLACK : Color.WHITE, alpha), r);
+                    if (useBlackWhiteTint()) {
+                        // Pure black/white base with no accent mixing, so the
+                        // toggle is actually visible instead of staying tinted.
+                        return blackWhiteBase(isDark, alpha);
                     }
-                    final int colorBg = Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground, r);
-                    final int accent = Theme.getColor(Theme.key_chat_messageLinkIn, r);
-                    final int tinted = ColorUtils.blendARGB(colorBg, accent, isDark ? 0.13f : 0.09f);
-                    return tintWithAccent(Theme.multAlpha(tinted, alpha), r);
+                    // Primary theme color (window background), not the secondary
+                    // submenu background. Accent mixing stays solely inside
+                    // tintWithAccent, driven by the tint-strength slider.
+                    final int colorBg = Theme.getColor(Theme.key_windowBackgroundWhite, r);
+                    return tintWithAccent(Theme.multAlpha(colorBg, alpha), r);
                 })
                 .setStrokeColorTop(0x30FFFFFF, 0x24FFFFFF)
                 .setStrokeColorBottom(0x1AFFFFFF, 0x14FFFFFF)
@@ -238,12 +277,7 @@ public class BlurredBackgroundProviderImpl {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
                 .setBackgroundColor((r, isDark) -> {
                     final float alpha = glassTintAlpha(LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.90f : 0.86f);
-                    if (zxc.iconic.xenon.NekoConfig.advancedGlassTintBlackWhite) {
-                        // Use a neutral black/white base in advanced glass mode (same pattern as chatTitlePill).
-                        return tintWithAccent(Theme.multAlpha(isDark ? Color.BLACK : Color.WHITE, alpha), r);
-                    }
-                    final int colorBg = Theme.getColor(Theme.key_dialogBackground, r);
-                    return tintWithAccent(Theme.multAlpha(colorBg, alpha), r);
+                    return glassTint(Theme.getColor(Theme.key_dialogBackground, r), r, isDark, alpha);
                 })
                 .setStrokeColorTop(0x10FFFFFF, 0x10FFFFFF)
                 .setStrokeColorBottom(0x10FFFFFF, 0x08FFFFFF)
@@ -253,6 +287,7 @@ public class BlurredBackgroundProviderImpl {
     }
 
     public static BlurredBackgroundProvider topPanelChatActivityTags(Theme.ResourcesProvider resourcesProvider) {
+        // Wallpaper-blur panel, no liquid glass effect — plain theme color.
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
             .setBackgroundColor((r, isDark) -> {
                 if (!checkBlurEnabled(resourcesProvider)) {
@@ -273,6 +308,7 @@ public class BlurredBackgroundProviderImpl {
     }
 
     public static BlurredBackgroundProvider topPanelChatActivitySearchListBg(Theme.ResourcesProvider resourcesProvider) {
+        // Wallpaper-blur search list, no liquid glass effect — plain theme color.
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
                 .setBackgroundColor((r, isDark) -> {
                     final float alpha = 0.7f;
@@ -288,6 +324,7 @@ public class BlurredBackgroundProviderImpl {
     }
 
     public static BlurredBackgroundProvider bulletin(Theme.ResourcesProvider resourcesProvider) {
+        // Bulletin has no liquid glass effect — original theme tint, no B/W override.
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
             .setBackgroundColor((r, isDark) -> {
                 final float alpha = glassTintAlpha(LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.85f : 0.76f);
@@ -310,6 +347,9 @@ public class BlurredBackgroundProviderImpl {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
                 .setBackgroundColor((r, isDark) -> {
                     final float alpha = glassTintAlpha(LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.85f : 0.76f);
+                    if (useBlackWhiteTint()) {
+                        return blackWhiteBase(isDark, alpha);
+                    }
                     final int colorBg = Theme.getColor(Theme.key_windowBackgroundWhite, r);
                     final int colorTarget = Theme.getColor(Theme.key_chat_messagePanelBackground, r);
                     return tintWithAccent(solveSrcColor(colorBg, colorTarget, alpha), r);
@@ -346,6 +386,7 @@ public class BlurredBackgroundProviderImpl {
     }
 
     public static BlurredBackgroundProvider premiumButton(Theme.ResourcesProvider resourcesProvider) {
+        // Plain button, no liquid glass — theme color without accent tint.
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
             .setBackgroundColor((r, isDark) ->
                 Theme.multAlpha(Theme.getColor(Theme.key_dialogBackground, r), 0.78f))

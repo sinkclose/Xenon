@@ -90,6 +90,8 @@ public class FragmentFloatingButton extends FrameLayout implements FactorAnimato
                     return isDark() ? 0x04FFFFFF : 0x20000000;
                 }
             };
+            // Solid-color button, no liquid glass — keep the plain theme color.
+            iBlur3ColorProviderTabs.setGlassTintEnabled(false);
             iBlur3SourceColor = new BlurredBackgroundSourceColor();
             iBlur3Background = iBlur3SourceColor.createDrawable();
             iBlur3Background.setColorProvider(iBlur3ColorProviderTabs);

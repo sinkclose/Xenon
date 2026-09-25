@@ -11,6 +11,12 @@ public class BlurredBackgroundColorProviderThemed implements BlurredBackgroundCo
     private final Theme.ResourcesProvider resourcesProvider;
     private final int backgroundColorId;
     private float alpha;
+    /**
+     * Opt-out for surfaces with no liquid glass at all (e.g. solid-color
+     * buttons): keeps the plain theme color so the B/W glass toggle and the
+     * accent tint never leak there. Defaults to true.
+     */
+    private boolean glassTintEnabled = true;
 
     public BlurredBackgroundColorProviderThemed(Theme.ResourcesProvider resourcesProvider, int backgroundColorId) {
         this(resourcesProvider, backgroundColorId, org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl.glassTintAlpha(LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.85f : 0.76f));
@@ -29,6 +35,12 @@ public class BlurredBackgroundColorProviderThemed implements BlurredBackgroundCo
         updateColors();
     }
 
+    public BlurredBackgroundColorProviderThemed setGlassTintEnabled(boolean enabled) {
+        this.glassTintEnabled = enabled;
+        updateColors();
+        return this;
+    }
+
     private int backgroundColor, shadowColor, strokeColorTop, strokeColorBottom;
 
     public boolean isDark() {
@@ -37,10 +49,18 @@ public class BlurredBackgroundColorProviderThemed implements BlurredBackgroundCo
     }
 
     public void updateColors() {
-        final int color = Theme.getColor(backgroundColorId, resourcesProvider);
-        backgroundColor = org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl.tintWithAccent(Theme.multAlpha(color, alpha), resourcesProvider);
+        final boolean dark = isDark();
+        if (glassTintEnabled && zxc.iconic.xenon.NekoConfig.advancedGlassTintBlackWhite) {
+            // Pure black/white base with no accent mixing, mirrors
+            // BlurredBackgroundProviderImpl.chatTitlePill/bottomSheet.
+            // Only for glass surfaces — see setGlassTintEnabled.
+            backgroundColor = Theme.multAlpha(dark ? android.graphics.Color.BLACK : android.graphics.Color.WHITE, alpha);
+        } else {
+            final int color = Theme.getColor(backgroundColorId, resourcesProvider);
+            backgroundColor = org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl.tintWithAccent(Theme.multAlpha(color, alpha), resourcesProvider);
+        }
 
-        if (isDark()) {
+        if (dark) {
             strokeColorTop = 0x28FFFFFF;
             strokeColorBottom = 0x14FFFFFF;
             shadowColor = 0;

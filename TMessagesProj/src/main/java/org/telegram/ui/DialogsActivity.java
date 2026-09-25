@@ -622,6 +622,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
     private View blurredView;
     private ProgressiveFadeBlurController progressiveFadeController;
+    private DialogsActivityTopBubblesFadeView dialogsTopDimOverlay;
     private View capturePage;
     private View capturePageExtra;
 
@@ -1186,7 +1187,24 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             updateStoriesViewAlpha(storiesAlpha);
             if (progressiveFadeController != null) {
                 progressiveFadeController.setTopOffset(top);
-                progressiveFadeController.setFadeZoneTop((int) (top + actionBar.getHeight() + dp(SEARCH_FIELD_HEIGHT) + dp(SEARCH_TABS_HEIGHT)));
+                // The list below is clipped at the header bottom (see drawChild),
+                // which can sit lower than the header views (e.g. stories), leaving
+                // a backdrop-less void that shows through as black. Extend the fade
+                // down to that line so the opaque part covers the void and the
+                // gradient dissolves into real rows instead.
+                final int listClipTop = (int) (-getY() + top + actionBarHeight);
+                final int fadeTop = (int) (top + actionBar.getHeight() + dp(SEARCH_FIELD_HEIGHT) + dp(SEARCH_TABS_HEIGHT));
+                final int fadeZone = Math.max(fadeTop, listClipTop + dp(48));
+                progressiveFadeController.setFadeZoneTop(fadeZone);
+                if (dialogsTopDimOverlay != null) {
+                    // Theme-colored gradient over the blur (bottom-scrim look),
+                    // alpha from the shared dimming settings. Never black.
+                    dialogsTopDimOverlay.setPosition(0, fadeZone);
+                    final int dimBase = getThemedColor(Theme.key_windowBackgroundGray);
+                    dialogsTopDimOverlay.setColor(NekoConfig.blurredFadeDimming
+                        ? Theme.multAlpha(dimBase, 0.9f * NekoConfig.blurredFadeDimStrength / 100f)
+                        : 0);
+                }
                 View currentPage = viewPages[0];
                 View extraPage = viewPages.length > 1 && viewPages[1].getVisibility() == View.VISIBLE ? viewPages[1] : null;
                 if (capturePage != currentPage || capturePageExtra != extraPage) {
@@ -4883,7 +4901,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
 
         topBubblesFadeView = new DialogsActivityTopBubblesFadeView(context);
-        topBubblesFadeView.setColor(Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurOtherActivities ? Color.TRANSPARENT : Theme.getColor(Theme.key_windowBackgroundGray));
+        // Opaque gray underlay stays always (stock look): the progressive fade
+        // draws over it, so the header zone can never show through to black.
+        topBubblesFadeView.setColor(Theme.getColor(Theme.key_windowBackgroundGray));
         contentView.addView(topBubblesFadeView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 100, Gravity.TOP));
 
         searchViewPagerIndex = contentView.getChildCount();
@@ -5519,10 +5539,23 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         //}
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurOtherActivities) {
             progressiveFadeController = new ProgressiveFadeBlurController(contentView, viewPages[0], contentView.indexOfChild(searchTabsAndFiltersLayout), () -> getThemedColor(Theme.key_windowBackgroundGray));
+            // In-drawable dimming stays off: the static theme-colored gradient
+            // overlay below takes over that role (driven by the same dimming
+            // settings), so the two never stack into double-dark.
             progressiveFadeController.setDimEnabled(false);
-            progressiveFadeController.setFlipped(true);
+            // No flip: flipped top fade is opaque at its bottom edge = hard cutoff
+            // under the folders. Normal orientation fades out smoothly like the
+            // bottom fade and like settings lists do.
+            progressiveFadeController.setFlipped(false);
             progressiveFadeController.setUpdateAtScreenRefreshRate(true);
             progressiveFadeController.startContinuousUpdates();
+            // Static theme-colored gradient over the live blur, same look as the
+            // bottom scrim: blur stays, but the zone can never go black.
+            // Inserted right above the fade view (below search/tabs/action bar),
+            // NOT appended: appended would paint over the header controls.
+            dialogsTopDimOverlay = new DialogsActivityTopBubblesFadeView(context);
+            dialogsTopDimOverlay.setColor(getThemedColor(Theme.key_windowBackgroundGray));
+            contentView.addView(dialogsTopDimOverlay, contentView.indexOfChild(searchTabsAndFiltersLayout), LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
         }
         if (!onlySelect) {
             animatedStatusView = new AnimatedStatusView(context, 20, 60);
@@ -7724,6 +7757,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         searchIsShowed = show;
         if (progressiveFadeController != null) {
             progressiveFadeController.setFadeViewVisibility(show ? View.GONE : View.VISIBLE);
+        }
+        if (dialogsTopDimOverlay != null) {
+            dialogsTopDimOverlay.setVisibility(show ? View.GONE : View.VISIBLE);
         }
         blur3_InvalidateBlur();
         if (show) {
@@ -12393,7 +12429,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 topPanelLayout.updateColors();
             }
             if (topBubblesFadeView != null) {
-                topBubblesFadeView.setColor(Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurOtherActivities ? Color.TRANSPARENT : Theme.getColor(Theme.key_windowBackgroundGray));
+                topBubblesFadeView.setColor(Theme.getColor(Theme.key_windowBackgroundGray));
             }
             if (fragmentContextView != null) {
                 fragmentContextView.updateColors();
@@ -14691,6 +14727,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
     private void drawHeaderShadow(Canvas canvas, int sy) {
         if (parentLayout == null || actionBar == null /*|| !actionBar.getCastShadows()*/) {
+            return;
+        }
+        // With the progressive fade the header zone is transparent, so a shadow
+        // line under it would float over scrolling content. Hide it as well.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurOtherActivities) {
             return;
         }
 

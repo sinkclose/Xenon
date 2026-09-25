@@ -92,6 +92,9 @@ public class GlassPreviewCell extends View {
             invalidate();
             return;
         }
+        // Refresh the cached backgroundColor (tint) before redrawing, otherwise
+        // the B/W toggle and tint slider would not visibly update the preview.
+        glassDrawable.updateColors();
         if (lastAdvanced != NekoConfig.useAdvancedLiquidGlass) {
             // Toggle changed — need a fresh LiquidGlassEffect with recompiled shader.
             rebuildGlass();
