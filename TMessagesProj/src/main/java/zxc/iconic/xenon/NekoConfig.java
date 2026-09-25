@@ -251,6 +251,7 @@ public class NekoConfig {
     public static final float DEFAULT_ADVANCED_GLASS_DISPERSION = 1.0f;
     public static final float DEFAULT_ADVANCED_GLASS_FRESNEL = 1.0f;
     public static final float DEFAULT_ADVANCED_GLASS_GLARE = 1.0f;
+    public static final float DEFAULT_ADVANCED_GLASS_GLARE_ANGLE = 45f;
     public static final int DEFAULT_ADVANCED_GLASS_TINT_PERCENT = 20;
     public static final boolean DEFAULT_ADVANCED_GLASS_TINT_BLACK_WHITE = false;
     public static final boolean DEFAULT_GLASS_BOTTOM_SHEET = false;
@@ -270,6 +271,7 @@ public class NekoConfig {
     public static float advancedGlassDispersion = DEFAULT_ADVANCED_GLASS_DISPERSION;
     public static float advancedGlassFresnel = DEFAULT_ADVANCED_GLASS_FRESNEL;
     public static float advancedGlassGlare = DEFAULT_ADVANCED_GLASS_GLARE;
+    public static float advancedGlassGlareAngle = DEFAULT_ADVANCED_GLASS_GLARE_ANGLE;
     public static int advancedGlassTintPercent = DEFAULT_ADVANCED_GLASS_TINT_PERCENT;
     public static boolean advancedGlassTintBlackWhite = DEFAULT_ADVANCED_GLASS_TINT_BLACK_WHITE;
     public static boolean glassBottomSheet = DEFAULT_GLASS_BOTTOM_SHEET;
@@ -466,6 +468,7 @@ public class NekoConfig {
             advancedGlassDispersion = preferences.getFloat("advancedGlassDispersion", DEFAULT_ADVANCED_GLASS_DISPERSION);
             advancedGlassFresnel = preferences.getFloat("advancedGlassFresnel", DEFAULT_ADVANCED_GLASS_FRESNEL);
             advancedGlassGlare = preferences.getFloat("advancedGlassGlare", DEFAULT_ADVANCED_GLASS_GLARE);
+            advancedGlassGlareAngle = preferences.getFloat("advancedGlassGlareAngle", DEFAULT_ADVANCED_GLASS_GLARE_ANGLE);
             advancedGlassTintPercent = preferences.getInt("advancedGlassTintPercent", DEFAULT_ADVANCED_GLASS_TINT_PERCENT);
             advancedGlassTintBlackWhite = preferences.getBoolean("advancedGlassTintBlackWhite", DEFAULT_ADVANCED_GLASS_TINT_BLACK_WHITE);
             glassBottomSheet = preferences.getBoolean("glassBottomSheet", DEFAULT_GLASS_BOTTOM_SHEET);
@@ -1844,6 +1847,14 @@ public class NekoConfig {
         editor.apply();
     }
 
+    public static void setAdvancedGlassGlareAngle(float value) {
+        advancedGlassGlareAngle = Math.max(0f, Math.min(360f, value));
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putFloat("advancedGlassGlareAngle", advancedGlassGlareAngle);
+        editor.apply();
+    }
+
     public static void setAdvancedGlassTintPercent(int value) {
         advancedGlassTintPercent = Math.max(0, Math.min(100, value));
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
@@ -1879,7 +1890,8 @@ public class NekoConfig {
             advancedGlassGlare = 0f;
         } else if (mode == GLASS_GLARE_FULL) {
             if (advancedGlassGlare < 0.1f) {
-                advancedGlassGlare = DEFAULT_ADVANCED_GLASS_GLARE;
+        advancedGlassGlare = DEFAULT_ADVANCED_GLASS_GLARE;
+        advancedGlassGlareAngle = DEFAULT_ADVANCED_GLASS_GLARE_ANGLE;
             }
         }
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
@@ -1912,6 +1924,7 @@ public class NekoConfig {
         editor.putFloat("advancedGlassDispersion", advancedGlassDispersion);
         editor.putFloat("advancedGlassFresnel", advancedGlassFresnel);
         editor.putFloat("advancedGlassGlare", advancedGlassGlare);
+        editor.putFloat("advancedGlassGlareAngle", advancedGlassGlareAngle);
         editor.putInt("advancedGlassTintPercent", advancedGlassTintPercent);
         editor.putBoolean("advancedGlassTintBlackWhite", advancedGlassTintBlackWhite);
         editor.putBoolean("glassBottomSheet", glassBottomSheet);

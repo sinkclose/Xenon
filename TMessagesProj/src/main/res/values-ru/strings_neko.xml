@@ -114,6 +114,7 @@
     <string name="AdvancedGlassRefraction">Сила рефракции</string>
     <string name="AdvancedGlassDispersion">Хроматическая дисперсия</string>
     <string name="AdvancedGlassGlare">Сила блика</string>
+    <string name="GlassGlareAngle">Угол блика</string>
     <string name="BlurAndLiquidGlass">Размытие и Liquid glass</string>
     <string name="GlassGlare">Блики стекла</string>
     <string name="GlassGlareFull">Полный</string>

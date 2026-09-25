@@ -117,6 +117,7 @@
     <string name="AdvancedGlassRefraction">Refraction strength</string>
     <string name="AdvancedGlassDispersion">Chromatic dispersion</string>
     <string name="AdvancedGlassGlare">Glare strength</string>
+    <string name="GlassGlareAngle">Glare angle</string>
     <string name="BlurAndLiquidGlass">Blur and Liquid glass</string>
     <string name="GlassGlare">Glass glare</string>
     <string name="GlassGlareFull">Full</string>

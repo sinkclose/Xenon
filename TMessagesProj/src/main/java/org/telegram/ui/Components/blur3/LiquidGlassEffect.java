@@ -63,6 +63,7 @@ public class LiquidGlassEffect {
     private float sizeX, sizeY;
     private float radiusLeftTop, radiusRightTop, radiusRightBottom, radiusLeftBottom;
     private float thickness, intensity, index;
+    private float glareAngle;
     private int foregroundColor;
 
     public void update(
@@ -77,12 +78,15 @@ public class LiquidGlassEffect {
         float sX = (right - left) / 2f;
         float sY = (bottom - top) / 2f;
 
+        final float angleDeg = zxc.iconic.xenon.NekoConfig.advancedGlassGlareAngle;
+
         if (this.resolutionX != resX || this.resolutionY != resY ||
                 this.centerX != cX || this.centerY != cY ||
                 this.sizeX != sX || this.sizeY != sY ||
                 this.radiusLeftTop != rLT || this.radiusRightTop != rRT ||
                 this.radiusRightBottom != rRB || this.radiusLeftBottom != rLB ||
                 this.thickness != thickness || this.intensity != intensity || this.index != index ||
+                this.glareAngle != angleDeg ||
                 this.foregroundColor != foregroundColor) {
 
             this.resolutionX = resX; this.resolutionY = resY;
@@ -90,8 +94,9 @@ public class LiquidGlassEffect {
             this.sizeX = sX; this.sizeY = sY;
             this.radiusLeftTop = rLT; this.radiusRightTop = rRT;
             this.radiusRightBottom = rRB; this.radiusLeftBottom = rLB;
-            this.thickness = thickness; this.intensity = intensity;
-            this.index = index; this.foregroundColor = foregroundColor;
+            this.thickness = thickness; this.intensity = intensity; this.index = index;
+            this.glareAngle = angleDeg;
+            this.foregroundColor = foregroundColor;
 
             final float a = Color.alpha(foregroundColor) / 255f;
             final float r = Color.red(foregroundColor) / 255f * a;
@@ -132,7 +137,7 @@ public class LiquidGlassEffect {
                 highlightShader.setFloatUniform("size", sX * 2f, sY * 2f);
                 highlightShader.setFloatUniform("cornerRadii", rLT, rRT, rRB, rLB);
                 highlightShader.setColorUniform("color", Color.WHITE);
-                highlightShader.setFloatUniform("angle", (float) Math.toRadians(45));
+                highlightShader.setFloatUniform("angle", (float) Math.toRadians(angleDeg));
                 highlightShader.setFloatUniform("falloff", Math.max(0.1f, zxc.iconic.xenon.NekoConfig.advancedGlassGlare));
 
                 highlightRect.set(left, top, right, bottom);

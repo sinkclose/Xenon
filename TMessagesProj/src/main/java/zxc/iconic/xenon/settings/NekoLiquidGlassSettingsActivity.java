@@ -42,6 +42,7 @@ public class NekoLiquidGlassSettingsActivity extends BaseNekoSettingsActivity {
     private final int hideFadeViewRow = rowId++;
     private final int glassGlareRow = rowId++;
     private final int advancedGlassGlareRow = rowId++;
+    private final int advancedGlassGlareAngleRow = rowId++;
 
     // --- Strength sliders ---
     private final int blurStrengthRow = rowId++;
@@ -136,6 +137,17 @@ public class NekoLiquidGlassSettingsActivity extends BaseNekoSettingsActivity {
                                 }
                             }),
                     Math.round(NekoConfig.advancedGlassGlare * 100)).slug("advancedGlassGlare"));
+            items.add(SeekbarCellFactory.of(advancedGlassGlareAngleRow,
+                    new SeekbarConfig(LocaleController.getString(R.string.GlassGlareAngle),
+                            "0", "360", 0, 360,
+                            progress -> {
+                                float v = Math.max(0f, Math.min(360f, progress));
+                                if (Math.abs(v - NekoConfig.advancedGlassGlareAngle) > 0.5f) {
+                                    NekoConfig.setAdvancedGlassGlareAngle(v);
+                                    invalidatePreview();
+                                }
+                            }),
+                    Math.round(NekoConfig.advancedGlassGlareAngle)).slug("advancedGlassGlareAngle"));
         }
         items.add(UItem.asShadow(null));
 
