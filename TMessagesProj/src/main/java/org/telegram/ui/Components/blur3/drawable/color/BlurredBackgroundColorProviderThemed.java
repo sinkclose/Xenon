@@ -50,7 +50,7 @@ public class BlurredBackgroundColorProviderThemed implements BlurredBackgroundCo
 
     public void updateColors() {
         final boolean dark = isDark();
-        if (glassTintEnabled && zxc.iconic.xenon.NekoConfig.advancedGlassTintBlackWhite) {
+        if (glassTintEnabled && org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl.isBlackWhiteTintEnabled()) {
             // Pure black/white base with no accent mixing, mirrors
             // BlurredBackgroundProviderImpl.chatTitlePill/bottomSheet.
             // Only for glass surfaces — see setGlassTintEnabled.

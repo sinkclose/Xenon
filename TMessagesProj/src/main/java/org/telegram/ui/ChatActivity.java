@@ -3912,10 +3912,6 @@ if (feedIntegration != null) {
             @Override
             public int getBackgroundColor() {
                 if (!BlurredBackgroundProviderImpl.checkBlurEnabled(currentAccount, themeDelegate)) {
-                    if (NekoConfig.advancedGlassTintBlackWhite) {
-                        final boolean dark = themeDelegate != null ? themeDelegate.isDark() : Theme.isCurrentThemeDark();
-                        return dark ? Color.BLACK : Color.WHITE;
-                    }
                     return ColorUtils.setAlphaComponent(getThemedColor(Theme.key_chat_messagePanelBackground), 255);
                 }
 
@@ -3930,10 +3926,6 @@ if (feedIntegration != null) {
             @Override
             public int getBackgroundColor() {
                 if (!BlurredBackgroundProviderImpl.checkBlurEnabled(currentAccount, themeDelegate)) {
-                    if (NekoConfig.advancedGlassTintBlackWhite) {
-                        final boolean dark = themeDelegate != null ? themeDelegate.isDark() : Theme.isCurrentThemeDark();
-                        return dark ? Color.BLACK : Color.WHITE;
-                    }
                     return ColorUtils.setAlphaComponent(getThemedColor(Theme.key_windowBackgroundWhite), 255);
                 }
 

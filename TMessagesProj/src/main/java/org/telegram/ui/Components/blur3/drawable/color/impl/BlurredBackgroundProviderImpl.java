@@ -20,8 +20,18 @@ import zxc.iconic.xenon.helpers.MainTabsUiHelper;
 import zxc.iconic.xenon.helpers.NonIslandHelper;
 
 public class BlurredBackgroundProviderImpl {
+    /**
+     * B/W glass tint applies only while the blur pipeline exists. With blur
+     * (and therefore glass) fully off there is no tinted surface — just solid
+     * theme colors — so the toggle must stay out of the way instead of
+     * painting everything black/white.
+     */
+    public static boolean isBlackWhiteTintEnabled() {
+        return zxc.iconic.xenon.NekoConfig.advancedGlassTintBlackWhite && SharedConfig.chatBlurEnabled();
+    }
+
     private static boolean useBlackWhiteTint() {
-        return zxc.iconic.xenon.NekoConfig.advancedGlassTintBlackWhite;
+        return isBlackWhiteTintEnabled();
     }
 
     private static int blackWhiteBase(boolean isDark, float alpha) {
@@ -207,9 +217,6 @@ public class BlurredBackgroundProviderImpl {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
                 .setBackgroundColor((r, isDark) -> {
                     if (!checkBlurEnabled(resourcesProvider)) {
-                        if (useBlackWhiteTint()) {
-                            return isDark ? Color.BLACK : Color.WHITE;
-                        }
                         return ColorUtils.setAlphaComponent(Theme.getColor(Theme.key_chat_messagePanelBackground, r), 255);
                     }
 
@@ -232,9 +239,6 @@ public class BlurredBackgroundProviderImpl {
         BlurredBackgroundProviderBuilder b = new BlurredBackgroundProviderBuilder(resourcesProvider)
                 .setBackgroundColor((r, isDark) -> {
                     if (!checkBlurEnabled(resourcesProvider)) {
-                        if (useBlackWhiteTint()) {
-                            return isDark ? Color.BLACK : Color.WHITE;
-                        }
                         return ColorUtils.setAlphaComponent(Theme.getColor(isDark ?
                             Theme.key_actionBarDefault : Theme.key_chat_topPanelBackground, r), 255);
                     }
