@@ -564,6 +564,7 @@
     <string name="PopupHoldTime">Время удержания</string>
     <string name="MaterialDesign3">Material Design 3</string>
     <string name="LoadingIndicators">Индикаторы загрузки</string>
+    <string name="WavyProgressIndicator">Волнистый индикатор</string>
     <string name="ListItems">Элементы списка</string>
     <string name="Switches">Переключатели</string>
     <string name="ChatHeaderSettings">Настройки заголовка чата</string>

@@ -141,6 +141,7 @@
     <string name="PopupHoldTime">Time to hold</string>
     <string name="MaterialDesign3">Material Design 3</string>
     <string name="LoadingIndicators">Loading indicators</string>
+    <string name="WavyProgressIndicator">Wavy progress indicator</string>
     <string name="ListItems">List items</string>
     <string name="Switches">Switches</string>
     <string name="MaterialSliders">Sliders</string>

@@ -739,7 +739,8 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
         @Override
         protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
             if (progressViewStyle == ALERT_TYPE_SPINNER) {
-                progressViewContainer.measure(MeasureSpec.makeMeasureSpec(dp(86), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(86), MeasureSpec.EXACTLY));
+                final int spinnerCardMeasure = zxc.iconic.xenon.NekoConfig.wavyEnabled ? dp(47) : dp(86);
+                progressViewContainer.measure(MeasureSpec.makeMeasureSpec(spinnerCardMeasure, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(spinnerCardMeasure, MeasureSpec.EXACTLY));
                 setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.getSize(heightMeasureSpec));
             } else {
                 inLayout = true;
@@ -933,7 +934,9 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
             if (blurredBackground && !blurredNativeBackground) {
                 float r;
                 if (progressViewStyle == ALERT_TYPE_SPINNER && progressViewContainer != null) {
-                    r = dp(18);
+                    r = zxc.iconic.xenon.NekoConfig.wavyEnabled
+                            ? progressViewContainer.getWidth() * progressViewContainer.getScaleX() / 2f
+                            : dp(18);
                     float w = progressViewContainer.getWidth() * progressViewContainer.getScaleX();
                     float h = progressViewContainer.getHeight() * progressViewContainer.getScaleY();
                     AndroidUtilities.rectTmp.set(
@@ -1248,10 +1251,14 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
 
             progressViewContainer = new FrameLayout(getContext());
             backgroundColor = getThemedColor(Theme.key_dialog_inlineProgressBackground);
+            // With M3 indicators the card becomes a circle hugging the spinner:
+            // 10% bigger than the 43dp progress, the indicator itself unchanged.
+            final boolean m3spinnerCard = zxc.iconic.xenon.NekoConfig.wavyEnabled;
+            final int spinnerCardSize = m3spinnerCard ? dp(47) : dp(86);
             if (!(blurredBackground && !blurredNativeBackground)) {
-                progressViewContainer.setBackgroundDrawable(Theme.createRoundRectDrawable(dp(18), backgroundColor));
+                progressViewContainer.setBackgroundDrawable(Theme.createRoundRectDrawable(m3spinnerCard ? spinnerCardSize / 2 : dp(18), backgroundColor));
             }
-            containerView.addView(progressViewContainer, LayoutHelper.createLinear(86, 86, Gravity.CENTER));
+            containerView.addView(progressViewContainer, LayoutHelper.createLinear(spinnerCardSize, spinnerCardSize, Gravity.CENTER));
 
             ImageView progressView = new ImageView(getContext());
             progressView.setImageDrawable(new CircularProgressDrawable(dp(9), AndroidUtilities.dp(0.2f), getThemedColor(Theme.key_dialog_inlineProgress)));

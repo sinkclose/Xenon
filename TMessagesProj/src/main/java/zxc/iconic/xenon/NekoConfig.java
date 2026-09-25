@@ -308,6 +308,7 @@ public class NekoConfig {
     public static int avatarShapeRotationSpeed = 60;
     public static boolean avatarShapeSquareBase = false;
     public static boolean wavyEnabled = true;
+    public static boolean wavyProgressEnabled = true;
     public static boolean holdToOpenPopup = false;
     public static float popupHoldTime = 0.5f;
     public static boolean swipeOtherBubbles = false;
@@ -534,6 +535,7 @@ public class NekoConfig {
             avatarShapeRotationSpeed = preferences.getInt("avatarShapeRotationSpeed", 60);
             avatarShapeSquareBase = preferences.getBoolean("avatarShapeSquareBase", false);
             wavyEnabled = preferences.getBoolean("wavyEnabled", true);
+            wavyProgressEnabled = preferences.getBoolean("wavyProgressEnabled", true);
             holdToOpenPopup = preferences.getBoolean("holdToOpenPopup", false);
             popupHoldTime = preferences.getFloat("popupHoldTime", 0.5f);
             swipeOtherBubbles = preferences.getBoolean("swipeOtherBubbles", false);
@@ -2135,6 +2137,14 @@ public class NekoConfig {
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("wavyEnabled", wavyEnabled);
+        editor.apply();
+    }
+
+    public static void toggleWavyProgressEnabled() {
+        wavyProgressEnabled = !wavyProgressEnabled;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("wavyProgressEnabled", wavyProgressEnabled);
         editor.apply();
     }
 

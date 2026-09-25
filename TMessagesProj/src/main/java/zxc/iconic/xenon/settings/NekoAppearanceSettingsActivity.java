@@ -64,6 +64,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
     private final int materialSlidersRow = rowId++;
     private final int material3ChatHeadersRow = rowId++;
     private final int loadingIndicatorsRow = rowId++;
+    private final int wavyProgressRow = rowId++;
     private final int chatHeaderSettingsRow = rowId++;
     private final int nonIslandTabBarsRow = rowId++;
     private final int nonIslandGlobalSearchRow = rowId++;
@@ -136,6 +137,9 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         items.add(UItem.asCheck(material3BottomNavigationBarRow, LocaleController.getString(R.string.BottomNavigationBar)).setChecked(NekoConfig.material3BottomNavigationBar).slug("material3BottomNavigationBar"));
         items.add(UItem.asCheck(md3FoldersRow, LocaleController.getString(R.string.Md3Folders)).setChecked(NekoConfig.md3Folders).slug("md3Folders"));
         items.add(InfoCheckCellFactory.of(loadingIndicatorsRow, LocaleController.getString(R.string.LoadingIndicators), NekoConfig.wavyEnabled, () -> showLoadingIndicatorsInfo()).slug("loadingIndicators"));
+        if (NekoConfig.wavyEnabled) {
+            items.add(UItem.asCheck(wavyProgressRow, LocaleController.getString(R.string.WavyProgressIndicator)).setChecked(NekoConfig.wavyProgressEnabled).slug("wavyProgress"));
+        }
         items.add(InfoCheckCellFactory.of(material3DialogsRow, LocaleController.getString(R.string.Material3Dialogs), NekoConfig.material3Dialogs, () -> showDialogsInfo()).slug("material3Dialogs"));
         items.add(TextSettingsCellFactory.of(avatarShapeRow, LocaleController.getString(R.string.Avatars), "›").slug("avatarShape"));
         items.add(UItem.asShadow(null));
@@ -342,6 +346,12 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
             NekoConfig.toggleWavyEnabled();
             if (view instanceof InfoCheckCell) {
                 ((InfoCheckCell) view).setChecked(NekoConfig.wavyEnabled);
+            }
+            listView.adapter.update(true);
+        } else if (id == wavyProgressRow) {
+            NekoConfig.toggleWavyProgressEnabled();
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.wavyProgressEnabled);
             }
         } else if (id == material3BottomNavigationBarRow) {
             NekoConfig.toggleMaterial3BottomNavigationBar();

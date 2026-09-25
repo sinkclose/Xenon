@@ -108,7 +108,7 @@ public class MediaActionDrawable extends Drawable {
             float cy = oval.centerY();
             float baseRadius = Math.min(oval.width(), oval.height()) / 2f;
 
-            float amplitude = baseRadius * 0.05f * wavyAmplitudeSmooth;
+            float amplitude = NekoConfig.wavyProgressEnabled ? baseRadius * 0.05f * wavyAmplitudeSmooth : 0f;
             int waves = 11;
             int steps = 180;
 
