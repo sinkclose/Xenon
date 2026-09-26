@@ -14,6 +14,7 @@ import org.telegram.messenger.BuildConfig;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
+import org.telegram.messenger.SharedConfig;
 import org.telegram.ui.ActionBar.Theme;
 
 import java.util.ArrayList;
@@ -920,6 +921,21 @@ public class NekoConfig {
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("progressiveFadeBlurOtherActivities", progressiveFadeBlurOtherActivities);
         editor.apply();
+    }
+
+    // Effective states: progressive/blurred fades are hard-gated on the master
+    // blur switch (SharedConfig.chatBlurEnabled covers the manual toggle, low-end
+    // devices and the power-saver preset). Config values are NOT modified here.
+    public static boolean blurredFadeViewEnabled() {
+        return blurredFadeView && SharedConfig.chatBlurEnabled();
+    }
+
+    public static boolean progressiveFadeBlurEnabled() {
+        return progressiveFadeBlur && SharedConfig.chatBlurEnabled();
+    }
+
+    public static boolean progressiveFadeBlurOtherActivitiesEnabled() {
+        return progressiveFadeBlurOtherActivities && progressiveFadeBlurEnabled();
     }
 
     public static void setAvatarPlacement(int placement) {

@@ -41,6 +41,12 @@ public class ProgressiveFadeBlurController {
             if (!continuousUpdating) {
                 return;
             }
+            if (!isEnabled()) {
+                // Master blur went off (toggle or power saver): stop the loop and
+                // fall back to the stock non-blurred fade. No repost, no capture.
+                syncState();
+                return;
+            }
             try {
                 parent.invalidate();
             } catch (Exception e) {
@@ -62,6 +68,12 @@ public class ProgressiveFadeBlurController {
         @Override
         public void run() {
             if (!continuousUpdating) {
+                return;
+            }
+            if (!isEnabled()) {
+                // Master blur went off (toggle or power saver): stop the loop and
+                // fall back to the stock non-blurred fade. No repost, no capture.
+                syncState();
                 return;
             }
             try {
@@ -151,8 +163,27 @@ public class ProgressiveFadeBlurController {
         this.dimEnabled = dimEnabled;
     }
 
+    private int fadeViewRequestedVisibility = View.VISIBLE;
+
+    public boolean isEnabled() {
+        return NekoConfig.progressiveFadeBlurOtherActivitiesEnabled();
+    }
+
+    // Applies the stock behavior when the master blur is off: loops stopped,
+    // blur fade hidden so the plain rect / header shadow path draws instead.
+    // Safe to call from any state; idempotent.
+    public void syncState() {
+        if (isEnabled()) {
+            fadeView.setVisibility(fadeViewRequestedVisibility);
+        } else {
+            stopContinuousUpdates();
+            fadeView.setVisibility(View.GONE);
+        }
+    }
+
     public void setFadeViewVisibility(int visibility) {
-        fadeView.setVisibility(visibility);
+        fadeViewRequestedVisibility = visibility;
+        fadeView.setVisibility(isEnabled() ? visibility : View.GONE);
     }
 
     public void setFlipped(boolean flipped) {
@@ -176,7 +207,7 @@ public class ProgressiveFadeBlurController {
             return;
         }
         continuousUpdating = true;
-        if (updateAtScreenRefreshRate && NekoConfig.progressiveFadeBlur) {
+        if (updateAtScreenRefreshRate && NekoConfig.progressiveFadeBlurEnabled()) {
             // Pre-"fix chatactivity lags" updating: drive redraws every frame so
             // the progressive fade never goes stale (e.g. folders swipe in the
             // chats menu). Only when progressive blur is enabled; otherwise the
@@ -222,13 +253,17 @@ public class ProgressiveFadeBlurController {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || source.inRecording() || SizeNotifierFrameLayout.drawingBlur) {
             return;
         }
+        syncState();
+        if (!isEnabled()) {
+            return;
+        }
         // When the only draw pass since the previous record is the fade-view redraw
         // scheduled by that record itself, the captured content is unchanged: skip
         // re-recording and do not invalidate again, so an idle screen stops rendering
         // instead of looping record -> redraw -> record at the display refresh rate.
         // Skipped when progressive blur is enabled: pre-"fix chatactivity lags"
         // behavior re-captures (throttled below) so no stale ghosts remain.
-        if (!NekoConfig.progressiveFadeBlur && drawCount == lastProcessedDrawCount) {
+        if (!NekoConfig.progressiveFadeBlurEnabled() && drawCount == lastProcessedDrawCount) {
             return;
         }
         final int fw = captureView.getWidth();

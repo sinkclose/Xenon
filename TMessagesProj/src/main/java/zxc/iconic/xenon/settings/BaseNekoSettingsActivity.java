@@ -25,9 +25,11 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.LiteMode;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.messenger.SharedConfig;
+import org.telegram.messenger.Utilities;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.ActionBarMenu;
 import org.telegram.ui.ActionBar.ActionBarMenuItem;
@@ -133,7 +135,7 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
 
             @Override
             public void drawBlurRect(Canvas canvas, float y, Rect rectTmp, Paint blurScrimPaint, boolean top) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurOtherActivities) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()) {
                     return;
                 }
                 if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || !SharedConfig.chatBlurEnabled() || iBlur3SourceGlassFrosted == null) {
@@ -214,7 +216,7 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
                 AndroidUtilities.rectTmp2.set(0, 0, getMeasuredWidth(), top);
                 blurScrimPaint.setColor(Theme.getColor(Theme.key_actionBarDefault, resourceProvider));
                 contentView.drawBlurRect(canvas, 0, AndroidUtilities.rectTmp2, blurScrimPaint, true);
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || !NekoConfig.progressiveFadeBlurOtherActivities) {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || !NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()) {
                     if (getParentLayout() != null) {
                         getParentLayout().drawHeaderShadow(canvas, top);
                     }
@@ -235,7 +237,7 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
 
         updateActionBarVisible(true, false);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && progressiveBlurEnabled() && NekoConfig.progressiveFadeBlurOtherActivities) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && progressiveBlurEnabled() && NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()) {
             progressiveFadeController = new ProgressiveFadeBlurController(contentView, listView, contentView.indexOfChild(actionBarBackground), () -> getThemedColor(Theme.key_windowBackgroundGray));
             progressiveFadeController.setFadeZoneTop(listView.getPaddingTop());
         }
@@ -361,6 +363,35 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
 
     protected boolean progressiveBlurEnabled() {
         return true;
+    }
+
+    // Re-applies the stock non-blurred fade immediately when the master blur
+    // switch changes (manual toggle or power saver), no re-enter needed.
+    protected void refreshFadeBlurState() {
+        if (progressiveFadeController != null) {
+            progressiveFadeController.syncState();
+            progressiveFadeController.invalidate();
+        }
+        if (listView != null) {
+            listView.invalidate();
+        }
+        if (contentView != null) {
+            contentView.invalidate();
+        }
+    }
+
+    private final Utilities.Callback<Boolean> onPowerSaverApplied = applied -> refreshFadeBlurState();
+
+    @Override
+    public void onBecomeFullyVisible() {
+        super.onBecomeFullyVisible();
+        LiteMode.addOnPowerSaverAppliedListener(onPowerSaverApplied);
+    }
+
+    @Override
+    public void onBecomeFullyHidden() {
+        super.onBecomeFullyHidden();
+        LiteMode.removeOnPowerSaverAppliedListener(onPowerSaverApplied);
     }
 
     protected void showRestartBulletin() {

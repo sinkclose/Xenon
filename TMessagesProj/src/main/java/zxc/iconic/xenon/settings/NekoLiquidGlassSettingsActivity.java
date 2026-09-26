@@ -280,6 +280,7 @@ public class NekoLiquidGlassSettingsActivity extends BaseNekoSettingsActivity {
             LiteMode.toggleFlag(LiteMode.FLAG_CHAT_BLUR);
             listView.adapter.update(true);
             listView.post(this::invalidatePreview);
+            refreshFadeBlurState();
         } else if (id == forceBlurLiquidGlassRow) {
             NekoConfig.toggleForceBlurLiquidGlass();
             if (view instanceof TextCheckCell) {

@@ -1024,7 +1024,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
         @Override
         public void drawBlurRect(Canvas canvas, float y, Rect rectTmp, Paint blurScrimPaint, boolean top) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurOtherActivities) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()) {
                 canvas.drawRect(rectTmp, blurScrimPaint);
                 return;
             }
@@ -1186,7 +1186,18 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             updateContextViewPosition();
             updateStoriesViewAlpha(storiesAlpha);
             if (progressiveFadeController != null) {
-                progressiveFadeController.setTopOffset(top);
+                if (!NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()) {
+                    // Master blur went off (toggle or power saver): hide the blur
+                    // fade and overlay so the stock rect / shadow path draws instead.
+                    progressiveFadeController.syncState();
+                    if (dialogsTopDimOverlay != null) {
+                        dialogsTopDimOverlay.setVisibility(View.GONE);
+                    }
+                } else {
+                    if (dialogsTopDimOverlay != null) {
+                        dialogsTopDimOverlay.setVisibility(searchIsShowed ? View.GONE : View.VISIBLE);
+                    }
+                    progressiveFadeController.setTopOffset(top);
                 // The list below is clipped at the header bottom (see drawChild),
                 // which can sit lower than the header views (e.g. stories), leaving
                 // a backdrop-less void that shows through as black. Extend the fade
@@ -1214,6 +1225,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     progressiveFadeController.setCaptureViews(capturePage, extra);
                 }
                 progressiveFadeController.invalidate();
+                }
             }
             super.dispatchDraw(canvas);
             drawHeaderShadow(canvas, top + actionBarHeight);
@@ -5537,7 +5549,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             final FrameLayout.LayoutParams layoutParams = LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT);
             contentView.addView(actionBar, layoutParams);
         //}
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurOtherActivities) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()) {
             progressiveFadeController = new ProgressiveFadeBlurController(contentView, viewPages[0], contentView.indexOfChild(searchTabsAndFiltersLayout), () -> getThemedColor(Theme.key_windowBackgroundGray));
             // In-drawable dimming stays off: the static theme-colored gradient
             // overlay below takes over that role (driven by the same dimming
@@ -14731,7 +14743,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
         // With the progressive fade the header zone is transparent, so a shadow
         // line under it would float over scrolling content. Hide it as well.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurOtherActivities) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()) {
             return;
         }
 
