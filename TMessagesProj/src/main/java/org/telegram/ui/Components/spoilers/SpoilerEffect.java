@@ -699,7 +699,13 @@ public class SpoilerEffect extends Drawable {
         if (v instanceof TextView && spoilersPool != null) {
             spoilersPool.clear();
         }
-        SpoilerHelper.linkNeighbors(spoilers);
+        // Neighbor linking (merge/snap for a continuous cover) only matters
+        // for the custom solid covers. In default mode every fragment draws
+        // the same shared tiling noise, so linking is visually a no-op —
+        // keep the stock path untouched instead of mutating bounds.
+        if (zxc.iconic.xenon.NekoConfig.textSpoilerMode != zxc.iconic.xenon.NekoConfig.TEXT_SPOILER_DEFAULT) {
+            SpoilerHelper.linkNeighbors(spoilers);
+        }
     }
 
     private static void addSpoilerRangesInternal(@Nullable View v, @NonNull Layout textLayout, int mostleft, int mostright, int start, int end, @Nullable Stack<SpoilerEffect> spoilersPool, List<SpoilerEffect> spoilers, ArrayList<QuoteSpan.Block> quoteBlocks) {

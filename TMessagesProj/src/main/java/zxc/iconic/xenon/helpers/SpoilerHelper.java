@@ -112,6 +112,12 @@ public class SpoilerHelper {
         int mode = getMediaSpoilerMode();
         if (mode == NekoConfig.MEDIA_SPOILER_TELEGRAM) return false;
 
+        // Stock redraws spoiler cells every frame (drawBlurredPhotoParticles
+        // ends with invalidate() to drive the shimmer loop). The static cover
+        // still needs that loop while anything underneath animates (photo
+        // fade-in, reveal, progress) — otherwise it pops in late and blinks.
+        cell.invalidate();
+
         var photoImage = cell.getPhotoImage();
         float left = photoImage.getImageX();
         float top = photoImage.getImageY();
