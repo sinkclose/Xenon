@@ -50,8 +50,16 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
     // the generated source from the samples setting (3..25, odd). Taps spread
     // with stride across the full radius: more samples = denser taps = no dots
     // at strong blur. Recompiled only when the sample count changes.
+    // Weights are Gaussian like before commit 087b0bf03 ("fix chatactivity
+    // lags maybee"): round kernel, no square halos. That commit replaced it
+    // with a 1D vertical loop whose `break` fired on the first tap whenever
+    // radius < 40px (0/0 = NaN = transparency), and the later 2D tent rewrite
+    // has a square base (squares grow with radius). Gaussian corners already
+    // fade to ~2%, so the support is effectively round; the center tap is 1.0,
+    // so totalWeight can never be 0.
     private static String buildProgressiveBlurShader(int samples) {
         final int h = Math.max(1, Math.min(12, samples / 2));
+        final double gaussK = 2.0 / (h * h);
         return
         "uniform shader inputTexture;\n" +
         "uniform float maxRadius;\n" +
@@ -79,12 +87,9 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
         "    half4 result = half4(0.0);\n" +
         "    float totalWeight = 0.0;\n" +
         "    for (int i = -" + h + "; i <= " + h + "; i++) {\n" +
-        "        float fi = float(i);\n" +
-        "        float wx = 1.0 - abs(fi) / " + (h + 1) + ".0;\n" +
         "        for (int j = -" + h + "; j <= " + h + "; j++) {\n" +
-        "            float fj = float(j);\n" +
-        "            float weight = wx * (1.0 - abs(fj) / " + (h + 1) + ".0);\n" +
-        "            float2 sc = clamp(coord + float2(fi * stride, fj * stride), float2(0.0, 0.0), texSize);\n" +
+        "            float weight = exp(-float(i * i + j * j) * " + gaussK + ");\n" +
+        "            float2 sc = clamp(coord + float2(float(i) * stride, float(j) * stride), float2(0.0, 0.0), texSize);\n" +
         "            result += inputTexture.eval(sc) * half4(weight);\n" +
         "            totalWeight += weight;\n" +
         "        }\n" +
