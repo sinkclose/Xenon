@@ -28,7 +28,6 @@ import android.os.Handler;
 import android.os.PowerManager;
 import android.os.SystemClock;
 import android.telephony.TelephonyManager;
-import android.text.TextUtils;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
@@ -445,19 +444,26 @@ public class ApplicationLoader extends Application {
     }
 
     public static void startPushService() {
-        if (NekoConfig.optimizedPushService || isFcmPushHealthy()) {
-            // FCM delivers pushes, keeping the process alive only wastes battery.
-            // Low-power mode: MTProto push connection only, no keep-alive service.
-            // Process can be killed by the OS. FCM wakes it up when a push arrives.
+        if (NekoConfig.optimizedPushService) {
+            // Opt-in low-power mode: MTProto push connection only, no keep-alive service.
+            // The process can be killed by the OS, FCM wakes it up when a push arrives.
+            if (BuildVars.LOGS_ENABLED) {
+                FileLog.d("push service: low-power mode (optimizedPushService)");
+            }
             stopPushServiceAndEnablePushConnection();
             return;
         }
+        // Default mode follows the user setting and the server app config
+        // (keep_alive_service / background_connection), like the official client.
         SharedPreferences preferences = MessagesController.getGlobalNotificationsSettings();
         boolean enabled;
         if (preferences.contains("pushService")) {
             enabled = preferences.getBoolean("pushService", true);
         } else {
             enabled = MessagesController.getMainSettings(UserConfig.selectedAccount).getBoolean("keepAliveService", false);
+        }
+        if (BuildVars.LOGS_ENABLED) {
+            FileLog.d("push service: keep-alive service " + (enabled ? "enabled" : "disabled"));
         }
         if (enabled) {
             try {
@@ -467,23 +473,6 @@ public class ApplicationLoader extends Application {
             }
         } else {
             applicationContext.stopService(new Intent(applicationContext, NotificationsService.class));
-        }
-    }
-
-    /**
-     * FCM token is issued and Play Services are available: the system will wake
-     * us up on incoming pushes, so the keep-alive service would only waste battery.
-     * Any "__...__" pushStringStatus value means registration failed or is pending.
-     */
-    private static boolean isFcmPushHealthy() {
-        try {
-            if (applicationLoaderInstance == null || !getPushProvider().hasServices()) {
-                return false;
-            }
-            String pushString = SharedConfig.pushString;
-            return !TextUtils.isEmpty(pushString) && !pushString.startsWith("__");
-        } catch (Throwable ignore) {
-            return false;
         }
     }
 

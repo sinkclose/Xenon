@@ -522,7 +522,7 @@
     <string name="EnablePushService">Фоновый сервис</string>
     <string name="EnablePushServiceDesc">Держать приложение активным в фоне для получения обновлений и сохранения удалённых сообщений</string>
     <string name="OptimizedPushService">Оптимизированный push-сервис</string>
-    <string name="OptimizedPushServiceDesc">Всегда использовать энергоэффективное push-соединение. Когда выключено, режим выбирается автоматически: экономичный пока работает push-регистрация, иначе фоновый сервис.</string>
+    <string name="OptimizedPushServiceDesc">Принудительно использовать энергоэффективное push-соединение вместо фонового сервиса. Включайте, только если push-уведомления приходят на этом устройстве стабильно.</string>
     <string name="ClearDatabase">Очистить базу данных</string>
     <string name="ClearDatabaseDesc">Удаляет все сохранённые удалённые сообщения и историю редактирований.</string>
     <string name="ClearDatabaseConfirm">Все сохранённые удалённые сообщения и история редактирований будут безвозвратно удалены. Продолжить?</string>

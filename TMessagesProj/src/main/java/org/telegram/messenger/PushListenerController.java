@@ -50,6 +50,9 @@ public class PushListenerController {
         Utilities.stageQueue.postRunnable(() -> {
             ConnectionsManager.setRegId(token, pushType, SharedConfig.pushStringStatus);
             if (token == null) {
+                // Token request failed: re-evaluate the push mode, so the keep-alive
+                // service can take over instead of silently losing notifications.
+                AndroidUtilities.runOnUIThread(ApplicationLoader::startPushService);
                 return;
             }
             boolean sendStat = false;
@@ -90,9 +93,8 @@ public class PushListenerController {
                     AndroidUtilities.runOnUIThread(() -> MessagesController.getInstance(currentAccount).registerForPush(pushType, token));
                 }
             }
-            // Token state changed (issued or failed): re-evaluate keep-alive service mode.
-            // Healthy FCM -> drop the battery-hungry service; failure -> fall back to it.
-            ApplicationLoader.startPushService();
+            // Token issued or changed: re-evaluate the push mode on the UI thread.
+            AndroidUtilities.runOnUIThread(ApplicationLoader::startPushService);
         });
     }
 
