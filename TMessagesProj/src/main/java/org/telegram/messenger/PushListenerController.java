@@ -52,6 +52,7 @@ public class PushListenerController {
             if (token == null) {
                 // Token request failed: re-evaluate the push mode, so the keep-alive
                 // service can take over instead of silently losing notifications.
+                SharedConfig.pushRegistrationFailed = true;
                 AndroidUtilities.runOnUIThread(ApplicationLoader::startPushService);
                 return;
             }
@@ -59,6 +60,12 @@ public class PushListenerController {
             if (SharedConfig.pushStringGetTimeStart != 0 && SharedConfig.pushStringGetTimeEnd != 0 && (!SharedConfig.pushStatSent || !TextUtils.equals(SharedConfig.pushString, token))) {
                 sendStat = true;
                 SharedConfig.pushStatSent = false;
+            }
+            if (!TextUtils.isEmpty(SharedConfig.pushString) && !TextUtils.equals(SharedConfig.pushString, token) && SharedConfig.pushDeliveryConfirmed) {
+                // A new token means a new Firebase installation: FCM has to prove
+                // delivery again before we rely on it alone.
+                SharedConfig.pushDeliveryConfirmed = false;
+                SharedConfig.saveConfig();
             }
             SharedConfig.pushString = token;
             SharedConfig.pushType = pushType;
@@ -93,8 +100,6 @@ public class PushListenerController {
                     AndroidUtilities.runOnUIThread(() -> MessagesController.getInstance(currentAccount).registerForPush(pushType, token));
                 }
             }
-            // Token issued or changed: re-evaluate the push mode on the UI thread.
-            AndroidUtilities.runOnUIThread(ApplicationLoader::startPushService);
         });
     }
 
@@ -102,6 +107,13 @@ public class PushListenerController {
         String tag = pushType == PUSH_TYPE_FIREBASE ? "FCM" : "HCM";
         if (BuildVars.LOGS_ENABLED) {
             FileLog.d(tag + " PRE START PROCESSING");
+        }
+        if (pushType == PUSH_TYPE_FIREBASE && !SharedConfig.pushDeliveryConfirmed) {
+            // An actual Telegram push arrived via FCM: delivery is proven, so the
+            // keep-alive service is no longer required for notifications.
+            SharedConfig.pushDeliveryConfirmed = true;
+            SharedConfig.saveConfig();
+            AndroidUtilities.runOnUIThread(ApplicationLoader::startPushService);
         }
         long receiveTime = SystemClock.elapsedRealtime();
         AndroidUtilities.runOnUIThread(() -> {

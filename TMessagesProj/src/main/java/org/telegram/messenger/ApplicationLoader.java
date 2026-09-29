@@ -457,10 +457,22 @@ public class ApplicationLoader extends Application {
         // (keep_alive_service / background_connection), like the official client.
         SharedPreferences preferences = MessagesController.getGlobalNotificationsSettings();
         boolean enabled;
-        if (preferences.contains("pushService")) {
+        final boolean userChoice = preferences.contains("pushService");
+        if (userChoice) {
             enabled = preferences.getBoolean("pushService", true);
         } else {
             enabled = MessagesController.getMainSettings(UserConfig.selectedAccount).getBoolean("keepAliveService", false);
+        }
+        if (!enabled && !userChoice && isFcmDeliveryUnavailable()) {
+            // The server has no accepted FCM token for this device, so FCM will never
+            // wake the app up once the process is killed. Keep the app alive and use
+            // the low-impact MTProto push connection instead, like the official client
+            // does with "Background connection" + "Keep-Alive service".
+            if (BuildVars.LOGS_ENABLED) {
+                FileLog.d("push service: FCM registration unavailable, keeping app alive");
+            }
+            enabled = true;
+            enablePushConnection();
         }
         if (BuildVars.LOGS_ENABLED) {
             FileLog.d("push service: keep-alive service " + (enabled ? "enabled" : "disabled"));
@@ -480,6 +492,36 @@ public class ApplicationLoader extends Application {
         try {
             applicationContext.stopService(new Intent(applicationContext, NotificationsService.class));
         } catch (Throwable ignore) {
+        }
+        for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+            if (UserConfig.getInstance(a).isClientActivated()) {
+                MessagesController.getNotificationsSettings(a).edit().putBoolean("pushConnection", true).apply();
+                ConnectionsManager.getInstance(a).setPushConnectionEnabled(true);
+            }
+        }
+    }
+
+    /**
+     * True when FCM cannot be trusted to wake the app up: no Google Play Services,
+     * the server refused the FCM token / the token could not be obtained, or FCM
+     * has not delivered a single push yet. In that state only the app's own MTProto
+     * connection can deliver notifications, so the keep-alive service must stay running.
+     */
+    private static boolean isFcmDeliveryUnavailable() {
+        try {
+            if (applicationLoaderInstance == null || !getPushProvider().hasServices()) {
+                return true;
+            }
+            return SharedConfig.pushRegistrationFailed || !SharedConfig.pushDeliveryConfirmed;
+        } catch (Throwable ignore) {
+            return false;
+        }
+    }
+
+    private static void enablePushConnection() {
+        SharedPreferences globalPreferences = MessagesController.getGlobalNotificationsSettings();
+        if (globalPreferences.contains("pushConnection") && !globalPreferences.getBoolean("pushConnection", true)) {
+            return;
         }
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
             if (UserConfig.getInstance(a).isClientActivated()) {
