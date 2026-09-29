@@ -38,8 +38,9 @@ Gradle injects these into `BuildConfig`. The small class `zxc.iconic.xenon.Extra
 
 If you use Firebase Cloud Messaging:
 
-1. In [Firebase Console](https://console.firebase.google.com/), create an Android app with application ID **`zxc.iconic.xenon`** (Xenon ships a single rolling stable build — no separate `.beta` suffix).  
-2. Enable Cloud Messaging and download `google-services.json` into the **`TMessagesProj`** module directory.
+1. In [Firebase Console](https://console.firebase.google.com/), create an Android app with application ID **`zxc.iconic.xenon`** (Xenon ships a single rolling stable build — no separate `.beta` suffix).
+2. Enable Cloud Messaging and download `google-services.json` into the **`TMessagesProj_App`** module directory (the `com.google.gms.google-services` plugin is applied to `:TMessagesProj_App`, so the file must live there and contain a `client` entry for the `APP_PACKAGE` from `gradle.properties`).
+3. On [my.telegram.org](https://my.telegram.org), in the settings of the app whose `apiId`/`apiHash` you build with, register the FCM credentials of this same Firebase project. Without this step the Telegram servers cannot deliver FCM pushes to your build: the device registers, but nothing arrives once the app is closed.
 
 ### 6. Compile
 
