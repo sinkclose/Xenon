@@ -139,15 +139,20 @@ public final class PluginSafeMode {
         }
 
         boolean pluginsActive = arePluginsActive();
+        // Blame plugins only with evidence: engine, LuaJ or Pine frames in the
+        // crashing stack. A crash in pure Telegram code with plugins merely
+        // installed must not disable them nor show a plugin-blaming sheet.
+        boolean pluginBlamed = pluginsActive && isPluginStackTrace(throwable);
 
         // Mark the crash. appCrashFlag is universal; pluginCrash is set only
-        // when plugins were active so the recovery sheet can disable + attribute
-        // them.
+        // when the stack actually implicates plugins, so the recovery sheet
+        // can attribute (and disable) them correctly.
         android.content.SharedPreferences.Editor ed = prefs.edit();
         ed.putBoolean(KEY_APP_CRASH_FLAG, true);
         ed.putLong(KEY_APP_CRASH_TIME, System.currentTimeMillis());
         ed.putBoolean("pluginsActiveLastTime", pluginsActive);
-        if (pluginsActive) {
+        ed.putBoolean("pluginBlamedLastTime", pluginBlamed);
+        if (pluginBlamed) {
             ed.putBoolean(KEY_CRASH_FLAG, true);
             ed.putLong(KEY_CRASH_TIME, System.currentTimeMillis());
         }
@@ -184,6 +189,7 @@ public final class PluginSafeMode {
                 .append(" (").append(Build.MODEL).append(")\n");
         sb.append("Plugins enabled: ").append(NekoConfig.pluginsEnabled).append("\n");
         sb.append("Plugins active: ").append(arePluginsActive()).append("\n");
+        sb.append("Plugin frames in stack: ").append(isPluginStackTrace(throwable)).append("\n");
         sb.append("\n--- Stack trace ---\n");
         if (throwable != null) {
             sb.append(LogExceptionToString(throwable));
@@ -191,6 +197,32 @@ public final class PluginSafeMode {
             sb.append("(no throwable)");
         }
         return sb.toString();
+    }
+
+    /**
+     * True if the throwable's stack (including causes) passes through the
+     * plugin engine, the LuaJ interpreter or Pine hooks — i.e. there is
+     * evidence a plugin participated in the crash. Pure Telegram crashes
+     * have none of these frames.
+     */
+    private static boolean isPluginStackTrace(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            StackTraceElement[] frames = current.getStackTrace();
+            if (frames != null) {
+                for (StackTraceElement frame : frames) {
+                    String cn = frame.getClassName();
+                    if (cn == null) continue;
+                    if (cn.startsWith("zxc.iconic.xenon.plugins.")
+                            || cn.startsWith("org.luaj.")
+                            || cn.startsWith("top.canyie.pine.")) {
+                        return true;
+                    }
+                }
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private static String LogExceptionToString(Throwable t) {
@@ -246,8 +278,12 @@ public final class PluginSafeMode {
     // Volume-key Safe Mode (cold launch)
     // ------------------------------------------------------------------
 
-    /** Set by onVolumeKeyDown during the launch window. */
+    /** Set when a volume key hold is CONFIRMED (repeats or long press). */
     private static volatile boolean volumeKeyHeldAtLaunch;
+    /** Down-time of the current volume press (uptime millis), 0 when released. */
+    private static volatile long volumeKeyDownTime;
+    /** Hold duration that counts as an intentional safe-mode gesture. */
+    private static final long VOLUME_HOLD_MS = 1200;
 
     /**
      * Incremented each time markBootStarted is called (once per process start).
@@ -260,14 +296,32 @@ public final class PluginSafeMode {
     private static volatile int lastConsumedBootSession = -1;
 
     /**
-     * Called from LaunchActivity.dispatchKeyEvent when a volume key goes down.
-     * Records the press — the flag is consumed by consumeVolumeKeySafeMode on
-     * the next onResume, but only once per boot session.
+     * Called from LaunchActivity.dispatchKeyEvent for volume key events.
+     * A single tap must NOT trigger Safe Mode — only a confirmed hold does:
+     * either key repeats (the system sends them for a held volume key) or a
+     * press still held down after {@link #VOLUME_HOLD_MS}. This stops normal
+     * volume adjustments in the first seconds after launch from disabling
+     * plugins and showing a bogus "Crashed!" sheet.
      */
-    public static void onVolumeKeyDown(int keyCode) {
-        if (keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP
-                || keyCode == android.view.KeyEvent.KEYCODE_VOLUME_DOWN) {
+    public static void onVolumeKeyEvent(android.view.KeyEvent event) {
+        if (event == null) return;
+        final int keyCode = event.getKeyCode();
+        if (keyCode != android.view.KeyEvent.KEYCODE_VOLUME_UP
+                && keyCode != android.view.KeyEvent.KEYCODE_VOLUME_DOWN) {
+            return;
+        }
+        if (event.getAction() == android.view.KeyEvent.ACTION_UP) {
+            volumeKeyDownTime = 0;
+            return;
+        }
+        if (event.getAction() != android.view.KeyEvent.ACTION_DOWN) {
+            return;
+        }
+        if (event.getRepeatCount() > 0) {
+            // Held key generates repeats — confirmed hold gesture.
             volumeKeyHeldAtLaunch = true;
+        } else if (volumeKeyDownTime == 0) {
+            volumeKeyDownTime = event.getDownTime();
         }
     }
 
@@ -290,11 +344,17 @@ public final class PluginSafeMode {
         }
         // Flag not set yet — key events may arrive after window gets focus
         // (dispatchKeyEvent can't fire before onResume completes and the
-        // window is focused). Schedule a delayed check to catch them.
+        // window is focused). Schedule a delayed check to catch them. Only a
+        // CONFIRMED hold triggers: repeats seen, or the key still down after
+        // VOLUME_HOLD_MS. A quick tap never fires this.
         final Activity act = activity;
         org.telegram.messenger.AndroidUtilities.runOnUIThread(() -> {
             if (volumeKeyHeldAtLaunch) {
                 volumeKeyHeldAtLaunch = false;
+                triggerSafeModeManual(act, "Volume key held at launch");
+            } else if (volumeKeyDownTime != 0
+                    && android.os.SystemClock.uptimeMillis() - volumeKeyDownTime >= VOLUME_HOLD_MS) {
+                volumeKeyDownTime = 0;
                 triggerSafeModeManual(act, "Volume key held at launch");
             }
         }, 2500);
@@ -317,7 +377,7 @@ public final class PluginSafeMode {
                     + "Plugins disabled by user (safe mode).\n");
             if (activity != null) {
                 org.telegram.messenger.AndroidUtilities.runOnUIThread(
-                        () -> showCrashSheet(activity, System.currentTimeMillis(), "safe", true, true), 500);
+                        () -> showCrashSheet(activity, System.currentTimeMillis(), "safe", true, true, false), 500);
             }
         } catch (Throwable t) {
             FileLog.e(t);
@@ -340,6 +400,7 @@ public final class PluginSafeMode {
         // (the first onResume) will trigger Safe Mode if any were detected.
         bootSessionId++;
         volumeKeyHeldAtLaunch = false;
+        volumeKeyDownTime = 0;
         Context ctx = ApplicationLoader.applicationContext;
         if (ctx == null) return;
         // CAPTURE the previous launch's state BEFORE we overwrite it with our
@@ -435,9 +496,12 @@ public final class PluginSafeMode {
             return;
         }
 
-        // Whether plugins were active during the failed launch — used to decide
-        // if we should disable plugins and whether the sheet should mention them.
+        // Whether plugins were installed during the failed launch, and whether
+        // the crash stack actually implicates them. Plugins are auto-disabled
+        // only with stack evidence — a crash in pure Telegram code leaves
+        // them alone.
         boolean pluginsActiveLastTime = prefs.getBoolean("pluginsActiveLastTime", false);
+        boolean pluginBlamed = crashed && prefs.getBoolean("pluginBlamedLastTime", false);
 
         // Prefer the explicit crash time; fall back to the boot time for hangs.
         long when = prefs.getLong(KEY_APP_CRASH_TIME, 0);
@@ -450,13 +514,19 @@ public final class PluginSafeMode {
 
         String reason = crashed ? "crash" : "hang";
 
-        // Only disable plugins if they were actually active — a crash/hang in
-        // pure Telegram code shouldn't blame (and disable) plugins. And only if
-        // automatic Safe Mode is enabled: when the user turns it off, plugins
+        // Only disable plugins if the crash stack implicates them — a crash/hang
+        // in pure Telegram code shouldn't blame (and disable) plugins. And only
+        // if automatic Safe Mode is enabled: when the user turns it off, plugins
         // stay enabled no matter what and Safe Mode must be started manually
         // (hold a volume button while the app is opening).
+        // NOTE: hangs carry no stack, so a hang with plugins installed still
+        // disables them — that's the Safe Mode purpose (boot clean).
         boolean disabledPlugins = false;
-        if (pluginsActiveLastTime && NekoConfig.pluginAutoSafeMode) {
+        boolean blameForSheet = pluginBlamed;
+        if (!crashed && hung && pluginsActiveLastTime) {
+            blameForSheet = true;
+        }
+        if (blameForSheet && NekoConfig.pluginAutoSafeMode) {
             try {
                 NekoConfig.pluginsEnabled = false;
                 ctx.getSharedPreferences("nekoconfig", Context.MODE_PRIVATE)
@@ -474,6 +544,7 @@ public final class PluginSafeMode {
         prefs.edit()
                 .putBoolean(KEY_APP_CRASH_FLAG, false)
                 .putBoolean(KEY_CRASH_FLAG, false)
+                .putBoolean("pluginBlamedLastTime", false)
                 .putBoolean(KEY_BOOT_FLAG, false)
                 .commit();
 
@@ -491,11 +562,12 @@ public final class PluginSafeMode {
         final String crashReason = reason;
         final boolean showPlugins = pluginsActiveLastTime;
         final boolean pluginsDisabled = disabledPlugins;
+        final boolean blamed = blameForSheet;
         org.telegram.messenger.AndroidUtilities.runOnUIThread(
-                () -> showCrashSheet(activity, crashTime, crashReason, showPlugins, pluginsDisabled), 800);
+                () -> showCrashSheet(activity, crashTime, crashReason, showPlugins, pluginsDisabled, blamed), 800);
     }
 
-    private static void showCrashSheet(Activity activity, long crashTime, String reason, boolean pluginsActive, boolean pluginsDisabled) {
+    private static void showCrashSheet(Activity activity, long crashTime, String reason, boolean pluginsActive, boolean pluginsDisabled, boolean pluginBlamed) {
         try {
             final String crashLog = readCrashLog();
             boolean isHang = "hang".equals(reason);
@@ -508,7 +580,8 @@ public final class PluginSafeMode {
 
             // Title
             TextView title = new TextView(activity);
-            title.setText(isHang ? "Failed to start" : "Crashed!");
+            boolean isSafeMode = "safe".equals(reason);
+            title.setText(isHang ? "Failed to start" : isSafeMode ? "Safe mode" : "Crashed!");
             title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
             title.setTypeface(org.telegram.messenger.AndroidUtilities.getTypeface("fonts/rmedium.ttf"));
             title.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
@@ -517,7 +590,11 @@ public final class PluginSafeMode {
 
             // Body
             TextView body = new TextView(activity);
-            if (isHang) {
+            if (isSafeMode) {
+                body.setText("Safe mode was started manually (volume key held at launch). "
+                        + "Plugins have been disabled. Re-enable them in Settings → Plugins "
+                        + "when you're ready.");
+            } else if (isHang) {
                 if (pluginsActive) {
                     if (pluginsDisabled) {
                         body.setText("The client failed to finish starting up last time — it most likely "
@@ -534,7 +611,7 @@ public final class PluginSafeMode {
                             + "hung or was killed. You can copy the log below to report it.");
                 }
             } else {
-                if (pluginsActive) {
+                if (pluginsActive && pluginBlamed) {
                     if (pluginsDisabled) {
                         body.setText("The client crashed on the previous launch. Plugins have been "
                                 + "disabled to keep things stable. If a plugin caused this, you can "
@@ -546,6 +623,10 @@ public final class PluginSafeMode {
                                 + "opening, or turn it off in Settings → Plugins. Copy the crash log "
                                 + "below if you want to report it.");
                     }
+                } else if (pluginsActive) {
+                    body.setText("The client crashed on the previous launch. The crash looks like "
+                            + "client code, not a plugin — plugins were left enabled. Copy the "
+                            + "crash log below if you want to report it.");
                 } else {
                     body.setText("The client crashed on the previous launch. You can copy the "
                             + "crash log below to report it.");
