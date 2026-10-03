@@ -2241,9 +2241,10 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
     @Override
     public void onFactorChanged(int id, float factor, float fraction, FactorAnimator callee) {
-        if (chatAvatarContainer != null && animatorAvatarContainerWidth.isAnimating()) {
-            // The centered pill width is animating (e.g. status text changed):
-            // re-layout every frame so title/subtitle track the live width and
+        if (chatAvatarContainer != null && (animatorAvatarContainerWidth.isAnimating() || animatorMenuItemsWidth.isAnimating() || animatorAvatarContainerHasAvatar.isAnimating() || animatorHasMenuItems.isAnimating())) {
+            // The centered pill width or its available space is animating
+            // (status text changed, menu items width or avatar presence morphed):
+            // re-layout every frame so avatar/title/subtitle track the live width and
             // stay glued to the screen center while the pill breathes around them.
             chatAvatarContainer.requestLayout();
         }

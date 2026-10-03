@@ -474,9 +474,9 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
             || child == titleTextLargerCopyView.get() || child == subtitleTextLargerCopyView.get();
         float searchFade = 1f;
         if ((avatarChild || textChild) && actionBar != null) {
-            final float searchFactor = actionBar.getSearchFactor();
-            if (searchFactor > 0f) {
-                searchFade = Math.max(0f, 1f - searchFactor);
+            final float hideFactor = Math.max(actionBar.getSearchFactor(), actionBar.getActionModeFactor());
+            if (hideFactor > 0f) {
+                searchFade = Math.max(0f, 1f - hideFactor);
             }
         }
         final boolean fadeChild = searchFade < 1f;
