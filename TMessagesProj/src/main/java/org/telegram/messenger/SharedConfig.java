@@ -210,6 +210,17 @@ public class SharedConfig {
     public static int pushType = PushListenerController.PUSH_TYPE_FIREBASE;
     public static String pushString = "";
     public static String pushStringStatus = "";
+    /**
+     * Set when the server refused the FCM token (or the token could not be obtained):
+     * in that state FCM will not wake the app up, so the keep-alive service is used.
+     */
+    public static volatile boolean pushRegistrationFailed;
+    /**
+     * Set once an FCM push has actually been delivered. Until then the app keeps the
+     * keep-alive service and the MTProto push connection, because FCM credentials of
+     * a third-party build are tied to its api_id and may not be configured at all.
+     */
+    public static volatile boolean pushDeliveryConfirmed;
     public static long pushStringGetTimeStart;
     public static long pushStringGetTimeEnd;
     public static boolean pushStatSent;
@@ -447,6 +458,7 @@ public class SharedConfig {
                 editor.putString("pushString2", pushString);
                 editor.putInt("pushType", pushType);
                 editor.putBoolean("pushStatSent", pushStatSent);
+                editor.putBoolean("pushDeliveryConfirmed", pushDeliveryConfirmed);
                 editor.putString("pushAuthKey", pushAuthKey != null ? Base64.encodeToString(pushAuthKey, Base64.DEFAULT) : "");
                 editor.putInt("lastLocalId", lastLocalId);
                 editor.putString("passportConfigJson", passportConfigJson);
@@ -526,6 +538,7 @@ public class SharedConfig {
             pushString = preferences.getString("pushString2", "");
             pushType = preferences.getInt("pushType", PushListenerController.PUSH_TYPE_FIREBASE);
             pushStatSent = preferences.getBoolean("pushStatSent", false);
+            pushDeliveryConfirmed = preferences.getBoolean("pushDeliveryConfirmed", false);
             passportConfigJson = preferences.getString("passportConfigJson", "");
             passportConfigHash = preferences.getInt("passportConfigHash", 0);
             storageCacheDir = preferences.getString("storageCacheDir", null);

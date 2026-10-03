@@ -45,28 +45,18 @@ public class WallpaperBitmapProvider {
         }
 
         if (drawable instanceof BitmapDrawable) {
-            final Bitmap rawBitmap = ((BitmapDrawable) drawable).getBitmap();
-            final Bitmap bitmap;
-            if (zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass
-                    && zxc.iconic.xenon.NekoConfig.advancedGlassWallpaperBlur) {
-                // Unified wallpaper blur: pre-blur the wallpaper with the same
-                // radius the glass content uses. We do this here on the CPU
-                // (stack blur) instead of a RenderNode GPU blur, because the
-                // previous GPU path recorded the wallpaper RenderNode from
-                // inside draw() and raced the render thread (flickering), and
-                // never re-recorded when the underlying bitmap changed (blur
-                // disappeared until the chat was reopened).
-                bitmap = getAdvancedBlurBitmap(rawBitmap);
-            } else {
-                bitmap = blurredFromBitmap.get(rawBitmap);
-            }
+            // Glass blur for the wallpaper layer lives on the GPU now
+            // (BlurredBackgroundSourceRenderNode records the sharp source and
+            // blurs it with a RenderEffect). The provider only prepares the
+            // stock frosted matte used by the action bar / status colors.
+            final Bitmap bitmap = blurredFromBitmap.get(((BitmapDrawable) drawable).getBitmap());
             sourceBitmap.setBitmap(bitmap);
             return sourceBitmap;
         }
 
         if (drawable instanceof ChatBackgroundDrawable) {
             ChatBackgroundDrawable chatDrawable = (ChatBackgroundDrawable) drawable;
-            return updateSourceFromBackgroundViewDrawable(chatDrawable.getDrawable(false));
+            return updateSourceFromBackgroundViewDrawable(chatDrawable.getFullDrawable());
         }
 
         if (drawable != null) {
@@ -76,15 +66,7 @@ public class WallpaperBitmapProvider {
             drawable.draw(canvas);
             drawable.setBounds(tmpRect);
             sourceBitmap.endRecording();
-            final Bitmap captured = sourceBitmap.getBitmap();
-            final Bitmap bitmap;
-            if (zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass
-                    && zxc.iconic.xenon.NekoConfig.advancedGlassWallpaperBlur) {
-                bitmap = getAdvancedBlurBitmap(captured);
-            } else {
-                bitmap = blurredFromBitmap.get(captured);
-            }
-            sourceBitmap.setBitmap(bitmap);
+            sourceBitmap.setBitmap(blurredFromBitmap.get(sourceBitmap.getBitmap()));
         }
 
         return sourceBitmap;
@@ -92,9 +74,10 @@ public class WallpaperBitmapProvider {
 
     /**
      * Same as {@link #updateSourceFromBackgroundViewDrawable} but keeps the raw
-     * (not pre-blurred) bitmap. Used for layers that must show clean wallpapers,
-     * e.g. the fade dim layer. Falls back to the blurred source for drawables
-     * without a direct bitmap.
+     * (not pre-blurred) bitmap. Used for the glass wallpaper layer (blurred on
+     * the GPU inside BlurredBackgroundSourceRenderNode) and for layers that
+     * must show clean wallpapers, e.g. the fade dim layer. Falls back to the
+     * blurred source for drawables without a direct bitmap.
      */
     public BlurredBackgroundSource updateSharpSourceFromBackgroundViewDrawable(
         Drawable drawable
@@ -122,7 +105,7 @@ public class WallpaperBitmapProvider {
 
         if (drawable instanceof ChatBackgroundDrawable) {
             ChatBackgroundDrawable chatDrawable = (ChatBackgroundDrawable) drawable;
-            return updateSharpSourceFromBackgroundViewDrawable(chatDrawable.getDrawable(false));
+            return updateSharpSourceFromBackgroundViewDrawable(chatDrawable.getFullDrawable());
         }
 
         return updateSourceFromBackgroundViewDrawable(drawable);
@@ -172,30 +155,6 @@ public class WallpaperBitmapProvider {
         sourceBitmapSharp.setParentSize(width, height, actionBarHeight);
     }
 
-    // Advanced/unified wallpaper blur cache. Memoised by (bitmap, generationId)
-    // like the stock cache. The radius it was generated with is tracked
-    // separately: when the user moves the advancedGlassBlur slider, the cache
-    // instance is dropped so the next updateSourceFromBackgroundViewDrawable
-    // call re-blurs with the new radius.
-    private int lastAdvancedBlurRadius = Integer.MIN_VALUE;
-    private BitmapMemoizedMetadata<Bitmap> blurredAdvancedFromBitmap =
-            new BitmapMemoizedMetadata<>(WallpaperBitmapProvider::blurBitmapAdvancedCurrent);
-
-    private Bitmap getAdvancedBlurBitmap(Bitmap bitmap) {
-        final int radius = zxc.iconic.xenon.NekoConfig.advancedGlassBlur;
-        if (radius != lastAdvancedBlurRadius) {
-            lastAdvancedBlurRadius = radius;
-            // Radius changed -> the memoised bitmap is stale. Rebuild the cache.
-            blurredAdvancedFromBitmap = new BitmapMemoizedMetadata<>(
-                    WallpaperBitmapProvider::blurBitmapAdvancedCurrent);
-        }
-        return blurredAdvancedFromBitmap.get(bitmap);
-    }
-
-    private static Bitmap blurBitmapAdvancedCurrent(Bitmap bitmap) {
-        return blurBitmapAdvanced(bitmap, zxc.iconic.xenon.NekoConfig.advancedGlassBlur);
-    }
-
     private static Bitmap blurBitmap(Bitmap bitmap) {
         if (bitmap == null || bitmap.isRecycled()) {
             return null;
@@ -203,33 +162,6 @@ public class WallpaperBitmapProvider {
 
         final float scale = Math.max(bitmap.getWidth() / 90f, bitmap.getHeight() / 120f);
         final Bitmap result = Utilities.stackBlurBitmapWithScaleFactor(bitmap, scale);
-        result.setHasAlpha(false);
-        return result;
-    }
-
-    private static Bitmap blurBitmapAdvanced(Bitmap bitmap, int radius) {
-        if (bitmap == null || bitmap.isRecycled()) {
-            return null;
-        }
-
-        // Match the look of messages blurred under glass: a modest 2x downscale
-        // (same as DownscaledRenderNode scale 2,2) keeps the wallpaper recognisable
-        // through the glass, and the stack-blur radius maps 1:1 to the
-        // advancedGlassBlur slider so the wallpaper and the glass content always
-        // share the same softness. The previous version used a huge downsample
-        // (up to 37x) which collapsed the wallpaper into a flat matte and hid it
-        // behind the glass.
-        final float clamped = Math.max(0, Math.min(40, radius));
-        final int blurRadius = Math.max(1, (int) Math.round(org.telegram.messenger.AndroidUtilities.dpf2(clamped)));
-        final int w = Math.max(1, bitmap.getWidth() / 2);
-        final int h = Math.max(1, bitmap.getHeight() / 2);
-        final Bitmap result = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-        final Canvas canvas = new Canvas(result);
-        canvas.save();
-        canvas.scale((float) w / bitmap.getWidth(), (float) h / bitmap.getHeight());
-        canvas.drawBitmap(bitmap, 0, 0, null);
-        canvas.restore();
-        org.telegram.messenger.Utilities.stackBlurBitmap(result, blurRadius);
         result.setHasAlpha(false);
         return result;
     }

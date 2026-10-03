@@ -8670,9 +8670,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
-        if (event.getAction() == android.view.KeyEvent.ACTION_DOWN && (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)) {
-            // Track volume key presses during launch for the Safe Mode gesture.
-            zxc.iconic.xenon.plugins.PluginSafeMode.onVolumeKeyDown(keyCode);
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+            // Track volume key holds during launch for the Safe Mode gesture
+            // (Safe Mode needs a confirmed hold — taps are ignored inside).
+            zxc.iconic.xenon.plugins.PluginSafeMode.onVolumeKeyEvent(event);
         }
         if (event.getKeyCode() == KeyEvent.KEYCODE_VOLUME_UP || event.getKeyCode() == KeyEvent.KEYCODE_VOLUME_DOWN) {
             BaseFragment baseFragment = getLastFragment();

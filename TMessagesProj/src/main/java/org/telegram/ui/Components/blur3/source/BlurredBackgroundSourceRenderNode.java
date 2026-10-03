@@ -144,6 +144,7 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
         this.fallbackSource = fallbackSource;
 
         renderNode = new RenderNode(null);
+        wallpaperNode = new RenderNode("WallpaperBlur");
     }
 
     public void setupRenderer(RenderNodeWithHash.Renderer renderer) {
@@ -167,6 +168,113 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
 
     public void setUnderSource(BlurredBackgroundSource underSource) {
         this.underSource = underSource;
+        wallpaperDirty = true;
+    }
+
+    // ------------------------------------------------------------------
+    // Glass wallpaper layer: the sharp wallpaper (underSource) is recorded
+    // into a half-size RenderNode once per content/size change and blurred
+    // on the GPU with the same radius the glass content uses. Recording
+    // happens here on explicit invalidation — never per-frame inside draw —
+    // so there is no race with the render thread and no UI-thread stackBlur.
+    // Screens that never call setWallpaperSize keep the legacy direct draw.
+    // ------------------------------------------------------------------
+
+    private final RenderNode wallpaperNode;
+    private int wallpaperParentW, wallpaperParentH;
+    private boolean wallpaperDirty = true;
+    private boolean wallpaperRecording;
+    private float wallpaperEffectRadius = -1f;
+    private boolean wallpaperEffectSaturated;
+
+    /** Parent-space size the wallpaper shader matrix is built for. */
+    public void setWallpaperSize(int width, int height) {
+        if (this.wallpaperParentW != width || this.wallpaperParentH != height) {
+            this.wallpaperParentW = width;
+            this.wallpaperParentH = height;
+            this.wallpaperDirty = true;
+        }
+    }
+
+    /** Re-record the wallpaper node on next draw (bitmap finished loading). */
+    public void invalidateWallpaper() {
+        wallpaperDirty = true;
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.S)
+    private void syncWallpaperEffect() {
+        // Mirror the glass-content blur from DownscaleScrollableNoiseSuppressor
+        // so wallpaper and messages share one softness (the Blur slider).
+        final boolean advanced = zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass;
+        final float full = org.telegram.messenger.AndroidUtilities.dpf2(
+                advanced
+                        ? Math.max(1f, zxc.iconic.xenon.NekoConfig.blurStrength / 3.75f)
+                        : zxc.iconic.xenon.NekoConfig.blurStrength / 3.75f);
+        final float radius = org.telegram.ui.Components.blur3.DownscaleScrollableNoiseSuppressor.downscaleRadius(full, 2);
+        if (radius == wallpaperEffectRadius && advanced == wallpaperEffectSaturated) {
+            return;
+        }
+        wallpaperEffectRadius = radius;
+        wallpaperEffectSaturated = advanced;
+        if (radius > 0) {
+            final android.graphics.RenderEffect blur = android.graphics.RenderEffect.createBlurEffect(
+                    radius, radius, android.graphics.Shader.TileMode.CLAMP);
+            wallpaperNode.setRenderEffect(!advanced
+                    ? android.graphics.RenderEffect.createChainEffect(blur,
+                            org.telegram.messenger.utils.RenderNodeEffects.getSaturationX1_25RenderEffect())
+                    : blur);
+        } else {
+            wallpaperNode.setRenderEffect(null);
+        }
+    }
+
+    private void recordWallpaperIfNeeded() {
+        if (!wallpaperDirty && wallpaperNode.hasDisplayList()) {
+            return;
+        }
+        if (underSource == null || underSource == this
+                || wallpaperParentW <= 0 || wallpaperParentH <= 0 || wallpaperRecording) {
+            return;
+        }
+        // Half resolution, same as the glass DownscaledRenderNode (scale 2,2):
+        // cheap to record, and the blur radius is converted accordingly.
+        final int rw = Math.max(1, wallpaperParentW / 2);
+        final int rh = Math.max(1, wallpaperParentH / 2);
+        wallpaperNode.setPosition(0, 0, rw, rh);
+        wallpaperRecording = true;
+        try {
+            final RecordingCanvas rc = wallpaperNode.beginRecording(rw, rh);
+            rc.scale((float) rw / wallpaperParentW, (float) rh / wallpaperParentH);
+            underSource.draw(rc, 0, 0, wallpaperParentW, wallpaperParentH);
+            wallpaperNode.endRecording();
+            wallpaperDirty = false;
+        } finally {
+            wallpaperRecording = false;
+        }
+    }
+
+    private void drawWallpaper(Canvas canvas, float left, float top, float right, float bottom) {
+        if (underSource == null) {
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && wallpaperParentW > 0 && wallpaperParentH > 0) {
+            syncWallpaperEffect();
+            recordWallpaperIfNeeded();
+            if (wallpaperNode.hasDisplayList()) {
+                canvas.save();
+                if (!noClip) {
+                    canvas.clipRect(left, top, right, bottom);
+                }
+                // The node holds parent-space wallpaper at half resolution,
+                // so 2x maps node pixels back onto the requested rect.
+                canvas.scale(2f, 2f);
+                canvas.drawRenderNode(wallpaperNode);
+                canvas.restore();
+                return;
+            }
+        }
+        // Size unknown (non-chat screens) or recording failed: legacy direct draw.
+        underSource.draw(canvas, left, top, right, bottom);
     }
 
     @RequiresApi(api = Build.VERSION_CODES.S)
@@ -251,15 +359,10 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
             throw new IllegalStateException();
         }
 
-        // Draw underSource (the chat wallpaper) directly. In advanced/unified
-        // wallpaper-blur mode the wallpaper is already stack-blurred in
-        // WallpaperBitmapProvider, so no GPU blur RenderNode is needed here.
-        // The previous per-frame GPU blur node raced the render thread
-        // (flickering) and never re-recorded when the underlying bitmap changed
-        // (blur disappeared until the chat was reopened).
-        if (underSource != null) {
-            underSource.draw(canvas, left, top, right, bottom);
-        }
+        // Wallpaper layer: sharp source recorded once into a half-size node
+        // and blurred on the GPU (see drawWallpaper). Steady-state draw()
+        // performs zero recording — no render-thread race, no CPU stackBlur.
+        drawWallpaper(canvas, left, top, right, bottom);
         canvas.save();
         if (!noClip) {
             canvas.clipRect(left, top, right, bottom);

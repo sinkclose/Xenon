@@ -53,6 +53,29 @@ public class ChatBackgroundDrawable extends Drawable {
     final TLRPC.WallPaper wallpaper;
     private boolean colorFilterSetted;
 
+    /**
+     * Fired when the full-resolution wallpaper image finishes loading inside
+     * the internal {@link ImageReceiver} (not just the striped thumb).
+     * Listeners (chat content views) re-derive their glass/frosted wallpaper
+     * sources from {@link #getFullDrawable()} here, so premium/per-chat
+     * wallpapers appear correctly without re-entering the chat.
+     */
+    public interface OnFullImageLoadedListener {
+        void onFullImageLoaded(ChatBackgroundDrawable drawable);
+    }
+
+    private final ArrayList<OnFullImageLoadedListener> fullImageLoadedListeners = new ArrayList<>();
+
+    public void addOnFullImageLoadedListener(OnFullImageLoadedListener listener) {
+        if (listener != null && !fullImageLoadedListeners.contains(listener)) {
+            fullImageLoadedListeners.add(listener);
+        }
+    }
+
+    public void removeOnFullImageLoadedListener(OnFullImageLoadedListener listener) {
+        fullImageLoadedListeners.remove(listener);
+    }
+
     public static Drawable getOrCreate(Drawable backgroundDrawable, TLRPC.WallPaper wallpaper, boolean themeIsDark) {
         if (backgroundDrawable instanceof ChatBackgroundDrawable) {
             ChatBackgroundDrawable chatBackgroundDrawable = (ChatBackgroundDrawable) backgroundDrawable;
@@ -92,6 +115,15 @@ public class ChatBackgroundDrawable extends Drawable {
 
     public ChatBackgroundDrawable(TLRPC.WallPaper wallPaper, boolean themeIsDark, boolean preview) {
         imageReceiver.setInvalidateAll(true);
+        imageReceiver.setDelegate((receiver, set, thumb, memCache) -> {
+            // thumb == true means only the placeholder/thumb was set.
+            // A full image arrival must refresh glass sources bound to this drawable.
+            if (set && !thumb && !fullImageLoadedListeners.isEmpty()) {
+                for (int i = 0; i < fullImageLoadedListeners.size(); i++) {
+                    fullImageLoadedListeners.get(i).onFullImageLoaded(this);
+                }
+            }
+        });
         isPattern = wallPaper.pattern;
         this.wallpaper = wallPaper;
         this.themeIsDark = themeIsDark;
@@ -111,6 +143,11 @@ public class ChatBackgroundDrawable extends Drawable {
                 motionBackgroundDrawable.setPatternBitmap(wallPaper.settings.intensity, result.bitmap);
                 if (parent != null) {
                     parent.invalidate();
+                }
+                if (!fullImageLoadedListeners.isEmpty()) {
+                    for (int i = 0; i < fullImageLoadedListeners.size(); i++) {
+                        fullImageLoadedListeners.get(i).onFullImageLoaded(this);
+                    }
                 }
             });
         } else {
@@ -284,6 +321,23 @@ public class ChatBackgroundDrawable extends Drawable {
         } else {
             return imageReceiver.getStaticThumb();
         }
+    }
+
+    /**
+     * Unlike {@link #getDrawable(boolean)}, prefers the fully loaded image
+     * over the striped thumb. Glass/frosted wallpaper sources must use this:
+     * the thumb is a low-quality placeholder, and after the full bitmap
+     * arrives {@code getDrawable(false)} would still keep returning the thumb.
+     */
+    public Drawable getFullDrawable() {
+        if (motionBackgroundDrawable != null) {
+            return motionBackgroundDrawable;
+        }
+        final Drawable loaded = imageReceiver.getDrawable();
+        if (loaded != null) {
+            return loaded;
+        }
+        return getDrawable(false);
     }
 
     public static String hash(TLRPC.WallPaperSettings settings) {

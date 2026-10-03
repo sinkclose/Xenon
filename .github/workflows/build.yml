@@ -120,7 +120,25 @@ jobs:
         run: |
           echo "twpicBotUsername=${{ secrets.TWPIC_BOT_USERNAME }}" >> local.properties
 
-          echo "${{ secrets.GOOGLE_SERVICES_JSON }}" | base64 --decode > TMessagesProj_App/google-services.json
+          # The google-services plugin is applied to :TMessagesProj_App, so the file
+          # must live in that module and contain a client entry for APP_PACKAGE,
+          # otherwise the build fails or FCM silently never delivers pushes.
+          APP_PACKAGE=$(grep -E '^APP_PACKAGE=' gradle.properties | cut -d= -f2)
+          if [ -n "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
+            echo "${{ secrets.GOOGLE_SERVICES_JSON }}" | base64 --decode > TMessagesProj_App/google-services.json
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "::warning::GOOGLE_SERVICES_JSON secret is not available for pull requests, using a placeholder (FCM will not work in this build)."
+            python3 -c 'import json; json.dump({"project_info": {"project_number": "100000000000", "project_id": "placeholder", "storage_bucket": "placeholder.appspot.com"}, "client": [{"client_info": {"mobilesdk_app_id": "1:100000000000:android:00000000000000001000000000000000", "android_client_info": {"package_name": "zxc.iconic.xenon"}}, "api_key": [{"current_key": "placeholder"}]}], "configuration_version": "1"}, open("TMessagesProj_App/google-services.json", "w"))'
+          else
+            echo "::error::GOOGLE_SERVICES_JSON secret is not set, cannot build an FCM-enabled APK."
+            exit 1
+          fi
+          python3 -c 'import json,sys
+          data=json.load(open("TMessagesProj_App/google-services.json",encoding="utf-8"))
+          pkgs=[c.get("client_info",{}).get("android_client_info",{}).get("package_name") for c in data.get("client",[])]
+          print(f"google-services.json packages: {pkgs}")
+          if sys.argv[1] not in pkgs:
+              sys.exit(f"::error::google-services.json has no client entry for {sys.argv[1]!r}; FCM pushes would silently break.")' "$APP_PACKAGE"
 
       - name: Build with Gradle (Debug)
         if: github.event_name == 'pull_request'

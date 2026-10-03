@@ -70,6 +70,24 @@ public class SizeNotifierFrameLayout extends FrameLayout implements Theme.Colora
     private Drawable oldBackgroundDrawable;
     private boolean oldBackgroundMotion;
 
+    // Refreshes glass/frosted wallpaper sources when the full-resolution
+    // image of a ChatBackgroundDrawable finishes loading asynchronously.
+    // Replaces polling on every invalidateSelf() with a single event.
+    private final org.telegram.ui.ChatBackgroundDrawable.OnFullImageLoadedListener wallpaperFullImageListener = drawable -> {
+        if (drawable == backgroundDrawable) {
+            onUpdateBackgroundDrawable(backgroundDrawable);
+        }
+    };
+
+    private void bindWallpaperListener(Drawable oldDrawable, Drawable newDrawable) {
+        if (oldDrawable instanceof org.telegram.ui.ChatBackgroundDrawable) {
+            ((org.telegram.ui.ChatBackgroundDrawable) oldDrawable).removeOnFullImageLoadedListener(wallpaperFullImageListener);
+        }
+        if (newDrawable instanceof org.telegram.ui.ChatBackgroundDrawable) {
+            ((org.telegram.ui.ChatBackgroundDrawable) newDrawable).addOnFullImageLoadedListener(wallpaperFullImageListener);
+        }
+    }
+
     protected int keyboardHeight;
     private int bottomClip;
     protected SizeNotifierFrameLayoutDelegate delegate;
@@ -184,6 +202,7 @@ public class SizeNotifierFrameLayout extends FrameLayout implements Theme.Colora
                     MotionBackgroundDrawable motionBackgroundDrawable = (MotionBackgroundDrawable) newDrawable;
                     motionBackgroundDrawable.setParentView(backgroundView);
                 }
+                bindWallpaperListener(backgroundDrawable, newDrawable);
                 backgroundDrawable = newDrawable;
                 if (attached && backgroundDrawable instanceof ChatBackgroundDrawable) {
                     ((ChatBackgroundDrawable) backgroundDrawable).onAttachedToWindow(this);
@@ -333,6 +352,7 @@ public class SizeNotifierFrameLayout extends FrameLayout implements Theme.Colora
                     if (attached && oldBackgroundDrawable instanceof MotionBackgroundDrawable) {
                         ((MotionBackgroundDrawable) oldBackgroundDrawable).onDetachedFromWindow();
                     }
+                    bindWallpaperListener(oldBackgroundDrawable, null);
                     oldBackgroundDrawable = null;
                     oldBackgroundMotion = false;
                     checkMotion();
@@ -375,6 +395,7 @@ public class SizeNotifierFrameLayout extends FrameLayout implements Theme.Colora
         if (attached && backgroundDrawable instanceof ChatBackgroundDrawable) {
             ((ChatBackgroundDrawable) backgroundDrawable).onDetachedFromWindow(backgroundView);
         }
+        bindWallpaperListener(backgroundDrawable, bitmap);
         backgroundDrawable = bitmap;
         if (attached && backgroundDrawable instanceof ChatBackgroundDrawable) {
             ((ChatBackgroundDrawable) backgroundDrawable).onAttachedToWindow(backgroundView);
@@ -603,23 +624,6 @@ public class SizeNotifierFrameLayout extends FrameLayout implements Theme.Colora
     @Override
     protected boolean verifyDrawable(Drawable who) {
         return who == getBackgroundImage() || super.verifyDrawable(who);
-    }
-
-    @Override
-    public void invalidateDrawable(@NonNull Drawable drawable) {
-        super.invalidateDrawable(drawable);
-        // Re-derive the glass blur source when a custom chat wallpaper finishes
-        // loading asynchronously. ChatBackgroundDrawable calls invalidateSelf()
-        // when its ImageReceiver delivers the bitmap; without this hook,
-        // navbarContentSourceWallpaper stays bound to a null-bitmap source and
-        // shows a frosted fallback until the user re-enters the chat.
-        // We only do this for ChatBackgroundDrawable — MotionBackgroundDrawable
-        // calls invalidateSelf() on every animation frame and must not trigger
-        // a wallpaper re-blur each time.
-        if (drawable == backgroundDrawable
-                && drawable instanceof org.telegram.ui.ChatBackgroundDrawable) {
-            onUpdateBackgroundDrawable(backgroundDrawable);
-        }
     }
 
     final BlurBackgroundTask blurBackgroundTask = new BlurBackgroundTask();

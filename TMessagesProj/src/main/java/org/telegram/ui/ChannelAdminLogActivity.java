@@ -184,6 +184,7 @@ import tw.nekomimi.nekogram.tlv.TlViewer;
 public class ChannelAdminLogActivity extends BaseFragment implements NotificationCenter.NotificationCenterDelegate {
     private final @NonNull BlurredBackgroundSourceWrapped navbarContentSourceWallpaper;
     private final @NonNull BlurredBackgroundDrawableViewFactory navbarContentDrawableFactory;
+    private final @NonNull BlurredBackgroundSourceWrapped navbarContentSourceWallpaperSharp;
 
     private final @Nullable BlurredBackgroundSourceRenderNode glassBackgroundSourceRenderNode;
     private final @Nullable BlurredBackgroundSourceRenderNode glassBackgroundSourceFrostedRenderNode;
@@ -349,6 +350,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
 
     public ChannelAdminLogActivity(TLRPC.Chat chat) {
         navbarContentSourceWallpaper = new BlurredBackgroundSourceWrapped();
+        navbarContentSourceWallpaperSharp = new BlurredBackgroundSourceWrapped();
         navbarContentDrawableFactory = new BlurredBackgroundDrawableViewFactory(navbarContentSourceWallpaper);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SharedConfig.chatBlurEnabled()) {
@@ -357,7 +359,8 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
             glassBackgroundSourceFrostedRenderNode = new BlurredBackgroundSourceRenderNode(navbarContentSourceWallpaper);
             glassBackgroundSourceFrostedRenderNode.setOnDrawablesRelativePositionChangeListener(this::invalidateMergedVisibleBlurredPositionsAndSourcesPositions);
             glassBackgroundSourceFrostedRenderNode.setScrollableNoiseSuppressor(scrollableViewNoiseSuppressor, DownscaleScrollableNoiseSuppressor.DRAW_FROSTED_GLASS);
-            glassBackgroundSourceFrostedRenderNode.setUnderSource(navbarContentSourceWallpaper);
+            // Glass samples the sharp wallpaper with a GPU blur (see ChatActivity).
+            glassBackgroundSourceFrostedRenderNode.setUnderSource(navbarContentSourceWallpaperSharp);
 
             glassBackgroundDrawableFactoryFrosted = new BlurredBackgroundDrawableViewFactory(glassBackgroundSourceFrostedRenderNode);
             glassBackgroundDrawableFactoryFrosted.setLiquidGlassEffectAllowed(true);
@@ -366,7 +369,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
                 glassBackgroundSourceRenderNode = new BlurredBackgroundSourceRenderNode(navbarContentSourceWallpaper);
                 glassBackgroundSourceRenderNode.setOnDrawablesRelativePositionChangeListener(this::invalidateMergedVisibleBlurredPositionsAndSourcesPositions);
                 glassBackgroundSourceRenderNode.setScrollableNoiseSuppressor(scrollableViewNoiseSuppressor, DownscaleScrollableNoiseSuppressor.DRAW_GLASS);
-                glassBackgroundSourceRenderNode.setUnderSource(navbarContentSourceWallpaper);
+                glassBackgroundSourceRenderNode.setUnderSource(navbarContentSourceWallpaperSharp);
                 glassBackgroundDrawableFactory = new BlurredBackgroundDrawableViewFactory(glassBackgroundSourceRenderNode);
                 glassBackgroundDrawableFactory.setLiquidGlassEffectAllowed(true);
                 recommendedAdditionalSizeY = 0;
@@ -1021,6 +1024,16 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
                     ((BlurredBackgroundSourceBitmap) navbarContentSourceWallpaper.getSource())
                         .setParentSize(widthSize, heightSize, 0);
                 }
+                if (navbarContentSourceWallpaperSharp.getSource() instanceof BlurredBackgroundSourceBitmap) {
+                    ((BlurredBackgroundSourceBitmap) navbarContentSourceWallpaperSharp.getSource())
+                        .setParentSize(widthSize, heightSize, 0);
+                }
+                if (glassBackgroundSourceFrostedRenderNode != null) {
+                    glassBackgroundSourceFrostedRenderNode.setWallpaperSize(widthSize, heightSize);
+                }
+                if (glassBackgroundSourceRenderNode != null) {
+                    glassBackgroundSourceRenderNode.setWallpaperSize(widthSize, heightSize);
+                }
 
                 setMeasuredDimension(widthSize, heightSize);
                 heightSize -= getPaddingTop();
@@ -1069,6 +1082,13 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
                 // shouldHaveLightNavigationBarIcons = isDark;
 
                 navbarContentSourceWallpaper.setSource(source);
+                navbarContentSourceWallpaperSharp.setSource(wallpaperBitmapProvider.updateSharpSourceFromBackgroundViewDrawable(drawable));
+                if (glassBackgroundSourceFrostedRenderNode != null) {
+                    glassBackgroundSourceFrostedRenderNode.invalidateWallpaper();
+                }
+                if (glassBackgroundSourceRenderNode != null) {
+                    glassBackgroundSourceRenderNode.invalidateWallpaper();
+                }
                 if (chatActivityFadeView != null) {
                     chatActivityFadeView.invalidate();
                 }

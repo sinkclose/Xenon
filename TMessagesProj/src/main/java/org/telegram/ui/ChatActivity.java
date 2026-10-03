@@ -450,7 +450,6 @@ public class ChatActivity extends BaseFragment implements
 
     private final @NonNull BlurredBackgroundSourceWrapped navbarContentSourceWallpaperSharp;
     private final @NonNull BlurredBackgroundDrawableViewFactory dimWallpaperDrawableFactory;
-    private Drawable lastWallpaperDrawable;
 
     private final @Nullable BlurredBackgroundSourceRenderNode fadeBlurSource;
     private final @Nullable BlurredBackgroundDrawableViewFactory fadeBlurFactory;
@@ -2925,7 +2924,10 @@ public class ChatActivity extends BaseFragment implements
             glassBackgroundSourceFrostedRenderNode = new BlurredBackgroundSourceRenderNode(navbarContentSourceWallpaper);
             glassBackgroundSourceFrostedRenderNode.setOnDrawablesRelativePositionChangeListener(this::invalidateMergedVisibleBlurredPositionsAndSourcesPositions);
             glassBackgroundSourceFrostedRenderNode.setScrollableNoiseSuppressor(scrollableViewNoiseSuppressor, DownscaleScrollableNoiseSuppressor.DRAW_FROSTED_GLASS);
-            glassBackgroundSourceFrostedRenderNode.setUnderSource(navbarContentSourceWallpaper);
+            // Glass samples the sharp wallpaper; its blur is applied on the GPU
+            // inside the node (same radius as the glass content). The blurred
+            // matte stays only as the software fallback and for the action bar.
+            glassBackgroundSourceFrostedRenderNode.setUnderSource(navbarContentSourceWallpaperSharp);
 
             glassBackgroundDrawableFactoryFrosted = new BlurredBackgroundDrawableViewFactory(glassBackgroundSourceFrostedRenderNode);
             glassBackgroundDrawableFactoryFrosted.setLiquidGlassEffectAllowed(!NonIslandHelper.chatElements());
@@ -2934,7 +2936,7 @@ public class ChatActivity extends BaseFragment implements
                 glassBackgroundSourceRenderNode = new BlurredBackgroundSourceRenderNode(navbarContentSourceWallpaper);
                 glassBackgroundSourceRenderNode.setOnDrawablesRelativePositionChangeListener(this::invalidateMergedVisibleBlurredPositionsAndSourcesPositions);
                 glassBackgroundSourceRenderNode.setScrollableNoiseSuppressor(scrollableViewNoiseSuppressor, DownscaleScrollableNoiseSuppressor.DRAW_GLASS);
-                glassBackgroundSourceRenderNode.setUnderSource(navbarContentSourceWallpaper);
+                glassBackgroundSourceRenderNode.setUnderSource(navbarContentSourceWallpaperSharp);
                 glassBackgroundDrawableFactory = new BlurredBackgroundDrawableViewFactory(glassBackgroundSourceRenderNode);
                 glassBackgroundDrawableFactory.setLiquidGlassEffectAllowed(!NonIslandHelper.chatElements());
             } else {
@@ -8906,6 +8908,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
                             }
                         };
                         container.chatActivity.navbarContentSourceWallpaper.setSource(navbarContentSourceWallpaper);
+                        container.chatActivity.navbarContentSourceWallpaperSharp.setSource(navbarContentSourceWallpaperSharp);
                         container.chatActivity.parentThemeDelegate = themeDelegate;
                         container.chatActivity.parentChatActivity = ChatActivity.this;
                         container.chatActivity.chatActivityDelegate = new ChatActivityDelegate() {
@@ -18682,6 +18685,15 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
             navbarContentSourceWallpaper.setSource(source);
             navbarContentSourceWallpaperSharp.setSource(wallpaperBitmapProvider.updateSharpSourceFromBackgroundViewDrawable(drawable));
+            // The wallpaper bitmap may have just finished loading (per-chat /
+            // premium wallpapers resolve asynchronously inside the same
+            // ChatBackgroundDrawable): re-record the GPU wallpaper layer.
+            if (glassBackgroundSourceFrostedRenderNode != null) {
+                glassBackgroundSourceFrostedRenderNode.invalidateWallpaper();
+            }
+            if (glassBackgroundSourceRenderNode != null) {
+                glassBackgroundSourceRenderNode.invalidateWallpaper();
+            }
             if (chatActivityFadeView != null) {
                 chatActivityFadeView.invalidate();
             }
@@ -19696,6 +19708,12 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             int heightSize = allHeight;
 
             wallpaperBitmapProvider.setParentSize(widthSize, heightSize, 0);
+            if (glassBackgroundSourceFrostedRenderNode != null) {
+                glassBackgroundSourceFrostedRenderNode.setWallpaperSize(widthSize, heightSize);
+            }
+            if (glassBackgroundSourceRenderNode != null) {
+                glassBackgroundSourceRenderNode.setWallpaperSize(widthSize, heightSize);
+            }
             if (lastWidth != widthSize) {
                 globalIgnoreLayout = false;
                 lastWidth = widthMeasureSpec;
@@ -50227,23 +50245,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (Color.alpha(wallpaperColor) < 255) {
             wallpaperColor = ColorUtils.setAlphaComponent(wallpaperColor, 255);
         }
-        // The background drawable instance may stay the same while the wallpaper
-        // image finishes loading inside it (first chat open), so refresh sources
-        // from the current drawable on every capture instead of relying only on
-        // onUpdateBackgroundDrawable. Both update calls are memoized/early-out
-        // when nothing changed.
-        final Drawable bgDrawable = contentView.getBackgroundImage();
-        if (bgDrawable != null && (bgDrawable != lastWallpaperDrawable || bgDrawable instanceof ChatBackgroundDrawable)) {
-            lastWallpaperDrawable = bgDrawable;
-            final BlurredBackgroundSource freshSource = wallpaperBitmapProvider.updateSourceFromBackgroundViewDrawable(bgDrawable);
-            if (freshSource != null) {
-                navbarContentSourceWallpaper.setSource(freshSource);
-            }
-            final BlurredBackgroundSource freshSharpSource = wallpaperBitmapProvider.updateSharpSourceFromBackgroundViewDrawable(bgDrawable);
-            if (freshSharpSource != null) {
-                navbarContentSourceWallpaperSharp.setSource(freshSharpSource);
-            }
-        }
+        // The fade snapshot re-resolves its wallpaper from the sources bound in
+        // onUpdateBackgroundDrawable (kept fresh by the wallpaper load event),
+        // so no per-capture source refresh is needed here.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurEnabled()) {
             final int pixelation = Math.max(2, NekoConfig.blurredFadePixelation);
             fadeBlurSource.setPixelation(pixelation);
