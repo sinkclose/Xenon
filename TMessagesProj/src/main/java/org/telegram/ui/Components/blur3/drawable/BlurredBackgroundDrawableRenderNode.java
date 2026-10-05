@@ -229,6 +229,7 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
             return;
         }
 
+        source.prepareToDraw();
         if (!renderNode.hasDisplayList()) {
             source.dispatchOnDrawablesRelativePositionChange();
             updateDisplayList();

@@ -4,7 +4,6 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.SystemClock;
-import android.view.Choreographer;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
@@ -28,33 +27,12 @@ public class ProgressiveFadeBlurController {
     private final BlurredBackgroundSourceRenderNode source;
     private final BlurredBackgroundSourceColor underSource;
     private final ChatActivityFadeView fadeView;
-    private final ViewGroup parent;
     private View captureView;
     private final List<View> additionalCaptureViews = new ArrayList<>();
     private boolean dimEnabled = true;
     private boolean flipped;
     private boolean continuousUpdating;
     private boolean updateAtScreenRefreshRate;
-    private final Choreographer.FrameCallback frameCallback = new Choreographer.FrameCallback() {
-        @Override
-        public void doFrame(long frameTimeNanos) {
-            if (!continuousUpdating) {
-                return;
-            }
-            if (!isEnabled()) {
-                // Master blur went off (toggle or power saver): stop the loop and
-                // fall back to the stock non-blurred fade. No repost, no capture.
-                syncState();
-                return;
-            }
-            try {
-                parent.invalidate();
-            } catch (Exception e) {
-                FileLog.e(e);
-            }
-            Choreographer.getInstance().postFrameCallback(this);
-        }
-    };
     private int drawCount;
     private int lastProcessedDrawCount = -1;
     private final ViewTreeObserver.OnPreDrawListener drawCountListener = new ViewTreeObserver.OnPreDrawListener() {
@@ -64,26 +42,25 @@ public class ProgressiveFadeBlurController {
             return true;
         }
     };
+    private boolean updatePending;
+    private boolean capturePending;
+    private long lastCaptureTransform;
     private final Runnable updateRunnable = new Runnable() {
         @Override
         public void run() {
-            if (!continuousUpdating) {
-                return;
-            }
-            if (!isEnabled()) {
-                // Master blur went off (toggle or power saver): stop the loop and
-                // fall back to the stock non-blurred fade. No repost, no capture.
-                syncState();
-                return;
-            }
-            try {
+            updatePending = false;
+            if (fadeView.isAttachedToWindow()) {
                 invalidate();
-            } catch (Exception e) {
-                FileLog.e(e);
             }
-            fadeView.postDelayed(this, Math.max(8, 1000 / Math.max(15, NekoConfig.progressiveFadeBlurRefreshRate)));
         }
     };
+
+    private void scheduleUpdate(long delay) {
+        if (!updatePending) {
+            updatePending = true;
+            fadeView.postDelayed(updateRunnable, Math.max(1, delay));
+        }
+    }
     private int fadeZoneTop;
     private int fadeZoneBottom;
     private int topOffset;
@@ -102,7 +79,6 @@ public class ProgressiveFadeBlurController {
 
     public ProgressiveFadeBlurController(ViewGroup parent, View captureView, int insertIndex, IntSupplier backgroundColorProvider) {
         this.backgroundColorProvider = backgroundColorProvider;
-        this.parent = parent;
         this.captureView = captureView;
         underSource = new BlurredBackgroundSourceColor();
         source = new BlurredBackgroundSourceRenderNode(null);
@@ -126,6 +102,7 @@ public class ProgressiveFadeBlurController {
 
             @Override
             public void onViewDetachedFromWindow(View v) {
+                stopContinuousUpdates();
                 if (v.getViewTreeObserver().isAlive()) {
                     v.getViewTreeObserver().removeOnPreDrawListener(drawCountListener);
                 }
@@ -207,27 +184,16 @@ public class ProgressiveFadeBlurController {
             return;
         }
         continuousUpdating = true;
-        if (updateAtScreenRefreshRate && NekoConfig.progressiveFadeBlurEnabled()) {
-            // Pre-"fix chatactivity lags" updating: drive redraws every frame so
-            // the progressive fade never goes stale (e.g. folders swipe in the
-            // chats menu). Only when progressive blur is enabled; otherwise the
-            // event-driven behavior below stays as is.
-            Choreographer.getInstance().removeFrameCallback(frameCallback);
-            Choreographer.getInstance().postFrameCallback(frameCallback);
-        } else if (!updateAtScreenRefreshRate) {
-            // In screen-refresh-rate mode with progressive off updates stay fully
-            // event-driven: captures are requested from real draw passes (see
-            // invalidate) and skip themselves when nothing on screen changes, so
-            // no continuous loop is needed.
-            fadeView.removeCallbacks(updateRunnable);
-            fadeView.post(updateRunnable);
-        }
+        // Real draw passes request captures. Never invalidate the parent every
+        // vsync: that kept idle lists and their blur filters rendering forever.
+        scheduleUpdate(1);
     }
 
     public void stopContinuousUpdates() {
         continuousUpdating = false;
         fadeView.removeCallbacks(updateRunnable);
-        Choreographer.getInstance().removeFrameCallback(frameCallback);
+        updatePending = false;
+        capturePending = false;
     }
 
     public void addCaptureView(View view) {
@@ -247,8 +213,6 @@ public class ProgressiveFadeBlurController {
         background = color;
     }
 
-    private long lastDebugLogTime;
-
     public void invalidate() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || source.inRecording() || SizeNotifierFrameLayout.drawingBlur) {
             return;
@@ -257,13 +221,14 @@ public class ProgressiveFadeBlurController {
         if (!isEnabled()) {
             return;
         }
-        // When the only draw pass since the previous record is the fade-view redraw
-        // scheduled by that record itself, the captured content is unchanged: skip
-        // re-recording and do not invalidate again, so an idle screen stops rendering
-        // instead of looping record -> redraw -> record at the display refresh rate.
-        // Skipped when progressive blur is enabled: pre-"fix chatactivity lags"
-        // behavior re-captures (throttled below) so no stale ghosts remain.
-        if (!NekoConfig.progressiveFadeBlurEnabled() && drawCount == lastProcessedDrawCount) {
+        // Ignore the redraw requested by our previous capture, unless the
+        // captured content itself is dirty (scrolling/animations can coincide).
+        final long transform = captureTransform();
+        boolean contentDirty = captureView.isDirty();
+        for (int i = 0; i < additionalCaptureViews.size(); i++) {
+            contentDirty |= additionalCaptureViews.get(i).isDirty();
+        }
+        if (!capturePending && drawCount == lastProcessedDrawCount && !contentDirty && transform == lastCaptureTransform) {
             return;
         }
         final int fw = captureView.getWidth();
@@ -272,9 +237,19 @@ public class ProgressiveFadeBlurController {
             return;
         }
         final long now = SystemClock.uptimeMillis();
-        if (now - lastUpdateTime < (updateAtScreenRefreshRate ? (long) AndroidUtilities.screenRefreshTime : 1000 / Math.max(15, NekoConfig.progressiveFadeBlurRefreshRate))) {
+        final long interval = Math.max(1, updateAtScreenRefreshRate
+                ? (long) Math.ceil(AndroidUtilities.screenRefreshTime)
+                : (long) Math.ceil(1000.0 / Math.max(15, NekoConfig.progressiveFadeBlurRefreshRate)));
+        final long remaining = interval - (now - lastUpdateTime);
+        if (remaining > 0) {
+            // Coalesce requests, but always capture the final scroll/animation
+            // state even if no further draw follows the rate-limited request.
+            capturePending = true;
+            scheduleUpdate(remaining);
             return;
         }
+        fadeView.removeCallbacks(updateRunnable);
+        updatePending = false;
         lastUpdateTime = now;
         final int color = backgroundColorProvider != null ? backgroundColorProvider.getAsInt() : background;
         if (color != lastBackgroundColor) {
@@ -287,7 +262,7 @@ public class ProgressiveFadeBlurController {
         source.setPixelation(pixelation);
         final float topFraction = fadeZoneTop > AndroidUtilities.dp(48) ? Math.min(1f, (fadeZoneTop - AndroidUtilities.dp(48)) / (float) fh) : 1f;
         final float bottomFraction = fadeZoneBottom > 0 ? Math.min(1f, fadeZoneBottom / (float) fh) : 0f;
-        source.setProgressiveBlur(AndroidUtilities.dpf2(NekoConfig.progressiveFadeBlurMaxRadius) / pixelation, fw / pixelation, fh / pixelation, topFraction, bottomFraction, NekoConfig.progressiveFadeBlurSamples);
+        source.setProgressiveBlur(AndroidUtilities.dpf2(NekoConfig.progressiveFadeBlurMaxRadius) / pixelation, Math.max(1, Math.round(fw / (float) pixelation)), Math.max(1, Math.round(fh / (float) pixelation)), topFraction, bottomFraction, NekoConfig.progressiveFadeBlurSamples);
         try {
             Canvas c = source.beginRecording(fw, fh);
             try {
@@ -305,32 +280,33 @@ public class ProgressiveFadeBlurController {
         fadeView.setDim(dimEnabled && NekoConfig.blurredFadeDimming ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
         // +1 accounts for the fade-view redraw this record schedules, so it is not
         // mistaken for a content change on the next draw pass.
+        capturePending = false;
+        lastCaptureTransform = transform;
         lastProcessedDrawCount = drawCount + 1;
         fadeView.invalidate();
-        // TEMP DEBUG: black fade investigation, remove after.
-        final long nowDbg = SystemClock.uptimeMillis();
-        if (nowDbg - lastDebugLogTime > 2000) {
-            lastDebugLogTime = nowDbg;
-            int childCount = captureView instanceof ViewGroup ? ((ViewGroup) captureView).getChildCount() : -1;
-            int listChildren = -1;
-            if (captureView instanceof ViewGroup) {
-                ViewGroup vg = (ViewGroup) captureView;
-                for (int i = 0; i < vg.getChildCount(); i++) {
-                    View ch = vg.getChildAt(i);
-                    if (ch instanceof androidx.recyclerview.widget.RecyclerView) {
-                        listChildren = ((androidx.recyclerview.widget.RecyclerView) ch).getChildCount();
-                    }
-                }
-            }
-            android.util.Log.d("ProgFadeDBG", "invalidate fw=" + fw + " fh=" + fh
-                + " fadeZoneTop=" + fadeZoneTop + " fadeZoneBottom=" + fadeZoneBottom + " topOffset=" + topOffset
-                + " color=" + Integer.toHexString(color) + " bg=" + Integer.toHexString(background)
-                + " capture=" + captureView.getWidth() + "x" + captureView.getHeight()
-                + " captureKids=" + childCount + " listKids=" + listChildren
-                + " extra=" + additionalCaptureViews.size()
-                + " dimEnabled=" + dimEnabled + " dimming=" + NekoConfig.blurredFadeDimming
-                + " strength=" + NekoConfig.blurredFadeDimStrength);
+    }
+
+    // RenderNode property animations (folder swipes) need not dirty the view's
+    // display list. Track their geometry as well as real draw passes.
+    private long captureTransform() {
+        long hash = viewTransform(captureView);
+        for (int i = 0; i < additionalCaptureViews.size(); i++) {
+            hash = hash * 31 + viewTransform(additionalCaptureViews.get(i));
         }
+        return hash;
+    }
+
+    private static long viewTransform(View view) {
+        long hash = System.identityHashCode(view);
+        hash = hash * 31 + view.getLeft();
+        hash = hash * 31 + view.getTop();
+        hash = hash * 31 + view.getWidth();
+        hash = hash * 31 + view.getHeight();
+        hash = hash * 31 + Float.floatToIntBits(view.getTranslationX());
+        hash = hash * 31 + Float.floatToIntBits(view.getTranslationY());
+        hash = hash * 31 + Float.floatToIntBits(view.getScaleX());
+        hash = hash * 31 + Float.floatToIntBits(view.getScaleY());
+        return hash;
     }
 
     private void drawCapturedView(Canvas c, View view) {

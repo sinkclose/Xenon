@@ -33,8 +33,15 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
     private boolean noClip;
     private float pixelationScale = 1f;
     private float lastBlurRadius = -1f;
+    private RenderEffect lastBlurEffect;
+    private boolean glassBlurEnabled;
+    private float standardGlassBlurRadius;
+    private RenderEffect standardGlassBlurEffect;
 
     private RuntimeShader progressiveShader;
+    private RuntimeShader progressiveVerticalShader;
+    private RenderEffect progressiveEffect;
+    private boolean progressiveEffectApplied;
     private boolean progressiveShaderFailed;
     private int progressiveShaderSamples = -1;
     private float progressiveMaxRadius = -1f;
@@ -44,67 +51,56 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
     private float progressiveFadeZoneBottomFraction = -1f;
     private int progressiveSamples = -1;
 
-    // Loop bounds must be compile-time constants in AGSL and there is no
-    // abs(int) overload plus dynamic break/continue is unsafe on some drivers
-    // (used to crash RuntimeShader creation), so the kernel size is baked into
-    // the generated source from the samples setting (3..25, odd). Taps spread
-    // with stride across the full radius: more samples = denser taps = no dots
-    // at strong blur. Recompiled only when the sample count changes.
-    // Weights are Gaussian like before commit 087b0bf03 ("fix chatactivity
-    // lags maybee"): round kernel, no square halos. That commit replaced it
-    // with a 1D vertical loop whose `break` fired on the first tap whenever
-    // radius < 40px (0/0 = NaN = transparency), and the later 2D tent rewrite
-    // has a square base (squares grow with radius). Gaussian corners already
-    // fade to ~2%, so the support is effectively round; the center tap is 1.0,
-    // so totalWeight can never be 0.
+    // Two materialized image-filter passes replace the N*N kernel with 2*N
+    // taps. Gaussian weights are normalized on the CPU only when quality changes;
+    // the GPU does no exp(), weight summation or division per pixel. For a varying
+    // radius this is a separable approximation: the vertical pass samples rows
+    // already blurred at their own radius, preserving a smooth progressive edge.
     private static String buildProgressiveBlurShader(int samples) {
         final int h = Math.max(1, Math.min(12, samples / 2));
         final double gaussK = 2.0 / (h * h);
-        return
-        "uniform shader inputTexture;\n" +
-        "uniform float maxRadius;\n" +
-        "uniform float textureWidth;\n" +
-        "uniform float textureHeight;\n" +
-        "uniform float fadeZoneTopFraction;\n" +
-        "uniform float fadeZoneBottomFraction;\n" +
-        "uniform int samples;\n" +
-        "\n" +
-        "half4 main(float2 coord) {\n" +
-        "    float t = coord.y / textureHeight;\n" +
-        "    float radius;\n" +
-        "    if (t < fadeZoneTopFraction) {\n" +
-        "        radius = maxRadius * (1.0 - t / fadeZoneTopFraction);\n" +
-        "    } else if (fadeZoneBottomFraction > 0.0 && t > 1.0 - fadeZoneBottomFraction) {\n" +
-        "        radius = maxRadius * ((t - (1.0 - fadeZoneBottomFraction)) / fadeZoneBottomFraction);\n" +
-        "    } else {\n" +
-        "        radius = 0.0;\n" +
-        "    }\n" +
-        "    if (radius < 0.5) {\n" +
-        "        return inputTexture.eval(coord);\n" +
-        "    }\n" +
-        "    float stride = radius / " + h + ".0;\n" +
-        "    float2 texSize = float2(textureWidth, textureHeight);\n" +
-        "    half4 result = half4(0.0);\n" +
-        "    float totalWeight = 0.0;\n" +
-        "    for (int i = -" + h + "; i <= " + h + "; i++) {\n" +
-        "        for (int j = -" + h + "; j <= " + h + "; j++) {\n" +
-        "            float weight = exp(-float(i * i + j * j) * " + gaussK + ");\n" +
-        "            float2 sc = clamp(coord + float2(float(i) * stride, float(j) * stride), float2(0.0, 0.0), texSize);\n" +
-        "            result += inputTexture.eval(sc) * half4(weight);\n" +
-        "            totalWeight += weight;\n" +
-        "        }\n" +
-        "    }\n" +
-        "    return result / half4(totalWeight);\n" +
-        "}";
+        double totalWeight = 0;
+        for (int i = -h; i <= h; i++) {
+            totalWeight += Math.exp(-i * i * gaussK);
+        }
+        StringBuilder shader = new StringBuilder(4096);
+        shader.append(
+                "uniform shader inputTexture;\n" +
+                "uniform float maxRadius;\n" +
+                "uniform float2 textureSize;\n" +
+                "uniform float2 direction;\n" +
+                "uniform float fadeZoneTopFraction;\n" +
+                "uniform float fadeZoneBottomFraction;\n" +
+                "half4 main(float2 coord) {\n" +
+                "    float t = coord.y / textureSize.y;\n" +
+                "    float radius = 0.0;\n" +
+                "    if (fadeZoneTopFraction > 0.0 && t < fadeZoneTopFraction) {\n" +
+                "        radius = maxRadius * (1.0 - t / fadeZoneTopFraction);\n" +
+                "    } else if (fadeZoneBottomFraction > 0.0 && t > 1.0 - fadeZoneBottomFraction) {\n" +
+                "        radius = maxRadius * ((t - (1.0 - fadeZoneBottomFraction)) / fadeZoneBottomFraction);\n" +
+                "    }\n" +
+                "    if (radius < 0.5) return inputTexture.eval(coord);\n" +
+                "    float2 step = direction * radius / " + h + ".0;\n" +
+                "    half4 result = half4(0.0);\n");
+        for (int i = -h; i <= h; i++) {
+            shader.append("    result += inputTexture.eval(clamp(coord + step * ")
+                    .append(i).append(".0, float2(0.5), textureSize - float2(0.5))) * ")
+                    .append((float) (Math.exp(-i * i * gaussK) / totalWeight)).append(";\n");
+        }
+        return shader.append("    return result;\n}").toString();
     }
 
     @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
     public void setProgressiveBlur(float maxRadius, int sourceWidth, int sourceHeight, float fadeZoneTopFraction, float fadeZoneBottomFraction, int samples) {
-        if (sourceHeight <= 0) return;
-        final float topFraction = fadeZoneTopFraction > 0f ? fadeZoneTopFraction : 1f;
+        if (sourceWidth <= 0 || sourceHeight <= 0) return;
+        final float topFraction = Math.max(0f, Math.min(1f, fadeZoneTopFraction));
         final float bottomFraction = Math.max(0f, Math.min(1f, fadeZoneBottomFraction));
+        if (maxRadius <= 0f || (topFraction == 0f && bottomFraction == 0f)) {
+            setBlur(0f);
+            return;
+        }
         final int sampleCount = Math.max(3, Math.min(25, samples | 1));
-        if (progressiveMaxRadius == maxRadius && progressiveWidth == sourceWidth && progressiveHeight == sourceHeight && progressiveFadeZoneTopFraction == topFraction && progressiveFadeZoneBottomFraction == bottomFraction && progressiveSamples == sampleCount) return;
+        if (progressiveEffectApplied && progressiveMaxRadius == maxRadius && progressiveWidth == sourceWidth && progressiveHeight == sourceHeight && progressiveFadeZoneTopFraction == topFraction && progressiveFadeZoneBottomFraction == bottomFraction && progressiveSamples == sampleCount) return;
         progressiveMaxRadius = maxRadius;
         progressiveWidth = sourceWidth;
         progressiveHeight = sourceHeight;
@@ -112,28 +108,43 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
         progressiveFadeZoneBottomFraction = bottomFraction;
         progressiveSamples = sampleCount;
         if (progressiveShaderFailed) {
+            setBlur(maxRadius);
             return;
         }
         if (progressiveShader == null || progressiveShaderSamples != sampleCount) {
             try {
-                progressiveShader = new RuntimeShader(buildProgressiveBlurShader(sampleCount));
+                final String shaderCode = buildProgressiveBlurShader(sampleCount);
+                progressiveShader = new RuntimeShader(shaderCode);
+                progressiveVerticalShader = new RuntimeShader(shaderCode);
+                progressiveShader.setFloatUniform("direction", 1f, 0f);
+                progressiveVerticalShader.setFloatUniform("direction", 0f, 1f);
                 progressiveShaderSamples = sampleCount;
             } catch (RuntimeException e) {
                 // A shader compile error must never crash the app (e.g. the
-                // abs(int) AGSL crash): fall back to unblurred rendering.
+                // abs(int) AGSL crash): fall back to the platform blur.
                 FileLog.e(e);
                 progressiveShaderFailed = true;
+                setBlur(maxRadius);
                 return;
             }
         }
-        progressiveShader.setFloatUniform("maxRadius", maxRadius);
-        progressiveShader.setFloatUniform("textureWidth", (float) sourceWidth);
-        progressiveShader.setFloatUniform("textureHeight", (float) sourceHeight);
-        progressiveShader.setFloatUniform("fadeZoneTopFraction", topFraction);
-        progressiveShader.setFloatUniform("fadeZoneBottomFraction", bottomFraction);
-        progressiveShader.setIntUniform("samples", sampleCount);
-        renderNode.setRenderEffect(RenderEffect.createRuntimeShaderEffect(progressiveShader, "inputTexture"));
+        updateProgressiveUniforms(progressiveShader, maxRadius, sourceWidth, sourceHeight, topFraction, bottomFraction);
+        updateProgressiveUniforms(progressiveVerticalShader, maxRadius, sourceWidth, sourceHeight, topFraction, bottomFraction);
+        // createChainEffect(outer, inner): rasterize horizontal first, then vertical.
+        progressiveEffect = RenderEffect.createChainEffect(
+                RenderEffect.createRuntimeShaderEffect(progressiveVerticalShader, "inputTexture"),
+                RenderEffect.createRuntimeShaderEffect(progressiveShader, "inputTexture"));
+        renderNode.setRenderEffect(progressiveEffect);
+        progressiveEffectApplied = true;
         lastBlurRadius = -1f;
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
+    private static void updateProgressiveUniforms(RuntimeShader shader, float radius, int width, int height, float top, float bottom) {
+        shader.setFloatUniform("maxRadius", radius);
+        shader.setFloatUniform("textureSize", (float) width, (float) height);
+        shader.setFloatUniform("fadeZoneTopFraction", top);
+        shader.setFloatUniform("fadeZoneBottomFraction", bottom);
     }
 
     public void setPixelation(float scale) {
@@ -207,9 +218,7 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
         // so wallpaper and messages share one softness (the Blur slider).
         final boolean advanced = zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass;
         final float full = org.telegram.messenger.AndroidUtilities.dpf2(
-                advanced
-                        ? Math.max(1f, zxc.iconic.xenon.NekoConfig.blurStrength / 3.75f)
-                        : zxc.iconic.xenon.NekoConfig.blurStrength / 3.75f);
+                zxc.iconic.xenon.NekoConfig.getGlassBlurRadiusDp());
         final float radius = org.telegram.ui.Components.blur3.DownscaleScrollableNoiseSuppressor.downscaleRadius(full, 2);
         if (radius == wallpaperEffectRadius && advanced == wallpaperEffectSaturated) {
             return;
@@ -279,18 +288,55 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
 
     @RequiresApi(api = Build.VERSION_CODES.S)
     public void setBlur(float radius) {
-        if (lastBlurRadius != radius) {
-            lastBlurRadius = radius;
-            renderNode.setRenderEffect(radius > 0 ? RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP) : null);
-        }
+        setBlur(radius, null);
     }
 
     @RequiresApi(api = Build.VERSION_CODES.S)
     public void setBlur(float radius, RenderEffect effect) {
-        renderNode.setRenderEffect(RenderEffect.createChainEffect(RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP), effect));
+        if (lastBlurRadius == radius && lastBlurEffect == effect) return;
+        progressiveEffectApplied = false;
+        lastBlurRadius = radius;
+        lastBlurEffect = effect;
+        RenderEffect result = radius > 0 ? RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP) : null;
+        if (effect != null) {
+            result = result != null ? RenderEffect.createChainEffect(result, effect) : effect;
+        }
+        renderNode.setRenderEffect(result);
     }
 
+    /** Keep advanced glass in sync with the slider, preserving the standard style. */
+    @RequiresApi(api = Build.VERSION_CODES.S)
+    public void setGlassBlur(float standardRadius) {
+        setGlassBlur(standardRadius, null);
+    }
 
+    @RequiresApi(api = Build.VERSION_CODES.S)
+    public void setGlassBlur(float standardRadius, RenderEffect standardEffect) {
+        glassBlurEnabled = true;
+        standardGlassBlurRadius = standardRadius;
+        standardGlassBlurEffect = standardEffect;
+        syncGlassBlur();
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.S)
+    private void syncGlassBlur() {
+        if (zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass) {
+            setBlur(org.telegram.messenger.AndroidUtilities.dpf2(
+                    zxc.iconic.xenon.NekoConfig.getGlassBlurRadiusDp()));
+        } else {
+            setBlur(standardGlassBlurRadius, standardGlassBlurEffect);
+        }
+    }
+
+    @Override
+    public void prepareToDraw() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (glassBlurEnabled) syncGlassBlur();
+            if (underSource != null && wallpaperParentW > 0 && wallpaperParentH > 0) {
+                syncWallpaperEffect();
+            }
+        }
+    }
 
     public void noClip() {
         this.noClip = true;
@@ -362,6 +408,7 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
         // Wallpaper layer: sharp source recorded once into a half-size node
         // and blurred on the GPU (see drawWallpaper). Steady-state draw()
         // performs zero recording — no render-thread race, no CPU stackBlur.
+        prepareToDraw();
         drawWallpaper(canvas, left, top, right, bottom);
         canvas.save();
         if (!noClip) {

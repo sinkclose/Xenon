@@ -299,7 +299,7 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
                     Canvas c = wallpaperRenderSource.beginRecording(getMeasuredWidth(), getMeasuredHeight());
                     recorded = drawWallpaperInto(c);
                     wallpaperRenderSource.endRecording();
-                    wallpaperRenderSource.setBlur(AndroidUtilities.dpf2(8f));
+                    wallpaperRenderSource.setGlassBlur(AndroidUtilities.dpf2(8f));
                 } else if (wallpaperBitmapSource != null) {
                     Canvas c = wallpaperBitmapSource.beginRecording(getMeasuredWidth(), getMeasuredHeight());
                     recorded = drawWallpaperInto(c);

@@ -50132,6 +50132,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
     private long lastFadeBlurUpdateTime;
     private boolean fadeBlurContinuousUpdating;
+    private boolean fadeBlurCapturePending;
     private int lastFadeBlurCaptureDrawCount;
     private final Choreographer.FrameCallback fadeBlurFrameCallback = new Choreographer.FrameCallback() {
         @Override
@@ -50146,17 +50147,10 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 stopFadeBlurContinuousUpdates();
                 return;
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurEnabled()) {
-                // Pre-"fix chatactivity lags" updating for the progressive fade
-                // only: re-capture continuously (rate-limited inside
-                // invalidateFadeBlur by progressiveFadeBlurRefreshRate), so no
-                // stale ghosts remain. Glass throttling is untouched.
-                invalidateFadeBlur();
-            } else if (fadeBlurCaptureView == null || fadeBlurCaptureView.getPreDrawCount() != lastFadeBlurCaptureDrawCount) {
-                // Re-capture only when the view tree actually redrew since the previous
-                // capture. When nothing on screen changes the recorded blur snapshot is
-                // still valid, so the chat must not be forced to render at the display
-                // refresh rate forever.
+            if (fadeBlurCapturePending || fadeBlurCaptureView == null || fadeBlurCaptureView.getPreDrawCount() != lastFadeBlurCaptureDrawCount
+                    || (chatListView != null && chatListView.isDirty())) {
+                // Only real content changes need a new snapshot; ignore the
+                // redraw caused by the previous blur capture itself.
                 invalidateFadeBlur();
             }
             Choreographer.getInstance().postFrameCallback(this);
@@ -50173,6 +50167,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
     private void stopFadeBlurContinuousUpdates() {
         fadeBlurContinuousUpdating = false;
+        fadeBlurCapturePending = false;
         Choreographer.getInstance().removeFrameCallback(fadeBlurFrameCallback);
     }
 
@@ -50181,10 +50176,12 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurEnabled()) {
                 final long now = SystemClock.uptimeMillis();
                 if (now - lastFadeBlurUpdateTime < 1000 / Math.max(15, NekoConfig.progressiveFadeBlurRefreshRate)) {
+                    fadeBlurCapturePending = true;
                     return;
                 }
                 lastFadeBlurUpdateTime = now;
             }
+            fadeBlurCapturePending = false;
             fadeBlurCaptureView.invalidate(1);
         }
     }
@@ -50255,16 +50252,21 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             float topFraction = fadeZoneTop > dp(48) ? Math.min(1f, (fadeZoneTop - dp(48)) / (float) fh) : 1f;
             int fadeZoneBottom = chatActivityFadeView.getFadeZoneBottom();
             float bottomFraction = fadeZoneBottom > 0 ? Math.min(1f, fadeZoneBottom / (float) fh) : 1f;
-            fadeBlurSource.setProgressiveBlur(AndroidUtilities.dpf2(NekoConfig.progressiveFadeBlurMaxRadius) / pixelation, fw / pixelation, fh / pixelation, topFraction, bottomFraction, NekoConfig.progressiveFadeBlurSamples);
+            fadeBlurSource.setProgressiveBlur(AndroidUtilities.dpf2(NekoConfig.progressiveFadeBlurMaxRadius) / pixelation, Math.max(1, Math.round(fw / (float) pixelation)), Math.max(1, Math.round(fh / (float) pixelation)), topFraction, bottomFraction, NekoConfig.progressiveFadeBlurSamples);
         } else {
             fadeBlurSource.setBlur(AndroidUtilities.dpf2(NekoConfig.blurredFadeBlurStrength));
             fadeBlurSource.setPixelation(NekoConfig.blurredFadePixelation);
         }
         Canvas c = fadeBlurSource.beginRecording(fw, fh);
-        c.drawColor(wallpaperColor);
-        navbarContentSourceWallpaper.draw(c, 0, 0, fw, fh);
-        contentView.drawList(c, fadeBlurCaptureRect);
-        fadeBlurSource.endRecording();
+        try {
+            c.drawColor(wallpaperColor);
+            navbarContentSourceWallpaper.draw(c, 0, 0, fw, fh);
+            contentView.drawList(c, fadeBlurCaptureRect);
+        } finally {
+            fadeBlurSource.endRecording();
+        }
+        // Ignore the extra draw scheduled by the fade invalidation below.
+        lastFadeBlurCaptureDrawCount = fadeBlurCaptureView.getPreDrawCount() + 1;
         chatActivityFadeView.setDimColor(wallpaperColor);
         chatActivityFadeView.setDim(NekoConfig.blurredFadeDimming ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
         chatActivityFadeView.invalidate();

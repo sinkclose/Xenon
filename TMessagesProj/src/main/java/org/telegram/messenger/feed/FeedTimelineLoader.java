@@ -406,7 +406,7 @@ final class FeedTimelineLoader {
         sb.append(" AND mid ");
         sb.append(inclusive ? op + "=" : op);
         sb.append(cursor.mid);
-        sb.append(')');
+        sb.append("))");
     }
 
     private static int compareDesc(Cursor a, Cursor b) {

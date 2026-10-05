@@ -2420,9 +2420,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
 
         // 4. Set blur radius from glass config.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            glassSource.setBlur(zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass
-                    ? (float) dp(Math.max(1, zxc.iconic.xenon.NekoConfig.advancedGlassBlur))
-                    : (float) dp(8));
+            glassSource.setGlassBlur((float) dp(8));
         }
 
         // 5. Create the drawable and enable AGSL liquid glass effect.

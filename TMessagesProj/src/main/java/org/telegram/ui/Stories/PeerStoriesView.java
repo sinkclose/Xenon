@@ -546,7 +546,7 @@ public class PeerStoriesView extends SizeNotifierFrameLayout implements Notifica
         blurredBackgroundSourceFallback.setColor(ColorUtils.blendARGB(Color.BLACK, Color.WHITE, 0.2f));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SharedConfig.canBlurChat()) {
             blurredBackgroundSourceRenderNodeWithSaturation = new BlurredBackgroundSourceRenderNode(blurredBackgroundSourceFallback);
-            blurredBackgroundSourceRenderNodeWithSaturation.setBlur(dp(8));
+            blurredBackgroundSourceRenderNodeWithSaturation.setGlassBlur(dp(8));
             blurredBackgroundSourceWithSaturation = blurredBackgroundSourceRenderNodeWithSaturation;
         } else {
             blurredBackgroundSourceRenderNodeWithSaturation = null;

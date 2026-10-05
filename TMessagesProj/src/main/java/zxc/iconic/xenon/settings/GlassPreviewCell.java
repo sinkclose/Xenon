@@ -115,9 +115,7 @@ public class GlassPreviewCell extends View {
         if (renderNodeSource == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
         // Advanced glass: apply the blur-slider value so the preview matches the chat.
         // Standard liquid glass: frosted backing blur (8 dp).
-        renderNodeSource.setBlur(NekoConfig.useAdvancedLiquidGlass
-                ? dpf2(Math.max(1f, NekoConfig.blurStrength / 3.75f))
-                : dpf2(8f));
+        renderNodeSource.setGlassBlur(dpf2(8f));
         if (glassDrawable instanceof BlurredBackgroundDrawableRenderNode) {
             ((BlurredBackgroundDrawableRenderNode) glassDrawable).invalidateDisplayList();
         }

@@ -132,6 +132,10 @@ public class DownscaleScrollableNoiseSuppressor {
         }
 
         public void setPrimaryEffectBlur(float radius) {
+            if (radius <= 0) {
+                setPrimaryEffect(null);
+                return;
+            }
             final float downsampledRadiusX = downscaleRadius(radius, scaleX);
             final float downsampledRadiusY = downscaleRadius(radius, scaleY);
             setPrimaryEffect(RenderEffect.createBlurEffect(
@@ -142,6 +146,10 @@ public class DownscaleScrollableNoiseSuppressor {
         }
 
         public void setPrimaryEffectBlur(float radius, RenderEffect secondEffect) {
+            if (radius <= 0) {
+                setPrimaryEffect(secondEffect);
+                return;
+            }
             final float downsampledRadiusX = downscaleRadius(radius, scaleX);
             final float downsampledRadiusY = downscaleRadius(radius, scaleY);
 
@@ -269,6 +277,7 @@ public class DownscaleScrollableNoiseSuppressor {
     }
 
     public static float downscaleRadius(float radius, float scale) {
+        if (radius <= 0) return 0;
         return Math.max(1, convertSigmaToRadius(convertRadiusToSigma(radius) / scale));
     }
 
@@ -414,10 +423,10 @@ public class DownscaleScrollableNoiseSuppressor {
                     // artifact and the per-pixel texture-read explosion from multi-tap shader sampling.
                     // No saturation boost: the shader receives the real scene, not a frosted matte.
                     renderNodesForGlass.setScale(2, 2);
-                    renderNodesForGlass.setPrimaryEffectBlur(dpf2(Math.max(1f, zxc.iconic.xenon.NekoConfig.blurStrength / 3.75f)));
+                    renderNodesForGlass.setPrimaryEffectBlur(dpf2(zxc.iconic.xenon.NekoConfig.getGlassBlurRadiusDp()));
                 } else {
                     renderNodesForGlass.setScale(2, 2);
-                    renderNodesForGlass.setPrimaryEffectBlur(dpf2(zxc.iconic.xenon.NekoConfig.blurStrength / 3.75f), RenderNodeEffects.getSaturationX1_25RenderEffect());
+                    renderNodesForGlass.setPrimaryEffectBlur(dpf2(zxc.iconic.xenon.NekoConfig.getGlassBlurRadiusDp()), RenderNodeEffects.getSaturationX1_25RenderEffect());
                 }
                 renderNodesForBlur = new DownscaledRenderNode("blur", 0);
                 renderNodesForBlur.setScale(8, 8);
@@ -448,9 +457,9 @@ public class DownscaleScrollableNoiseSuppressor {
             // Sync glass blur with the Blur strength slider on every redraw.
             if (renderNodesForGlass != null) {
                 if (zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass) {
-                    renderNodesForGlass.setPrimaryEffectBlur(dpf2(Math.max(1f, zxc.iconic.xenon.NekoConfig.blurStrength / 3.75f)));
+                    renderNodesForGlass.setPrimaryEffectBlur(dpf2(zxc.iconic.xenon.NekoConfig.getGlassBlurRadiusDp()));
                 } else {
-                    renderNodesForGlass.setPrimaryEffectBlur(dpf2(zxc.iconic.xenon.NekoConfig.blurStrength / 3.75f), RenderNodeEffects.getSaturationX1_25RenderEffect());
+                    renderNodesForGlass.setPrimaryEffectBlur(dpf2(zxc.iconic.xenon.NekoConfig.getGlassBlurRadiusDp()), RenderNodeEffects.getSaturationX1_25RenderEffect());
                 }
                 renderNodesForGlass.invalidateRenderNodes(renderNode);
                 renderNodesForBlur.invalidateRenderNodes(renderNodesForGlass.renderNodeRestored[0]);

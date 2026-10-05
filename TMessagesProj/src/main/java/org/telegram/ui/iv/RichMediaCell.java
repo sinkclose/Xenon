@@ -150,7 +150,7 @@ public class RichMediaCell extends RichBlockCell
 
         if (glass && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             blurSource = new BlurredBackgroundSourceRenderNode(new BlurredBackgroundSourceColor());
-            blurSource.setBlur(dp(24));
+            blurSource.setGlassBlur(dp(24));
             blurColors = new BlurredBackgroundColorProvider() {
                 @Override public int getShadowColor() { return 0; }
                 @Override public int getBackgroundColor() { return 0x66000000; }
