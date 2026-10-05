@@ -39,6 +39,19 @@ public class ProgressiveFadeBlurController {
         @Override
         public boolean onPreDraw() {
             drawCount++;
+            if (continuousUpdating) {
+                // HWUI can refresh child display lists without calling the
+                // parent's dispatchDraw. Preserve changes before that draw
+                // clears the dirty flags, then capture after the traversal.
+                boolean contentDirty = captureView.isDirty();
+                for (int i = 0; i < additionalCaptureViews.size(); i++) {
+                    contentDirty |= additionalCaptureViews.get(i).isDirty();
+                }
+                if (contentDirty || captureTransform() != lastCaptureTransform) {
+                    capturePending = true;
+                    scheduleUpdate(1);
+                }
+            }
             return true;
         }
     };
