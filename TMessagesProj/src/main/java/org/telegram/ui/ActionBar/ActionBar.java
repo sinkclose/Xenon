@@ -2368,7 +2368,8 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
                 + p + dp(3);
             chatPillWidth = width;
             chatAvatarContainer.setTranslationX(containerTrans);
-            chatAvatarContainer.setAvatarOffset(textOnlyPill ? -containerTrans : 0);
+            final boolean separateAvatar = textOnlyPill || chatAvatarContainer.getAvatarPlacement() == zxc.iconic.xenon.NekoConfig.AVATAR_PLACEMENT_RIGHT;
+            chatAvatarContainer.setAvatarOffset(separateAvatar ? -containerTrans : 0);
             if (!animatorAvatarContainerWidth.isAnimating() && chatPillWidth != lastContainerLayoutPillWidth) {
                 chatAvatarContainer.requestLayout();
             }

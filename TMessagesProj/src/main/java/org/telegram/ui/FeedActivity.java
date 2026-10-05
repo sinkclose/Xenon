@@ -261,13 +261,20 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
 
     public /* synthetic */ WindowInsetsCompat lambda$createView$1(View view, WindowInsetsCompat windowInsetsCompat) {
         this.lastWindowInsets = windowInsetsCompat;
-        int iDp = hasMainTabs ? AndroidUtilities.dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
+        int iDp = hasMainTabs ? AndroidUtilities.dp(zxc.iconic.xenon.helpers.MainTabsUiHelper.getTabsViewHeightDp()) : 0;
         if (iDp == 0) {
             return windowInsetsCompat;
         }
         Insets insets = windowInsetsCompat.getInsets(WindowInsetsCompat.Type.systemBars());
         Insets insets2 = windowInsetsCompat.getInsets(WindowInsetsCompat.Type.navigationBars());
-        return new WindowInsetsCompat.Builder(windowInsetsCompat).setInsets(WindowInsetsCompat.Type.systemBars(), Insets.of(insets.left, insets.top, insets.right, insets.bottom + iDp)).setInsets(WindowInsetsCompat.Type.navigationBars(), Insets.of(insets2.left, insets2.top, insets2.right, insets2.bottom + iDp)).build();
+        Insets stableNavigationInsets = windowInsetsCompat.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.navigationBars());
+        // The chat's animated bottom inset reads ignoring-visibility values.
+        // Update those as well so both the list and page-down button clear tabs.
+        return new WindowInsetsCompat.Builder(windowInsetsCompat)
+                .setInsets(WindowInsetsCompat.Type.systemBars(), Insets.of(insets.left, insets.top, insets.right, insets.bottom + iDp))
+                .setInsets(WindowInsetsCompat.Type.navigationBars(), Insets.of(insets2.left, insets2.top, insets2.right, insets2.bottom + iDp))
+                .setInsetsIgnoringVisibility(WindowInsetsCompat.Type.navigationBars(), Insets.of(stableNavigationInsets.left, stableNavigationInsets.top, stableNavigationInsets.right, stableNavigationInsets.bottom + iDp))
+                .build();
     }
 
     @Override // org.telegram.ui.ActionBar.BaseFragment
