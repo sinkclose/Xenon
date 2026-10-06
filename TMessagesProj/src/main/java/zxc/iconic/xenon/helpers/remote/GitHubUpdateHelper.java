@@ -86,34 +86,7 @@ public class GitHubUpdateHelper {
         new Thread(() -> {
             String result;
             try {
-                String base = BuildConfig.GIT_COMMIT_HASH;
-                String head = getReleaseCommit(release);
-                if (base == null || !base.matches("[0-9a-fA-F]{40}")
-                        || !head.matches("[0-9a-fA-F]{7,40}")) {
-                    throw new Exception("Build commit is unavailable");
-                }
-                StringBuilder text = new StringBuilder();
-                int received = 0;
-                for (int page = 1; ; page++) {
-                    String endpoint = "https://api.github.com/repos/sinkclose/Xenon/compare/"
-                            + base + "..." + head + "?per_page=100&page=" + page;
-                    com.google.gson.JsonObject comparison = fetchJson(endpoint);
-                    com.google.gson.JsonArray commits = comparison.getAsJsonArray("commits");
-                    if (page == 1 && "diverged".equals(comparison.get("status").getAsString())) {
-                        text.append("Changes on the target branch:\n\n");
-                    }
-                    for (com.google.gson.JsonElement element : commits) {
-                        com.google.gson.JsonObject commit = element.getAsJsonObject();
-                        String sha = commit.get("sha").getAsString();
-                        String message = commit.getAsJsonObject("commit").get("message").getAsString();
-                        if (received++ > 0) text.append("\n\n");
-                        text.append(sha.substring(0, Math.min(7, sha.length())))
-                                .append(": ").append(message.split("\n", 2)[0]);
-                    }
-                    if (received >= comparison.get("total_commits").getAsInt()) break;
-                    if (commits.size() == 0) throw new Exception("Incomplete commit history");
-                }
-                result = received > 0 ? text.toString() : getChangelogFallback(release);
+                result = fetchChangelog(BuildConfig.GIT_COMMIT_HASH, getReleaseCommit(release));
                 release.changelog = result;
             } catch (Exception e) {
                 FileLog.e("Update commit history unavailable", e);
@@ -122,6 +95,51 @@ public class GitHubUpdateHelper {
             String text = result;
             AndroidUtilities.runOnUIThread(() -> callback.accept(text));
         }, "XenonUpdateCommits").start();
+    }
+
+    private static String fetchChangelog(String base, String head) throws Exception {
+        if (base == null || !base.matches("[0-9a-fA-F]{7,40}")
+                || head == null || head.isEmpty()) {
+            throw new Exception("Build commit is unavailable");
+        }
+        // Resolve release tags and short hashes once, so every page uses the
+        // same APK commit even if another release is published during loading.
+        if (!head.matches("[0-9a-fA-F]{40}")) {
+            String ref = java.net.URLEncoder.encode(head, "UTF-8");
+            head = fetchJson("https://api.github.com/repos/sinkclose/Xenon/commits/" + ref)
+                    .get("sha").getAsString();
+        }
+        if (!head.matches("[0-9a-fA-F]{40}")) {
+            throw new Exception("Release commit is unavailable");
+        }
+        StringBuilder text = new StringBuilder();
+        java.util.HashSet<String> seen = new java.util.HashSet<>();
+        int total = -1;
+        for (int page = 1; ; page++) {
+            String endpoint = "https://api.github.com/repos/sinkclose/Xenon/compare/"
+                    + base + "..." + head + "?per_page=100&page=" + page;
+            com.google.gson.JsonObject comparison = fetchJson(endpoint);
+            com.google.gson.JsonArray commits = comparison.getAsJsonArray("commits");
+            if (page == 1) {
+                total = comparison.get("total_commits").getAsInt();
+                if ("diverged".equals(comparison.get("status").getAsString())) {
+                    text.append("Changes on the target branch:\n\n");
+                }
+            }
+            int before = seen.size();
+            for (com.google.gson.JsonElement element : commits) {
+                com.google.gson.JsonObject commit = element.getAsJsonObject();
+                String sha = commit.get("sha").getAsString();
+                if (!seen.add(sha)) continue;
+                String message = commit.getAsJsonObject("commit").get("message").getAsString();
+                if (seen.size() > 1) text.append("\n\n");
+                text.append(sha.substring(0, Math.min(7, sha.length())))
+                        .append(": ").append(message.split("\n", 2)[0]);
+            }
+            if (seen.size() >= total) break;
+            if (seen.size() == before) throw new Exception("Incomplete commit history");
+        }
+        return seen.isEmpty() ? "No new commits in this build." : text.toString();
     }
 
     private static com.google.gson.JsonObject fetchJson(String endpoint) throws Exception {

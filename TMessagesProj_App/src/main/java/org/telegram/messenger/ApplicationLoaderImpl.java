@@ -322,7 +322,7 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
         TLRPC.TL_help_appUpdate info = new TLRPC.TL_help_appUpdate();
         GitHubUpdateHelper.GitHubRelease release = pendingRelease;
         info.version = !TextUtils.isEmpty(release.name) ? release.name : release.tagName;
-        info.text = GitHubUpdateHelper.getChangelogFallback(release);
+        info.text = release.changelog != null ? release.changelog : LocaleController.getString(R.string.Loading);
         info.url = pendingApkUrl;
         info.flags |= 4;
         UpdateAppAlertDialog dialog = new UpdateAppAlertDialog(context, info, account);
