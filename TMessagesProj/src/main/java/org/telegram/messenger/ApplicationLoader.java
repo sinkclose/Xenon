@@ -857,7 +857,26 @@ public class ApplicationLoader extends Application {
     public void downloadUpdate() {}
     public void downloadUpdate(Runnable onComplete) {}
     public void downloadUpdate(String apkUrl, Runnable onComplete) {}
+    public void setGitHubUpdate(zxc.iconic.xenon.helpers.remote.GitHubUpdateHelper.GitHubRelease release) {}
+    public void showUpdateDownload(Context context, int account) {}
+    protected Activity getUpdateActivity() { return org.telegram.ui.LaunchActivity.instance; }
+    protected void retryUpdateCheck(boolean force) {
+        if (org.telegram.ui.LaunchActivity.instance != null) {
+            org.telegram.ui.LaunchActivity.instance.checkAppUpdate(true, null);
+        } else {
+            checkUpdate(force, null);
+        }
+    }
+    private final java.util.concurrent.CopyOnWriteArrayList<Runnable> updateDownloadListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
+    public void addUpdateDownloadListener(Runnable listener) { updateDownloadListeners.addIfAbsent(listener); }
+    public void removeUpdateDownloadListener(Runnable listener) { updateDownloadListeners.remove(listener); }
+    protected void notifyUpdateDownloadChanged() {
+        AndroidUtilities.runOnUIThread(() -> {
+            for (Runnable listener : updateDownloadListeners) listener.run();
+        });
+    }
     public void cancelDownloadingUpdate() {}
+    public boolean deleteDownloadedUpdateFile() { return false; }
     public boolean isDownloadingUpdate() {
         return false;
     }
@@ -871,6 +890,7 @@ public class ApplicationLoader extends Application {
     public BetaUpdate getUpdate() {
         return null;
     }
+    public String getUpdateCheckError() { return null; }
     public File getDownloadedUpdateFile() {
         return null;
     }

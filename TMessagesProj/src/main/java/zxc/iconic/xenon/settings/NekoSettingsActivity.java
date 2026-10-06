@@ -256,8 +256,8 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
             var activity = getParentActivity();
             if (activity == null) return;
             var impl = ApplicationLoader.applicationLoaderInstance;
-            if (impl != null && impl.isDownloadingUpdate()) {
-                showDownloadProgress(activity, impl);
+            if (impl != null && (impl.isDownloadingUpdate() || impl.getDownloadedUpdateFile() != null)) {
+                impl.showUpdateDownload(activity, currentAccount);
                 return;
             }
             var spinner = new org.telegram.ui.ActionBar.AlertDialog(activity, org.telegram.ui.ActionBar.AlertDialog.ALERT_TYPE_SPINNER);
@@ -267,147 +267,11 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
                 @Override
                 public void onUpdateAvailable(zxc.iconic.xenon.helpers.remote.GitHubUpdateHelper.GitHubRelease release) {
                     try { spinner.dismiss(); } catch (Throwable ignored) {}
-                    String apkUrl = zxc.iconic.xenon.helpers.remote.GitHubUpdateHelper.findApkDownloadUrl(release);
-                    if (apkUrl == null) {
-                        BulletinFactory.of(NekoSettingsActivity.this).createErrorBulletin("No arm64 build available").show();
-                        return;
-                    }
-                    String title = release.name != null ? release.name : release.tagName;
-                    var impl = ApplicationLoader.applicationLoaderInstance;
-                    if (NekoConfig.autoDownloadUpdate) {
-                        final Bulletin[] progBulletin = new Bulletin[1];
-                        AndroidUtilities.runOnUIThread(() -> {
-                            try {
-                                Bulletin b = BulletinFactory.global()
-                                        .createSimpleBulletin(R.raw.ic_download, LocaleController.getString(R.string.DownloadingUpdate) + NekoConfig.getChannelLabel(), LocaleController.getString(R.string.Cancel), Integer.MAX_VALUE, () -> impl.cancelDownloadingUpdate());
-                                if (b.getLayout() instanceof Bulletin.LottieLayout) {
-                                    ((Bulletin.LottieLayout) b.getLayout()).setIconPaddingBottom(2);
-                                }
-                                b.show();
-                                progBulletin[0] = b;
-                            } catch (Throwable ignored) {}
-                        }, 100);
-                        impl.downloadUpdate(apkUrl, () -> {
-                            AndroidUtilities.runOnUIThread(() -> {
-                                try { if (progBulletin[0] != null) progBulletin[0].hide(); } catch (Throwable ignored) {}
-                            });
-                            File apkFile = impl.getDownloadedUpdateFile();
-                            if (apkFile != null && apkFile.exists()) {
-                                AndroidUtilities.runOnUIThread(() -> {
-                                    try {
-                                        Bulletin b2 = BulletinFactory.global()
-                                                .createSimpleBulletin(R.raw.ic_download,
-                                                        LocaleController.getString(R.string.UpdateDownloaded),
-                                                        LocaleController.getString(R.string.NekoUpdate),
-                                                        Integer.MAX_VALUE,
-                                                        () -> zxc.iconic.xenon.helpers.ApkInstaller.installUpdate(activity, apkFile));
-                                        if (b2.getLayout() instanceof Bulletin.LottieLayout) {
-                                            ((Bulletin.LottieLayout) b2.getLayout()).setIconPaddingBottom(2);
-                                        }
-                                        b2.show();
-                                    } catch (Throwable ignored) {}
-                                });
-                            }
-                        });
-                        AndroidUtilities.runOnUIThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (impl.isDownloadingUpdate() && progBulletin[0] != null) {
-                                    if (!impl.isRetryingUpdate()) {
-                                        try {
-                                            float prog = impl.getDownloadingUpdateProgress();
-                                            long total = impl.getDownloadTotalSize();
-                                            long downloaded = impl.getDownloadBytesDownloaded();
-                                            String text;
-                                            if (total > 0) {
-                                                String d = android.text.format.Formatter.formatShortFileSize(activity, downloaded);
-                                                String t = android.text.format.Formatter.formatShortFileSize(activity, total);
-                                                text = LocaleController.getString(R.string.DownloadingUpdate) + NekoConfig.getChannelLabel() + " " + d + " / " + t;
-                                            } else {
-                                                text = LocaleController.getString(R.string.DownloadingUpdate) + NekoConfig.getChannelLabel() + " " + (int)(prog * 100) + "%";
-                                            }
-                                            ((Bulletin.LottieLayout) progBulletin[0].getLayout()).textView.setText(text);
-                                        } catch (Throwable ignored) {}
-                                    }
-                                    AndroidUtilities.runOnUIThread(this, 500);
-                                }
-                            }
-                        }, 500);
-                        return;
-                    }
-                    Activity act = activity;
-                    String finalText = release.body != null ? release.body : "";
-                    AndroidUtilities.runOnUIThread(() -> {
-                        TLRPC.TL_help_appUpdate appUpdate = new TLRPC.TL_help_appUpdate();
-                        appUpdate.version = title;
-                        appUpdate.text = finalText;
-                        appUpdate.can_not_skip = false;
-                        appUpdate.url = apkUrl;
-                        appUpdate.flags |= 4;
-                        UpdateAppAlertDialog dialog = new UpdateAppAlertDialog(act, appUpdate, UserConfig.selectedAccount);
-                        dialog.setOnDownloadClickListener(() -> {
-                                final Bulletin[] progBulletin = new Bulletin[1];
-                                AndroidUtilities.runOnUIThread(() -> {
-                                    try {
-                                        Bulletin b = BulletinFactory.global()
-                                                .createSimpleBulletin(R.raw.ic_download, LocaleController.getString(R.string.DownloadingUpdate) + NekoConfig.getChannelLabel(), LocaleController.getString(R.string.Cancel), Integer.MAX_VALUE, () -> impl.cancelDownloadingUpdate());
-                                        if (b.getLayout() instanceof Bulletin.LottieLayout) {
-                                            ((Bulletin.LottieLayout) b.getLayout()).setIconPaddingBottom(2);
-                                        }
-                                        b.show();
-                                        progBulletin[0] = b;
-                                    } catch (Throwable ignored) {}
-                                }, 100);
-                                impl.downloadUpdate(apkUrl, () -> {
-                                    AndroidUtilities.runOnUIThread(() -> {
-                                        try { if (progBulletin[0] != null) progBulletin[0].hide(); } catch (Throwable ignored) {}
-                                    });
-                                    File apkFile = impl.getDownloadedUpdateFile();
-                                    if (apkFile != null && apkFile.exists()) {
-                                        AndroidUtilities.runOnUIThread(() -> {
-                                            try {
-                                                Bulletin b2 = BulletinFactory.global()
-                                                        .createSimpleBulletin(R.raw.ic_download,
-                                                                LocaleController.getString(R.string.UpdateDownloaded),
-                                                                LocaleController.getString(R.string.NekoUpdate),
-                                                                Integer.MAX_VALUE,
-                                                                () -> zxc.iconic.xenon.helpers.ApkInstaller.installUpdate(activity, apkFile));
-                                                if (b2.getLayout() instanceof Bulletin.LottieLayout) {
-                                                    ((Bulletin.LottieLayout) b2.getLayout()).setIconPaddingBottom(2);
-                                                }
-                                                b2.show();
-                                            } catch (Throwable ignored) {}
-                                        });
-                                    }
-                                });
-                                AndroidUtilities.runOnUIThread(new Runnable() {
-                                    @Override
-                                    public void run() {
-                                        if (impl.isDownloadingUpdate() && progBulletin[0] != null) {
-                                            if (!impl.isRetryingUpdate()) {
-                                                try {
-                                                    float prog = impl.getDownloadingUpdateProgress();
-                                                    long total = impl.getDownloadTotalSize();
-                                                    long downloaded = impl.getDownloadBytesDownloaded();
-                                                    String text;
-                                                    if (total > 0) {
-                                                        String d = android.text.format.Formatter.formatShortFileSize(activity, downloaded);
-                                                        String t = android.text.format.Formatter.formatShortFileSize(activity, total);
-                                                        text = LocaleController.getString(R.string.DownloadingUpdate) + NekoConfig.getChannelLabel() + " " + d + " / " + t;
-                                                    } else {
-                                                        text = LocaleController.getString(R.string.DownloadingUpdate) + NekoConfig.getChannelLabel() + " " + (int)(prog * 100) + "%";
-                                                    }
-                                                    ((Bulletin.LottieLayout) progBulletin[0].getLayout()).textView.setText(text);
-                                                } catch (Throwable ignored) {}
-                                            }
-                                            AndroidUtilities.runOnUIThread(this, 500);
-                                        }
-                                    }
-                                }, 500);
-                            });
-                            dialog.show();
-                        });
-                    }
+                    var updater = ApplicationLoader.applicationLoaderInstance;
+                    updater.setGitHubUpdate(release);
+                    updater.showUpdateDownload(activity, currentAccount);
+                    if (NekoConfig.autoDownloadUpdate) updater.downloadUpdate();
+                }
 
                 @Override
                 public void onNoUpdate() {
@@ -579,62 +443,6 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
                 }
             }
         }
-    }
-
-    private void showDownloadProgress(Activity activity, ApplicationLoader impl) {
-        final Bulletin[] progBulletin = new Bulletin[1];
-        AndroidUtilities.runOnUIThread(() -> {
-            try {
-                Bulletin b = BulletinFactory.global()
-                        .createSimpleBulletin(R.raw.ic_download, LocaleController.getString(R.string.DownloadingUpdate) + NekoConfig.getChannelLabel(), LocaleController.getString(R.string.Cancel), Integer.MAX_VALUE, () -> impl.cancelDownloadingUpdate());
-                if (b.getLayout() instanceof Bulletin.LottieLayout) {
-                    ((Bulletin.LottieLayout) b.getLayout()).setIconPaddingBottom(2);
-                }
-                b.show();
-                progBulletin[0] = b;
-            } catch (Throwable ignored) {}
-        }, 100);
-        AndroidUtilities.runOnUIThread(new Runnable() {
-            @Override
-            public void run() {
-                if (impl.isDownloadingUpdate() && progBulletin[0] != null) {
-                    if (!impl.isRetryingUpdate()) {
-                        try {
-                            float prog = impl.getDownloadingUpdateProgress();
-                            long total = impl.getDownloadTotalSize();
-                            long downloaded = impl.getDownloadBytesDownloaded();
-                            String text;
-                            if (total > 0) {
-                                String d = android.text.format.Formatter.formatShortFileSize(activity, downloaded);
-                                String t = android.text.format.Formatter.formatShortFileSize(activity, total);
-                                text = LocaleController.getString(R.string.DownloadingUpdate) + NekoConfig.getChannelLabel() + " " + d + " / " + t;
-                            } else {
-                                text = LocaleController.getString(R.string.DownloadingUpdate) + NekoConfig.getChannelLabel() + " " + (int)(prog * 100) + "%";
-                            }
-                            ((Bulletin.LottieLayout) progBulletin[0].getLayout()).textView.setText(text);
-                        } catch (Throwable ignored) {}
-                    }
-                    AndroidUtilities.runOnUIThread(this, 500);
-                } else if (progBulletin[0] != null) {
-                    try { progBulletin[0].hide(); } catch (Throwable ignored) {}
-                    File apkFile = impl.getDownloadedUpdateFile();
-                    if (apkFile != null && apkFile.exists()) {
-                        try {
-                            Bulletin b2 = BulletinFactory.global()
-                                    .createSimpleBulletin(R.raw.ic_download,
-                                            LocaleController.getString(R.string.UpdateDownloaded),
-                                            LocaleController.getString(R.string.NekoUpdate),
-                                            Integer.MAX_VALUE,
-                                            () -> ApkInstaller.installUpdate(activity, apkFile));
-                            if (b2.getLayout() instanceof Bulletin.LottieLayout) {
-                                ((Bulletin.LottieLayout) b2.getLayout()).setIconPaddingBottom(2);
-                            }
-                            b2.show();
-                        } catch (Throwable ignored) {}
-                    }
-                }
-            }
-        }, 500);
     }
 
 }

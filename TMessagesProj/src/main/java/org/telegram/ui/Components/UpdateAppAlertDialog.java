@@ -43,11 +43,12 @@ public class UpdateAppAlertDialog extends BottomSheet {
     private TLRPC.TL_help_appUpdate appUpdate;
     private int accountNum;
     private Runnable onDownloadClickListener;
+    private ButtonWithCounterView downloadButton;
+    private TextView changelogView;
     private RadialProgress radialProgress;
     private FrameLayout radialProgressView;
     private AnimatorSet progressAnimation;
 
-    private Drawable shadowDrawable;
     private TextView textView;
     private TextView messageTextView;
     private NestedScrollView scrollView;
@@ -149,8 +150,7 @@ public class UpdateAppAlertDialog extends BottomSheet {
         setApplyTopPadding(false);
         setApplyBottomPadding(false);
 
-        shadowDrawable = context.getResources().getDrawable(R.drawable.sheet_shadow_round).mutate();
-        shadowDrawable.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_dialogBackground), PorterDuff.Mode.MULTIPLY));
+        // Keep the surface and navigation colors selected by BottomSheet (including Monet).
 
         FrameLayout container = new FrameLayout(context) {
             @Override
@@ -270,7 +270,7 @@ public class UpdateAppAlertDialog extends BottomSheet {
         messageTextView.setGravity(Gravity.CENTER_HORIZONTAL | Gravity.TOP);
         linearLayout.addView(messageTextView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP | Gravity.CENTER_HORIZONTAL, 23, 0, 23, 5));
 
-        TextView changelogTextView = new SpoilersTextView(getContext());
+        TextView changelogTextView = changelogView = new SpoilersTextView(getContext());
         changelogTextView.setTextColor(Theme.getColor(Theme.key_dialogTextBlack));
         changelogTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
         changelogTextView.setLinkTextColor(Theme.getColor(Theme.key_dialogTextLink));
@@ -293,7 +293,7 @@ public class UpdateAppAlertDialog extends BottomSheet {
         shadow.setTag(1);
         container.addView(shadow, frameLayoutParams);
 
-        ButtonWithCounterView doneButton = new ButtonWithCounterView(context, null).setRound();
+        ButtonWithCounterView doneButton = downloadButton = new ButtonWithCounterView(context, null).setRound();
         doneButton.setText(LocaleController.formatString(R.string.AppUpdateDownloadNow), false);
         doneButton.setOnClickListener(v -> {
             if (onDownloadClickListener != null) {
@@ -311,6 +311,17 @@ public class UpdateAppAlertDialog extends BottomSheet {
         scheduleButton.setText(LocaleController.getString(R.string.AppUpdateRemindMeLater), false);
         scheduleButton.setOnClickListener(v -> dismiss());
         container.addView(scheduleButton, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.FILL_HORIZONTAL | Gravity.BOTTOM, 20, 4, 20, 8));
+    }
+
+    public void bindUpdateDownload() {
+        android.view.ViewGroup parent = (android.view.ViewGroup) downloadButton.getParent();
+        android.view.ViewGroup.LayoutParams params = downloadButton.getLayoutParams();
+        parent.removeView(downloadButton);
+        parent.addView(new UpdateDownloadButton(getContext(), this::dismiss), params);
+    }
+
+    public void setChangelog(String text) {
+        changelogView.setText(text);
     }
 
     public void setOnDownloadClickListener(Runnable listener) {

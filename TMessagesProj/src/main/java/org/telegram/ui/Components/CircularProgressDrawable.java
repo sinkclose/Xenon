@@ -248,7 +248,10 @@ public class CircularProgressDrawable extends Drawable {
     @Override
     public boolean setVisible(boolean visible, boolean restart) {
         boolean changed = super.setVisible(visible, restart);
-        if (loadingIndicatorDrawable != null) {
+        // Material restarts its animator on every setVisible(true, ...), even
+        // when visibility did not change. Forward transitions only.
+        if (loadingIndicatorDrawable != null && (changed || restart
+                || loadingIndicatorDrawable.isVisible() != visible)) {
             loadingIndicatorDrawable.setVisible(visible, restart);
         }
         return changed;

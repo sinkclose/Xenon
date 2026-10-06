@@ -608,6 +608,9 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     }
 
     private void updateCenteredTitle(boolean animate) {
+        // Overlay titles already slide vertically. Position the incoming text before drawing
+        // rather than adding a second animation from its previous horizontal position.
+        animate &= !overlayTitleAnimationInProgress;
         if (getWidth() == 0) {
             return;
         }
@@ -1920,6 +1923,10 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
                 ellipsizeSpanAnimator.addView(titleTextView[1]);
             }
             overlayTitleAnimationInProgress = true;
+            if (centerTitleAnimator != null) {
+                centerTitleAnimator.cancel();
+                centerTitleAnimator = null;
+            }
             SimpleTextView tmp = titleTextView[1];
             titleTextView[1] = titleTextView[0];
             titleTextView[0] = tmp;

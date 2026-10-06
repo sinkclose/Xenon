@@ -3,567 +3,335 @@ package org.telegram.messenger;
 import android.app.Activity;
 import android.content.Context;
 import android.text.TextUtils;
-import android.view.ViewGroup;
-import android.widget.Toast;
-
 import org.telegram.messenger.regular.BuildConfig;
 import org.telegram.tgnet.TLRPC;
-import org.telegram.ui.Components.Bulletin;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.UpdateAppAlertDialog;
 import org.telegram.ui.Components.UpdateLayout;
 import org.telegram.ui.IUpdateLayout;
-
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.InputStream;
+import android.view.ViewGroup;
+import java.io.*;
 import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.List;
-
 import zxc.iconic.xenon.Extra;
 import zxc.iconic.xenon.helpers.ApkInstaller;
 import zxc.iconic.xenon.helpers.remote.GitHubUpdateHelper;
 
-/**
- * Application loader with GitHub-based update integration.
- *
- * Uses {@link GitHubUpdateHelper} to check for new releases.
- * Supports the custom update path in {@link org.telegram.ui.LaunchActivity#checkAppUpdate}:
- * {@code isCustomUpdate() -> checkUpdate() -> getUpdate() -> showCustomUpdateAppPopup()}.
- */
+/** One update session shared by automatic checks, settings and the chats menu. */
 public class ApplicationLoaderImpl extends ApplicationLoader {
-
-    private static final String TAG = "ApplicationLoaderImpl";
     private static final String APK_DIR = "updates";
     private static final int MAX_DOWNLOAD_RETRIES = 5;
-    private static final long RETRY_DELAY_MS = 10_000L;
-    private static final String DOWNLOAD_CANCELLED = "cancelled";
-
+    private final Object downloadLock = new Object();
+    private final List<Runnable> downloadCompletions = new ArrayList<>();
     private volatile BetaUpdate pendingUpdate;
     private volatile GitHubUpdateHelper.GitHubRelease pendingRelease;
     private volatile String pendingApkUrl;
-    private volatile String pendingTitle;
-    private volatile boolean downloading;
-    private volatile boolean retryingUpdate;
-    private volatile Bulletin downloadBulletin;
+    private volatile boolean downloading, cancelled, retryingUpdate;
     private volatile float downloadProgress;
-    private volatile long downloadTotalSize;
-    private volatile long downloadBytesDownloaded;
+    private volatile long downloadTotalSize, downloadBytesDownloaded;
     private volatile File downloadedApkFile;
-    private volatile int checkCounter;
+    private volatile String downloadedUrl;
+    private volatile String updateCheckError;
+    private volatile HttpURLConnection activeConnection;
+    // Remains set until the worker closes its streams and removes its partial file.
+    private Thread downloadWorker;
+    private int checkCounter;
 
-    private final Object downloadLock = new Object();
-    private final List<Runnable> downloadCompletions = new ArrayList<>();
+    @Override protected String onGetApplicationId() { return BuildConfig.APPLICATION_ID; }
+    @Override protected boolean isStandalone() { return Extra.isDirectApp(); }
+    @Override public boolean isCustomUpdate() { return true; }
 
-    @Override
-    protected String onGetApplicationId() {
-        return BuildConfig.APPLICATION_ID;
-    }
-
-    @Override
-    protected boolean isStandalone() {
-        return Extra.isDirectApp();
-    }
-
-    @Override
-    public boolean isCustomUpdate() {
-        return true;
-    }
-
-    @Override
-    public void checkUpdate(boolean force, Runnable whenDone) {
-        // Increment counter so each check produces a BetaUpdate with a unique
-        // (monotonically increasing) versionCode. This prevents
-        // BetaUpdate.higherThan() from returning false on repeated manual checks
-        // when the same GitHub release is found — LaunchActivity captures
-        // prevUpdate *before* calling checkUpdate(), so without this counter
-        // the dialog would only appear on the very first check.
-        final int thisCheck = ++checkCounter;
-        GitHubUpdateHelper.checkForUpdates(new GitHubUpdateHelper.UpdateCallback() {
-            @Override
-            public void onUpdateAvailable(GitHubUpdateHelper.GitHubRelease release) {
-                String title = !TextUtils.isEmpty(release.name) ? release.name : release.tagName;
-                String changelog = release.body;
-                String apkUrl = GitHubUpdateHelper.findApkDownloadUrl(release);
-                if (TextUtils.isEmpty(apkUrl)) {
-                    // Release exists but has no arm64-v8a APK asset (Xenon is
-                    // arm64-only — see GitHubUpdateHelper#findApkDownloadUrl).
-                    // Don't pretend an update is available: surface this as an
-                    // error so the user knows why nothing happened.
-                    FileLog.e(TAG + ": release " + release.tagName + " has no arm64 APK asset");
-                    pendingUpdate = null;
-                    pendingRelease = null;
-                    pendingApkUrl = null;
-                    AndroidUtilities.runOnUIThread(() -> {
-                        try {
-                            Toast.makeText(applicationContext,
-                                    "No arm64 build for this release", Toast.LENGTH_LONG).show();
-                        } catch (Throwable ignored) {}
-                    });
-                    if (whenDone != null) whenDone.run();
-                    return;
-                }
-                pendingRelease = release;
-                pendingApkUrl = apkUrl;
-                pendingTitle = title;
-                // version must be parseable as "x.y.z" for BetaUpdate.higherThan().
-                // Use VERSION_NAME + ".1" so it's always >= current build.
-                // thisCheck in versionCode guarantees higherThan(prevUpdate) == true
-                // on every manual re-check of the same release.
-                String versionStr = BuildConfig.VERSION_NAME + ".1";
-                int versionCode = (int) (BuildConfig.VERSION_CODE + thisCheck);
-                pendingUpdate = new BetaUpdate(versionStr, versionCode, changelog);
+    @Override public void setGitHubUpdate(GitHubUpdateHelper.GitHubRelease release) {
+        synchronized (downloadLock) {
+            // A check finishing late must not replace the release being downloaded.
+            if (downloadWorker != null) return;
+            String url = GitHubUpdateHelper.findApkDownloadUrl(release);
+            if (TextUtils.isEmpty(url)) return;
+            if (!url.equals(pendingApkUrl)) {
                 downloadedApkFile = null;
-                downloading = false;
+                downloadedUrl = null;
+                downloadProgress = 0;
+                downloadBytesDownloaded = 0;
+            }
+            pendingRelease = release;
+            pendingApkUrl = url;
+            pendingUpdate = new BetaUpdate(BuildConfig.VERSION_NAME + ".1",
+                    BuildConfig.VERSION_CODE + ++checkCounter, release.name);
+            downloadedApkFile = findDownloadedApk(url);
+            if (downloadedApkFile != null) {
+                downloadedUrl = url;
+                downloadProgress = 1;
+                downloadBytesDownloaded = downloadedApkFile.length();
+            }
+            downloadTotalSize = GitHubUpdateHelper.findApkSize(release);
+        }
+        notifyUpdateDownloadChanged();
+    }
+
+    @Override public void checkUpdate(boolean force, Runnable whenDone) {
+        updateCheckError = null;
+        synchronized (downloadLock) {
+            if (downloadWorker != null || getDownloadedUpdateFile() != null) {
+                if (whenDone != null) AndroidUtilities.runOnUIThread(whenDone);
+                return;
+            }
+        }
+        GitHubUpdateHelper.checkForUpdates(new GitHubUpdateHelper.UpdateCallback() {
+            @Override public void onUpdateAvailable(GitHubUpdateHelper.GitHubRelease release) {
+                setGitHubUpdate(release);
                 if (whenDone != null) whenDone.run();
             }
-
-            @Override
-            public void onNoUpdate() {
-                pendingUpdate = null;
-                pendingRelease = null;
-                pendingApkUrl = null;
+            @Override public void onNoUpdate() {
+                synchronized (downloadLock) {
+                    if (downloadWorker == null && getDownloadedUpdateFile() == null) {
+                        pendingUpdate = null;
+                        pendingRelease = null;
+                        pendingApkUrl = null;
+                    }
+                }
                 if (whenDone != null) whenDone.run();
             }
-
-            @Override
-            public void onError(String error) {
-                FileLog.e(TAG + ": update check error: " + error);
-                pendingUpdate = null;
-                pendingRelease = null;
-                pendingApkUrl = null;
-                // Show error to user — LaunchActivity would otherwise display
-                // "Your version is up to date" because pendingUpdate is null.
-                // This callback runs on the GitHubUpdateHelper worker thread,
-                // which has no Looper; calling Toast.show() directly there
-                // throws RuntimeException ("Can't toast on a thread that has
-                // not called Looper.prepare()") and used to be silently
-                // swallowed by a broad catch — meaning the user never saw any
-                // feedback for failed checks. Always dispatch via the UI thread.
-                AndroidUtilities.runOnUIThread(() -> {
-                    try {
-                        BulletinFactory.global()
-                                .createSimpleBulletin(R.raw.chats_infotip,
-                                        "Update check failed: " + error,
-                                        "Retry",
-                                        () -> checkUpdate(force, null))
-                                .show();
-                    } catch (Throwable ignored) {}
-                });
+            @Override public void onError(String error) {
+                updateCheckError = error;
+                synchronized (downloadLock) {
+                    if (downloadWorker == null && getDownloadedUpdateFile() == null) pendingUpdate = null;
+                }
+                FileLog.e("Update check failed: " + error);
+                BulletinFactory.global().createSimpleBulletin(R.raw.chats_infotip,
+                        "Update check failed: " + error, "Retry", () -> retryUpdateCheck(force)).show();
                 if (whenDone != null) whenDone.run();
             }
         }, false);
     }
 
-    @Override
-    public BetaUpdate getUpdate() {
-        return pendingUpdate;
-    }
-
-    @Override
-    public void downloadUpdate() {
-        downloadUpdate(null);
-    }
-
-    public void downloadUpdate(Runnable onComplete) {
-        String apkUrl = pendingApkUrl;
-        if (TextUtils.isEmpty(apkUrl)) return;
-        downloadUpdate(apkUrl, onComplete);
-    }
-
-    public void downloadUpdate(String apkUrl, Runnable onComplete) {
-        if (TextUtils.isEmpty(apkUrl)) return;
+    @Override public BetaUpdate getUpdate() { return pendingUpdate; }
+    @Override public String getUpdateCheckError() { return updateCheckError; }
+    @Override public void downloadUpdate() { downloadUpdate((Runnable) null); }
+    @Override public void downloadUpdate(Runnable complete) { downloadUpdate(pendingApkUrl, complete); }
+    @Override public void downloadUpdate(String url, Runnable complete) {
+        if (TextUtils.isEmpty(url)) return;
         synchronized (downloadLock) {
-            // A download is already running (another updater started it) — don't
-            // start a second one that would fight over the shared progress fields
-            // and the shared temp file. Attach to the running download instead and
-            // run this caller's completion callback when it finishes.
-            if (downloading) {
-                if (onComplete != null) {
-                    downloadCompletions.add(onComplete);
-                }
+            if (downloadWorker != null) {
+                if (!cancelled && complete != null) downloadCompletions.add(complete);
                 return;
             }
-            // The APK for this URL was already fully downloaded earlier — don't
-            // re-download it, just complete immediately.
-            File existing = findDownloadedApk();
-            if (existing != null) {
-                downloadedApkFile = existing;
-                if (onComplete != null) {
-                    AndroidUtilities.runOnUIThread(onComplete);
-                }
+            File cached = findDownloadedApk(url);
+            if (cached != null) {
+                pendingApkUrl = url;
+                downloadedApkFile = cached;
+                downloadedUrl = url;
+                downloadProgress = 1;
+                downloadBytesDownloaded = downloadTotalSize = cached.length();
+                notifyUpdateDownloadChanged();
+                if (complete != null) AndroidUtilities.runOnUIThread(complete);
                 return;
             }
-            pendingApkUrl = apkUrl;
+            pendingApkUrl = url;
+            downloadedApkFile = null;
+            downloadedUrl = null;
+            cancelled = false;
             downloading = true;
+            retryingUpdate = false;
+            downloadProgress = 0;
+            downloadBytesDownloaded = 0;
             downloadCompletions.clear();
-            if (onComplete != null) {
-                downloadCompletions.add(onComplete);
-            }
+            if (complete != null) downloadCompletions.add(complete);
+            downloadWorker = new Thread(() -> runDownload(url), "XenonUpdateDownload");
+            downloadWorker.start();
         }
-        doDownload(apkUrl);
+        notifyUpdateDownloadChanged();
     }
 
-    private void doDownload(String apkUrl) {
-
-        downloadProgress = 0f;
-        downloadTotalSize = 0;
-        downloadBytesDownloaded = 0;
-        downloadedApkFile = null;
-
-        new Thread(() -> {
-            String error = downloadOnce(apkUrl);
-            if (error == null) {
-                downloading = false;
-                fireDownloadCompletions();
-                return;
+    private void runDownload(String url) {
+        String error = null;
+        boolean success = false;
+        for (int attempt = 0; attempt <= MAX_DOWNLOAD_RETRIES && !cancelled; attempt++) {
+            retryingUpdate = attempt > 0;
+            downloadProgress = 0;
+            downloadBytesDownloaded = 0;
+            downloadTotalSize = GitHubUpdateHelper.findApkSize(pendingRelease);
+            notifyUpdateDownloadChanged();
+            try {
+                downloadOnce(url);
+                success = true;
+                break;
+            } catch (Exception e) {
+                error = e.getMessage();
+                if (!cancelled) FileLog.e("Update download attempt failed", e);
             }
-            if (DOWNLOAD_CANCELLED.equals(error) || !downloading) {
-                downloading = false;
-                return;
+            // Retry immediately. Each attempt starts with a clean partial file and counters.
+        }
+        final List<Runnable> completions;
+        final boolean wasCancelled;
+        synchronized (downloadLock) {
+            success &= !cancelled;
+            if (!success) {
+                if (cancelled && downloadedApkFile != null) {
+                    File identity = new File(downloadedApkFile.getParent(), downloadedApkFile.getName() + ".url");
+                    if (identity.exists() && !identity.delete()) FileLog.e("Cannot remove cancelled APK identity");
+                    if (!downloadedApkFile.delete()) FileLog.e("Cannot remove cancelled APK");
+                }
+                downloadedApkFile = null;
+                downloadedUrl = null;
+                downloadProgress = 0;
+                downloadBytesDownloaded = 0;
             }
-            for (int retry = 1; retry <= MAX_DOWNLOAD_RETRIES; retry++) {
-                if (!downloading) {
-                    return;
-                }
-                final int attempt = retry;
-                retryingUpdate = true;
-                AndroidUtilities.runOnUIThread(() -> updateRetryBulletin(attempt));
-                try {
-                    Thread.sleep(RETRY_DELAY_MS);
-                } catch (InterruptedException e) {
-                    retryingUpdate = false;
-                    return;
-                }
-                if (!downloading) {
-                    retryingUpdate = false;
-                    return;
-                }
-                error = downloadOnce(apkUrl);
-                if (error == null) {
-                    downloading = false;
-                    fireDownloadCompletions();
-                    return;
-                }
-                if (DOWNLOAD_CANCELLED.equals(error)) {
-                    retryingUpdate = false;
-                    downloading = false;
-                    return;
-                }
-            }
+            completions = success ? new ArrayList<>(downloadCompletions) : new ArrayList<>();
+            downloadCompletions.clear();
             retryingUpdate = false;
             downloading = false;
-            downloadProgress = 0f;
-            final String finalError = error;
-            AndroidUtilities.runOnUIThread(() -> showDownloadFailed(finalError));
-        }, "XenonUpdateDownload").start();
+            downloadWorker = null;
+            wasCancelled = cancelled;
+        }
+        notifyUpdateDownloadChanged();
+        final boolean completed = success;
+        final String failure = error;
+        AndroidUtilities.runOnUIThread(() -> {
+            for (Runnable callback : completions) {
+                try { callback.run(); } catch (Exception e) { FileLog.e(e); }
+            }
+            if (completed) {
+                File apk = getDownloadedUpdateFile();
+                Activity activity = getUpdateActivity();
+                if (apk != null && activity != null && !activity.isFinishing()) {
+                    BulletinFactory.global().createSimpleBulletin(R.raw.ic_download,
+                            LocaleController.getString(R.string.UpdateDownloaded),
+                            LocaleController.getString(R.string.NekoUpdate),
+                            () -> ApkInstaller.installUpdate(activity, apk)).show();
+                }
+            } else if (!wasCancelled) {
+                BulletinFactory.global().createSimpleBulletin(R.raw.chats_infotip,
+                        "Download failed: " + failure, "Retry", this::downloadUpdate).show();
+            }
+        });
     }
 
-    private void fireDownloadCompletions() {
-        List<Runnable> completions;
+    private void downloadOnce(String url) throws Exception {
+        File dir = new File(applicationContext.getCacheDir(), APK_DIR);
+        if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("Cannot create updates directory");
+        File partial = new File(dir, "xenon_update.apk.part");
+        HttpURLConnection connection = GitHubUpdateHelper.openConnection(url);
+        try {
+            activeConnection = connection;
+            if (cancelled) throw new IOException("Cancelled");
+            connection.setInstanceFollowRedirects(true);
+            connection.setConnectTimeout(15000);
+            connection.setReadTimeout(15000);
+            connection.setRequestProperty("Accept-Encoding", "identity");
+            if (connection.getResponseCode() != 200) throw new IOException("Download HTTP " + connection.getResponseCode());
+            long length = connection.getContentLengthLong();
+            if (length > 0) downloadTotalSize = length;
+            long lastProgress = 0;
+            try (InputStream input = connection.getInputStream(); FileOutputStream output = new FileOutputStream(partial)) {
+                byte[] buffer = new byte[32768];
+                int read;
+                while ((read = input.read(buffer)) != -1) {
+                    if (cancelled) throw new IOException("Cancelled");
+                    output.write(buffer, 0, read);
+                    downloadBytesDownloaded += read;
+                    retryingUpdate = false;
+                    if (downloadTotalSize > 0) downloadProgress = Math.min(1, (float) downloadBytesDownloaded / downloadTotalSize);
+                    long now = android.os.SystemClock.elapsedRealtime();
+                    if (now - lastProgress >= 100) {
+                        lastProgress = now;
+                        notifyUpdateDownloadChanged();
+                    }
+                }
+                output.flush();
+            }
+            if (cancelled) throw new IOException("Cancelled");
+            if (downloadBytesDownloaded == 0 || (downloadTotalSize > 0 && downloadBytesDownloaded != downloadTotalSize)) {
+                throw new IOException("Incomplete APK download");
+            }
+            // Only a complete APK can be found by subsequent checks, even after process death.
+            File apk = new File(dir, "xenon_update.apk");
+            synchronized (downloadLock) {
+                if (cancelled) throw new IOException("Cancelled");
+                File identity = new File(dir, "xenon_update.apk.url");
+                if (identity.exists() && !identity.delete()) throw new IOException("Cannot remove old APK identity");
+                if (apk.exists() && !apk.delete()) throw new IOException("Cannot replace APK");
+                if (!partial.renameTo(apk)) throw new IOException("Cannot save APK");
+                try (FileWriter writer = new FileWriter(identity)) { writer.write(url); }
+                downloadedUrl = url;
+                downloadedApkFile = apk;
+                downloadProgress = 1;
+            }
+        } finally {
+            activeConnection = null;
+            connection.disconnect();
+            if (partial.exists() && !partial.delete()) FileLog.e("Cannot delete partial update APK");
+        }
+    }
+
+    @Override public void cancelDownloadingUpdate() {
+        HttpURLConnection connection;
         synchronized (downloadLock) {
-            completions = new ArrayList<>(downloadCompletions);
+            cancelled = true;
+            connection = activeConnection;
             downloadCompletions.clear();
         }
-        for (Runnable onComplete : completions) {
-            if (onComplete != null) {
-                AndroidUtilities.runOnUIThread(onComplete);
-            }
+        if (connection != null) connection.disconnect();
+        notifyUpdateDownloadChanged();
+    }
+    @Override public boolean isDownloadingUpdate() { return downloading && !cancelled; }
+    @Override public boolean deleteDownloadedUpdateFile() {
+        synchronized (downloadLock) {
+            // Never remove the APK while a worker is finalizing it.
+            if (downloadWorker != null) return false;
+            File apk = getDownloadedUpdateFile();
+            if (apk == null || !apk.delete()) return false;
+            File identity = new File(apk.getParent(), apk.getName() + ".url");
+            if (identity.exists() && !identity.delete()) FileLog.e("Cannot delete update identity");
+            downloadedApkFile = null;
+            downloadedUrl = null;
+            downloadProgress = 0;
+            downloadBytesDownloaded = 0;
         }
-    }
-
-    private void updateRetryBulletin(int attempt) {
-        try {
-            Bulletin b = Bulletin.getVisibleBulletin();
-            if (b == null || !(b.getLayout() instanceof Bulletin.LottieLayout)) {
-                b = downloadBulletin;
-            }
-            if (b == null || !(b.getLayout() instanceof Bulletin.LottieLayout)) {
-                b = BulletinFactory.global()
-                        .createSimpleBulletin(R.raw.ic_download,
-                                "Downloading update (" + attempt + "/" + MAX_DOWNLOAD_RETRIES + ")")
-                        .show();
-                downloadBulletin = b;
-            }
-            if (b.getLayout() instanceof Bulletin.LottieLayout) {
-                ((Bulletin.LottieLayout) b.getLayout()).textView.setText(
-                        "Downloading update (" + attempt + "/" + MAX_DOWNLOAD_RETRIES + ")");
-            }
-        } catch (Throwable ignored) {}
-    }
-
-    private void showDownloadFailed(String error) {
-        try {
-            Toast.makeText(applicationContext,
-                    "Download failed: " + error, Toast.LENGTH_LONG).show();
-        } catch (Throwable ignored) {}
-    }
-
-    private String downloadOnce(String apkUrl) {
-        HttpURLConnection connection = null;
-        InputStream is = null;
-        FileOutputStream fos = null;
-        File tempFile = null;
-        boolean cleanupPartial = false;
-        try {
-            File dir = new File(applicationContext.getCacheDir(), APK_DIR);
-            if (!dir.exists()) dir.mkdirs();
-            tempFile = new File(dir, "xenon_update.apk");
-            if (tempFile.exists()) tempFile.delete();
-
-            connection = GitHubUpdateHelper.openConnection(apkUrl);
-            connection.setInstanceFollowRedirects(true);
-            connection.setConnectTimeout(30000);
-            connection.setReadTimeout(60000);
-            connection.connect();
-
-            int code = connection.getResponseCode();
-            if (code != 200) {
-                throw new Exception("Download HTTP " + code);
-            }
-
-            long totalSize = connection.getContentLength();
-            downloadTotalSize = totalSize;
-            is = connection.getInputStream();
-            fos = new FileOutputStream(tempFile);
-
-            byte[] buffer = new byte[8192];
-            long downloaded = 0;
-            int read;
-            while ((read = is.read(buffer)) != -1) {
-                if (!downloading) {
-                    cleanupPartial = true;
-                    return DOWNLOAD_CANCELLED;
-                }
-                fos.write(buffer, 0, read);
-                downloaded += read;
-                downloadBytesDownloaded = downloaded;
-                if (downloaded > 0) {
-                    retryingUpdate = false;
-                }
-                if (totalSize > 0) {
-                    downloadProgress = (float) downloaded / totalSize;
-                }
-            }
-            fos.flush();
-
-            downloadedApkFile = tempFile;
-            downloading = false;
-            downloadProgress = 1f;
-            if (pendingRelease != null && !TextUtils.isEmpty(pendingRelease.tagName)) {
-                File tagFile = new File(tempFile.getParent(), tempFile.getName() + ".tag");
-                try (java.io.FileWriter w = new java.io.FileWriter(tagFile)) {
-                    w.write(pendingRelease.tagName);
-                } catch (Throwable ignored) {}
-            }
-            return null;
-        } catch (Throwable e) {
-            FileLog.e(TAG + ": download failed", e);
-            downloadProgress = 0f;
-            cleanupPartial = true;
-            return e.getMessage() != null ? e.getMessage() : "Unknown error";
-        } finally {
-            try { if (fos != null) fos.close(); } catch (Throwable ignored) {}
-            try { if (is != null) is.close(); } catch (Throwable ignored) {}
-            if (connection != null) connection.disconnect();
-            if (cleanupPartial && tempFile != null && tempFile.exists()) {
-                if (!tempFile.delete()) {
-                    FileLog.e(TAG + ": failed to delete partial APK at " + tempFile);
-                }
-            }
-        }
-    }
-
-    @Override
-    public void cancelDownloadingUpdate() {
-        downloading = false;
-        retryingUpdate = false;
-        downloadBulletin = null;
-        downloadProgress = 0f;
-        // If a fully-downloaded APK was already produced (download finished
-        // before the user pressed cancel), delete it too — leaving the file
-        // around would let getDownloadedUpdateFile() resurface a stale APK
-        // on the next "Install update" tap.
-        File f = downloadedApkFile;
-        downloadedApkFile = null;
-        if (f != null && f.exists()) {
-            try { f.delete(); } catch (Throwable ignored) {}
-        }
-    }
-
-    @Override
-    public boolean isDownloadingUpdate() {
-        return downloading;
-    }
-
-    @Override
-    public boolean isRetryingUpdate() {
-        return retryingUpdate;
-    }
-
-    @Override
-    public float getDownloadingUpdateProgress() {
-        return downloadProgress;
-    }
-
-    @Override
-    public File getDownloadedUpdateFile() {
-        return downloadedApkFile;
-    }
-
-    // Returns a previously fully-downloaded APK (in memory or on disk with a
-    // matching release tag), or null if none matches the pending release.
-    private File findDownloadedApk() {
-        File f = downloadedApkFile;
-        if (f != null && f.exists()) {
-            return f;
-        }
-        File cachedApk = new File(applicationContext.getCacheDir(), APK_DIR + "/xenon_update.apk");
-        if (!cachedApk.exists() || cachedApk.length() <= 0) {
-            return null;
-        }
-        if (pendingRelease == null || TextUtils.isEmpty(pendingRelease.tagName)) {
-            return null;
-        }
-        File tagFile = new File(cachedApk.getParent(), cachedApk.getName() + ".tag");
-        if (!tagFile.exists()) {
-            return null;
-        }
-        try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader(tagFile))) {
-            return pendingRelease.tagName.equals(r.readLine()) ? cachedApk : null;
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
-
-    public long getDownloadTotalSize() {
-        return downloadTotalSize;
-    }
-
-    public long getDownloadBytesDownloaded() {
-        return downloadBytesDownloaded;
-    }
-
-    @Override
-    public boolean showUpdateAppPopup(Context context, TLRPC.TL_help_appUpdate update, int account) {
-        try {
-            (new UpdateAppAlertDialog(context, update, account)).show();
-        } catch (Exception e) {
-            FileLog.e(e);
-        }
+        notifyUpdateDownloadChanged();
         return true;
     }
-
-    @Override
-    public boolean showCustomUpdateAppPopup(Context context, BetaUpdate update, int account) {
-        if (update == null) return false;
-
-        File cachedApk = new File(applicationContext.getCacheDir(), APK_DIR + "/xenon_update.apk");
-        if (cachedApk.exists() && cachedApk.length() > 0 && context instanceof Activity) {
-            boolean tagMatch = false;
-            File tagFile = new File(cachedApk.getParent(), cachedApk.getName() + ".tag");
-            if (tagFile.exists() && pendingRelease != null && !TextUtils.isEmpty(pendingRelease.tagName)) {
-                try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader(tagFile))) {
-                    tagMatch = pendingRelease.tagName.equals(r.readLine());
-                } catch (Throwable ignored) {}
-            }
-            if (tagMatch) {
-                downloadedApkFile = cachedApk;
-                Activity activity = (Activity) context;
-                try {
-                    BulletinFactory.global()
-                            .createSimpleBulletin(R.raw.ic_download,
-                                    LocaleController.getString(R.string.UpdateDownloaded),
-                                    "Update",
-                                    Integer.MAX_VALUE,
-                                    () -> ApkInstaller.installUpdate(activity, cachedApk))
-                            .show();
-                } catch (Throwable ignored) {}
-                return true;
-            }
-        }
-
-        try {
-            TLRPC.TL_help_appUpdate appUpdate = new TLRPC.TL_help_appUpdate();
-            appUpdate.version = !TextUtils.isEmpty(pendingTitle) ? pendingTitle : update.version;
-            appUpdate.text = update.changelog != null ? update.changelog : "";
-            appUpdate.can_not_skip = false;
-            if (!TextUtils.isEmpty(pendingApkUrl)) {
-                appUpdate.url = pendingApkUrl;
-                appUpdate.flags |= 4;
-            }
-            UpdateAppAlertDialog dialog = new UpdateAppAlertDialog(context, appUpdate, account);
-            dialog.setOnDownloadClickListener(() -> {
-                final Bulletin[] progBulletin = new Bulletin[1];
-                AndroidUtilities.runOnUIThread(() -> {
-                    try {
-                        Bulletin b = BulletinFactory.global()
-                                .createSimpleBulletin(R.raw.ic_download, "Downloading update...", "Cancel", Integer.MAX_VALUE, () -> cancelDownloadingUpdate());
-                        if (b.getLayout() instanceof Bulletin.LottieLayout) {
-                            ((Bulletin.LottieLayout) b.getLayout()).setIconPaddingBottom(2);
-                        }
-                        b.show();
-                        progBulletin[0] = b;
-                    } catch (Throwable ignored) {}
-                }, 100);
-                downloadUpdate(() -> {
-                    AndroidUtilities.runOnUIThread(() -> {
-                        try { if (progBulletin[0] != null) progBulletin[0].hide(); } catch (Throwable ignored) {}
-                    });
-                    File apkFile = getDownloadedUpdateFile();
-                    if (apkFile != null && apkFile.exists() && context instanceof Activity) {
-                        Activity activity = (Activity) context;
-                        AndroidUtilities.runOnUIThread(() -> {
-                            try {
-                                Bulletin b2 = BulletinFactory.global()
-                                        .createSimpleBulletin(R.raw.ic_download,
-                                                LocaleController.getString(R.string.UpdateDownloaded),
-                                                "Update",
-                                                Integer.MAX_VALUE,
-                                                () -> ApkInstaller.installUpdate(activity, apkFile));
-                                if (b2.getLayout() instanceof Bulletin.LottieLayout) {
-                                    ((Bulletin.LottieLayout) b2.getLayout()).setIconPaddingBottom(2);
-                                }
-                                b2.show();
-                            } catch (Throwable ignored) {}
-                        });
-                    }
-                });
-                AndroidUtilities.runOnUIThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (isDownloadingUpdate() && progBulletin[0] != null) {
-                            if (!isRetryingUpdate()) {
-                                try {
-                                    float prog = getDownloadingUpdateProgress();
-                                    long total = getDownloadTotalSize();
-                                    long downloaded = getDownloadBytesDownloaded();
-                                    String text;
-                                    if (total > 0) {
-                                        String d = android.text.format.Formatter.formatShortFileSize(applicationContext, downloaded);
-                                        String t = android.text.format.Formatter.formatShortFileSize(applicationContext, total);
-                                        text = "Downloading update... " + d + " / " + t;
-                                    } else {
-                                        text = "Downloading update... " + (int)(prog * 100) + "%";
-                                    }
-                                    ((Bulletin.LottieLayout) progBulletin[0].getLayout()).textView.setText(text);
-                                } catch (Throwable ignored) {}
-                            }
-                            AndroidUtilities.runOnUIThread(this, 500);
-                        }
-                    }
-                }, 500);
-            });
-            dialog.show();
-        } catch (Exception e) {
-            FileLog.e(e);
-        }
-        return true;
+    @Override public boolean isRetryingUpdate() { return retryingUpdate; }
+    @Override public float getDownloadingUpdateProgress() { return downloadProgress; }
+    @Override public long getDownloadTotalSize() { return downloadTotalSize; }
+    @Override public long getDownloadBytesDownloaded() { return downloadBytesDownloaded; }
+    @Override public File getDownloadedUpdateFile() {
+        File file = downloadedApkFile;
+        return !downloading && file != null && file.exists() ? file : null;
+    }
+    private File findDownloadedApk(String url) {
+        File file = getDownloadedUpdateFile();
+        if (url.equals(downloadedUrl) && file != null) return file;
+        File apk = new File(applicationContext.getCacheDir(), APK_DIR + "/xenon_update.apk");
+        File identity = new File(apk.getParent(), apk.getName() + ".url");
+        if (apk.length() <= 0 || !identity.exists()) return null;
+        try (BufferedReader reader = new BufferedReader(new FileReader(identity))) {
+            return url.equals(reader.readLine()) ? apk : null;
+        } catch (IOException e) { return null; }
     }
 
-    @Override
-    public IUpdateLayout takeUpdateLayout(Activity activity, ViewGroup sideMenuContainer) {
-        return new UpdateLayout(activity, sideMenuContainer);
+    @Override public void showUpdateDownload(Context context, int account) {
+        showCustomUpdateAppPopup(context, pendingUpdate, account);
+    }
+    @Override public boolean showUpdateAppPopup(Context context, TLRPC.TL_help_appUpdate update, int account) {
+        new UpdateAppAlertDialog(context, update, account).show();
+        return true;
+    }
+    @Override public boolean showCustomUpdateAppPopup(Context context, BetaUpdate update, int account) {
+        if (update == null || pendingRelease == null) return false;
+        TLRPC.TL_help_appUpdate info = new TLRPC.TL_help_appUpdate();
+        GitHubUpdateHelper.GitHubRelease release = pendingRelease;
+        info.version = !TextUtils.isEmpty(release.name) ? release.name : release.tagName;
+        info.text = GitHubUpdateHelper.getChangelogFallback(release);
+        info.url = pendingApkUrl;
+        info.flags |= 4;
+        UpdateAppAlertDialog dialog = new UpdateAppAlertDialog(context, info, account);
+        dialog.bindUpdateDownload();
+        GitHubUpdateHelper.loadChangelog(release, dialog::setChangelog);
+        dialog.show();
+        return true;
+    }
+    @Override public IUpdateLayout takeUpdateLayout(Activity activity, ViewGroup container) {
+        return new UpdateLayout(activity, container);
     }
 }

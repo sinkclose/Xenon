@@ -179,8 +179,8 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
     private int overscrollSelectedPosition;
     private StoryCell overscrollSelectedView;
     private ActionBar actionBar;
-    private final AnimatedFloat centeredTitleOffset = new AnimatedFloat(this, 0, 300, CubicBezierInterpolator.EASE_OUT_QUINT);
-    private final AnimatedFloat centeredLogoOffset = new AnimatedFloat(this, 0, 300, CubicBezierInterpolator.EASE_OUT_QUINT);
+    private final AnimatedFloat centeredTitlePosition = new AnimatedFloat(this, 0, 300, CubicBezierInterpolator.EASE_OUT_QUINT);
+    private final AnimatedFloat centeredLogoPosition = new AnimatedFloat(this, 0, 300, CubicBezierInterpolator.EASE_OUT_QUINT);
     private StoriesUtilities.EnsureStoryFileLoadedObject globalCancelable;
     private float menuItemsOffset;
 
@@ -972,17 +972,22 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
             titleView.setScaleY(scale);
             float center = actionBar.getCenteredTitlePosition(lastViewRight,
                     titleView.getDrawable().getCurrentWidth() * titleView.getScaleX());
-            float titleOffset = centeredTitleOffset.set(zxc.iconic.xenon.NekoConfig.centerTitle
-                    ? Math.max(dp(8), center - lastViewRight - titleView.getDrawable().getCurrentWidth() * titleView.getScaleX() / 2f) : 0f);
-            titleView.setTranslationX(lastViewRight + titleOffset);
+            boolean switchingTitle = animatorHasTitleText.isAnimating();
+            float titleX = centeredTitlePosition.set(zxc.iconic.xenon.NekoConfig.centerTitle
+                    ? Math.max(lastViewRight + dp(8), center - titleView.getDrawable().getCurrentWidth() * titleView.getScaleX() / 2f)
+                    : lastViewRight, switchingTitle || titleView.getAlpha() == 0f);
+            titleView.setTranslationX(titleX);
             titleView.getDrawable().setRightPadding(titleView.getTranslationX() - dp(12) + actionBar.menu.getVisibleItemsMeasuredWidthWithAlpha() * progress);
 
             offset = (telegramLogoView.getMeasuredHeight() - telegramLogoView.getTextHeight()) / 2f;
             float logoWidth = telegramLogoView.getDrawable().getCurrentWidth();
             center = actionBar.getCenteredTitlePosition(lastViewRight, logoWidth);
-            float logoOffset = centeredLogoOffset.set(zxc.iconic.xenon.NekoConfig.centerTitle
-                    ? center - lastViewRight - dp(1) - logoWidth / 2f : 0f);
-            telegramLogoView.setTranslationX(lastViewRight + dp(1) + logoOffset);
+            // Animate screen coordinates, not an offset from the changing story stack.
+            // The hidden logo must already be centered when its vertical transition begins.
+            float logoX = centeredLogoPosition.set(zxc.iconic.xenon.NekoConfig.centerTitle
+                    ? center - logoWidth / 2f : lastViewRight + dp(1),
+                    switchingTitle || telegramLogoView.getAlpha() == 0f);
+            telegramLogoView.setTranslationX(logoX);
             telegramLogoView.setTranslationY(bottomY + dp(14) - offset + AndroidUtilities.dp(FAKE_TOP_PADDING) + translationOffset /*titleView.getTranslationY() + dpf2(37.33f)*/);
 
             emojiStatusView.setTranslationX(telegramLogoView.getTranslationX() - dp(1) - dpf2(3.33f) + logoWidth);

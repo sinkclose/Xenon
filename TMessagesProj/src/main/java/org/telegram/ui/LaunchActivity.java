@@ -6059,66 +6059,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     private boolean autoUpdateCheckScheduledFromResume;
 
     private void startUpdateDownload(BetaUpdate update) {
-        final Bulletin[] progBulletin = new Bulletin[1];
-        AndroidUtilities.runOnUIThread(() -> {
-            try {
-                Bulletin b = BulletinFactory.global()
-                        .createSimpleBulletin(R.raw.ic_download, "Downloading update...", "Cancel", Integer.MAX_VALUE, () -> ApplicationLoader.applicationLoaderInstance.cancelDownloadingUpdate());
-                if (b.getLayout() instanceof Bulletin.LottieLayout) {
-                    ((Bulletin.LottieLayout) b.getLayout()).setIconPaddingBottom(2);
-                }
-                b.show();
-                progBulletin[0] = b;
-            } catch (Throwable ignored) {}
-        }, 100);
-
-        ApplicationLoader.applicationLoaderInstance.downloadUpdate(() -> {
-            AndroidUtilities.runOnUIThread(() -> {
-                try { if (progBulletin[0] != null) progBulletin[0].hide(); } catch (Throwable ignored) {}
-            });
-            File apkFile = ApplicationLoader.applicationLoaderInstance.getDownloadedUpdateFile();
-            if (apkFile != null && apkFile.exists()) {
-                AndroidUtilities.runOnUIThread(() -> {
-                    try {
-                        Bulletin b2 = BulletinFactory.global()
-                                .createSimpleBulletin(R.raw.ic_download,
-                                        LocaleController.getString(R.string.UpdateDownloaded),
-                                        "Update",
-                                        Integer.MAX_VALUE,
-                                        () -> zxc.iconic.xenon.helpers.ApkInstaller.installUpdate(LaunchActivity.this, apkFile));
-                        if (b2.getLayout() instanceof Bulletin.LottieLayout) {
-                            ((Bulletin.LottieLayout) b2.getLayout()).setIconPaddingBottom(2);
-                        }
-                        b2.show();
-                    } catch (Throwable ignored) {}
-                });
-            }
-        });
-
-        AndroidUtilities.runOnUIThread(new Runnable() {
-            @Override
-            public void run() {
-                if (ApplicationLoader.applicationLoaderInstance.isDownloadingUpdate() && progBulletin[0] != null) {
-                    if (!ApplicationLoader.applicationLoaderInstance.isRetryingUpdate()) {
-                        try {
-                            float prog = ApplicationLoader.applicationLoaderInstance.getDownloadingUpdateProgress();
-                            long total = ApplicationLoader.applicationLoaderInstance.getDownloadTotalSize();
-                            long downloaded = ApplicationLoader.applicationLoaderInstance.getDownloadBytesDownloaded();
-                            String text;
-                            if (total > 0) {
-                                String d = android.text.format.Formatter.formatShortFileSize(LaunchActivity.this, downloaded);
-                                String t = android.text.format.Formatter.formatShortFileSize(LaunchActivity.this, total);
-                                text = "Downloading update... " + d + " / " + t;
-                            } else {
-                                text = "Downloading update... " + (int)(prog * 100) + "%";
-                            }
-                            ((Bulletin.LottieLayout) progBulletin[0].getLayout()).textView.setText(text);
-                        } catch (Throwable ignored) {}
-                    }
-                    AndroidUtilities.runOnUIThread(this, 500);
-                }
-            }
-        }, 500);
+        ApplicationLoader.applicationLoaderInstance.downloadUpdate();
     }
 
     public void startAutoUpdateCheck() {
@@ -6172,6 +6113,12 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
      */
     private static boolean autoUpdateCheckPerformed = false;
     public void checkAppUpdate(boolean force, Browser.Progress progress) {
+        var updater = ApplicationLoader.applicationLoaderInstance;
+        if (updater.isCustomUpdate() && (updater.isDownloadingUpdate() || updater.getDownloadedUpdateFile() != null)) {
+            if (progress != null) progress.end();
+            if (force) updater.showUpdateDownload(this, currentAccount);
+            return;
+        }
         if (!force && !BuildVars.CHECK_UPDATES) {
             return;
         }
@@ -6196,14 +6143,16 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 final BetaUpdate pendingUpdate = ApplicationLoader.applicationLoaderInstance.getUpdate();
                 if (progress != null) {
                     progress.end();
-                    if (pendingUpdate == null) {
+                    if (pendingUpdate == null && updater.getUpdateCheckError() == null) {
                         BaseFragment fragment = getLastFragment();
                         if (fragment != null) {
                             BulletinFactory.of(fragment).createSimpleBulletin(R.raw.chats_infotip, LocaleController.getString(R.string.YourVersionIsLatest)).show();
                         }
                     }
                 }
-                if (pendingUpdate != null && !ApplicationLoader.applicationLoaderInstance.isDownloadingUpdate() && (first || prevUpdate == null || pendingUpdate.higherThan(prevUpdate))) {
+                if (force && pendingUpdate != null && (updater.isDownloadingUpdate() || updater.getDownloadedUpdateFile() != null)) {
+                    updater.showUpdateDownload(this, currentAccount);
+                } else if (pendingUpdate != null && !updater.isDownloadingUpdate() && (force || first || prevUpdate == null || pendingUpdate.higherThan(prevUpdate))) {
                     if (NekoConfig.autoDownloadUpdate) {
                         startUpdateDownload(pendingUpdate);
                     } else {

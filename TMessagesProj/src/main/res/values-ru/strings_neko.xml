@@ -621,5 +621,6 @@
     <string name="SwipeActionQr">QR</string>
     <string name="SwipeActionOpenIn">Открыть в</string>
     <string name="SwipeActionReaction">Реакция</string>
+    <string name="UpdateDeleteFile">Удалить файл</string>
 </resources>
 

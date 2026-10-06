@@ -599,6 +599,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     private ViewPage[] viewPages;
     private ActionBarMenuItem passcodeItem;
     private ActionBarMenuItem downloadsItem;
+    private ActionBarMenuItem updateDownloadItem;
     private DownloadProgressIcon downloadProgressIcon;
     private boolean downloadsItemVisible;
     public ActionBarMenuItem searchItem;
@@ -3458,6 +3459,35 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             downloadsItem.addView(downloadProgressIcon = new DownloadProgressIcon(currentAccount, context));
             downloadsItem.setContentDescription(getString(R.string.DownloadsTabs));
             downloadsItem.setVisibility(View.GONE);
+
+            updateDownloadItem = menu.addItem(-48, new ColorDrawable(Color.TRANSPARENT));
+            updateDownloadItem.addView(new org.telegram.ui.Components.UpdateDownloadIcon(context, this::checkUi_itemUpdateDownloadVisibility),
+                    LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+            updateDownloadItem.setContentDescription(getString(R.string.DownloadingUpdate));
+            updateDownloadItem.setOnClickListener(v -> {
+                var updater = ApplicationLoader.applicationLoaderInstance;
+                File apk = updater.getDownloadedUpdateFile();
+                if (apk != null) {
+                    zxc.iconic.xenon.helpers.ApkInstaller.installUpdate(getParentActivity(), apk);
+                } else {
+                    updater.showUpdateDownload(getParentActivity(), currentAccount);
+                }
+            });
+            updateDownloadItem.setOnLongClickListener(v -> {
+                var updater = ApplicationLoader.applicationLoaderInstance;
+                if (updater.getDownloadedUpdateFile() == null) return false;
+                ItemOptions.makeOptions(this, updateDownloadItem)
+                        .setColors(getThemedColor(Theme.key_actionBarDefaultTitle), getThemedColor(Theme.key_actionBarDefaultTitle))
+                        .setDimAlpha(0x08)
+                        .add(R.drawable.msg_delete, getString(R.string.UpdateDeleteFile), true, () -> {
+                            if (!updater.deleteDownloadedUpdateFile()) {
+                                BulletinFactory.of(this).createErrorBulletin(getString(R.string.ErrorOccurred)).show();
+                            }
+                        })
+                        .show();
+                return true;
+            });
+            checkUi_itemUpdateDownloadVisibility();
 
             updateProxyButton(false, false);
         }
@@ -14538,7 +14568,17 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         FragmentFloatingButton.setAnimatedVisibility(passcodeItem, factor);
     }
 
+    private void checkUi_itemUpdateDownloadVisibility() {
+        if (updateDownloadItem == null) return;
+        var updater = ApplicationLoader.applicationLoaderInstance;
+        boolean visible = updater.isDownloadingUpdate() || updater.getDownloadedUpdateFile() != null;
+        final float factor = (visible ? 1 : 0) * (1f - animatorSearchVisible.getFloatValue())
+                * (1f - getRightSlidingProgress()) * (1f - animatorDoneButtonVisible.getFloatValue());
+        FragmentFloatingButton.setAnimatedVisibility(updateDownloadItem, factor);
+    }
+
     private void checkUi_itemDownloadsVisibility() {
+        checkUi_itemUpdateDownloadVisibility();
         final float factor0 = downloadsItemVisible ? 1 : 0;
         final float factor1 = 1f - animatorSearchVisible.getFloatValue();
         final float factor2 = 1f - getRightSlidingProgress();

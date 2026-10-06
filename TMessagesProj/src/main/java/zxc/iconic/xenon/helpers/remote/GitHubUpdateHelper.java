@@ -34,7 +34,7 @@ import java.util.List;
  * built from a <b>newer</b> commit than the installed build. Ordering is
  * established by the commit timestamp, which the CI writes both into the
  * release body ("Build Date") and into {@code BuildConfig.GIT_COMMIT_DATE}.
- * The release body text is used as the changelog.
+ * The release body identifies the APK commit; the sheet fetches its commit range.
  */
 public class GitHubUpdateHelper {
 
@@ -58,6 +58,85 @@ public class GitHubUpdateHelper {
     private static final Gson GSON = new Gson();
 
     private GitHubUpdateHelper() {
+    }
+
+    public static String getReleaseCommit(GitHubRelease release) {
+        if (release.body != null) {
+            java.util.regex.Matcher match = java.util.regex.Pattern.compile(
+                    "(?im)Commit:\\*{0,2}\\s*`?([0-9a-f]{40})\\b").matcher(release.body);
+            if (match.find()) return match.group(1);
+        }
+        String tag = release.tagName == null ? "" : release.tagName;
+        return tag.startsWith(POSRAL_TAG_PREFIX) ? tag.substring(POSRAL_TAG_PREFIX.length()) : tag;
+    }
+
+    public static String getChangelogFallback(GitHubRelease release) {
+        if (release.changelog != null) return release.changelog;
+        String hash = getReleaseCommit(release);
+        return hash.substring(0, Math.min(7, hash.length())) + ": "
+                + (release.name != null ? release.name : "Update");
+    }
+
+    /** Fetch the installed..APK range, never the moving branch HEAD. */
+    public static void loadChangelog(GitHubRelease release, java.util.function.Consumer<String> callback) {
+        if (release.changelog != null) {
+            AndroidUtilities.runOnUIThread(() -> callback.accept(release.changelog));
+            return;
+        }
+        new Thread(() -> {
+            String result;
+            try {
+                String base = BuildConfig.GIT_COMMIT_HASH;
+                String head = getReleaseCommit(release);
+                if (base == null || !base.matches("[0-9a-fA-F]{40}")
+                        || !head.matches("[0-9a-fA-F]{7,40}")) {
+                    throw new Exception("Build commit is unavailable");
+                }
+                StringBuilder text = new StringBuilder();
+                int received = 0;
+                for (int page = 1; ; page++) {
+                    String endpoint = "https://api.github.com/repos/sinkclose/Xenon/compare/"
+                            + base + "..." + head + "?per_page=100&page=" + page;
+                    com.google.gson.JsonObject comparison = fetchJson(endpoint);
+                    com.google.gson.JsonArray commits = comparison.getAsJsonArray("commits");
+                    if (page == 1 && "diverged".equals(comparison.get("status").getAsString())) {
+                        text.append("Changes on the target branch:\n\n");
+                    }
+                    for (com.google.gson.JsonElement element : commits) {
+                        com.google.gson.JsonObject commit = element.getAsJsonObject();
+                        String sha = commit.get("sha").getAsString();
+                        String message = commit.getAsJsonObject("commit").get("message").getAsString();
+                        if (received++ > 0) text.append("\n\n");
+                        text.append(sha.substring(0, Math.min(7, sha.length())))
+                                .append(": ").append(message.split("\n", 2)[0]);
+                    }
+                    if (received >= comparison.get("total_commits").getAsInt()) break;
+                    if (commits.size() == 0) throw new Exception("Incomplete commit history");
+                }
+                result = received > 0 ? text.toString() : getChangelogFallback(release);
+                release.changelog = result;
+            } catch (Exception e) {
+                FileLog.e("Update commit history unavailable", e);
+                result = "Could not load commit history.\n\n" + getChangelogFallback(release);
+            }
+            String text = result;
+            AndroidUtilities.runOnUIThread(() -> callback.accept(text));
+        }, "XenonUpdateCommits").start();
+    }
+
+    private static com.google.gson.JsonObject fetchJson(String endpoint) throws Exception {
+        HttpURLConnection connection = openConnection(endpoint);
+        try {
+            connection.setRequestProperty("Accept", "application/vnd.github+json");
+            connection.setRequestProperty("User-Agent", "Xenon-Updater/" + BuildConfig.VERSION_NAME);
+            connection.setConnectTimeout(15000);
+            connection.setReadTimeout(15000);
+            int status = connection.getResponseCode();
+            if (status != 200) throw new Exception("GitHub API returned HTTP " + status);
+            try (InputStreamReader reader = new InputStreamReader(connection.getInputStream(), "UTF-8")) {
+                return GSON.fromJson(reader, com.google.gson.JsonObject.class);
+            }
+        } finally { connection.disconnect(); }
     }
 
     public static HttpURLConnection openConnection(String urlStr) throws Exception {
@@ -96,7 +175,8 @@ public class GitHubUpdateHelper {
     private static boolean isNewerRelease(GitHubRelease release) {
         String currentCommit = BuildConfig.GIT_COMMIT_SHORT;
         if (!TextUtils.isEmpty(currentCommit) && !"unknown".equals(currentCommit)
-                && currentCommit.equals(release.tagName)) {
+                && (currentCommit.equals(release.tagName)
+                || getReleaseCommit(release).startsWith(currentCommit))) {
             return false;
         }
         long installedDate = parseDateMillis(BuildConfig.GIT_COMMIT_DATE);
@@ -204,7 +284,7 @@ public class GitHubUpdateHelper {
                     }
                 }
 
-                // Use release body as changelog (don't rely on flaky git commit fetch)
+                // Commit history is fetched separately so a failure cannot block the update.
                 FileLog.d(TAG + ": update available, apk=" + apkUrl);
                 AndroidUtilities.runOnUIThread(() -> callback.onUpdateAvailable(release));
             } catch (Exception e) {
@@ -436,6 +516,7 @@ public class GitHubUpdateHelper {
      * GitHub Release JSON model.
      */
     public static class GitHubRelease {
+        public transient volatile String changelog;
         @SerializedName("tag_name")
         public String tagName;
 
