@@ -372,6 +372,18 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         return openedDialogId;
     }
 
+    public void syncCenterTitle(boolean animate) {
+        if (actionBar == null || NekoConfig.centerTitle == actionBar.isCenterTitleActive()) {
+            return;
+        }
+        // Follows the toggle live with a 300ms ease-out, no re-enter needed.
+        if (NekoConfig.centerTitle) {
+            actionBar.centerTitleInFreeSpace(animate);
+        } else {
+            actionBar.cancelCenterTitle(animate);
+        }
+    }
+
     public class ViewPage extends FrameLayout {
         public int pageAdditionalOffset;
         public DialogsRecyclerView listView;
@@ -1024,7 +1036,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
         @Override
         public void drawBlurRect(Canvas canvas, float y, Rect rectTmp, Paint blurScrimPaint, boolean top) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()) {
+            // Opaque (transparent) rect only when the live fade actually exists:
+            // enabling the toggle without restart leaves the controller null,
+            // and drawing opaque here would be a solid rectangle with no fade.
+            if (progressiveFadeController != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()) {
                 canvas.drawRect(rectTmp, blurScrimPaint);
                 return;
             }
@@ -1051,6 +1066,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             if (Build.VERSION.SDK_INT >= 31 && scrollableViewNoiseSuppressor != null) {
                 blur3_InvalidateBlur();
             }
+            // Centered title follows the toggle live with a 300ms ease-out,
+            // no re-enter needed.
+            syncCenterTitle(true);
 
             if (invalidateScrollY && (rightSlidingDialogContainer == null || !rightSlidingDialogContainer.hasFragment()) && progressToActionMode == 0) {
                 invalidateScrollY = false;
@@ -1213,7 +1231,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     dialogsTopDimOverlay.setPosition(0, fadeZone);
                     final int dimBase = getThemedColor(Theme.key_windowBackgroundGray);
                     dialogsTopDimOverlay.setColor(NekoConfig.blurredFadeDimming
-                        ? Theme.multAlpha(dimBase, 0.9f * NekoConfig.blurredFadeDimStrength / 100f)
+                        ? Theme.multAlpha(dimBase, NekoConfig.blurredFadeDimStrength / 100f)
                         : 0);
                 }
                 View currentPage = viewPages[0];
@@ -5585,6 +5603,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         if (hasMainTabs) {
             actionBar.getTitlesContainer().setTranslationX(dp(4));
             actionBar.setTitleColor(getThemedColor(Theme.key_telegram_color_dialogsLogo));
+        }
+        // The collapsed stories header uses the same centering rule in DialogStoriesCell.
+        if (NekoConfig.centerTitle) {
+            actionBar.centerTitleInFreeSpace(false);
         }
 
         if (folderId != 0 || communityId != 0) {

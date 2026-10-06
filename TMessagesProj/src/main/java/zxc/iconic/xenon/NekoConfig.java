@@ -207,6 +207,7 @@ public class NekoConfig {
     public static boolean material3ChatHeaders = false;
     public static boolean materialSliders = false;
     public static boolean centerChatHeader = false;
+    public static boolean centerTitle = false;
     public static boolean biggerAvatar = false;
     public static boolean blurredFadeView = false;
     public static int blurredFadeBlurStrength = 20;
@@ -488,6 +489,7 @@ public class NekoConfig {
             material3ChatHeaders = preferences.getBoolean("material3ChatHeaders", false);
             materialSliders = preferences.getBoolean("materialSliders", false);
             centerChatHeader = preferences.getBoolean("centerChatHeader", false);
+            centerTitle = preferences.getBoolean("centerTitle", false);
             avatarPlacement = preferences.getInt("avatarPlacement", AVATAR_PLACEMENT_LEFT);
             biggerAvatar = preferences.getBoolean("biggerAvatar", false);
             blurredFadeView = preferences.getBoolean("blurredFadeView", false);
@@ -828,6 +830,14 @@ public class NekoConfig {
         editor.apply();
     }
 
+    public static void toggleCenterTitle() {
+        centerTitle = !centerTitle;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("centerTitle", centerTitle);
+        editor.apply();
+    }
+
     public static void toggleBiggerAvatar() {
         biggerAvatar = !biggerAvatar;
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
@@ -933,6 +943,13 @@ public class NekoConfig {
 
     public static boolean progressiveFadeBlurOtherActivitiesEnabled() {
         return progressiveFadeBlurOtherActivities && progressiveFadeBlurEnabled();
+    }
+
+    // Raw toggle state: fade view in other activities, without the progressive
+    // blur requirement. When the progressive path is off, callers show the
+    // same fade as a plain (non-blurred) gradient instead.
+    public static boolean fadeViewOtherActivities() {
+        return progressiveFadeBlurOtherActivities;
     }
 
     public static void setAvatarPlacement(int placement) {

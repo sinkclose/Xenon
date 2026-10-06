@@ -208,6 +208,23 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         glassOnlyBack = true;
     }
 
+    // Plain circle behind the back button (settings "fade in other
+    // activities"). No blur, no outline: same white as settings rows and
+    // switch thumbs (key_windowBackgroundWhite), arrow shifted into center.
+    private boolean plainBackCircle;
+    private final Paint plainBackCirclePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+    public void setPlainBackCircle(boolean enabled) {
+        if (plainBackCircle == enabled) {
+            return;
+        }
+        plainBackCircle = enabled;
+        if (backButtonImageView != null) {
+            backButtonImageView.setTranslationX(enabled ? dp(8) : 0);
+        }
+        invalidate();
+    }
+
     public void setChatAvatarContainer(ChatAvatarContainer chatAvatarContainer) {
         this.chatAvatarContainer = chatAvatarContainer;
     }
@@ -538,7 +555,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             return;
         }
         titleTextView[i] = new SimpleTextView(getContext());
-        titleTextView[i].setGravity(isCenterTitle ? Gravity.CENTER : Gravity.LEFT | Gravity.CENTER_VERTICAL);
+        titleTextView[i].setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
         if (titleColorToSet != 0) {
             titleTextView[i].setTextColor(titleColorToSet);
         } else {
@@ -557,16 +574,149 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     }
 
     private boolean isCenterTitle;
+    private boolean centerTitleFreeSpace;
+    private boolean centeredTitleLaidOut;
+    private ValueAnimator centerTitleAnimator;
+    private float[] centerTitleAnimationTargets;
+
+    public boolean isCenterTitleActive() {
+        return isCenterTitle;
+    }
 
     public void centerTitle() {
+        setCenteredTitle(false, false);
+    }
+
+    public void centerTitleAnimated() {
+        setCenteredTitle(false, true);
+    }
+
+    public void centerTitleInFreeSpace(boolean animate) {
+        setCenteredTitle(true, animate);
+    }
+
+    private void setCenteredTitle(boolean freeSpace, boolean animate) {
         isCenterTitle = true;
-        if (titleTextView != null) {
-            for (int a = 0; a < titleTextView.length; a++) {
-                if (titleTextView[a] != null) {
-                    titleTextView[a].setGravity(Gravity.CENTER);
+        centerTitleFreeSpace = freeSpace;
+        updateCenteredTitle(animate);
+    }
+
+    public void cancelCenterTitle(boolean animate) {
+        isCenterTitle = false;
+        centerTitleFreeSpace = false;
+        updateTitleTranslations(new float[titleTextView.length], animate);
+    }
+
+    private void updateCenteredTitle(boolean animate) {
+        if (getWidth() == 0) {
+            return;
+        }
+        float[] targets = new float[titleTextView.length];
+        for (int i = 0; i < titleTextView.length; i++) {
+            SimpleTextView titleView = titleTextView[i];
+            if (titleView == null || titleView.getMeasuredWidth() == 0) {
+                continue;
+            }
+            float origin = titleView.getLeft();
+            if (titleView.getParent() != this && titleView.getParent() instanceof View) {
+                View parent = (View) titleView.getParent();
+                origin += parent.getLeft() + parent.getTranslationX();
+            }
+            float leftBoundary = backButtonImageView != null
+                    && backButtonImageView.getVisibility() == VISIBLE && backButtonImageView.getAlpha() > 0f
+                    ? backButtonImageView.getRight() + backButtonImageView.getTranslationX() : 0f;
+            float center = centerTitleFreeSpace ? getCenteredTitlePosition(leftBoundary, titleView.getTextWidth()) : getWidth() / 2f;
+            // Use glyph bounds: the view also reserves space for status icons and hidden drawables.
+            targets[i] = center - origin - titleView.getTextCenterX();
+        }
+        updateTitleTranslations(targets, animate);
+    }
+
+    /** Keep the screen center whenever the visible text fits between the controls. */
+    public float getCenteredTitlePosition(float leftBoundary, float textWidth) {
+        float rightBoundary = getTitleRightBoundary();
+        leftBoundary = Math.max(0f, Math.min(leftBoundary, rightBoundary));
+        float halfWidth = Math.max(0f, textWidth) / 2f + AndroidUtilities.dp(8);
+        float screenCenter = getWidth() / 2f;
+        if (screenCenter - halfWidth >= leftBoundary && screenCenter + halfWidth <= rightBoundary) {
+            return screenCenter;
+        }
+        return (leftBoundary + rightBoundary) / 2f;
+    }
+
+    public float getTitleAvailableWidth(float leftBoundary) {
+        return Math.max(0f, getTitleRightBoundary() - leftBoundary - AndroidUtilities.dp(16));
+    }
+
+    private float getTitleRightBoundary() {
+        float rightBoundary = getWidth();
+        if (menu != null && menu.getVisibility() == VISIBLE && menu.getAlpha() > 0f && !isSearchFieldVisible) {
+            for (int i = 0; i < menu.getChildCount(); i++) {
+                View item = menu.getChildAt(i);
+                if (!(item instanceof ActionBarMenuItem) || item.getVisibility() != VISIBLE
+                        || item.getAlpha() <= 0f || item.getMeasuredWidth() == 0) {
+                    continue;
                 }
+                rightBoundary = Math.min(rightBoundary,
+                        menu.getLeft() + menu.getTranslationX() + item.getLeft() + item.getTranslationX());
             }
         }
+        for (int i = 0; i < getChildCount(); i++) {
+            View item = getChildAt(i);
+            if (item instanceof ActionBarMenuItem && item.getVisibility() == VISIBLE && item.getAlpha() > 0f
+                    && item.getMeasuredWidth() > 0 && item.getLayoutParams() instanceof FrameLayout.LayoutParams
+                    && (((FrameLayout.LayoutParams) item.getLayoutParams()).gravity & Gravity.HORIZONTAL_GRAVITY_MASK) == Gravity.RIGHT) {
+                rightBoundary = Math.min(rightBoundary, item.getLeft() + item.getTranslationX());
+            }
+        }
+        // Service containers are not controls, even when they cover the whole action bar.
+        return rightBoundary;
+    }
+
+    private void updateTitleTranslations(float[] targets, boolean animate) {
+        if (centerTitleAnimator != null && centerTitleAnimator.isRunning()
+                && centerTitleAnimationTargets != null) {
+            boolean sameTarget = true;
+            for (int i = 0; i < targets.length; i++) {
+                sameTarget &= Math.abs(targets[i] - centerTitleAnimationTargets[i]) < 0.5f;
+            }
+            if (sameTarget) {
+                return; // A layout during the toggle must not snap or restart its ease-out.
+            }
+        }
+        if (centerTitleAnimator != null) {
+            centerTitleAnimator.cancel();
+            centerTitleAnimator = null;
+        }
+        float[] from = new float[titleTextView.length];
+        boolean changed = false;
+        for (int i = 0; i < titleTextView.length; i++) {
+            if (titleTextView[i] != null) {
+                from[i] = titleTextView[i].getTranslationX();
+                changed |= Math.abs(from[i] - targets[i]) > 0.5f;
+            }
+        }
+        centerTitleAnimationTargets = targets;
+        if (!animate || !changed) {
+            for (int i = 0; i < titleTextView.length; i++) {
+                if (titleTextView[i] != null) {
+                    titleTextView[i].setTranslationX(targets[i]);
+                }
+            }
+            return;
+        }
+        centerTitleAnimator = ValueAnimator.ofFloat(0f, 1f);
+        centerTitleAnimator.addUpdateListener(animation -> {
+            float progress = (float) animation.getAnimatedValue();
+            for (int i = 0; i < titleTextView.length; i++) {
+                if (titleTextView[i] != null) {
+                    titleTextView[i].setTranslationX(from[i] + (targets[i] - from[i]) * progress);
+                }
+            }
+        });
+        centerTitleAnimator.setDuration(300);
+        centerTitleAnimator.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
+        centerTitleAnimator.start();
     }
 
     public void setTitleRightMargin(int value) {
@@ -1655,6 +1805,11 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             }
             child.layout(childLeft, childTop, childLeft + width, childTop + height);
         }
+        if (isCenterTitle) {
+            updateCenteredTitle(centeredTitleLaidOut
+                    && (centerTitleFreeSpace || centerTitleAnimator != null && centerTitleAnimator.isRunning()));
+        }
+        centeredTitleLaidOut = true;
     }
 
     public void onMenuButtonPressed() {
@@ -2063,6 +2218,10 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        if (centerTitleAnimator != null) {
+            centerTitleAnimator.cancel();
+            centerTitleAnimator = null;
+        }
         attached = false;
         updateAttachState();
         if (SharedConfig.noStatusBar && actionModeVisible) {
@@ -2335,6 +2494,9 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
     @Override
     protected void dispatchDraw(Canvas canvas) {
+        if (isCenterTitle && centerTitleFreeSpace && centeredTitleLaidOut) {
+            updateCenteredTitle(true);
+        }
         final int p = dp(6);
         final int s = dp(46);
 
@@ -2396,6 +2558,10 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         if (glassDrawableBack != null && hasBackButton && !nonIsland) {
             glassDrawableBack.setBounds(0, t, s + p * 2, b);
             glassDrawableBack.draw(canvas);
+        }
+        if (plainBackCircle && hasBackButton && !nonIsland) {
+            plainBackCirclePaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider));
+            canvas.drawCircle(dp(35), (t + b) / 2f, dp(23), plainBackCirclePaint);
         }
         if (glassDrawableMenu != null && menuWidth > 0 && !nonIsland && !glassOnlyBack && !doNotDrawGlassMenu && !avatarRightBigger) {
             glassDrawableMenu.setBounds(getWidth() - Math.max(s, menuWidth) - p * 2, t, getWidth(), b);

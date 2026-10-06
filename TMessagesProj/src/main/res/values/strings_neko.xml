@@ -557,6 +557,8 @@
     <string name="Material3Sections">List items</string>
     <string name="Material3ChatHeaders">Chat headers</string>
     <string name="CenterChatHeader">Centered header</string>
+    <string name="CenteredTitle">Centered title</string>
+    <string name="CenteredTitleInfo">Centers activity titles (settings and the chats list), except chats</string>
     <string name="AvatarPlacement">Avatar placement</string>
     <string name="AvatarPlacementLeft">Left</string>
     <string name="AvatarPlacementCenter">Center</string>

@@ -529,6 +529,8 @@
     <string name="PushServiceText">Xenon запущен</string>
     <string name="Material3ChatHeaders">Шапки чатов</string>
     <string name="CenterChatHeader">Заголовок по центру</string>
+    <string name="CenteredTitle">Заголовок по центру</string>
+    <string name="CenteredTitleInfo">Центрирует заголовки экранов (настройки и список чатов), кроме чатов</string>
     <string name="AvatarPlacement">Положение аватара</string>
     <string name="AvatarPlacementLeft">Слева</string>
     <string name="AvatarPlacementCenter">По центру</string>

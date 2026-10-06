@@ -173,6 +173,12 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
         return false;
     }
 
+    // Main screen with the logo header keeps the stock look, no fade.
+    @Override
+    protected boolean fadeViewEnabled() {
+        return false;
+    }
+
     @Override
     protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
         if (isSearchFieldVisible()) {

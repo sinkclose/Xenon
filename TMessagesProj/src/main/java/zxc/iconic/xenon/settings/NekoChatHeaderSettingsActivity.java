@@ -79,12 +79,10 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
         items.add(UItem.asCheck(centerHeaderRow, LocaleController.getString(R.string.CenterChatHeader)).setChecked(NekoConfig.centerChatHeader).slug("centerHeader"));
         items.add(UItem.asCheck(biggerAvatarRow, "Bigger avatar").setChecked(NekoConfig.biggerAvatar).slug("biggerAvatar"));
         items.add(UItem.asCheck(blurredFadeViewRow, LocaleController.getString(R.string.BlurredFadeView)).setChecked(NekoConfig.blurredFadeView).slug("blurredFadeView"));
-        if (NekoConfig.progressiveFadeBlur) {
-            items.add(UItem.asCheck(progressiveFadeBlurOtherActivitiesRow,
-                    LocaleController.getString(R.string.ProgressiveFadeBlurOtherActivities),
-                    LocaleController.getString(R.string.ProgressiveFadeBlurOtherActivitiesInfo))
-                    .setChecked(NekoConfig.progressiveFadeBlurOtherActivities).slug("progressiveFadeBlurOtherActivities"));
-        }
+        items.add(UItem.asCheck(progressiveFadeBlurOtherActivitiesRow,
+                LocaleController.getString(R.string.ProgressiveFadeBlurOtherActivities),
+                LocaleController.getString(R.string.ProgressiveFadeBlurOtherActivitiesInfo))
+                .setChecked(NekoConfig.progressiveFadeBlurOtherActivities).slug("progressiveFadeBlurOtherActivities"));
         if (NekoConfig.blurredFadeView) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 items.add(UItem.asCheck(progressiveFadeBlurRow, LocaleController.getString(R.string.ProgressiveFadeBlur)).setChecked(NekoConfig.progressiveFadeBlur).slug("progressiveFadeBlur"));
@@ -202,12 +200,17 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
                 listView.adapter.update(true);
             }
         } else if (id == progressiveFadeBlurRow) {
+            // Enabling the master blur can newly activate the blur fade in
+            // other activities whose controller is created in createView:
+            // restart is required, otherwise Dialogs keeps an opaque rect
+            // with no fade view (controller null).
+            final boolean otherWasActive = NekoConfig.progressiveFadeBlurOtherActivitiesEnabled();
             NekoConfig.toggleProgressiveFadeBlur();
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.progressiveFadeBlur);
             }
-            if (!NekoConfig.progressiveFadeBlur && NekoConfig.progressiveFadeBlurOtherActivities) {
-                NekoConfig.setProgressiveFadeBlurOtherActivities(false);
+            if (!otherWasActive && NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()) {
+                showRestartBulletin();
             }
             if (listView != null && listView.adapter != null) {
                 listView.adapter.update(true);
@@ -218,7 +221,11 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.progressiveFadeBlurOtherActivities);
             }
-            showRestartBulletin();
+            // The blur controller is created in createView: restart when it
+            // needs to be created now. The plain fade appears live regardless.
+            if (NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()) {
+                showRestartBulletin();
+            }
         } else if (id == blurredFadeDimmingRow) {
             NekoConfig.toggleBlurredFadeDimming();
             if (view instanceof TextCheckCell) {

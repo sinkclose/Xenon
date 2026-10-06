@@ -179,6 +179,8 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
     private int overscrollSelectedPosition;
     private StoryCell overscrollSelectedView;
     private ActionBar actionBar;
+    private final AnimatedFloat centeredTitleOffset = new AnimatedFloat(this, 0, 300, CubicBezierInterpolator.EASE_OUT_QUINT);
+    private final AnimatedFloat centeredLogoOffset = new AnimatedFloat(this, 0, 300, CubicBezierInterpolator.EASE_OUT_QUINT);
     private StoriesUtilities.EnsureStoryFileLoadedObject globalCancelable;
     private float menuItemsOffset;
 
@@ -648,7 +650,7 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
                 continue;
             } else {
                 miniItems.add(items.get(i));
-                if (miniItems.size() >= 3) {
+                if (miniItems.size() >= collapsedStoryLimit) {
                     break;
                 }
             }
@@ -673,6 +675,29 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
         invalidate();
     }
 
+    private int collapsedStoryLimit = 3;
+    private boolean collapsedStoryUpdatePosted;
+    private final AnimatedFloat titleFitScale = new AnimatedFloat(this, 0, 300, CubicBezierInterpolator.EASE_OUT_QUINT);
+
+    private void updateCollapsedStoryLimit() {
+        if (actionBar == null || actionBar.getWidth() == 0 || collapsedStoryUpdatePosted
+                || currentState == TRANSITION_STATE || overscrollProgress != 0) {
+            return;
+        }
+        float fullWidth = Math.max(titleView.getDrawable().getCurrentWidth(), telegramLogoView.getDrawable().getCurrentWidth());
+        float left = menuItemsOffset + getAvatarRight(dp(72), 1f) + dp(12 + COLLAPSED_DIS * 2);
+        int limit = zxc.iconic.xenon.NekoConfig.centerTitle && fullWidth > actionBar.getTitleAvailableWidth(left) ? 1 : 3;
+        if (limit != collapsedStoryLimit) {
+            collapsedStoryUpdatePosted = true;
+            post(() -> {
+                collapsedStoryUpdatePosted = false;
+                collapsedStoryLimit = limit;
+                updateItems(true, false);
+                requestLayout();
+            });
+        }
+    }
+
     private boolean shouldDrawSelfInMini() {
         long dialogId = UserConfig.getInstance(currentAccount).clientUserId;
         return storiesController.hasUnreadStories(dialogId) || (storiesController.hasSelfStories() && storiesController.getDialogListStories().size() <= 3);
@@ -682,6 +707,7 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
 
     @Override
     protected void dispatchDraw(Canvas canvas) {
+        updateCollapsedStoryLimit();
         canvas.save();
         if (clipTop > 0) {
             canvas.clipRect(0, clipTop, getMeasuredWidth(), getMeasuredHeight());
@@ -935,19 +961,31 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
 
             float offset = (titleView.getMeasuredHeight() - titleView.getTextHeight()) / 2f;
             titleView.setPivotX(0);
-            titleView.setScaleX(lerp(1f, 0.95f, subtitleOverlayContainer.getTotalVisibility()));
-            titleView.setScaleY(lerp(1f, 0.95f, subtitleOverlayContainer.getTotalVisibility()));
             titleView.setTranslationY(bottomY + dp(14) - offset + dp(FAKE_TOP_PADDING) - dp(6) * subtitleOverlayContainer.getTotalVisibility());
             int cellWidth = dp(72);
             lastViewRight += -cellWidth + getAvatarRight(cellWidth, collapsedProgress) + dp(12);
-            titleView.setTranslationX(lastViewRight);
-            titleView.getDrawable().setRightPadding(lastViewRight - dp(12) + actionBar.menu.getVisibleItemsMeasuredWidthWithAlpha() * progress);
+            float textWidth = titleView.getDrawable().getCurrentWidth();
+            float fit = zxc.iconic.xenon.NekoConfig.centerTitle && textWidth > 0f
+                    ? Math.max(0.85f, Math.min(1f, actionBar.getTitleAvailableWidth(lastViewRight) / textWidth)) : 1f;
+            float scale = titleFitScale.set(fit) * lerp(1f, 0.95f, subtitleOverlayContainer.getTotalVisibility());
+            titleView.setScaleX(scale);
+            titleView.setScaleY(scale);
+            float center = actionBar.getCenteredTitlePosition(lastViewRight,
+                    titleView.getDrawable().getCurrentWidth() * titleView.getScaleX());
+            float titleOffset = centeredTitleOffset.set(zxc.iconic.xenon.NekoConfig.centerTitle
+                    ? Math.max(dp(8), center - lastViewRight - titleView.getDrawable().getCurrentWidth() * titleView.getScaleX() / 2f) : 0f);
+            titleView.setTranslationX(lastViewRight + titleOffset);
+            titleView.getDrawable().setRightPadding(titleView.getTranslationX() - dp(12) + actionBar.menu.getVisibleItemsMeasuredWidthWithAlpha() * progress);
 
             offset = (telegramLogoView.getMeasuredHeight() - telegramLogoView.getTextHeight()) / 2f;
-            telegramLogoView.setTranslationX(titleView.getTranslationX() + dp(1));
+            float logoWidth = telegramLogoView.getDrawable().getCurrentWidth();
+            center = actionBar.getCenteredTitlePosition(lastViewRight, logoWidth);
+            float logoOffset = centeredLogoOffset.set(zxc.iconic.xenon.NekoConfig.centerTitle
+                    ? center - lastViewRight - dp(1) - logoWidth / 2f : 0f);
+            telegramLogoView.setTranslationX(lastViewRight + dp(1) + logoOffset);
             telegramLogoView.setTranslationY(bottomY + dp(14) - offset + AndroidUtilities.dp(FAKE_TOP_PADDING) + translationOffset /*titleView.getTranslationY() + dpf2(37.33f)*/);
 
-            emojiStatusView.setTranslationX(titleView.getTranslationX() - dpf2(3.33f) + telegramLogoView.getMeasuredWidth());
+            emojiStatusView.setTranslationX(telegramLogoView.getTranslationX() - dp(1) - dpf2(3.33f) + logoWidth);
             emojiStatusView.setTranslationY(bottomY + dp(14 - 11 + FAKE_TOP_PADDING + 4.333f) + translationOffset);
 
             subtitleOverlayContainer.setTranslationX(titleView.getTranslationX());
@@ -2053,7 +2091,7 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
             for (int i = 0; i < items.size(); i++) {
                 if (items.get(i).dialogId != UserConfig.getInstance(currentAccount).getClientUserId() || shouldDrawSelfInMini()) {
                     animateToDialogIds.add(items.get(i).dialogId);
-                    if (animateToDialogIds.size() == 3) {
+                    if (animateToDialogIds.size() == collapsedStoryLimit) {
                         break;
                     }
                 }

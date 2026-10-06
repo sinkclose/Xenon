@@ -842,6 +842,23 @@ public class SimpleTextView extends View implements Drawable.Callback {
         return (int) getX() + offsetX + textOffsetX;
     }
 
+    /** Center of the text glyphs in local coordinates, excluding side drawables. */
+    public float getTextCenterX() {
+        if (layout == null || layout.getLineCount() == 0) {
+            return getMeasuredWidth() / 2f;
+        }
+        int textOffsetX = 0;
+        if ((gravity & Gravity.HORIZONTAL_GRAVITY_MASK) == Gravity.LEFT) {
+            if (leftDrawable != null) {
+                textOffsetX += drawablePadding + leftDrawable.getIntrinsicWidth();
+            }
+            if (replacedDrawable != null && replacingDrawableTextIndex < 0) {
+                textOffsetX += drawablePadding + replacedDrawable.getIntrinsicWidth();
+            }
+        }
+        return offsetX + textOffsetX + layout.getLineLeft(0) + textWidth / 2f;
+    }
+
     public TextPaint getTextPaint() {
         return textPaint;
     }

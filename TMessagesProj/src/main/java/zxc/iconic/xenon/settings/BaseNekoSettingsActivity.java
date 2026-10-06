@@ -47,6 +47,7 @@ import org.telegram.ui.Components.ItemOptions;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.ProgressiveFadeBlurController;
+import org.telegram.ui.Components.chat.layouts.ChatActivityFadeView;
 import org.telegram.ui.Components.SizeNotifierFrameLayout;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.URLSpanNoUnderline;
@@ -103,9 +104,22 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
         contentView = new SizeNotifierFrameLayout(context) {
             @Override
             protected void dispatchDraw(Canvas canvas) {
-                if (progressiveFadeController != null) {
-                    progressiveFadeController.setFadeZoneTop(listView.getPaddingTop());
+                // Fade view: live-blurred capture when the progressive path is
+                // enabled (48dp gradient starting right below the back-button
+                // disc), plain theme-colored gradient (same zone, no blur)
+                // when only the toggle is on (start lowered ~5% down).
+                final boolean fadeBlurActive = progressiveFadeController != null && NekoConfig.progressiveFadeBlurOtherActivitiesEnabled();
+                final int fadeZone = Math.max(listView.getPaddingTop(), actionBarContainer.getHeight());
+                if (fadeBlurActive) {
+                    // Disc bottom sits ~5dp above the action bar bottom, the
+                    // gradient is 48dp tall: zone = height - 5 + 48.
+                    progressiveFadeController.setFadeZoneTop(fadeZone + AndroidUtilities.dp(43));
                     progressiveFadeController.invalidate();
+                    removePlainTopFade();
+                } else if (fadeViewEnabled() && NekoConfig.fadeViewOtherActivities()) {
+                    ensurePlainTopFade(fadeZone + fadeZone / 20);
+                } else {
+                    removePlainTopFade();
                 }
                 if (Build.VERSION.SDK_INT >= 31 && scrollableViewNoiseSuppressor != null) {
                     blur3_InvalidateBlur();
@@ -135,7 +149,8 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
 
             @Override
             public void drawBlurRect(Canvas canvas, float y, Rect rectTmp, Paint blurScrimPaint, boolean top) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()) {
+                // The fade view (blurred or plain) covers the header zone.
+                if (fadeViewEnabled() && NekoConfig.fadeViewOtherActivities()) {
                     return;
                 }
                 if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || !SharedConfig.chatBlurEnabled() || iBlur3SourceGlassFrosted == null) {
@@ -216,7 +231,7 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
                 AndroidUtilities.rectTmp2.set(0, 0, getMeasuredWidth(), top);
                 blurScrimPaint.setColor(Theme.getColor(Theme.key_actionBarDefault, resourceProvider));
                 contentView.drawBlurRect(canvas, 0, AndroidUtilities.rectTmp2, blurScrimPaint, true);
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || !NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()) {
+                if (!fadeViewEnabled() || !NekoConfig.fadeViewOtherActivities()) {
                     if (getParentLayout() != null) {
                         getParentLayout().drawHeaderShadow(canvas, top);
                     }
@@ -237,7 +252,7 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
 
         updateActionBarVisible(true, false);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && progressiveBlurEnabled() && NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && progressiveBlurEnabled() && fadeViewEnabled() && NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()) {
             progressiveFadeController = new ProgressiveFadeBlurController(contentView, listView, contentView.indexOfChild(actionBarBackground), () -> getThemedColor(Theme.key_windowBackgroundGray));
             progressiveFadeController.setFadeZoneTop(listView.getPaddingTop());
         }
@@ -336,7 +351,43 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
             }
         });
         actionBar.setBackButtonImage(R.drawable.ic_ab_back);
+        // Plain disc behind the back button, only with the fade toggle on
+        // (on every screen, including the main one). Synced live in onResume
+        // so switching the toggle off removes it without reopening.
+        actionBar.setPlainBackCircle(NekoConfig.fadeViewOtherActivities());
+        // Centered title, same scope as the fade view: the main screen keeps
+        // the stock left-aligned title via fadeViewEnabled.
+        syncCenterTitle(actionBar, false);
         return actionBar;
+    }
+
+    public void syncCenterTitle(boolean animate) {
+        syncCenterTitle(getActionBar(), animate);
+    }
+
+    private void syncCenterTitle(ActionBar actionBar, boolean animate) {
+        boolean centered = fadeViewEnabled() && NekoConfig.centerTitle;
+        if (actionBar == null || actionBar.isCenterTitleActive() == centered) {
+            return;
+        }
+        if (centered) {
+            if (animate) {
+                actionBar.centerTitleAnimated();
+            } else {
+                actionBar.centerTitle();
+            }
+        } else {
+            actionBar.cancelCenterTitle(animate);
+        }
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (getActionBar() != null) {
+            getActionBar().setPlainBackCircle(NekoConfig.fadeViewOtherActivities());
+        }
+        syncCenterTitle(false);
     }
 
     protected String getKey() {
@@ -363,6 +414,49 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
 
     protected boolean progressiveBlurEnabled() {
         return true;
+    }
+
+    // Whether the fade view applies to this screen at all. The main screen
+    // keeps the stock header with its logo (the back-button disc still
+    // follows the toggle there).
+    protected boolean fadeViewEnabled() {
+        return true;
+    }
+
+    // Plain top fade without blur: same 48dp gradient as the progressive
+    // path, solid theme color instead of a live capture. Dimming is fixed
+    // at 88%: the slider only affects the progressive version.
+    private void ensurePlainTopFade(int fadeZone) {
+        if (plainTopFadeView == null) {
+            plainTopFadeView = new ChatActivityFadeView(contentView.getContext());
+            plainTopFadeView.setupColorKey(Theme.key_windowBackgroundGray);
+            plainTopFadeView.setOpaqueFade(true);
+            plainTopFadeView.setFadeHeightTop(AndroidUtilities.dp(48), false);
+            plainTopFadeView.setFadeTopAlpha(255);
+            lastPlainFadeColor = Integer.MIN_VALUE;
+            plainTopFadeView.setDim(255 * 88 / 100);
+            contentView.addView(plainTopFadeView, contentView.indexOfChild(actionBarBackground), LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+        }
+        // Cover the visible header even when the list padding is small (zone
+        // computed by the caller, gradient start lowered ~5% down). Stretch
+        // the gradient over the whole zone: smooth, from below the back
+        // circle fading out to the top. Non-progressive starts a bit lower.
+        final int plainZone = fadeZone + AndroidUtilities.dp(12);
+        plainTopFadeView.setFadeZoneTop(plainZone);
+        plainTopFadeView.setFadeHeightTop(Math.max(AndroidUtilities.dp(48), plainZone), false);
+        final int color = getThemedColor(Theme.key_windowBackgroundGray);
+        if (color != lastPlainFadeColor) {
+            lastPlainFadeColor = color;
+            plainTopFadeView.updateColors();
+            plainTopFadeView.setDimColor(color);
+        }
+    }
+
+    private void removePlainTopFade() {
+        if (plainTopFadeView != null) {
+            contentView.removeView(plainTopFadeView);
+            plainTopFadeView = null;
+        }
     }
 
     // Re-applies the stock non-blurred fade immediately when the master blur
@@ -496,6 +590,11 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
     private boolean iBlur3Invalidated;
     private IBlur3Capture iBlur3Capture;
     private ProgressiveFadeBlurController progressiveFadeController;
+    // Plain (non-blurred) top fade: same zone as the progressive path, solid
+    // theme color instead of a live capture. Shown when the toggle is on but
+    // the progressive path is off.
+    private ChatActivityFadeView plainTopFadeView;
+    private int lastPlainFadeColor = Integer.MIN_VALUE;
 
     private final ArrayList<RectF> iBlur3Positions = new ArrayList<>();
     private final RectF iBlur3PositionActionBar = new RectF();

@@ -20,7 +20,9 @@ import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.UserObject;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.AlertDialog;
+import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.DialogsActivity;
 import org.telegram.ui.Cells.TextCheckCell;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.ChatAvatarContainer;
@@ -66,6 +68,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
     private final int loadingIndicatorsRow = rowId++;
     private final int wavyProgressRow = rowId++;
     private final int chatHeaderSettingsRow = rowId++;
+    private final int centeredTitleRow = rowId++;
     private final int nonIslandTabBarsRow = rowId++;
     private final int nonIslandGlobalSearchRow = rowId++;
     private final int material3BottomNavigationBarRow = rowId++;
@@ -146,6 +149,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
 
         items.add(UItem.asHeader("Chat Header"));
         items.add(TextSettingsCellFactory.of(chatHeaderSettingsRow, LocaleController.getString(R.string.ChatHeaderSettings), "›").slug("chatHeaderSettings"));
+        items.add(InfoCheckCellFactory.of(centeredTitleRow, LocaleController.getString(R.string.CenteredTitle), NekoConfig.centerTitle, () -> showCenteredTitleInfo()).slug("centeredTitle"));
         items.add(UItem.asShadow(null));
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.NonIslandUI)));
@@ -380,6 +384,26 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
             presentFragment(new NekoLiquidGlassSettingsActivity());
         } else if (id == chatHeaderSettingsRow) {
             presentFragment(new NekoChatHeaderSettingsActivity());
+        } else if (id == centeredTitleRow) {
+            NekoConfig.toggleCenterTitle();
+            if (view instanceof InfoCheckCell) {
+                ((InfoCheckCell) view).setChecked(NekoConfig.centerTitle);
+            }
+            syncCenterTitle(true);
+            // Live-apply with a 300ms ease-out on every screen in the stack
+            // instead of rebuilding views (which would snap, not glide).
+            if (parentLayout != null) {
+                for (BaseFragment fragment : parentLayout.getFragmentStack()) {
+                    if (fragment == this) {
+                        continue;
+                    }
+                    if (fragment instanceof BaseNekoSettingsActivity) {
+                        ((BaseNekoSettingsActivity) fragment).syncCenterTitle(true);
+                    } else if (fragment instanceof DialogsActivity) {
+                        ((DialogsActivity) fragment).syncCenterTitle(true);
+                    }
+                }
+            }
         }
     }
 
@@ -491,6 +515,15 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
 
         sheet.setCustomView(container);
         sheet.show();
+    }
+
+    private void showCenteredTitleInfo() {
+        if (getParentActivity() == null) return;
+        AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity(), resourcesProvider);
+        builder.setTitle(LocaleController.getString(R.string.CenteredTitle));
+        builder.setMessage(LocaleController.getString(R.string.CenteredTitleInfo));
+        builder.setNegativeButton(LocaleController.getString(R.string.Close), null);
+        builder.show();
     }
 
     private void showDialogsInfo() {
