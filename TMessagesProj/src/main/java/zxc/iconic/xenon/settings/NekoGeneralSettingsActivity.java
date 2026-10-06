@@ -1,5 +1,6 @@
 package zxc.iconic.xenon.settings;
 
+import android.os.Build;
 import android.text.TextUtils;
 import android.view.View;
 
@@ -31,7 +32,7 @@ import zxc.iconic.xenon.helpers.remote.GitHubUpdateHelper;
 import zxc.iconic.xenon.translator.Translator;
 import zxc.iconic.xenon.translator.TranslatorApps;
 
-import tw.nekomimi.nekogram.translator.deepl.DeepLOAuth;
+import zxc.iconic.xenon.translator.deepl.DeepLOAuth;
 
 public class NekoGeneralSettingsActivity extends BaseNekoSettingsActivity {
 
@@ -52,6 +53,8 @@ public class NekoGeneralSettingsActivity extends BaseNekoSettingsActivity {
     private final int nameOrderRow = rowId++;
     private final int idTypeRow = rowId++;
     private final int hidePhoneNumberRow = rowId++;
+
+    private final int externalStreamingProtocolRow = rowId++;
 
     private final int disabledInstantCameraRow = rowId++;
     private final int askBeforeCallRow = rowId++;
@@ -178,6 +181,15 @@ public class NekoGeneralSettingsActivity extends BaseNekoSettingsActivity {
         }).slug("idType"));
         items.add(UItem.asCheck(hidePhoneNumberRow, LocaleController.getString(R.string.HidePhoneNumber)).slug("hidePhoneNumber").setChecked(NekoConfig.hidePhoneNumber));
         items.add(UItem.asShadow(LocaleController.getString(R.string.IdTypeAbout)));
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            items.add(UItem.asHeader(LocaleController.getString(R.string.Streaming)));
+            items.add(TextSettingsCellFactory.of(externalStreamingProtocolRow, LocaleController.getString(R.string.ExternalStreamingProtocol),
+                    LocaleController.getString(NekoConfig.forceHttpStreaming ?
+                            R.string.ExternalStreamingProtocolHttp :
+                            R.string.ExternalStreamingProtocolContentProvider)).slug("externalStreamingProtocol"));
+            items.add(UItem.asShadow(LocaleController.getString(R.string.ExternalStreamingProtocolDescription)));
+        }
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.General)));
         items.add(UItem.asCheck(disabledInstantCameraRow, LocaleController.getString(R.string.DisableInstantCamera)).slug("disabledInstantCamera").setChecked(NekoConfig.disableInstantCamera));
@@ -415,6 +427,14 @@ public class NekoGeneralSettingsActivity extends BaseNekoSettingsActivity {
                     notifyItemChanged(deeplAuthRow, PARTIAL);
                 });
             }
+        } else if (id == externalStreamingProtocolRow) {
+            ArrayList<String> arrayList = new ArrayList<>();
+            arrayList.add(LocaleController.getString(R.string.ExternalStreamingProtocolContentProvider));
+            arrayList.add(LocaleController.getString(R.string.ExternalStreamingProtocolHttp));
+            showPopup(arrayList, NekoConfig.forceHttpStreaming ? 1 : 0, item, view, i -> {
+                NekoConfig.setForceHttpStreaming(i == 1);
+                listView.adapter.notifyItemChanged(position, PARTIAL);
+            });
         }
     }
 

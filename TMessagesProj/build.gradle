@@ -6,7 +6,7 @@ import java.util.zip.ZipFile
 plugins {
     id 'com.android.library'
     id 'org.lsposed.lsparanoid'
-    id 'org.telegram.lottie-meta'
+    id 'org.telegram.build-plugin'
     id 'tw.nekomimi.nekogram.tl-readers'
     id 'idea'
 }
@@ -19,11 +19,18 @@ tlReaders {
 idea {
     module {
         excludeDirs += [
-                file('jni/third_party'),
-                file('jni/ffmpeg'),
-                file('jni/tlottie'),
-                file('jni/boringssl'),
-                file('jni/sqlite')
+            file('jni/td'),
+            file('jni/third_party/absl'),
+            file('jni/third_party/boringssl'),
+            file('jni/third_party/dav1d'),
+            file('jni/third_party/ffmpeg'),
+            file('jni/third_party/libvpx'),
+            file('jni/third_party/libyuv'),
+            file('jni/third_party/openh264'),
+            file('jni/third_party/xiph'),
+            file('jni/tlottie'),
+            file('jni/voip/webrtc'),
+            file('jni/sqlite')
         ]
     }
 }
@@ -109,14 +116,15 @@ dependencies {
     implementation 'androidx.activity:activity:1.13.0'
     implementation 'androidx.collection:collection:1.6.0'
     implementation 'com.google.android.material:material:1.13.0'
-    implementation 'androidx.fragment:fragment:1.9.0'
-    implementation 'androidx.core:core:1.19.0'
+    implementation 'androidx.fragment:fragment:1.9.1'
+    implementation 'androidx.core:core:1.19.1'
     implementation 'androidx.palette:palette:1.0.0'
     implementation 'androidx.exifinterface:exifinterface:1.4.2'
     implementation 'androidx.dynamicanimation:dynamicanimation:1.1.0'
     implementation "androidx.sharetarget:sharetarget:1.2.0"
     implementation 'androidx.interpolator:interpolator:1.0.0'
     implementation 'androidx.biometric:biometric:1.1.0'
+    implementation 'androidx.webkit:webkit:1.14.0'
 
     implementation 'com.google.android.gms:play-services-cast-framework:22.3.1'
     implementation 'androidx.mediarouter:mediarouter:1.8.1'
@@ -128,7 +136,7 @@ dependencies {
 
     compileOnly 'org.checkerframework:checker-qual:2.5.2'
     compileOnly 'org.checkerframework:checker-compat-qual:2.5.0'
-    implementation 'com.google.firebase:firebase-messaging:25.1.2'
+    implementation 'com.google.firebase:firebase-messaging:25.1.3'
     implementation 'com.google.firebase:firebase-appindexing:20.0.0'
     implementation 'com.google.android.gms:play-services-maps:20.0.0'
     implementation 'com.google.android.gms:play-services-auth:21.6.0'
@@ -163,6 +171,12 @@ dependencies {
     implementation("io.noties.markwon:ext-latex:4.6.2") {
         exclude group: 'ru.noties', module: 'jlatexmath-android'
     }
+
+    api "androidx.media3:media3-exoplayer:1.11.1"
+    api "androidx.media3:media3-exoplayer-dash:1.11.1"
+    api "androidx.media3:media3-exoplayer-hls:1.11.1"
+    api "androidx.media3:media3-decoder-ffmpeg:1.11.1"
+    api "androidx.media3:media3-session:1.11.1"
     api project(':jlatexmath')
 
 //    implementation 'com.google.mlkit:translate:17.0.3'
@@ -178,11 +192,16 @@ dependencies {
 
     implementation 'androidx.browser:browser:1.10.0'
     implementation 'app.nekogram.gifski:gifski:1.0.2'
-    implementation 'app.nekogram.translator:translator:1.6.1'
+    implementation 'app.nekogram.translator:translator:2.0.0'
     implementation 'com.jaredrummler:truetypeparser-light:1.0.0'
     implementation 'com.squareup.okhttp3:okhttp:5.5.0'
     implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:6.1'
     implementation 'org.apache.commons:commons-text:1.15.0'
+    implementation 'org.chromium.net:cronet-api:143.7445.0'
+    implementation 'com.google.net.cronet:cronet-okhttp:0.1.1'
+    implementation 'com.google.android.gms:play-services-cronet:18.1.1'
+    implementation 'co.nstant.in:cbor:0.9'
+
 }
 
 lsparanoid {
@@ -239,6 +258,26 @@ android {
     externalNativeBuild {
         cmake {
             path 'jni/CMakeLists.txt'
+        }
+    }
+
+    defaultConfig {
+        vectorDrawables.generatedDensities = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi']
+
+        externalNativeBuild {
+            cmake {
+                version '3.22.1'
+                arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-23', '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
+                targets 'tmessages.49'
+                System.getenv("PATH").split(File.pathSeparator).any { path ->
+                    var file = Paths.get("${path}${File.separator}ccache${if (OperatingSystem.current().windows) ".exe" else ""}").toFile()
+                    if (file.exists()) {
+                        println("Using ccache ${file.getAbsolutePath()}")
+                        arguments += "-DANDROID_CCACHE=${file.getAbsolutePath()}"
+                        return true
+                    }
+                }
+            }
         }
     }
 
@@ -308,33 +347,12 @@ android {
             buildConfigField("String","API_HASH", "\"${localProperties.get("apiHash")}\"")
         }
     }
-    namespace 'org.telegram.messenger'
 
-    externalNativeBuild {
-        cmake {
-            version '4.0.0+'
-        }
-    }
+    namespace 'org.telegram.messenger'
 
     defaultConfig {
         ndk {
             abiFilters "arm64-v8a"
-        }
-        externalNativeBuild {
-            cmake {
-                arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-23', '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
-                System.getenv("PATH").split(File.pathSeparator).any { path ->
-                    var file = Paths.get("${path}${File.separator}ccache${if (OperatingSystem.current().windows) ".exe" else ""}").toFile()
-                    if (file.exists()) {
-                        println("Using ccache ${file.getAbsolutePath()}")
-                        arguments += "-DANDROID_CCACHE=${file.getAbsolutePath()}"
-                        return true
-                    }
-                }
-            }
-        }
-        vectorDrawables {
-            generatedDensities = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi']
         }
     }
 }

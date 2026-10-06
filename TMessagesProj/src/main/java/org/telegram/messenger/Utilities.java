@@ -168,11 +168,10 @@ public class Utilities {
                 if (allowedChar && start < 0) {
                     start = end;
                 } else if (!allowedChar && start >= 0) {
-                    end++;
                     break;
                 }
             }
-            if (start >= 0) {
+            if (start >= 0 && (end - start > 1 || value.charAt(start) != '-')) {
                 String str = value.subSequence(start, end).toString();
 //                val = parseInt(str);
                 val = Integer.parseInt(str);
@@ -361,6 +360,12 @@ public class Utilities {
 
     public static byte[] computePBKDF2(byte[] password, byte[] salt) {
         byte[] dst = new byte[64];
+        Utilities.pbkdf2(password, salt, dst, 100000);
+        return dst;
+    }
+
+    public static byte[] computePBKDF2(byte[] password, byte[] salt, int keyLength) {
+        byte[] dst = new byte[keyLength];
         Utilities.pbkdf2(password, salt, dst, 100000);
         return dst;
     }

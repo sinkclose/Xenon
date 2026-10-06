@@ -42,7 +42,6 @@ public class StickerSizePreviewMessagesCell extends LinearLayout {
     private FrameLayout fragmentView;
     private final ChatMessageCell[] cells = new ChatMessageCell[2];
     private final MessageObject[] messageObjects = new MessageObject[2];
-    private final Drawable shadowDrawable;
 
     public StickerSizePreviewMessagesCell(Context context, Theme.ResourcesProvider resourcesProvider) {
         super(context);
@@ -50,8 +49,6 @@ public class StickerSizePreviewMessagesCell extends LinearLayout {
         setWillNotDraw(false);
         setOrientation(LinearLayout.VERTICAL);
         setPadding(0, dp(11), 0, dp(11));
-
-        shadowDrawable = Theme.getThemedDrawable(context, R.drawable.greydivider_bottom, Theme.getColor(Theme.key_windowBackgroundGrayShadow, resourcesProvider));
 
         int date = (int) (System.currentTimeMillis() / 1000) - 60 * 60;
         TLRPC.TL_message message = new TLRPC.TL_message();
@@ -218,8 +215,6 @@ public class StickerSizePreviewMessagesCell extends LinearLayout {
             drawable.draw(canvas);
             canvas.restore();
         }
-        shadowDrawable.setBounds(0, 0, getMeasuredWidth(), getMeasuredHeight());
-        shadowDrawable.draw(canvas);
     }
 
     @Override

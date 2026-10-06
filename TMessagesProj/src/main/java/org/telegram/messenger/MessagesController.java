@@ -736,10 +736,10 @@ public class MessagesController extends BaseController implements NotificationCe
     public boolean starsLocked;
 
     public boolean starsPurchaseAvailable() {
-        return !starsLocked;
+        return true;//!starsLocked;
     }
     public boolean premiumFeaturesBlocked() {
-        return premiumLocked && !getUserConfig().isPremium();
+        return false;//premiumLocked && !getUserConfig().isPremium();
     }
     public boolean premiumPurchaseBlocked() {
         return premiumLocked;
@@ -11523,7 +11523,7 @@ private boolean hasImportantUnread(TLRPC.Dialog dialog) {
         return true;
     }
 
-    public void removeDeletedMessagesFromArray(final long dialogId, ArrayList<TLRPC.Message> messages) {
+    protected void removeDeletedMessagesFromArray(final long dialogId, ArrayList<TLRPC.Message> messages) {
         int maxDeletedId = deletedHistory.get(dialogId, 0);
         if (maxDeletedId == 0) {
             return;

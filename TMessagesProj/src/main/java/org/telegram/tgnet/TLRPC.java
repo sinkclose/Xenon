@@ -53,9 +53,10 @@ import org.telegram.ui.community.CommunityUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Objects;
 
 import zxc.iconic.xenon.helpers.WebAppHelper;
-import tw.nekomimi.nekogram.tlv.TlViewer;
+import zxc.iconic.xenon.tlv.TlViewer;
 
 public class TLRPC {
 
@@ -31726,6 +31727,11 @@ public class TLRPC {
 
             return null;
         }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(flags, collapsed, offset, length, url, language);
+        }
     }
 
     public static class TL_messageEntityTextUrl extends MessageEntity {
@@ -32322,6 +32328,11 @@ public class TLRPC {
             offset = parser.readInt32("offset", 0);
             length = parser.readInt32("length", 0);
             user_id = parser.readInt64("user_id", 0);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(super.hashCode(), user_id);
         }
     }
 
@@ -61861,6 +61872,11 @@ public class TLRPC {
             offset = parser.readInt32("offset", 0);
             length = parser.readInt32("length", 0);
             document_id = parser.readInt64("document_id", 0);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(super.hashCode(), document_id);
         }
     }
 

@@ -165,7 +165,7 @@ public:
         for (int a = 0; a < MAX_GREASE; a++) {
             grease[a] = (uint8_t) ((grease[a] & 0xf0) + 0x0A);
         }
-        for (size_t i = 1; i < MAX_GREASE; i += 2) {
+        for (size_t i = 1; i + 1 < MAX_GREASE; i += 2) {
             if (grease[i] == grease[i + 1]) {
                 grease[i] ^= 0x10;
             }
@@ -177,8 +177,8 @@ public:
             String, Random, K, M, P, E, Zero, Domain, Grease, BeginScope, EndScope, Permutation
         };
         Type type;
-        size_t length;
-        int seed;
+        size_t length = 0;
+        int seed = 0;
         std::string data;
         std::vector<std::vector<Op>> entities;
 

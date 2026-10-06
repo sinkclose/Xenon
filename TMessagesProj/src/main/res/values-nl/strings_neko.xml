@@ -31,7 +31,6 @@
     <string name="DeleteDownloadedFile">Gedownload bestand verwijderen</string>
     <string name="TestBackendOn">Dit account zal verbinding maken met de test backend.</string>
     <string name="TestBackendOff">Dit account zal verbinding maken met de productie backend.</string>
-    <string name="ViewHistory">Geschiedenis bekijken</string>
     <string name="Nya">Miauw!</string>
     <string name="StickerSize">Sticker grootte</string>
     <string name="StickerSizeLeft">Klein</string>

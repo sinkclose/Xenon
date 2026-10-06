@@ -407,6 +407,12 @@
     <string name="TelegaDetectorStatusWas">Использовал Telega в прошлом</string>
     <string name="TelegaDetectorStatusNot">Следов Telega не обнаружено</string>
     <string name="TelegaDetectorStatusRisk">Пользователь использует или использовал в прошлом клиент Telega.</string>
+    <string name="LocalCustomEmoji">Локальные пользовательские эмодзи</string>
+    <string name="MiniSenderAvatar">Телефотография отправителя</string>
+    <string name="ExternalStreamingProtocol">Внешний протокол потоковой передачи</string>
+    <string name="ExternalStreamingProtocolDescription">Выберите способ потоковой передачи незавершенных видеороликов на внешние плееры. Наивысший режим работает с большинством современных плееров; если видео зависит или не воспроизводится, переключитесь на HTTP.</string>
+    <string name="ExternalStreamingProtocolContentProvider">Внешний поставщик контента по протоколу потоковой передачи</string>
+    <string name="ExternalStreamingProtocolHttp">Внешний протокол потоковой передачи HTTP</string>
     <!-- Accessibility -->
     <string name="AccessibilitySettings">Настройки доступности</string>
     <string name="AlternativeTransition">Альтернативный переход</string>

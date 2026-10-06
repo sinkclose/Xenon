@@ -63,6 +63,7 @@ import android.media.audiofx.NoiseSuppressor;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -169,7 +170,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import zxc.iconic.xenon.NekoConfig;
 
 @SuppressLint("NewApi")
-public class VoIPService extends Service implements SensorEventListener, AudioManager.OnAudioFocusChangeListener, VoIPController.ConnectionStateListener, NotificationCenter.NotificationCenterDelegate, VoIPServiceState {
+public class VoIPService extends Service implements SensorEventListener, AudioManager.OnAudioFocusChangeListener, NotificationCenter.NotificationCenterDelegate, VoIPServiceState {
 
 	public static final int CALL_MIN_LAYER = 65;
 
@@ -235,6 +236,7 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 	private String lastError;
 	private PowerManager.WakeLock proximityWakelock;
 	private PowerManager.WakeLock cpuWakelock;
+	private WifiManager.WifiLock wifiLock;
 	private boolean isProximityNear;
 	private boolean isHeadsetPlugged;
 	private int previousAudioOutput = -1;
@@ -2607,7 +2609,7 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 								BaseFragment lastFragment = LaunchActivity.getSafeLastFragment();
 								if (lastFragment != null) {
 									BulletinFactory.of(lastFragment)
-										.createSimpleBulletin(R.raw.linkbroken, getString(R.string.ConferenceClosed))
+										.createSimpleBulletin(R.raw.linkbroken, LocaleController.getString(R.string.ConferenceClosed))
 										.show()
 										.hideAfterBottomSheet = false;
 								}
@@ -3451,16 +3453,6 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 				AndroidUtilities.runOnUIThread(() -> Toast.makeText(VoIPService.this, "This call uses TCP which will degrade its quality.", Toast.LENGTH_SHORT).show());
 			}
 
-			// proxy
-			Instance.Proxy proxy = null;
-			if (preferences.getBoolean("proxy_enabled", false) && preferences.getBoolean("proxy_enabled_calls", false)) {
-				final String server = preferences.getString("proxy_ip", null);
-				final String secret = preferences.getString("proxy_secret", null);
-				if (!TextUtils.isEmpty(server) && TextUtils.isEmpty(secret)) {
-					proxy = new Instance.Proxy(server, preferences.getInt("proxy_port", 0), preferences.getString("proxy_user", null), preferences.getString("proxy_pass", null));
-				}
-			}
-
 			// encryption key
 			final Instance.EncryptionKey encryptionKey = new Instance.EncryptionKey(authKey, isOutgoing);
 
@@ -3479,7 +3471,7 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 				}
 			}
 			// init
-			tgVoip[CAPTURE_DEVICE_CAMERA] = Instance.makeInstance(privateCall.protocol.library_versions.get(0), config, persistentStateFilePath, endpoints, proxy, getNetworkType(), encryptionKey, remoteSink[CAPTURE_DEVICE_CAMERA], captureDevice[CAPTURE_DEVICE_CAMERA], (uids, levels, voice) -> {
+			tgVoip[CAPTURE_DEVICE_CAMERA] = Instance.makeInstance(privateCall.protocol.library_versions.get(0), config, persistentStateFilePath, endpoints, null, getNetworkType(), encryptionKey, remoteSink[CAPTURE_DEVICE_CAMERA], captureDevice[CAPTURE_DEVICE_CAMERA], (uids, levels, voice) -> {
 				if (sharedInstance == null || privateCall == null) {
 					return;
 				}
@@ -4214,6 +4206,9 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 			}
 		}
 		cpuWakelock.release();
+		if (wifiLock != null) {
+			wifiLock.release();
+		}
 		AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
 		if (!playingSound) {
 			VoipAudioManager vam = VoipAudioManager.get();
@@ -4649,6 +4644,13 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 
 			cpuWakelock = ((PowerManager) getSystemService(POWER_SERVICE)).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "telegram-voip");
 			cpuWakelock.acquire();
+			var wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+			if (wm != null) {
+				wifiLock = wm.createWifiLock(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+						? WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+						: WifiManager.WIFI_MODE_FULL_HIGH_PERF, "telegram-voip");
+				wifiLock.acquire();
+			}
 
 			btAdapter = am.isBluetoothScoAvailableOffCall() ? BluetoothAdapter.getDefaultAdapter() : null;
 
@@ -5421,7 +5423,6 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 		}
 	}
 
-	@Override
 	public void onConnectionStateChanged(int newState, boolean inTransition) {
 		AndroidUtilities.runOnUIThread(() -> {
 			if (convertingVoip != null) {
@@ -5491,7 +5492,6 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 		Utilities.globalQueue.postRunnable(() -> soundPool.play(spAllowTalkId, 0.5f, 0.5f, 0, 0, 1));
 	}
 
-	@Override
 	public void onSignalBarCountChanged(int newCount) {
 		AndroidUtilities.runOnUIThread(() -> {
 			signalBarCount = newCount;

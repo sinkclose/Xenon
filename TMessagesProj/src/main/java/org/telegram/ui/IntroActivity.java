@@ -133,7 +133,7 @@ public class IntroActivity extends BaseFragment implements NotificationCenter.No
         MessagesController.getGlobalMainSettings().edit().putLong("intro_crashed_time", System.currentTimeMillis()).apply();
 
         titles = new CharSequence[]{
-                LocaleController.getString(R.string.AppNameNeko),
+                LocaleController.getString(R.string.Nekogram),
                 LocaleController.getString(R.string.Page2Title),
                 LocaleController.getString(R.string.Page3Title),
                 LocaleController.getString(R.string.Page5Title),
@@ -203,7 +203,7 @@ public class IntroActivity extends BaseFragment implements NotificationCenter.No
         };
         scrollView.addView(frameContainerView, LayoutHelper.createScroll(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.TOP));
 
-        darkThemeDrawable = new RLottieDrawable(R.raw.sun, String.valueOf(R.raw.sun), dp(28), dp(28), true, null);
+        darkThemeDrawable = new RLottieDrawable(R.raw.sun, dp(28), dp(28), true, null);
         darkThemeDrawable.setPlayInDirectionOfCustomEndFrame(true);
         darkThemeDrawable.beginApplyLayerColors();
         darkThemeDrawable.commitApplyLayerColors();

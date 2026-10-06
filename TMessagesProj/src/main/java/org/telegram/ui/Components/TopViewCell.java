@@ -6,15 +6,10 @@ import android.content.Context;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
-import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.TextView;
-
-import androidx.recyclerview.widget.LinearLayoutManager;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.MediaDataController;
-import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.UserConfig;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Stories.recorder.HintView2;
@@ -39,6 +34,7 @@ public class TopViewCell extends LinearLayout implements Theme.Colorable {
         imageView.setOnClickListener(v -> {
             imageView.getImageReceiver().startAnimation();
         });
+        imageView.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         addView(imageView, LayoutHelper.createLinear(90, 90, Gravity.CENTER, 0, 9, 0, 9));
 
         titleView = new LinkSpanDrawable.LinksTextView(context);
@@ -80,7 +76,7 @@ public class TopViewCell extends LinearLayout implements Theme.Colorable {
     private int lastIconResId;
     public void setEmoji(int iconResId) {
         if (lastIconResId != iconResId) {
-            imageView.setImageDrawable(new RLottieDrawable(lastIconResId = iconResId, "" + iconResId, dp(90), dp(90)));
+            imageView.setImageDrawable(new RLottieDrawable(lastIconResId = iconResId, dp(90), dp(90)));
             imageView.getImageReceiver().setAutoRepeat(2);
         }
     }

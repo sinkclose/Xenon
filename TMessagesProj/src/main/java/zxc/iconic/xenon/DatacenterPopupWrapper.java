@@ -16,6 +16,7 @@ import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.LinkSpanDrawable;
 import org.telegram.ui.Components.PopupSwipeBackLayout;
+import org.telegram.utils.proxy.ProxySettings;
 
 import java.util.ArrayList;
 
@@ -79,7 +80,8 @@ public class DatacenterPopupWrapper {
         }
         datacenterInfo.checking = true;
         updateStatus(item, resourcesProvider, true);
-        datacenterInfo.pingId = ConnectionsManager.getInstance(UserConfig.selectedAccount).checkProxy("ping.neko", datacenterInfo.id, null, null, null, time -> AndroidUtilities.runOnUIThread(() -> {
+        var proxySettings = ProxySettings.builder().setAddress("ping.neko").setPort(datacenterInfo.id).setType(ProxySettings.Type.SOCKS5).build();
+        datacenterInfo.pingId = ConnectionsManager.getInstance(UserConfig.selectedAccount).checkProxy(proxySettings, time -> AndroidUtilities.runOnUIThread(() -> {
             datacenterInfo.availableCheckTime = SystemClock.elapsedRealtime();
             datacenterInfo.checking = false;
             if (time == -1) {

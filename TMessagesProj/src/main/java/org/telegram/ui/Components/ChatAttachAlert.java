@@ -2974,6 +2974,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
         moveCaptionButton.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_windowBackgroundWhiteGrayText2), PorterDuff.Mode.SRC_IN));
         moveCaptionButton.setImageResource(R.drawable.menu_link_above);
         moveCaptionButton.setVisibility(View.GONE);
+        moveCaptionButton.setContentDescription(LocaleController.getString(R.string.CaptionAbove));
         moveCaptionButton.setOnClickListener(v -> {
             if (!captionAbove) {
                 toggleCaptionAbove();
@@ -3501,6 +3502,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
         topCommentMoveButton.setScaleType(ImageView.ScaleType.CENTER);
         topCommentMoveButton.setImageResource(R.drawable.menu_link_below);
         topCommentMoveButton.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_chat_messagePanelIcons), PorterDuff.Mode.SRC_IN));
+        topCommentMoveButton.setContentDescription(LocaleController.getString(R.string.CaptionBelow));
         topCommentTextView.addView(topCommentMoveButton, LayoutHelper.createFrame(40, 40, Gravity.BOTTOM | Gravity.RIGHT, 0, 0, 60, 0));
         topCommentMoveButton.setOnClickListener(v -> {
             if (captionAbove) {
@@ -5378,7 +5380,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
         currentSheetAnimation.setDuration(400);
         currentSheetAnimation.setStartDelay(20);
         currentSheetAnimation.setInterpolator(openInterpolator);
-        AnimationNotificationsLocker locker = new AnimationNotificationsLocker();
+        AnimationNotificationsLocker locker = new AnimationNotificationsLocker(new int[]{NotificationCenter.albumsDidLoad});
         BottomSheetDelegateInterface delegate = super.delegate;
         final Runnable onAnimationEnd = () -> {
             currentSheetAnimation = null;

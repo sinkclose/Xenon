@@ -32,7 +32,6 @@
     <string name="DeleteDownloadedFile">Șterge fișierul descărcat</string>
     <string name="TestBackendOn">Acest cont se va conecta la sistemul backend de testare.</string>
     <string name="TestBackendOff">Acest cont se va conecta la sistemul backend de producție.</string>
-    <string name="ViewHistory">Vizualizare istoric</string>
     <string name="Nya">Meow!</string>
     <string name="StickerSize">Dimensiune sticker</string>
     <string name="StickerSizeLeft">Mic</string>

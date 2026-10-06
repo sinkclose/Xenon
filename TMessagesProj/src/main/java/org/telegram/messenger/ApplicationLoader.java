@@ -36,6 +36,7 @@ import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
 
 import org.json.JSONObject;
+import org.telegram.messenger.utils.Choreographer60FpsContent;
 import org.telegram.messenger.voip.VideoCapturerDevice;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLRPC;
@@ -56,6 +57,7 @@ import zxc.iconic.xenon.proxy.XrayConfigValidator;
 import zxc.iconic.xenon.proxy.XrayLocalSocksAuth;
 import zxc.iconic.xenon.proxy.XrayProxyProfileStore;
 import zxc.iconic.xenon.proxy.XrayTelegramProxyBridge;
+import zxc.iconic.xenon.helpers.CronetHelper;
 
 public class ApplicationLoader extends Application {
 
@@ -318,6 +320,7 @@ public class ApplicationLoader extends Application {
         // AndroidUtilities must be initialized before FileLog
         final String helloWorld = AndroidUtilities.getHelloWorld();
         ComponentsHelper.fixComponents(this);
+        CronetHelper.init(this);
 
         if (BuildVars.LOGS_ENABLED) {
             FileLog.d(helloWorld);
@@ -381,67 +384,12 @@ public class ApplicationLoader extends Application {
 
         LauncherIconController.tryFixLauncherIconIfNeeded();
         ProxyRotationController.init();
-        if (NekoConfig.xrayAppProxyEnabled) {
-            XrayProxyProfileStore.Profile activeProfile = XrayProxyProfileStore.getActiveProfile();
-            if (activeProfile == null) {
-                FileLog.e("Xray startup skipped: no active profile");
-                NekoConfig.setXrayAppProxyEnabled(false);
-                AndroidUtilities.runOnUIThread(() -> XrayTelegramProxyBridge.disableLocalProxyIfOwned());
-            } else {
-                XrayLocalSocksAuth.Credentials credentials = XrayLocalSocksAuth.getOrCreateCredentials();
-                String runtimeConfig;
-                try {
-                    runtimeConfig = XrayLocalSocksAuth.applyCredentials(activeProfile.configJson, activeProfile.localPort, credentials);
-                } catch (Throwable t) {
-                    FileLog.e("Xray startup skipped: failed to apply socks auth", t);
-                    NekoConfig.setXrayAppProxyEnabled(false);
-                    AndroidUtilities.runOnUIThread(() -> XrayTelegramProxyBridge.disableLocalProxyIfOwned());
-                    runtimeConfig = null;
-                }
-
-                if (runtimeConfig != null) {
-                    XrayConfigValidator.ValidationResult validationResult = XrayConfigValidator.validate(runtimeConfig, activeProfile.localPort);
-                    if (validationResult.valid) {
-                        if (NekoConfig.xrayVpnMode) {
-                            boolean prepared = false;
-                            try {
-                                prepared = (android.net.VpnService.prepare(applicationContext) == null);
-                            } catch (Throwable ignore) {
-                            }
-                            if (prepared) {
-                                zxc.iconic.xenon.proxy.XrayVpnService.startVpn(applicationContext);
-                            } else {
-                                NekoConfig.setXrayVpnMode(false);
-                                XrayAppProxyManager.start(runtimeConfig, (success, message) -> {
-                                    if (!success) {
-                                        FileLog.e("Xray startup failed: " + message);
-                                        NekoConfig.setXrayAppProxyEnabled(false);
-                                        AndroidUtilities.runOnUIThread(() -> XrayTelegramProxyBridge.disableLocalProxyIfOwned());
-                                        return;
-                                    }
-                                    AndroidUtilities.runOnUIThread(() -> XrayTelegramProxyBridge.enableLocalProxy(activeProfile.localPort, credentials));
-                                });
-                            }
-                        } else {
-                            XrayAppProxyManager.start(runtimeConfig, (success, message) -> {
-                                if (!success) {
-                                    FileLog.e("Xray startup failed: " + message);
-                                    NekoConfig.setXrayAppProxyEnabled(false);
-                                    AndroidUtilities.runOnUIThread(() -> XrayTelegramProxyBridge.disableLocalProxyIfOwned());
-                                    return;
-                                }
-                                AndroidUtilities.runOnUIThread(() -> XrayTelegramProxyBridge.enableLocalProxy(activeProfile.localPort, credentials));
-                            });
-                        }
-                    } else {
-                        FileLog.e("Xray startup skipped: " + validationResult.message);
-                        NekoConfig.setXrayAppProxyEnabled(false);
-                        AndroidUtilities.runOnUIThread(() -> XrayTelegramProxyBridge.disableLocalProxyIfOwned());
-                    }
-                }
-            }
-        }
+        CronetHelper.init(this);
     }
+
+    private final Runnable debugEverySecondChecks = () -> AndroidUtilities.runOnUIThread(() -> {
+        NotificationCenter.sanitize();
+    });
 
     public static void startPushService() {
         if (NekoConfig.optimizedPushService) {

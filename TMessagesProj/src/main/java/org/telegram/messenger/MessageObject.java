@@ -130,6 +130,7 @@ import zxc.iconic.xenon.helpers.MessageFilterHelper;
 import zxc.iconic.xenon.helpers.MessageHelper;
 import zxc.iconic.xenon.syntaxhighlight.SyntaxHighlight;
 import zxc.iconic.xenon.translator.Translator;
+import zxc.iconic.xenon.helpers.WebpageHelper;
 
 import me.vkryl.core.BitwiseUtils;
 
@@ -7498,7 +7499,7 @@ public class MessageObject {
                 }
                 if ("instagram".equals(siteName)) {
                     hashtagsType = 1;
-                } else if ("twitter".equals(siteName)) {
+                } else if (WebpageHelper.isXFormerlyTwitter(siteName)) {
                     hashtagsType = 2;
                 }
             } else if (getMedia(messageOwner) instanceof TLRPC.TL_messageMediaGame && getMedia(messageOwner).game.description != null) {
@@ -8307,6 +8308,9 @@ public class MessageObject {
         int linksCount = 0, spoilersCount = 0, codesCount = 0;
         for (int a = 0; a < count; a++) {
             TextStyleSpan.TextStyleRun run = runs.get(a);
+            if (run.start < 0 || run.start >= run.end || run.end > text.length()) {
+                continue;
+            }
 
             if (allowed == ENTITIES_ONLY_HASHTAGS && !(run.urlEntity instanceof TLRPC.TL_messageEntityHashtag))
                 continue;

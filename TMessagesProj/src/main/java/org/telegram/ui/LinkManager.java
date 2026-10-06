@@ -798,7 +798,7 @@ public class LinkManager {
                 }), ConnectionsManager.RequestFlagFailOnServerErrors | ConnectionsManager.RequestFlagWithoutLogin));
                 return true;
             }
-            if (!TextUtils.isEmpty(third) && "passkey".equalsIgnoreCase(second) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            if (!TextUtils.isEmpty(third) && "passkey".equalsIgnoreCase(second)) {
                 init();
                 setRequestId(getConnectionsManager().sendRequestTyped(new TL_account.getPasskeys(), AndroidUtilities::runOnUIThread, (passkeys, error) -> {
                     done();
@@ -1033,8 +1033,6 @@ public class LinkManager {
                     scrollTo("useProxyRow");
                 if ("add-proxy".equalsIgnoreCase(third))
                     scrollTo("proxyAddRow");
-                if ("use-for-calls".equalsIgnoreCase(third))
-                    scrollTo("callsRow");
 
                 return true;
             }

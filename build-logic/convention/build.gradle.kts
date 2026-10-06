@@ -9,9 +9,13 @@ gradlePlugin {
             id = "tw.nekomimi.nekogram.tl-readers"
             implementationClass = "tw.nekomimi.nekogram.tlv.GenerateTlReadersPlugin"
         }
-        register("lottiePreParser") {
-            id = "org.telegram.lottie-meta"
-            implementationClass = "org.telegram.lottie.LottieMetaPlugin"
+        register("telegramBuildPlugin") {
+            id = "org.telegram.build-plugin"
+            implementationClass = "org.telegram.plugin.TelegramBuildPlugin"
+        }
+        register("telegramBuildAppPlugin") {
+            id = "org.telegram.build-app-plugin"
+            implementationClass = "org.telegram.plugin.TelegramBuildAppPlugin"
         }
         register("testGenerator") {
             id = "test-generator"
@@ -39,7 +43,7 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
 }
 
 dependencies {
-    compileOnly("com.android.tools.build:gradle:9.3.2")
+    compileOnly("com.android.tools.build:gradle:9.4.1")
 
     implementation("com.squareup.moshi:moshi:1.15.0")
     implementation("com.squareup.moshi:moshi-kotlin:1.15.0")

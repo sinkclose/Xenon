@@ -118,7 +118,7 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
         titleView.setGravity(Gravity.CENTER);
         titleView.setSingleLine();
         titleView.setEllipsize(TextUtils.TruncateAt.END);
-        titleView.setText(LocaleController.getString(R.string.AppNameNeko));
+        titleView.setText(LocaleController.getString(R.string.Nekogram));
         titleView.setTextColor(getThemedColor(Theme.key_windowBackgroundWhiteBlackText));
         topView.addView(titleView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 138.333f - 12, 0, 0));
 
@@ -349,8 +349,7 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
                 searchResultList.add(new SearchResult(i * 1000 + item.id, item.text.toString(), null, fragmentTitle, fragmentTitle.equals(headerText) ? null : headerText, icon, () -> {
                     var fragment1 = createFragment(icon);
                     presentFragment(fragment1);
-                    AndroidUtilities.runOnUIThread(() -> fragment1.scrollToRow(item.slug, () -> {
-                    }));
+                    fragment1.scrollToRow(item.slug, null);
                 }));
             }
             searchResultList.add(new SearchResult(10000 + i, fragmentTitle, icon, () -> presentFragment(createFragment(icon))));
@@ -358,8 +357,7 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
         searchResultList.add(new SearchResult(8000, LocaleController.getString(R.string.EmojiUseDefault), null, LocaleController.getString(R.string.Chat), LocaleController.getString(R.string.EmojiSets), R.drawable.msg_theme, () -> {
             var fragment = new NekoEmojiSettingsActivity();
             presentFragment(fragment);
-            AndroidUtilities.runOnUIThread(() -> fragment.scrollToRow("useSystemEmoji", () -> {
-            }));
+            fragment.scrollToRow("useSystemEmoji", null);
         }));
 
         searchResultList.add(new SearchResult(20002, LocaleController.getString(R.string.XenonCreator), LocaleController.getString(R.string.XenonCreatorUsername), R.drawable.msg_contacts, () -> Browser.openUrl(getParentActivity(), CREATOR_URL)));

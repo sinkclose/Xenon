@@ -53,7 +53,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.sha }}
-          submodules: true
+          submodules: recursive
 
       - name: Ensure Xray core AAR
         run: |
@@ -98,7 +98,7 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
-          packages: "build-tools;37.0.0 ndk;27.3.13750724 platforms;android-37.0"
+          packages: "build-tools;37.0.0 ndk;27.3.13750724 platforms;android-37.0 cmake;3.22.1"
 
       - name: Configure Gradle
         run: |

@@ -9,8 +9,6 @@ import static org.telegram.ui.ActionBar.Theme.RIPPLE_MASK_CIRCLE_20DP;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.Paint;
-import android.graphics.Path;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.RectF;
@@ -100,6 +98,7 @@ public class CaptionPhotoViewer extends CaptionContainerView {
         addPhotoButton.setScaleType(ImageView.ScaleType.CENTER);
         addPhotoButton.setColorFilter(new PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN));
         addPhotoButton.setBackground(Theme.createSelectorDrawable(Theme.ACTION_BAR_WHITE_SELECTOR_COLOR, RIPPLE_MASK_CIRCLE_20DP, dp(18)));
+        addPhotoButton.setContentDescription(LocaleController.getString(R.string.Add));
         setAddPhotoVisible(false, false);
         addView(addPhotoButton, LayoutHelper.createFrame(44, 44, Gravity.LEFT | (isAtTop() ? Gravity.TOP : Gravity.BOTTOM), 14, isAtTop() ? 6 : 0, 0, isAtTop() ? 0 : 6));
 
@@ -107,6 +106,7 @@ public class CaptionPhotoViewer extends CaptionContainerView {
         timerButton.setImageDrawable(timerDrawable = new PeriodDrawable());
         timerButton.setBackground(Theme.createSelectorDrawable(Theme.ACTION_BAR_WHITE_SELECTOR_COLOR, RIPPLE_MASK_CIRCLE_20DP, dp(18)));
         timerButton.setScaleType(ImageView.ScaleType.CENTER);
+        timerButton.setContentDescription(LocaleController.getString(R.string.SetTimer));
         setTimerVisible(false, false);
         addView(timerButton, LayoutHelper.createFrame(44, 44, Gravity.RIGHT | (isAtTop() ? Gravity.TOP : Gravity.BOTTOM), 0, isAtTop() ? 6 : 0, 10, isAtTop() ? 0 : 6));
 
@@ -170,9 +170,6 @@ public class CaptionPhotoViewer extends CaptionContainerView {
                 String text;
                 if (value == -1) {
                     text = getString(R.string.AutoDeleteCustom);
-                    if (Arrays.stream(values).noneMatch(v -> v == this.timer)) {
-                        timerPopup.putCheck();
-                    }
                 } else if (value == 0) {
                     text = getString(R.string.TimerPeriodDoNotDelete);
                 } else if (value == SHOW_ONCE) {
@@ -183,6 +180,10 @@ public class CaptionPhotoViewer extends CaptionContainerView {
                 timerPopup.add(0, text, () -> changeTimer(value));
                 if (this.timer == value) {
                     timerPopup.putCheck();
+                } else if (value == -1) {
+                    if (Arrays.stream(values).noneMatch(v -> v == this.timer)) {
+                        timerPopup.putCheck();
+                    }
                 }
             }
             timerPopup.show();
@@ -451,7 +452,7 @@ public class CaptionPhotoViewer extends CaptionContainerView {
         hint.setTranslationY((-Math.min(dp(34), getEditTextHeight()) - dp(14)) * (isAtTop() ? -1.0f : 1.0f));
         hint.setText(text);
         final int iconResId = value > 0 ? R.raw.fire_on : R.raw.fire_off;
-        RLottieDrawable icon = new RLottieDrawable(iconResId, "" + iconResId, dp(34), dp(34));
+        RLottieDrawable icon = new RLottieDrawable(iconResId, dp(34), dp(34));
         icon.start();
         hint.setIcon(icon);
         hint.show();

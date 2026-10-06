@@ -1719,16 +1719,7 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
             }
         });
 
-        writeButtonContainer = new FrameLayout(context) {
-            @Override
-            public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
-                super.onInitializeAccessibilityNodeInfo(info);
-                info.setText(LocaleController.formatPluralString("AccDescrShareInChats", selectedDialogs.size()));
-                info.setClassName(Button.class.getName());
-                info.setLongClickable(true);
-                info.setClickable(true);
-            }
-        };
+        writeButtonContainer = new FrameLayout(context);
         writeButtonContainer.setFocusable(true);
         writeButtonContainer.setFocusableInTouchMode(true);
         writeButtonContainer.setVisibility(View.INVISIBLE);
@@ -1761,6 +1752,15 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
             @Override
             public int getFillColor() {
                 return getThemedColor(Theme.key_dialogFloatingButton);
+            }
+
+            @Override
+            public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
+                super.onInitializeAccessibilityNodeInfo(info);
+                info.setText(LocaleController.formatPluralString("AccDescrShareInChats", selectedDialogs.size()));
+                info.setClassName(Button.class.getName());
+                info.setLongClickable(true);
+                info.setClickable(true);
             }
         };
         writeButton.setCircleSize(dp(52), dp(38));

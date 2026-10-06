@@ -32,7 +32,6 @@
     <string name="DeleteDownloadedFile">ลบไฟล์ที่ดาวน์โหลด</string>
     <string name="TestBackendOn">บัญชีนี้จะเชื่อมต่อกับระบบหลังบ้านสำหรับการทดสอบ</string>
     <string name="TestBackendOff">บัญชีนี้จะเชื่อมต่อกับระบบหลังบ้านสำหรับการใช้งานจริง</string>
-    <string name="ViewHistory">ดูประวัติ</string>
     <string name="Nya">เหมียว!</string>
     <string name="StickerSize">ขนาดสติ๊กเกอร์</string>
     <string name="StickerSizeLeft">เล็ก</string>
