@@ -157,7 +157,6 @@ public class M3SectionsHelper {
         if (tRbR == null) return null;
         float tR = tRbR[0];
         float bR = tRbR[1];
-        int bgColor = Theme.getColor(Theme.key_windowBackgroundWhite, listView.resourcesProvider);
         int cw = child.getWidth();
         int ch = child.getHeight();
         float[] radiiArr = new float[]{tR, tR, tR, tR, bR, bR, bR, bR};
@@ -173,6 +172,7 @@ public class M3SectionsHelper {
                 clipPath.rewind();
                 clipPath.addRoundRect(tmp, radiiArr, Path.Direction.CW);
                 canvas.clipPath(clipPath);
+                int bgColor = Theme.getColor(Theme.key_windowBackgroundWhite, listView.resourcesProvider);
                 p.setColor(ColorUtils.setAlphaComponent(bgColor, p.getAlpha()));
                 canvas.drawRect(tmp, p);
                 canvas.restore();

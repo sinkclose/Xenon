@@ -4065,9 +4065,9 @@ public class Theme {
             themeInfo = new ThemeInfo();
             themeInfo.name = "Monet Dark";
             themeInfo.assetName = "monet_dark.attheme";
-            themeInfo.previewBackgroundColor = MonetHelper.getColor("n1_900");
-            themeInfo.previewInColor = MonetHelper.getColor("n2_800");
-            themeInfo.previewOutColor = MonetHelper.getColor("a1_100");
+            themeInfo.previewBackgroundColor = MonetHelper.getColor("monetDarkSurface");
+            themeInfo.previewInColor = MonetHelper.getColor("monetDarkSurfaceContainerLow");
+            themeInfo.previewOutColor = MonetHelper.getColor("monetDarkPrimaryContainer");
             themeInfo.sortIndex = 7;
             themes.add(themeInfo);
             themesDict.put("Monet Dark", themeInfo);
@@ -4075,9 +4075,9 @@ public class Theme {
             themeInfo = new ThemeInfo();
             themeInfo.name = "Monet AMOLED";
             themeInfo.assetName = "monet_dark.attheme";
-            themeInfo.previewBackgroundColor = MonetHelper.getColor("n1_1000");
-            themeInfo.previewInColor = MonetHelper.getColor("n2_800");
-            themeInfo.previewOutColor = MonetHelper.getColor("a1_100");
+            themeInfo.previewBackgroundColor = MonetHelper.getColor("monetDarkSurface", true);
+            themeInfo.previewInColor = MonetHelper.getColor("monetDarkSurfaceContainerLow");
+            themeInfo.previewOutColor = MonetHelper.getColor("monetDarkPrimaryContainer");
             themeInfo.sortIndex = 8;
             themes.add(themeInfo);
             themesDict.put("Monet AMOLED", themeInfo);

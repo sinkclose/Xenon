@@ -277,19 +277,6 @@ public class BlurredBackgroundProviderImpl {
                 .build();
     }
 
-    public static BlurredBackgroundProvider bottomSheet(Theme.ResourcesProvider resourcesProvider) {
-        return new BlurredBackgroundProviderBuilder(resourcesProvider)
-                .setBackgroundColor((r, isDark) -> {
-                    final float alpha = glassTintAlpha(LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.90f : 0.86f);
-                    return glassTint(Theme.getColor(Theme.key_dialogBackground, r), r, isDark, alpha);
-                })
-                .setStrokeColorTop(0x10FFFFFF, 0x10FFFFFF)
-                .setStrokeColorBottom(0x10FFFFFF, 0x08FFFFFF)
-                .setShadowColor(0x20000000, 0)
-                .setStrokeWidth(dpf2(0.5f), dpf2(0.5f))
-                .build();
-    }
-
     public static BlurredBackgroundProvider topPanelChatActivityTags(Theme.ResourcesProvider resourcesProvider) {
         // Wallpaper-blur panel, no liquid glass effect — plain theme color.
         return new BlurredBackgroundProviderBuilder(resourcesProvider)

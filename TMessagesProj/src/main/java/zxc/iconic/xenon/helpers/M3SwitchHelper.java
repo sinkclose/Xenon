@@ -52,6 +52,13 @@ public class M3SwitchHelper {
         int offColor = Theme.getColor(trackColorKey, resourcesProvider);
         int onColor = Theme.getColor(trackCheckedColorKey, resourcesProvider);
         int thumbOnColor = Theme.getColor(thumbCheckedColorKey, resourcesProvider);
+        boolean monetSwitch = Theme.getActiveTheme().isMonet() && Theme.isCurrentThemeDark()
+                && (trackCheckedColorKey == Theme.key_switchTrackChecked
+                || trackCheckedColorKey == Theme.key_switch2TrackChecked
+                || trackCheckedColorKey == Theme.key_switchTrackBlueChecked);
+        if (monetSwitch) {
+            thumbOnColor = Theme.getColor(Theme.key_switchTrackBlueThumbChecked, resourcesProvider);
+        }
 
         float frameWidthDp = measuredWidth / AndroidUtilities.density;
         float targetW = Math.max(TARGET_TRACK_W, Math.min(frameWidthDp - 1f, FULL_TRACK_W));
@@ -67,6 +74,10 @@ public class M3SwitchHelper {
             fillPaint.setColor(onColor);
             canvas.drawRoundRect(rectF, radius, radius, fillPaint);
         } else {
+            if (monetSwitch) {
+                fillPaint.setColor(Theme.getColor(Theme.key_switchTrackBlueThumb, resourcesProvider));
+                canvas.drawRoundRect(rectF, radius, radius, fillPaint);
+            }
             float sw = AndroidUtilities.dpf2(2f);
             strokePaint.setColor(offColor);
             strokePaint.setStrokeWidth(sw);
@@ -80,9 +91,12 @@ public class M3SwitchHelper {
         thumbPaint.setColor(isChecked ? thumbOnColor : offColor);
         canvas.drawCircle(cx, cy, rest, thumbPaint);
 
-        int iconColor = isChecked ? onColor : Color.WHITE;
+        int iconColor = isChecked ? onColor : monetSwitch
+                ? Theme.getColor(Theme.key_switchTrackBlueThumb, resourcesProvider) : Color.WHITE;
         if (iconDrawable != null) {
-            if (iconDrawable.getColorFilter() != whiteFilter) {
+            if (monetSwitch) {
+                iconDrawable.setColorFilter(new PorterDuffColorFilter(iconColor, PorterDuff.Mode.SRC_IN));
+            } else if (iconDrawable.getColorFilter() != whiteFilter) {
                 iconDrawable.setColorFilter(whiteFilter);
             }
             if (iconVisibility > 0f) {

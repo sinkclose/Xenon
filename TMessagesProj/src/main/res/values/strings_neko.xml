@@ -110,8 +110,6 @@
     <string name="AdvancedGlassAlpha">Glass transparency</string>
     <string name="AdvancedGlassBlur">Blur strength</string>
     <string name="AdvancedGlassBlurDesc">Affects both background blur and Liquid Glass blur</string>
-    <string name="GlassBottomSheet">Glass in bottom sheets (WIP)</string>
-    <string name="GlassBottomSheetDesc">Apply liquid glass background to popups and bottom menus. Requires blur to be enabled.</string>
     <string name="AdvancedGlassRefraction">Refraction strength</string>
     <string name="AdvancedGlassDispersion">Chromatic dispersion</string>
     <string name="AdvancedGlassGlare">Glare strength</string>

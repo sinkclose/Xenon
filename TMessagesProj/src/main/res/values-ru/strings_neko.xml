@@ -107,8 +107,6 @@
     <string name="AdvancedGlassAlpha">Прозрачность стекла</string>
     <string name="AdvancedGlassBlur">Сила блюра</string>
     <string name="AdvancedGlassBlurDesc">Влияет на размытие фона и Liquid glass</string>
-    <string name="GlassBottomSheet">Стекло в нижних панелях (WIP)</string>
-    <string name="GlassBottomSheetDesc">Применять жидкое стекло к нижним панелям, контекстным меню и попапам. Требует включённое размытие.</string>
     <string name="AdvancedGlassRefraction">Сила рефракции</string>
     <string name="AdvancedGlassDispersion">Хроматическая дисперсия</string>
     <string name="AdvancedGlassGlare">Сила блика</string>

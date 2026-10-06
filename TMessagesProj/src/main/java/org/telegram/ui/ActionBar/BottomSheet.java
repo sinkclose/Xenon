@@ -22,6 +22,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.res.Configuration;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.RenderEffect;
 import android.graphics.Insets;
@@ -86,11 +87,6 @@ import org.telegram.ui.Components.Bulletin;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.LayoutHelper;
-import org.telegram.messenger.SharedConfig;
-import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
-import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawableRenderNode;
-import org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl;
-import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode;
 import org.telegram.ui.LaunchActivity;
 import org.telegram.ui.Components.ItemOptions;
 
@@ -240,14 +236,6 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
     protected int dimBehindAlpha = 51;
 
     protected boolean allowNestedScroll = true;
-
-    // ----- Liquid glass background for attached-mode BottomSheets -----
-    @Nullable private BlurredBackgroundSourceRenderNode glassSource;
-    @Nullable private BlurredBackgroundDrawable glassDrawable;
-    @Nullable private View glassHostView;
-    private boolean glassApplied;
-
-
 
     protected Drawable shadowDrawable;
     protected int backgroundPaddingTop;
@@ -846,7 +834,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
 
         @Override
         protected void dispatchDraw(Canvas canvas) {
-            if (containerView != null && internalPaddingBottom > 0) {
+            if (!hasContinuousNavigationBackground() && containerView != null && internalPaddingBottom > 0) {
                 internalBackgroundPaint.setColor(internalBackgroundColor);
                 canvas.drawRect(0,
                     getMeasuredHeight() - internalPaddingBottom + containerView.getTranslationY() - 1,
@@ -867,7 +855,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
             if (drawDoubleNavigationBar && !shouldOverlayCameraViewOverNavBar()) {
                 drawNavigationBar(canvas, 1f);
             }
-            if (backgroundPaint.getAlpha() < 255 && drawNavigationBar) {
+            if (!hasContinuousNavigationBackground() && backgroundPaint.getAlpha() < 255 && drawNavigationBar) {
                 float translation = 0;
                 if (scrollNavBar || Build.VERSION.SDK_INT >= 29 && getAdditionalMandatoryOffsets() > 0) {
                     float dist = containerView.getMeasuredHeight() - containerView.getTranslationY();
@@ -893,12 +881,12 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
                     canvas.drawRect(0, containerView.getTranslationY(), containerView.getLeft() + backgroundPaddingLeft, getMeasuredHeight(), backgroundPaint);
                 }
 
-                if (containerView.getY() + containerView.getMeasuredHeight() < getMeasuredHeight()) {
+                if (!hasContinuousNavigationBackground() && containerView.getY() + containerView.getMeasuredHeight() < getMeasuredHeight()) {
                     backgroundPaint.setColor(behindKeyboardColorKey >= 0 ? getThemedColor(behindKeyboardColorKey) : behindKeyboardColor);
                     canvas.drawRect(containerView.getLeft() + backgroundPaddingLeft, containerView.getY() + containerView.getMeasuredHeight(), containerView.getRight() - backgroundPaddingLeft, getMeasuredHeight(), backgroundPaint);
                 }
             } else {
-                if ((getMeasuredHeight() - containerView.getY() - containerView.getMeasuredHeight()) > dp(48)) {
+                if (!hasContinuousNavigationBackground() && (getMeasuredHeight() - containerView.getY() - containerView.getMeasuredHeight()) > dp(48)) {
                     backgroundPaint.setColor(behindKeyboardColorKey >= 0 ? getThemedColor(behindKeyboardColorKey) : behindKeyboardColor);
                     canvas.drawRect(containerView.getLeft() + backgroundPaddingLeft, containerView.getY() + containerView.getMeasuredHeight(), containerView.getRight() - backgroundPaddingLeft, getMeasuredHeight(), backgroundPaint);
                 }
@@ -907,6 +895,34 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
 
         @Override
         protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
+            if (child == containerView && hasContinuousNavigationBackground()
+                    && child.getVisibility() == View.VISIBLE && child.getAlpha() > 0f) {
+                // Extend the actual sheet drawable under the transparent system bar.
+                // Content keeps its existing inset so controls stay above the navigation gestures.
+                float bottom = child.getY() + child.getHeight();
+                if (bottom < getHeight()) {
+                    Drawable background = child.getBackground();
+                    Rect bounds = new Rect(background.getBounds());
+                    Drawable.Callback callback = background.getCallback();
+                    int save = canvas.save();
+                    canvas.clipRect(child.getX() + backgroundPaddingLeft, bottom,
+                            child.getX() + child.getWidth() - backgroundPaddingLeft, getHeight());
+                    canvas.translate(child.getX(), child.getY());
+                    int layer = canvas.saveLayerAlpha(0, 0, child.getWidth(), getHeight() - child.getY(),
+                            (int) (255 * child.getAlpha()));
+                    // Temporary bounds must not schedule another frame on every draw.
+                    background.setCallback(null);
+                    try {
+                        background.setBounds(0, 0, child.getWidth(), (int) Math.ceil(getHeight() - child.getY()));
+                        background.draw(canvas);
+                    } finally {
+                        background.setBounds(bounds);
+                        background.setCallback(callback);
+                    }
+                    canvas.restoreToCount(layer);
+                    canvas.restoreToCount(save);
+                }
+            }
             if (child instanceof CameraView) {
                 if (shouldOverlayCameraViewOverNavBar()) {
                     drawNavigationBar(canvas, 1f);
@@ -919,7 +935,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
         @Override
         protected void onDraw(Canvas canvas) {
             boolean restore = false;
-            if (backgroundPaint.getAlpha() < 255 && drawNavigationBar) {
+            if (!hasContinuousNavigationBackground() && backgroundPaint.getAlpha() < 255 && drawNavigationBar) {
                 float translation = 0;
                 if (scrollNavBar || Build.VERSION.SDK_INT >= 29 && getAdditionalMandatoryOffsets() > 0) {
                     float dist = containerView.getMeasuredHeight() - containerView.getTranslationY();
@@ -942,6 +958,9 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
         }
 
         public void drawNavigationBar(Canvas canvas, float alpha) {
+            if (hasContinuousNavigationBackground()) {
+                return;
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 if (navBarColorKey >= 0) {
                     backgroundPaint.setColor(getThemedColor(navBarColorKey));
@@ -1237,7 +1256,18 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
 
         Rect padding = new Rect();
         shadowDrawable = context.getResources().getDrawable(R.drawable.sheet_shadow_round).mutate();
-        shadowDrawable.setColorFilter(new PorterDuffColorFilter(internalBackgroundColor = getThemedColor(Theme.key_dialogBackground), PorterDuff.Mode.MULTIPLY));
+        int backgroundKey = usesSystemMonetSurface() ? Theme.key_windowBackgroundWhite : Theme.key_dialogBackground;
+        shadowDrawable.setColorFilter(new PorterDuffColorFilter(internalBackgroundColor = getThemedColor(backgroundKey), PorterDuff.Mode.MULTIPLY));
+        if (usesSystemMonetSurface()) {
+            navBarColorKey = -1;
+            navBarColor = internalBackgroundColor;
+            behindKeyboardColorKey = -1;
+            behindKeyboardColor = internalBackgroundColor;
+            setOverlayNavBarColor(internalBackgroundColor);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                getWindow().setNavigationBarContrastEnforced(false);
+            }
+        }
         shadowDrawable.getPadding(padding);
         backgroundPaddingLeft = padding.left;
         backgroundPaddingTop = padding.top;
@@ -1297,7 +1327,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
                 }
             });
         }
-        if (Build.VERSION.SDK_INT >= 30) {
+        if (Build.VERSION.SDK_INT >= 30 || usesSystemMonetSurface()) {
             container.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
         } else {
             container.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
@@ -1329,10 +1359,13 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
     }
 
     public void fixNavigationBar() {
-        fixNavigationBar(getThemedColor(Theme.key_windowBackgroundGray));
+        fixNavigationBar(usesSystemMonetSurface() ? internalBackgroundColor : getThemedColor(Theme.key_windowBackgroundGray));
     }
 
     public void fixNavigationBar(int bgColor) {
+        if (usesSystemMonetSurface() && bgColor == getThemedColor(Theme.key_dialogBackground)) {
+            bgColor = internalBackgroundColor;
+        }
         drawNavigationBar = !occupyNavigationBar;
         drawDoubleNavigationBar = true;
         scrollNavBar = true;
@@ -1572,10 +1605,26 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
     }
 
     private int internalBackgroundColor;
+    private boolean usesSystemMonetSurface() {
+        return Theme.getActiveTheme().isMonet() && Theme.isCurrentThemeDark();
+    }
+
+    private boolean hasContinuousNavigationBackground() {
+        return usesSystemMonetSurface() && !keyboardVisible && !shouldOverlayCameraViewOverNavBar()
+                && containerView != null && containerView.getBackground() != null;
+    }
+
     public void setBackgroundColor(int color) {
         shadowDrawable.setColorFilter(color, PorterDuff.Mode.MULTIPLY);
         if (internalBackgroundColor != color) {
             internalBackgroundColor = color;
+            if (usesSystemMonetSurface()) {
+                navBarColorKey = -1;
+                navBarColor = color;
+                behindKeyboardColorKey = -1;
+                behindKeyboardColor = color;
+                setOverlayNavBarColor(color);
+            }
             if (container != null) {
                 container.invalidate(0,
                     container.getMeasuredHeight() - container.internalPaddingBottom,
@@ -2378,96 +2427,14 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
     }
 
 
-    @SuppressLint("NewApi")
-    private void setupGlassBackground() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
-        if (!SharedConfig.chatBlurEnabled()) return;
-        if (!zxc.iconic.xenon.NekoConfig.glassBottomSheet) return;
-        if (containerView == null || containerView.getWidth() == 0) return;
-
-        // Resolve the host view whose content will be captured as the glass source.
-        // Attached mode: the fragment's own layout container (same window as the sheet).
-        // Dialog mode:  the main activity's decor view (a separate window — its draw()
-        //               does NOT include the dialog, so the snapshot is always clean).
-        final View hostView;
-        if (attachedFragment != null) {
-            hostView = attachedFragment.getLayoutContainer();
-            if (hostView == null) return;
-        } else {
-            if (LaunchActivity.instance == null
-                    || LaunchActivity.instance.getWindow() == null) return;
-            hostView = LaunchActivity.instance.getWindow().getDecorView();
-        }
-        if (hostView.getWidth() == 0 || hostView.getHeight() == 0) return;
-
-        glassHostView = hostView;
-
-        // 1. Create RenderNode source.
-        glassSource = new BlurredBackgroundSourceRenderNode(null);
-
-        // 2. Snapshot hostView (captures the content behind the sheet).
-        final Bitmap hostSnapshot = Bitmap.createBitmap(
-                hostView.getWidth(), hostView.getHeight(), Bitmap.Config.ARGB_8888);
-        final android.graphics.Canvas snapshotCanvas = new android.graphics.Canvas(hostSnapshot);
-        hostView.draw(snapshotCanvas);
-
-        // 3. Draw snapshot into the RenderNode source (one-time).
-        final android.graphics.Canvas rc = glassSource.beginRecording(
-                hostView.getWidth(), hostView.getHeight());
-        rc.drawBitmap(hostSnapshot, 0f, 0f, null);
-        glassSource.endRecording();
-        hostSnapshot.recycle();
-
-        // 4. Set blur radius from glass config.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            glassSource.setBlur(zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass
-                    ? (float) dp(Math.max(1, zxc.iconic.xenon.NekoConfig.advancedGlassBlur))
-                    : (float) dp(8));
-        }
-
-        // 5. Create the drawable and enable AGSL liquid glass effect.
-        glassDrawable = glassSource.createDrawable();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-                && glassDrawable instanceof BlurredBackgroundDrawableRenderNode) {
-            ((BlurredBackgroundDrawableRenderNode) glassDrawable).setLiquidGlassEffectAllowed();
-        }
-
-        // 6. Apply color provider (uses key_dialogBackground tinted by accent).
-        glassDrawable.setColorProvider(
-                BlurredBackgroundProviderImpl.bottomSheet(resourcesProvider));
-
-        // 7. Set corner radii: rounded at the top, square at the bottom (matches the sheet shape).
-        final float r = (float) dp(12);
-        glassDrawable.setRadius(r, r, 0f, 0f);
-
-        // 8. Inset the glass visual area to match the sheet body (shadow padding region).
-        glassDrawable.setPadding(backgroundPaddingLeft);
-
-        // 9. Replace shadowDrawable as containerView background.
-        containerView.setBackgroundDrawable(glassDrawable);
-
-        glassApplied = true;
-    }
     protected void onContainerViewTranslation() {
-        // One-time glass setup on the first animation frame.
-        if (!glassApplied) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                setupGlassBackground();
-            }
-        }
-        // Update the glass source offset to track containerView position during animation/drag.
-        if (glassApplied && glassDrawable != null && glassHostView != null && containerView != null) {
-            final int[] hostLoc = new int[2];
-            final int[] viewLoc = new int[2];
-            glassHostView.getLocationOnScreen(hostLoc);
-            containerView.getLocationOnScreen(viewLoc);
-            glassDrawable.setSourceOffset(viewLoc[0] - hostLoc[0], viewLoc[1] - hostLoc[1]);
-            glassDrawable.invalidateSelf();
-        }
     }
 
     @Override
     public int getNavigationBarColor(int color) {
+        if (usesSystemMonetSurface()) {
+            return Color.TRANSPARENT;
+        }
         final float t;
         if (!attachedToParent() || containerView == null) {
             t = 0;
@@ -2829,7 +2796,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
 //            AndroidUtilities.setLightStatusBar(getWindow(), !useLightStatusBar);
 //            AndroidUtilities.setLightNavigationBar(getWindow(), !useLightNavBar);
 //        }
-        AndroidUtilities.setNavigationBarColor(this, overlayDrawNavBarColor);
+        AndroidUtilities.setNavigationBarColor(this, usesSystemMonetSurface() ? Color.TRANSPARENT : overlayDrawNavBarColor);
         AndroidUtilities.setLightNavigationBar(this, AndroidUtilities.computePerceivedBrightness(overlayDrawNavBarColor) > .721);
     }
 

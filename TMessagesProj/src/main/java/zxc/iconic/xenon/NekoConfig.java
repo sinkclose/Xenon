@@ -255,7 +255,6 @@ public class NekoConfig {
     public static final float DEFAULT_ADVANCED_GLASS_GLARE_ANGLE = 45f;
     public static final int DEFAULT_ADVANCED_GLASS_TINT_PERCENT = 20;
     public static final boolean DEFAULT_ADVANCED_GLASS_TINT_BLACK_WHITE = false;
-    public static final boolean DEFAULT_GLASS_BOTTOM_SHEET = false;
 
     public static final int GLASS_GLARE_FULL = 0;
     public static final int GLASS_GLARE_SOLID = 1;
@@ -274,7 +273,6 @@ public class NekoConfig {
     public static float advancedGlassGlareAngle = DEFAULT_ADVANCED_GLASS_GLARE_ANGLE;
     public static int advancedGlassTintPercent = DEFAULT_ADVANCED_GLASS_TINT_PERCENT;
     public static boolean advancedGlassTintBlackWhite = DEFAULT_ADVANCED_GLASS_TINT_BLACK_WHITE;
-    public static boolean glassBottomSheet = DEFAULT_GLASS_BOTTOM_SHEET;
     public static int glassGlareMode = GLASS_GLARE_FULL;
 
     public static boolean forceBlurLiquidGlass = false;
@@ -471,7 +469,6 @@ public class NekoConfig {
             advancedGlassGlareAngle = preferences.getFloat("advancedGlassGlareAngle", DEFAULT_ADVANCED_GLASS_GLARE_ANGLE);
             advancedGlassTintPercent = preferences.getInt("advancedGlassTintPercent", DEFAULT_ADVANCED_GLASS_TINT_PERCENT);
             advancedGlassTintBlackWhite = preferences.getBoolean("advancedGlassTintBlackWhite", DEFAULT_ADVANCED_GLASS_TINT_BLACK_WHITE);
-            glassBottomSheet = preferences.getBoolean("glassBottomSheet", DEFAULT_GLASS_BOTTOM_SHEET);
             cameraInVideoMessages = preferences.getInt("cameraInVideoMessages", CAMERA_FRONT);
             textSpoilerMode = preferences.getInt("textSpoilerMode", TEXT_SPOILER_DEFAULT);
             mediaSpoilerMode = preferences.getInt("mediaSpoilerMode", MEDIA_SPOILER_TELEGRAM);
@@ -1892,15 +1889,6 @@ public class NekoConfig {
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("advancedGlassTintBlackWhite", advancedGlassTintBlackWhite);
-        editor.putBoolean("glassBottomSheet", glassBottomSheet);
-        editor.apply();
-    }
-
-    public static void toggleGlassBottomSheet() {
-        glassBottomSheet = !glassBottomSheet;
-        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
-        SharedPreferences.Editor editor = preferences.edit();
-        editor.putBoolean("glassBottomSheet", glassBottomSheet);
         editor.apply();
     }
 
@@ -1934,7 +1922,6 @@ public class NekoConfig {
         advancedGlassGlare = DEFAULT_ADVANCED_GLASS_GLARE;
         advancedGlassTintPercent = DEFAULT_ADVANCED_GLASS_TINT_PERCENT;
         advancedGlassTintBlackWhite = DEFAULT_ADVANCED_GLASS_TINT_BLACK_WHITE;
-        glassBottomSheet = DEFAULT_GLASS_BOTTOM_SHEET;
         glassGlareMode = GLASS_GLARE_FULL;
         disableGlassGlare = true;
         strokeOnViews = true;
@@ -1949,7 +1936,6 @@ public class NekoConfig {
         editor.putFloat("advancedGlassGlareAngle", advancedGlassGlareAngle);
         editor.putInt("advancedGlassTintPercent", advancedGlassTintPercent);
         editor.putBoolean("advancedGlassTintBlackWhite", advancedGlassTintBlackWhite);
-        editor.putBoolean("glassBottomSheet", glassBottomSheet);
         editor.putInt("glassGlareMode", glassGlareMode);
         editor.putBoolean("disableGlassGlare", disableGlassGlare);
         editor.putBoolean("strokeOnViews", strokeOnViews);
