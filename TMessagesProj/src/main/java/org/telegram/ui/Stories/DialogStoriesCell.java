@@ -961,6 +961,8 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
 
             float offset = (titleView.getMeasuredHeight() - titleView.getTextHeight()) / 2f;
             titleView.setPivotX(0);
+            // Keep the vertically centered text in place when shrinking it to fit.
+            titleView.setPivotY(titleView.getMeasuredHeight() / 2f);
             titleView.setTranslationY(bottomY + dp(14) - offset + dp(FAKE_TOP_PADDING) - dp(6) * subtitleOverlayContainer.getTotalVisibility());
             int cellWidth = dp(72);
             lastViewRight += -cellWidth + getAvatarRight(cellWidth, collapsedProgress) + dp(12);

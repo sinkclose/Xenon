@@ -105,15 +105,14 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
             @Override
             protected void dispatchDraw(Canvas canvas) {
                 // Fade view: live-blurred capture when the progressive path is
-                // enabled (48dp gradient starting right below the back-button
-                // disc), plain theme-colored gradient (same zone, no blur)
+                // enabled (48dp gradient raised 12dp under the header),
+                // plain theme-colored gradient (no blur)
                 // when only the toggle is on (start lowered ~5% down).
                 final boolean fadeBlurActive = progressiveFadeController != null && NekoConfig.progressiveFadeBlurOtherActivitiesEnabled();
                 final int fadeZone = Math.max(listView.getPaddingTop(), actionBarContainer.getHeight());
                 if (fadeBlurActive) {
-                    // Disc bottom sits ~5dp above the action bar bottom, the
-                    // gradient is 48dp tall: zone = height - 5 + 48.
-                    progressiveFadeController.setFadeZoneTop(fadeZone + AndroidUtilities.dp(43));
+                    // Raise the 48dp progressive gradient by 12dp.
+                    progressiveFadeController.setFadeZoneTop(fadeZone + AndroidUtilities.dp(31));
                     progressiveFadeController.invalidate();
                     removePlainTopFade();
                 } else if (fadeViewEnabled() && NekoConfig.fadeViewOtherActivities()) {

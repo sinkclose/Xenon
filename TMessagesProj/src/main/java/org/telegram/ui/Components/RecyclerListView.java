@@ -3456,6 +3456,13 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
         final int viewType = getAdapter().getItemViewType(position - 1);
         return isViewTypeSection.run(viewType);
     }
+    public boolean isSectionPosition(int position) {
+        final Adapter adapter = getAdapter();
+        if (adapter == null || position < 0 || position >= adapter.getItemCount() || sectionsItemDecoration == null) return false;
+        final View view = findViewByPosition(position);
+        if (view != null) return sectionsItemDecoration.isSectionItem.run(view);
+        return isViewTypeSection != null && isViewTypeSection.run(adapter.getItemViewType(position));
+    }
     private boolean hasBelow(View view, int index) {
         if (view == null || index < getChildCount() - 1 || getAdapter() == null || isViewTypeSection == null) return false;
         final int position = getChildAdapterPosition(view);
