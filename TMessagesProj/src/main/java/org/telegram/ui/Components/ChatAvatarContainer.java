@@ -108,10 +108,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     private boolean biggerAvatar = false;
     private View rightAnchorView;
     private int lastRightAvatarLeft = Integer.MIN_VALUE;
-    // Avatar offset from the live pill right edge, remembered while the anchor
-    // is valid. Lets the avatar ride the pill through search/action-mode
-    // transitions (anchor GONE) with zero jumps on open and close.
-    private int lastAvatarPillDelta = Integer.MIN_VALUE;
+    private int lastRightAvatarTop = Integer.MIN_VALUE;
     StatusDrawable currentTypingDrawable;
 
     private int lastWidth = -1;
@@ -907,6 +904,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         avatarPlacement = placement;
         avatarSizeInDp = biggerAvatar ? 48 : 42;
         lastRightAvatarLeft = Integer.MIN_VALUE;
+        lastRightAvatarTop = Integer.MIN_VALUE;
         if (avatarImageView != null) {
             avatarImageView.setRoundRadius(getAvatarCornerRadius());
         }
@@ -984,8 +982,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         final boolean avatarVisible = avatarImageView.getVisibility() == VISIBLE;
         final boolean rightAvatar = avatarPlacement == zxc.iconic.xenon.NekoConfig.AVATAR_PLACEMENT_RIGHT && avatarVisible;
         final boolean textOnly = textOnlyPill && avatarVisible;
-        // Centered pill geometry, hoisted so the right-avatar fallback below
-        // can glue to the live pill edge when its anchor is gone (search).
+        // Centered text pill geometry is independent of the right avatar.
         final int pillLeft = leftPadding - dp(6) - dp(3);
         final int targetPillWidth = textOnlyPill ? (int) (getVisualWidth() * 1.05f) + dp(8) + dp(12) : 0;
         final int pillWidth = textOnlyPill ? getLivePillWidth(targetPillWidth) : 0;
@@ -1015,9 +1012,8 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         final int badgeBase;
         int avatarTop = 1 + viewTop + dp(0.3f);
         if (rightAvatar) {
-            // While searching (or action mode) the anchor is GONE and the pill
-            // geometry is frozen: ignore even a valid anchor and ride the pill,
-            // so the avatar never jumps on open nor snaps back on close.
+            // Keep the last menu position while its anchor is hidden. Following
+            // the pill edge here couples the avatar to changing subtitle widths.
             final boolean avatarTransitioning = actionBar != null && (actionBar.getSearchFactor() > 0f || actionBar.getActionModeFactor() > 0f);
             int[] anchor = avatarTransitioning ? null : anchorCenterInParent();
             android.view.ViewGroup.MarginLayoutParams lp = (android.view.ViewGroup.MarginLayoutParams) getLayoutParams();
@@ -1025,26 +1021,15 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
                 avatarLeft = anchor[0] - avatarImageView.getMeasuredWidth() / 2 - lp.leftMargin;
                 avatarTop = anchor[1] - avatarImageView.getMeasuredHeight() / 2 + dp(0.3f);
                 lastRightAvatarLeft = avatarLeft;
-                if (textOnlyPill) {
-                    lastAvatarPillDelta = avatarLeft - (pillLeft + pillWidth);
-                }
-            } else if (textOnlyPill && lastAvatarPillDelta != Integer.MIN_VALUE) {
-                avatarLeft = pillLeft + pillWidth + lastAvatarPillDelta;
-                avatarTop = 1 + (actionBarHeight - avatarImageView.getMeasuredHeight() - 2) / 2 + (occupyStatusBar ? AndroidUtilities.statusBarHeight : 0) + dp(0.3f);
-                if (rightAnchorView != null && !rightAnchorView.isLaidOut()) {
-                    post(() -> requestLayout());
-                }
+                lastRightAvatarTop = avatarTop;
             } else {
                 if (lastRightAvatarLeft != Integer.MIN_VALUE) {
                     avatarLeft = lastRightAvatarLeft;
-                } else if (textOnlyPill) {
-                    // Never anchored (e.g. anchor gone the whole time): align to
-                    // the live pill edge instead of jumping off-screen.
-                    avatarLeft = pillLeft + pillWidth - avatarImageView.getMeasuredWidth() - dp(3);
+                    avatarTop = lastRightAvatarTop;
                 } else {
-                    avatarLeft = getWidth() + dp(3);
+                    final int parentWidth = getParent() instanceof View ? ((View) getParent()).getWidth() : getWidth() + lp.leftMargin;
+                    avatarLeft = parentWidth - lp.leftMargin - dp(16) - avatarImageView.getMeasuredWidth();
                 }
-                avatarTop = 1 + (actionBarHeight - avatarImageView.getMeasuredHeight() - 2) / 2 + (occupyStatusBar ? AndroidUtilities.statusBarHeight : 0) + dp(0.3f);
                 if (rightAnchorView != null && !rightAnchorView.isLaidOut()) {
                     post(() -> requestLayout());
                 }

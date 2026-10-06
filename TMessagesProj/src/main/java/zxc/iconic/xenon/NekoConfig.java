@@ -1836,6 +1836,11 @@ public class NekoConfig {
         editor.apply();
     }
 
+    /** Glass source blur in dp, shared by full-size and downscaled renderers. */
+    public static float getGlassBlurRadiusDp() {
+        return Math.max(0, Math.min(100, blurStrength)) / 3.75f;
+    }
+
     public static void setBlurStrength(int value) {
         blurStrength = Math.max(0, Math.min(100, value));
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);

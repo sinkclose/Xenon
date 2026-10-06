@@ -73,7 +73,7 @@ public class CommunityPendingRequestCell extends FrameLayout implements Theme.Co
         final BlurredBackgroundDrawableViewFactory factory;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             sourceRenderNode = new BlurredBackgroundSourceRenderNode(null);
-            sourceRenderNode.setBlur(dp(7), RenderNodeEffects.createSaturationXRenderEffect(1.125f));
+            sourceRenderNode.setGlassBlur(dp(7), RenderNodeEffects.createSaturationXRenderEffect(1.125f));
             sourceRenderNode.noClip();
             factory = new BlurredBackgroundDrawableViewFactory(sourceRenderNode);
         } else {

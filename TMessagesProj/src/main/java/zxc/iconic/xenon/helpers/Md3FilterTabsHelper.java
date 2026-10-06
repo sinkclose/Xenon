@@ -31,9 +31,18 @@ public class Md3FilterTabsHelper {
             return;
         }
 
-        float inner = AndroidUtilities.dp(7);
-        float inset = AndroidUtilities.dp(1);
-        float pillR = (height - 2 * inset) / 2f;
+        final float inset = AndroidUtilities.dp(1);
+        final float contentWidth = width - 2 * inset;
+        final float contentHeight = height - 2 * inset;
+        if (contentWidth <= 0f || contentHeight <= 0f) {
+            return;
+        }
+        // Text-only folders can be narrower than the tab height. Bound every
+        // corner to the actual rectangle so Path does not rescale the whole
+        // outline as the selection animates.
+        final float pillR = Math.min(contentWidth, contentHeight) / 2f;
+        final float inner = Math.min(AndroidUtilities.dp(7), pillR);
+        selectionProgress = Math.max(0f, Math.min(1f, selectionProgress));
 
         boolean first = position == 0;
         boolean last = position == tabCount - 1;
@@ -42,7 +51,7 @@ public class Md3FilterTabsHelper {
         float br = last ? pillR : inner;
         float bl = first ? pillR : inner;
 
-        float radiusProgress = spring(selectionProgress);
+        float radiusProgress = selectionProgress * selectionProgress * (3f - 2f * selectionProgress);
         tl += (pillR - tl) * radiusProgress;
         tr += (pillR - tr) * radiusProgress;
         br += (pillR - br) * radiusProgress;
@@ -58,7 +67,7 @@ public class Md3FilterTabsHelper {
 
         rectF.set(inset, inset, width - inset, height - inset);
         int unselectedColor = ColorUtils.blendARGB(unactiveColor, backgroundColor, 0.78f);
-        backgroundPaint.setColor(selectionProgress >= 0.5f ? activeColor : unselectedColor);
+        backgroundPaint.setColor(ColorUtils.blendARGB(unselectedColor, activeColor, selectionProgress));
         backgroundPaint.setAlpha(255);
 
         path.rewind();
@@ -66,10 +75,4 @@ public class Md3FilterTabsHelper {
         canvas.drawPath(path, backgroundPaint);
     }
 
-    private static float spring(float t) {
-        float c1 = 1.70158f;
-        float c3 = c1 + 1;
-        t -= 1;
-        return 1 + c3 * t * t * t + c1 * t * t;
-    }
 }
