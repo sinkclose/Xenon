@@ -17,7 +17,7 @@ class GenerateTlReadersPlugin : Plugin<Project> {
             val task = project.tasks.register<GenerateTlReadersTask>("generate${suffix}TlReaders") {
                 schemaDir.set(ext.schemaDir)
                 tlrpcFile.set(ext.tlrpcFile)
-                outputFile.set(ext.outputFile.orElse("tw/nekomimi/nekogram/tlv/TlReaders.java"))
+                outputFile.set(ext.outputFile.orElse("zxc/iconic/xenon/tlv/TlReaders.java"))
             }
 
             variant.sources.java?.addGeneratedSourceDirectory(

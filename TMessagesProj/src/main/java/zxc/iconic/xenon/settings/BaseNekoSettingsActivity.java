@@ -3,6 +3,7 @@ package zxc.iconic.xenon.settings;
 import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -508,13 +509,20 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
         BulletinFactory.of(this).createSimpleBulletin(R.raw.chats_infotip,
                 LocaleController.formatString(R.string.RestartAppToTakeEffect),
                 LocaleController.getString(R.string.BotUnblockNoCaps),
-                () -> {
-                    // Destroy the old activity and its static viewers before creating
-                    // the replacement, so editor views cannot retain the old window.
-                    if (!activity.isFinishing() && !activity.isDestroyed()) {
-                        activity.recreate();
-                    }
-                }).show();
+                () -> restartApp(activity)).show();
+    }
+
+    private static void restartApp(Activity activity) {
+        Context ctx = activity.getApplicationContext();
+        Intent launch = ctx.getPackageManager().getLaunchIntentForPackage(ctx.getPackageName());
+        if (launch == null || launch.getComponent() == null) {
+            activity.recreate();
+            return;
+        }
+        ctx.startActivity(Intent.makeRestartActivityTask(launch.getComponent()));
+        activity.finishAffinity();
+        android.os.Process.killProcess(android.os.Process.myPid());
+        System.exit(0);
     }
 
     protected void updateRows() {
