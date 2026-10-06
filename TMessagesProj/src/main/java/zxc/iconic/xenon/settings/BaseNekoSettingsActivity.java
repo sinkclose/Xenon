@@ -495,10 +495,11 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
                 LocaleController.formatString(R.string.RestartAppToTakeEffect),
                 LocaleController.getString(R.string.BotUnblockNoCaps),
                 () -> {
-                    android.content.Intent intent = new android.content.Intent(activity, org.telegram.ui.LaunchActivity.class);
-                    intent.setFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    activity.startActivity(intent);
-                    activity.finishAffinity();
+                    // Destroy the old activity and its static viewers before creating
+                    // the replacement, so editor views cannot retain the old window.
+                    if (!activity.isFinishing() && !activity.isDestroyed()) {
+                        activity.recreate();
+                    }
                 }).show();
     }
 
