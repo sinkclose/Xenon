@@ -180,7 +180,7 @@ abstract class GenerateTlReadersTask : DefaultTask() {
         val totalCount = currentObjects.size + legacyObjects.size
         val out = StringBuilder()
 
-        out.appendLine("package tw.nekomimi.nekogram.tlv;")
+        out.appendLine("package zxc.iconic.xenon.tlv;")
         out.appendLine()
         out.appendLine("import android.util.Base64;")
         out.appendLine()
