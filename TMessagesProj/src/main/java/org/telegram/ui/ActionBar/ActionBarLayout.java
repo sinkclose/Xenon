@@ -29,11 +29,14 @@ import android.graphics.Matrix;
 import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.RecordingCanvas;
 import android.graphics.Rect;
+import android.graphics.RenderNode;
 import android.graphics.Shader;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
+import android.provider.Settings;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
@@ -65,6 +68,7 @@ import androidx.core.view.WindowInsetsCompat;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.AnimationNotificationsLocker;
+import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.ImageLoader;
@@ -649,25 +653,116 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
         return altTransitionInterpolatorOpen;
     }
 
-    private static PathInterpolator aospInterpolator;
-    private static String aospInterpolatorLastBezier;
+    // AOSP open/close transition, ported 1:1 from ExteraGram's
+    // WindowTransitionAnimationHelper: fixed 96dp slide on the Material Emphasized
+    // curve, time-based fades (incoming from 50ms over 83ms on open, outgoing
+    // from 35ms over 83ms on close), 450ms * system animator scale, plus the
+    // RenderNode edge stretch drawn under the sliding containers.
+    private boolean aospTransitionActive;
+    private WindowEdgeExtension aospEdgeExtension;
+    private WindowEdgeExtension aospEdgeExtensionBack;
 
-    private static PathInterpolator getAospInterpolator() {
-        String bezier = "0.5,0,0,1";
-        if (aospInterpolator == null || !bezier.equals(aospInterpolatorLastBezier)) {
-            try {
-                String[] parts = bezier.split(",");
-                float x1 = Float.parseFloat(parts[0].trim());
-                float y1 = Float.parseFloat(parts[1].trim());
-                float x2 = Float.parseFloat(parts[2].trim());
-                float y2 = Float.parseFloat(parts[3].trim());
-                aospInterpolator = new PathInterpolator(x1, y1, x2, y2);
-                aospInterpolatorLastBezier = bezier;
-            } catch (Exception e) {
-                aospInterpolator = new PathInterpolator(0.8f, 0f, 0f, 1f);
+    private static float getAospTransitionDuration() {
+        float scale;
+        try {
+            scale = Settings.Global.getFloat(ApplicationLoader.applicationContext.getContentResolver(), "transition_animation_scale", 1.0f);
+        } catch (Exception e) {
+            scale = 1.0f;
+        }
+        return Math.max(1.0f, scale * 450.0f);
+    }
+
+    private static float aospFade(float progress, float offsetMs, float lengthMs) {
+        return clamp01((progress * 450.0f - offsetMs) / lengthMs);
+    }
+
+    private static void applyAospTransition(View front, View back, boolean open, float progress) {
+        float p = clamp01(progress);
+        float slide = dp(96);
+        float shifted = Math.round(CubicBezierInterpolator.Emphasized.getInterpolation(p) * slide);
+        if (front != null) {
+            front.setTranslationX(open ? slide - shifted : shifted - slide);
+            front.setAlpha(open ? aospFade(p, 50.0f, 83.0f) : 1.0f);
+        }
+        if (back != null) {
+            back.setTranslationX(open ? -shifted : shifted);
+            back.setAlpha(open ? 1.0f : 1.0f - aospFade(p, 35.0f, 83.0f));
+        }
+    }
+
+    private void drawAospEdgeExtension(Canvas canvas, View view) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || !canvas.isHardwareAccelerated()) {
+            return;
+        }
+        float translationX = view.getTranslationX();
+        if (translationX == 0.0f) {
+            return;
+        }
+        boolean fromLeft = translationX > 0.0f;
+        boolean isFront = view == containerView;
+        WindowEdgeExtension extension = isFront ? aospEdgeExtension : aospEdgeExtensionBack;
+        if (extension == null) {
+            extension = new WindowEdgeExtension();
+            if (isFront) {
+                aospEdgeExtension = extension;
+            } else {
+                aospEdgeExtensionBack = extension;
             }
         }
-        return aospInterpolator;
+        if (extension.isCaptured() || extension.capture(view, fromLeft)) {
+            float slide = dp(96);
+            extension.draw(canvas, fromLeft ? translationX - slide : translationX + view.getWidth(), slide, view.getAlpha());
+        }
+    }
+
+    private static final class WindowEdgeExtension {
+        private boolean captured;
+        private final RenderNode node = new RenderNode("xenonAospEdgeExtension");
+
+        boolean isCaptured() {
+            return captured;
+        }
+
+        boolean capture(View view, boolean fromLeft) {
+            int width = view.getWidth();
+            int height = view.getHeight();
+            if (width <= 0 || height <= 0) {
+                return false;
+            }
+            node.setPosition(0, 0, 1, height);
+            node.setPivotX(0.0f);
+            node.setPivotY(0.0f);
+            RecordingCanvas recordingCanvas = node.beginRecording(1, height);
+            try {
+                recordingCanvas.translate(fromLeft ? 0.0f : -(width - 1), 0.0f);
+                view.draw(recordingCanvas);
+                node.endRecording();
+                node.setUseCompositingLayer(true, null);
+                captured = true;
+                return true;
+            } catch (Throwable t) {
+                node.endRecording();
+                throw t;
+            }
+        }
+
+        void draw(Canvas canvas, float x, float width, float alpha) {
+            if (!captured || width <= 0.0f || alpha <= 0.0f || !canvas.isHardwareAccelerated()) {
+                return;
+            }
+            node.setScaleX(width);
+            node.setTranslationX(x);
+            node.setAlpha(alpha);
+            canvas.drawRenderNode(node);
+        }
+
+        void release() {
+            if (captured) {
+                captured = false;
+                node.setUseCompositingLayer(false, null);
+                node.discardDisplayList();
+            }
+        }
     }
 
     public float innerTranslationX;
@@ -1241,6 +1336,9 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
         if ((inPreviewMode || transitionAnimationPreviewMode) && child == containerView) {
             drawPreviewDrawables(canvas, containerView);
         }
+        if (aospTransitionActive && (child == containerView || child == containerViewBack)) {
+            drawAospEdgeExtension(canvas, child);
+        }
         final boolean result = super.drawChild(canvas, child, drawingTime);
         canvas.restoreToCount(restoreCount);
 
@@ -1676,27 +1774,23 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
 
         if (!backAnimation) {
             distToMove = Math.abs(containerView.getMeasuredWidth() - x);
-            int duration = Math.max((int) (200.0f / containerView.getMeasuredWidth() * distToMove), newBackTransitions() ? 380 : 50);
+            int duration = Math.max((int) (200.0f / containerView.getMeasuredWidth() * distToMove), 380);
             if (!overrideTransition) {
                 animatorSet.playTogether(
                     ObjectAnimator.ofFloat(containerView, View.TRANSLATION_X, (containerView.getMeasuredWidth() + (predictiveBackInProgress ? dp(56) : 0))).setDuration(duration),
                     ObjectAnimator.ofFloat(this, "innerTranslationX", (float) containerView.getMeasuredWidth()).setDuration(duration)
                 );
-                if (newBackTransitions()) {
-                    animatorSet.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
-                }
+                animatorSet.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
             }
         } else {
             distToMove = x;
-            int duration = Math.max((int) (320.0f / containerView.getMeasuredWidth() * distToMove), newBackTransitions() ? 320 : 120);
+            int duration = Math.max((int) (320.0f / containerView.getMeasuredWidth() * distToMove), 320);
             if (!overrideTransition) {
                 animatorSet.playTogether(
                     ObjectAnimator.ofFloat(containerView, View.TRANSLATION_X, 0).setDuration(duration),
                     ObjectAnimator.ofFloat(this, "innerTranslationX", 0.0f).setDuration(duration)
                 );
-                if (newBackTransitions()) {
-                    animatorSet.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
-                }
+                animatorSet.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
             }
         }
 
@@ -1797,6 +1891,13 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
         containerViewBack.setScaleY(1.0f);
         containerViewBack.setOutlineProvider(null);
         containerViewBack.setClipToOutline(false);
+        aospTransitionActive = false;
+        if (aospEdgeExtension != null) {
+            aospEdgeExtension.release();
+        }
+        if (aospEdgeExtensionBack != null) {
+            aospEdgeExtensionBack.release();
+        }
     }
 
     public BaseFragment getLastFragment() {
@@ -1966,12 +2067,18 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
         boolean fadeClose = NekoConfig.closeAnimationStyle == NekoConfig.ANIMATION_STYLE_FADE;
         boolean styledOpen = altOpen || aospOpen || fadeOpen;
         boolean styledClose = altClose || aospClose || fadeClose;
+        boolean aosp = !preview && (open ? aospOpen : aospClose);
         if (first) {
             animationProgress = 0.0f;
             lastFrameTime = System.nanoTime() / 1000000;
+            if (aosp) {
+                aospTransitionActive = true;
+            }
             if (styledClose && !open && !preview) {
                 if (aospClose) {
-                    containerView.setTranslationX(-getWidth() * 0.2f);
+                    containerView.setTranslationX(-dp(96));
+                    containerView.setAlpha(1f);
+                    containerViewBack.setAlpha(1f);
                 } else if (!fadeClose) {
                     containerView.setTranslationX(-dp(96));
                 }
@@ -2004,7 +2111,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                 long dt = newTime - lastFrameTime;
                 if (dt > 40 && first) {
                     dt = 0;
-                } else if (dt > 18) {
+                } else if (dt > 18 && !aosp) {
                     dt = 18;
                 }
                 lastFrameTime = newTime;
@@ -2013,7 +2120,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                     if (open ? fadeOpen : fadeClose) {
                         duration = NekoConfig.fadeDuration;
                     } else {
-                        duration = (open ? aospOpen : aospClose) ? 400 : NekoConfig.alternativeTransitionSpeed;
+                        duration = aosp ? getAospTransitionDuration() : NekoConfig.alternativeTransitionSpeed;
                     }
                 }
                 animationProgress += dt / duration;
@@ -2059,8 +2166,8 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                     }
                 } else if (open ? altOpen : altClose) {
                     interpolated = getAltTransitionInterpolator().getInterpolation(animationProgress);
-                } else if (open ? aospOpen : aospClose) {
-                    interpolated = getAospInterpolator().getInterpolation(animationProgress);
+                } else if (aosp) {
+                    interpolated = animationProgress;
                 } else if (open ? fadeOpen : fadeClose) {
                     interpolated = CubicBezierInterpolator.EASE_OUT_QUINT.getInterpolation(animationProgress);
                 } else {
@@ -2088,14 +2195,9 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                         if (altOpen) {
                             containerView.setTranslationX(getWidth() * (1.0f - interpolated));
                             containerViewBack.setTranslationX(-dp(96) * interpolated);
-                        } else if (aospOpen) {
-                            containerView.setTranslationX(getWidth() * 0.2f * (1.0f - interpolated));
-                            containerViewBack.setTranslationX(-getWidth() * 0.2f * interpolated);
-                            float alphaStart = 50f / 400;
-                            float alphaEnd = (50f + 250) / 400;
-                            float alphaP = MathUtils.clamp((interpolated - alphaStart) / (alphaEnd - alphaStart), 0f, 1f);
-                            containerView.setAlpha(alphaP);
-                            containerViewBack.setAlpha(1f - alphaP);
+                        } else if (aosp) {
+                            applyAospTransition(containerView, containerViewBack, true, interpolated);
+                            invalidate();
                         } else if (fadeOpen) {
                             containerView.setAlpha(clampedInterpolated);
                         } else {
@@ -2120,14 +2222,9 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                         if (altClose) {
                             containerViewBack.setTranslationX(getWidth() * interpolated);
                             containerView.setTranslationX(-dp(96) * (1.0f - interpolated));
-                        } else if (aospClose) {
-                            containerViewBack.setTranslationX(getWidth() * 0.2f * interpolated);
-                            containerView.setTranslationX(-getWidth() * 0.2f * (1.0f - interpolated));
-                            float alphaStart = 50f / 400;
-                            float alphaEnd = (50f + 250) / 400;
-                            float alphaP = MathUtils.clamp((interpolated - alphaStart) / (alphaEnd - alphaStart), 0f, 1f);
-                            containerViewBack.setAlpha(1f - alphaP);
-                            containerView.setAlpha(alphaP);
+                        } else if (aosp) {
+                            applyAospTransition(containerView, containerViewBack, false, interpolated);
+                            invalidate();
                         } else if (fadeClose) {
                             containerViewBack.setAlpha(clampedReverseInterpolated);
                             containerView.setAlpha(1f);
@@ -2479,7 +2576,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                             containerView.setTranslationX(getWidth());
                             setupRoundedCorners(containerView);
                         } else if (NekoConfig.openAnimationStyle == NekoConfig.ANIMATION_STYLE_AOSP) {
-                            containerView.setTranslationX(getWidth() * 0.2f);
+                            applyAospTransition(containerView, containerViewBack, true, 0f);
                         } else {
                             containerView.setTranslationX(dp(48));
                         }
