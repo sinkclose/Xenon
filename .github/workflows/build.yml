@@ -3,7 +3,7 @@ name: Build
 # Отменяем устаревшие прогоны на той же ветке, чтобы пуши подряд
 # не копились в очереди и не выглядели как "зависший" workflow.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: build-${{ github.workflow }}-${{ inputs.ref || github.ref }}
   cancel-in-progress: true
 
 on:
@@ -18,6 +18,8 @@ on:
       - '!**.md'
       - '!.github/**'
       - '.github/workflows/build.yml'
+      - '.github/workflows/release.yml'
+      - '.github/scripts/**'
   pull_request:
     branches: [ "main", "dev" ]
     paths:
@@ -25,13 +27,20 @@ on:
       - '!**.md'
       - '!.github/**'
       - '.github/workflows/build.yml'
+      - '.github/workflows/release.yml'
+      - '.github/scripts/**'
   workflow_call:
+    inputs:
+      ref:
+        type: string
+        default: ''
 
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
+      contents: read
       id-token: write
       attestations: write
       artifact-metadata: write
@@ -43,6 +52,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.ref || github.sha }}
           submodules: true
 
       - name: Ensure Xray core AAR
@@ -100,33 +110,43 @@ jobs:
 
       - name: Configure Signing
         if: github.event_name != 'pull_request'
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEYSTORE_JKS: ${{ secrets.KEYSTORE_JKS }}
         run: |
-          echo "storeFile=${{ github.workspace }}/keystore.jks" >> local.properties
-          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" >> local.properties
-          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> local.properties
-          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> local.properties
-          
-          echo "${{ secrets.KEYSTORE_JKS }}" | base64 --decode > keystore.jks
+          set -euo pipefail
+          printf 'storeFile=%s/keystore.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            "$GITHUB_WORKSPACE" "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" >> local.properties
+          printf '%s' "$KEYSTORE_JKS" | base64 --decode > keystore.jks
 
       - name: Configure Secrets
         if: github.event_name != 'pull_request'
+        env:
+          API_ID: ${{ secrets.API_ID }}
+          API_HASH: ${{ secrets.API_HASH }}
+          HELPER_BOT_ID: ${{ secrets.HELPER_BOT_ID }}
+          HELPER_BOT_USERNAME: ${{ secrets.HELPER_BOT_USERNAME }}
         run: |
-          echo "apiId=${{ secrets.API_ID }}" >> local.properties
-          echo "apiHash=${{ secrets.API_HASH }}" >> local.properties
-          echo "helperBotId=${{ secrets.HELPER_BOT_ID }}" >> local.properties
-          echo "helperBotUsername=${{ secrets.HELPER_BOT_USERNAME }}" >> local.properties
+          printf 'apiId=%s\napiHash=%s\nhelperBotId=%s\nhelperBotUsername=%s\n' \
+            "$API_ID" "$API_HASH" "$HELPER_BOT_ID" "$HELPER_BOT_USERNAME" >> local.properties
 
       - name: Configure Build
+        env:
+          TWPIC_BOT_USERNAME: ${{ secrets.TWPIC_BOT_USERNAME }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
-          echo "twpicBotUsername=${{ secrets.TWPIC_BOT_USERNAME }}" >> local.properties
+          set -euo pipefail
+          printf 'twpicBotUsername=%s\n' "$TWPIC_BOT_USERNAME" >> local.properties
 
           # The google-services plugin is applied to :TMessagesProj_App, so the file
           # must live in that module and contain a client entry for APP_PACKAGE,
           # otherwise the build fails or FCM silently never delivers pushes.
           APP_PACKAGE=$(grep -E '^APP_PACKAGE=' gradle.properties | cut -d= -f2)
-          if [ -n "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
-            echo "${{ secrets.GOOGLE_SERVICES_JSON }}" | base64 --decode > TMessagesProj_App/google-services.json
-          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" | base64 --decode > TMessagesProj_App/google-services.json
+          elif [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             echo "::warning::GOOGLE_SERVICES_JSON secret is not available for pull requests, using a placeholder (FCM will not work in this build)."
             python3 -c 'import json; json.dump({"project_info": {"project_number": "100000000000", "project_id": "placeholder", "storage_bucket": "placeholder.appspot.com"}, "client": [{"client_info": {"mobilesdk_app_id": "1:100000000000:android:00000000000000001000000000000000", "android_client_info": {"package_name": "zxc.iconic.xenon"}}, "api_key": [{"current_key": "placeholder"}]}], "configuration_version": "1"}, open("TMessagesProj_App/google-services.json", "w"))'
           else
@@ -185,6 +205,8 @@ jobs:
         with:
           name: outputs
           path: TMessagesProj_App/build/outputs
+          if-no-files-found: error
+          compression-level: 0
 
   release:
     needs: build
@@ -193,6 +215,8 @@ jobs:
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ayu-features')
     permissions:
       contents: write
+    outputs:
+      assets: ${{ steps.publish.outputs.assets }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -208,33 +232,32 @@ jobs:
         id: apks
         run: |
           set -euo pipefail
-          APK_GLOB="outputs/apk/release/*.apk"
-          APK_COUNT=$(ls $APK_GLOB 2>/dev/null | wc -l)
+          shopt -s nullglob
+          apks=(outputs/apk/release/*.apk)
+          APK_COUNT=${#apks[@]}
           if [ "$APK_COUNT" -eq 0 ]; then
             echo "No release APK found under outputs/apk/release"
             exit 1
           fi
 
           # Build a markdown table of every APK with size + SHA256.
-          TABLE=$(printf '| File | Size | SHA256 |\n|-----------|------|--------|\n')
-          while IFS= read -r apk; do
-            name=$(basename "$apk")
-            size=$(stat -c%s "$apk" | numfmt --to=iec)
-            sha=$(sha256sum "$apk" | awk '{print $1}')
-            TABLE=$(printf '%s| `%s` | %s | `%s` |\n' "$TABLE" "$name" "$size" "$sha")
-          done < <(find outputs/apk/release -name "*.apk" -type f | sort)
-
-          # Preserve newlines across $GITHUB_OUTPUT.
-          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
-          echo "table<<$EOF" >> $GITHUB_OUTPUT
-          echo "$TABLE" >> $GITHUB_OUTPUT
-          echo "$EOF" >> $GITHUB_OUTPUT
-          echo "count=$APK_COUNT" >> $GITHUB_OUTPUT
+          {
+            echo 'table<<APK_TABLE'
+            printf '| File | Size | SHA256 |\n|------|------|--------|\n'
+            for apk in "${apks[@]}"; do
+              name=$(basename "$apk")
+              size=$(stat -c%s "$apk" | numfmt --to=iec)
+              sha=$(sha256sum "$apk" | awk '{print $1}')
+              printf '| `%s` | %s | `%s` |\n' "$name" "$size" "$sha"
+            done
+            echo 'APK_TABLE'
+            echo "count=$APK_COUNT"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Get Commit Info
         id: commit_info
         run: |
-          COMMIT_MSG=$(git log -1 --pretty=%B | head -1)
+          COMMIT_MSG=$(git log -1 --format=%s)
           COMMIT_HASH=$(git rev-parse --short=7 HEAD)
           COMMIT_FULL=$(git rev-parse HEAD)
           
@@ -261,11 +284,13 @@ jobs:
           fi
 
       - name: Create Release
+        id: publish
         uses: softprops/action-gh-release@v3
         with:
           name: "${{ steps.channel.outputs.name_prefix }}${{ steps.commit_info.outputs.title }}"
           tag_name: "${{ steps.channel.outputs.tag_prefix }}${{ steps.commit_info.outputs.hash_short }}"
           prerelease: ${{ steps.channel.outputs.is_posral }}
+          target_commitish: ${{ github.sha }}
           body: |
             ## Build Info
             - **Commit:** `${{ steps.commit_info.outputs.hash_full }}`
@@ -282,125 +307,20 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   telegram:
-    # Зависим только от build: артефакт качаем напрямую, а ссылка на релиз
-    # детерминирована (тег = short hash). Иначе при медленном/упавшем release
-    # TG-уведомление ждёт его или скипается вместе с ним — выглядит как зависший workflow.
-    needs: build
+    needs: release
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          ref: ${{ github.sha }}
 
-      - name: Download artifacts
-        uses: actions/download-artifact@v8
-        with:
-          name: outputs
-          path: outputs
-
-      - name: Build message and publish to Telegram
+      - name: Publish APK links to Telegram
         env:
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          set -euo pipefail
-          if [ -z "${TG_TOKEN:-}" ] || [ -z "${TG_CHAT_ID:-}" ]; then
-            echo "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID secret is not set"
-            exit 1
-          fi
-
-          API="https://api.telegram.org/bot${TG_TOKEN}"
-
-          # Commit / build metadata.
-          COMMIT_MSG=$(git log -1 --pretty=%B | head -1)
-          HASH_SHORT=$(git rev-parse --short=7 HEAD)
-          HASH_FULL=$(git rev-parse HEAD)
-          BRANCH="${GITHUB_REF_NAME:-main}"
-          BUILD_DATE="${BUILD_DATE:-$(date -u '+%Y-%m-%d %H:%M:%S UTC')}"
-          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          # GitHub Release created by the `release` job above (tag = short hash).
-          RELEASE_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${HASH_SHORT}"
-
-          # HTML-escape <, >, & for Telegram parse_mode=HTML.
-          esc() { sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
-          COMMIT_MSG_ESC=$(printf '%s' "$COMMIT_MSG" | esc)
-
-          # Compose the descriptive message (use real newlines — curl encodes them).
-          NL=$'\n'
-          MSG="🛠 <b>Новый билд</b>${NL}${NL}"
-          MSG+="📅 <b>Дата сборки:</b> ${BUILD_DATE}${NL}"
-          MSG+="🌿 <b>Ветка:</b> ${BRANCH}${NL}"
-          MSG+="🔗 <b>Коммит:</b> <code>${HASH_SHORT}</code> — ${COMMIT_MSG_ESC}${NL}"
-          MSG+="📦 <b>Релиз:</b> <a href=\"${RELEASE_URL}\">GitHub Release</a>${NL}"
-          MSG+="⚙️ <b>CI:</b> <a href=\"${RUN_URL}\">GitHub Actions run</a>${NL}${NL}"
-          MSG+="<b>APK-файлы:</b>${NL}"
-
-          # Collect every release APK with size + SHA256.
-          # Telegram Bot API file limit: 50 MB. APKs above the limit will
-          # be included in the message as GitHub Release links instead.
-          TG_MAX_BYTES=$((50 * 1024 * 1024))
-          shopt -s nullglob
-          apks=(outputs/apk/release/*.apk)
-          shopt -u nullglob
-          if [ "${#apks[@]}" -eq 0 ]; then
-            echo "No release APK found under outputs/apk/release"
-            exit 1
-          fi
-
-          # Sort for a stable order.
-          IFS=$'\n' sorted=($(sort <<<"${apks[*]}")); unset IFS
-
-          # Separate into sendable (>50 MB → link only) and append
-          # large-APK download links to the initial message.
-          for apk in "${sorted[@]}"; do
-            name=$(basename "$apk")
-            size_bytes=$(stat -c%s "$apk")
-            sha=$(sha256sum "$apk" | awk '{print $1}')
-            name_esc=$(printf '%s' "$name" | esc)
-
-            if [ "$size_bytes" -le "$TG_MAX_BYTES" ]; then
-              MSG+="📎 <b>${name_esc}</b> — отправлю файлом${NL}"
-            else
-              size_human=$(echo "$size_bytes" | numfmt --to=iec)
-              MSG+="📎 <b>${name_esc}</b> — ${size_human} (слишком большой для бота)${NL}"
-              MSG+="   📥 <a href=\"${RELEASE_URL}\">Скачать с GitHub Release</a>${NL}"
-              MSG+="   🔑 <code>${sha}</code>${NL}"
-            fi
-          done
-
-          curl --fail --silent --show-error --connect-timeout 15 --max-time 120 --retry 2 \
-            --data-urlencode "chat_id=${TG_CHAT_ID}" \
-            --data-urlencode "text=${MSG}" \
-            --data-urlencode "parse_mode=HTML" \
-            --data-urlencode "disable_web_page_preview=true" \
-            "${API}/sendMessage" >/dev/null
-
-          # Send each APK that fits within the Bot API limit as a document.
-          for apk in "${sorted[@]}"; do
-            size_bytes=$(stat -c%s "$apk")
-            if [ "$size_bytes" -gt "$TG_MAX_BYTES" ]; then
-              echo "Skipping $(basename "$apk") — too large ($(echo "$size_bytes" | numfmt --to=iec))"
-              continue
-            fi
-
-            name=$(basename "$apk")
-            size=$(echo "$size_bytes" | numfmt --to=iec)
-            sha=$(sha256sum "$apk" | awk '{print $1}')
-            name_esc=$(printf '%s' "$name" | esc)
-
-            caption="<b>${name_esc}</b>${NL}"
-            caption+="📦 ${size}${NL}"
-            caption+="🔑 <code>${sha}</code>"
-
-            echo "Sending ${name} (${size})..."
-            curl --fail --silent --show-error --connect-timeout 15 --max-time 600 --retry 2 \
-              --form "chat_id=${TG_CHAT_ID}" \
-              --form "document=@${apk}" \
-              --form "caption=${caption}" \
-              --form "parse_mode=HTML" \
-              "${API}/sendDocument" >/dev/null
-          done
-
-          echo "All APKs published to Telegram."
+          RELEASE_ASSETS: ${{ needs.release.outputs.assets }}
+        run: python3 .github/scripts/telegram_release.py

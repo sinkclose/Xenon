@@ -47,7 +47,7 @@ public class SpoilerEffect2 {
         return true;
     }
 
-    private static HashMap<Integer, SpoilerEffect2> instance;
+    private static final ArrayList<SpoilerEffect2> instances = new ArrayList<>();
     public static SpoilerEffect2 getInstance(View view) {
         return getInstance(TYPE_DEFAULT, view);
     }
@@ -57,20 +57,20 @@ public class SpoilerEffect2 {
     }
 
     public static SpoilerEffect2 getInstance(int type, View view, ViewGroup rootView) {
-        if (view == null || !supports()) {
+        if (view == null || rootView == null || !supports()) {
             return null;
         }
-        if (instance == null) {
-            instance = new HashMap<>();
-        }
-        SpoilerEffect2 e = instance.get(type);
-        if (e == null) {
-            final int sz = getSize();
-            if (rootView == null) {
-                return null;
+        // A TextureView belongs to one window. Reusing it in another activity
+        // leaves new holders sampling a surface from the old window.
+        for (SpoilerEffect2 e : instances) {
+            if (e.type == type && e.textureViewContainer.getParent() == rootView) {
+                e.attach(view);
+                return e;
             }
-            instance.put(type, e = new SpoilerEffect2(type, makeTextureViewContainer(rootView), sz, sz));
         }
+        final int sz = getSize();
+        SpoilerEffect2 e = new SpoilerEffect2(type, makeTextureViewContainer(rootView), sz, sz);
+        instances.add(e);
         e.attach(view);
         return e;
     }
@@ -88,15 +88,13 @@ public class SpoilerEffect2 {
     }
 
     public static void pause(boolean pause) {
-        if (instance == null) return;
-        for (SpoilerEffect2 s : instance.values()) {
+        for (SpoilerEffect2 s : instances) {
             if (s.thread != null) s.thread.pause(pause);
         }
     }
 
     public static void pause(int type, boolean pause) {
-        if (instance == null) return;
-        for (SpoilerEffect2 s : instance.values()) {
+        for (SpoilerEffect2 s : instances) {
             if (s.type == type && s.thread != null) s.thread.pause(pause);
         }
     }
@@ -229,8 +227,14 @@ public class SpoilerEffect2 {
     }
 
     private void destroy() {
+        if (destroyed) {
+            return;
+        }
         destroyed = true;
-        instance = null;
+        AndroidUtilities.cancelRunOnUIThread(checkDestroy);
+        // Removing a preview must not orphan the chat renderer: pause/resume
+        // still needs to reach every other live surface.
+        instances.remove(this);
         if (thread != null) {
             thread.halt();
             thread = null;
@@ -362,10 +366,14 @@ public class SpoilerEffect2 {
                     dt = MAX_DELTA;
                 }
 
-                while (paused) {
+                while (running && paused) {
                     try {
                         sleep(1000);
                     } catch (Exception ignore) {}
+                }
+
+                if (!running) {
+                    break;
                 }
 
                 checkResize();

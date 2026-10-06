@@ -98,7 +98,7 @@ public class M3SectionsHelper {
             if (child == null || child.getVisibility() != View.VISIBLE || child.getAlpha() <= 0f) continue;
             if (!isSection.run(child)) continue;
             if (child instanceof HeaderCell) continue;
-            float[] tRbR = computeRadii(listView, child, i, isSection);
+            float[] tRbR = computeRadii(listView, child);
             float tR = tRbR[0];
             float bR = tRbR[1];
             rect.set(child.getLeft(), RecyclerListView.top(child), child.getRight(), RecyclerListView.bottom(child));
@@ -116,8 +116,7 @@ public class M3SectionsHelper {
         if (deco == null) return;
         Utilities.CallbackReturn<View, Boolean> isSection = deco.isSectionItem;
         if (!isSection.run(child) || child instanceof HeaderCell) return;
-        int index = listView.indexOfChild(child);
-        float[] tRbR = computeRadii(listView, child, index, isSection);
+        float[] tRbR = computeRadii(listView, child);
         float tR = tRbR[0];
         float bR = tRbR[1];
         rect.set(child.getX(), RecyclerListView.top(child), child.getX() + child.getWidth(), RecyclerListView.bottom(child));
@@ -127,21 +126,25 @@ public class M3SectionsHelper {
         canvas.clipPath(path);
     }
 
-    private static float[] computeRadii(RecyclerListView listView, View child, int childIndex, Utilities.CallbackReturn<View, Boolean> isSection) {
-        View prev = childIndex >= 0 ? visualSibling(listView, childIndex, false) : null;
-        View next = childIndex >= 0 ? visualSibling(listView, childIndex, true) : null;
-        boolean prevIsSection = prev != null && isSection.run(prev) && !(prev instanceof HeaderCell);
-        boolean nextIsSection = next != null && isSection.run(next) && !(next instanceof HeaderCell);
+    private static float[] computeRadii(RecyclerListView listView, View child) {
+        final int position = listView.getChildAdapterPosition(child);
+        // Adapter neighbours remain stable when children are recycled or reordered
+        // by animations, and include rows just outside the viewport.
+        boolean prevIsSection = position != RecyclerView.NO_POSITION && isSectionRow(listView, position - 1);
+        boolean nextIsSection = position != RecyclerView.NO_POSITION && isSectionRow(listView, position + 1);
         return m3Radii(child, prevIsSection, nextIsSection);
     }
 
-    private static View visualSibling(RecyclerListView listView, int fromIndex, boolean forward) {
-        int step = forward ? 1 : -1;
-        for (int i = fromIndex + step; i >= 0 && i < listView.getChildCount(); i += step) {
-            View v = listView.getChildAt(i);
-            if (v != null && v.getVisibility() == View.VISIBLE && v.getAlpha() > 0.01f) return v;
+    private static boolean isSectionRow(RecyclerListView listView, int position) {
+        final RecyclerView.Adapter<?> adapter = listView.getAdapter();
+        if (adapter == null || position < 0 || position >= adapter.getItemCount()) return false;
+        if (adapter instanceof UniversalAdapter) {
+            final int viewType = adapter.getItemViewType(position);
+            if (isHeaderViewType(viewType) || UniversalAdapter.isShadow(viewType)) return false;
         }
-        return null;
+        final View neighbour = listView.findViewByPosition(position);
+        if (neighbour instanceof HeaderCell) return false;
+        return listView.isSectionPosition(position);
     }
 
     private static float[] m3Radii(View child, boolean prevIsSection, boolean nextIsSection) {
@@ -236,9 +239,8 @@ public class M3SectionsHelper {
         if (deco == null) return null;
         Utilities.CallbackReturn<View, Boolean> isSection = deco.isSectionItem;
         if (!isSection.run(child)) return null;
-        int index = listView.indexOfChild(child);
-        if (index < 0) return null;
-        return computeRadii(listView, child, index, isSection);
+        if (listView.indexOfChild(child) < 0) return null;
+        return computeRadii(listView, child);
     }
 
     private static void setRadii(float top, float bottom) {
