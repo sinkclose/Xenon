@@ -19,10 +19,11 @@ import android.system.OsConstants;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.OptIn;
 import androidx.annotation.RequiresApi;
-
-import com.google.android.exoplayer2.upstream.DataSource;
-import com.google.android.exoplayer2.upstream.DataSpec;
+import androidx.media3.common.util.UnstableApi;
+import androidx.media3.datasource.DataSource;
+import androidx.media3.datasource.DataSpec;
 
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.FileLoader;
@@ -33,6 +34,8 @@ import org.telegram.tgnet.TLRPC;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 
+import zxc.iconic.xenon.NekoConfig;
+
 public class MediaStreamingProvider extends ContentProvider {
 
     private HandlerThread callbackThread;
@@ -41,6 +44,9 @@ public class MediaStreamingProvider extends ContentProvider {
 
     @Override
     public boolean onCreate() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return true;
+        }
         var context = getContext();
         if (context == null) {
             return false;
@@ -54,7 +60,11 @@ public class MediaStreamingProvider extends ContentProvider {
 
     @Override
     public void shutdown() {
-        callbackThread.quit();
+        if (callbackThread != null) {
+            callbackThread.quit();
+            callbackThread = null;
+            callbackHandler = null;
+        }
     }
 
     @Nullable
@@ -144,6 +154,7 @@ public class MediaStreamingProvider extends ContentProvider {
     }
 
     @Nullable
+    @RequiresApi(api = Build.VERSION_CODES.O)
     private static Uri getStreamingUri(int currentAccount, TLRPC.Document document, Object parent) {
         var uri = FileStreamLoadOperation.prepareUri(currentAccount, document, parent);
         if (uri == null || !"tg".equals(uri.getScheme())) {
@@ -159,8 +170,8 @@ public class MediaStreamingProvider extends ContentProvider {
     }
 
     public static boolean openForStreaming(Activity activity, int currentAccount, TLRPC.Document document, Object parent) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            return false;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || NekoConfig.forceHttpStreaming) {
+            return MediaStreamingServer.openForStreaming(activity, currentAccount, document, parent);
         }
         var uri = getStreamingUri(currentAccount, document, parent);
         if (uri == null) {
@@ -174,6 +185,7 @@ public class MediaStreamingProvider extends ContentProvider {
     }
 
     @RequiresApi(api = Build.VERSION_CODES.O)
+    @OptIn(markerClass = UnstableApi.class)
     private static class StreamingProxyFileDescriptorCallback extends ProxyFileDescriptorCallback {
         private long size;
         private final DataSource dataSource;

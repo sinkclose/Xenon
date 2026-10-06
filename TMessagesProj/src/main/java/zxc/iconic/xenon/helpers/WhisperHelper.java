@@ -15,6 +15,7 @@ import androidx.annotation.NonNull;
 import com.google.gson.Gson;
 import com.google.gson.annotations.Expose;
 import com.google.gson.annotations.SerializedName;
+import com.google.net.cronet.okhttptransport.CronetCallFactory;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BotWebViewVibrationEffect;
@@ -42,6 +43,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
+import okhttp3.Call;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -49,7 +51,7 @@ import okhttp3.RequestBody;
 import zxc.iconic.xenon.NekoConfig;
 
 public class WhisperHelper {
-    private static OkHttpClient okHttpClient;
+    private static Call.Factory okHttpClient;
     private static final Gson gson = new Gson();
     private static final ExecutorService executorService = Executors.newCachedThreadPool();
 
@@ -156,13 +158,21 @@ public class WhisperHelper {
         }
     }
 
-    private static OkHttpClient getOkHttpClient() {
+    private static Call.Factory getOkHttpClient() {
         if (okHttpClient == null) {
-            var builder = new OkHttpClient.Builder();
-            builder.connectTimeout(120, TimeUnit.SECONDS);
-            builder.readTimeout(120, TimeUnit.SECONDS);
-            builder.writeTimeout(120, TimeUnit.SECONDS);
-            okHttpClient = builder.build();
+            if (CronetHelper.isAvailable()) {
+                var builder = CronetCallFactory.newBuilder(CronetHelper.getEngine());
+                builder.setCallTimeoutMillis(120 * 1000);
+                builder.setReadTimeoutMillis(120 * 1000);
+                builder.setWriteTimeoutMillis(120 * 1000);
+                okHttpClient = builder.build();
+            } else {
+                var builder = new OkHttpClient.Builder();
+                builder.connectTimeout(120, TimeUnit.SECONDS);
+                builder.readTimeout(120, TimeUnit.SECONDS);
+                builder.writeTimeout(120, TimeUnit.SECONDS);
+                okHttpClient = builder.build();
+            }
         }
         return okHttpClient;
     }
@@ -243,7 +253,7 @@ public class WhisperHelper {
             }
             var payload = new WhisperRequest();
             payload.audio = Base64.encodeToString(audio, Base64.NO_WRAP);
-            payload.vadFilter = false;
+            payload.vadFilter = true;
             var client = getOkHttpClient();
             var request = new Request.Builder()
                     .url("https://api.cloudflare.com/client/v4/accounts/" + NekoConfig.cfAccountID + "/ai/run/@cf/openai/whisper-large-v3-turbo")

@@ -29,7 +29,7 @@ public class ChatActivityEnterViewAnimatedIconView extends RLottieImageView {
             if (obj == null) {
                 TransitState state = (TransitState) key;
                 int res = resource(state);
-                RLottieDrawable rLottieDrawable = new RLottieDrawable(res, String.valueOf(res), AndroidUtilities.dp(sizeDp), AndroidUtilities.dp(sizeDp));
+                RLottieDrawable rLottieDrawable = new RLottieDrawable(res, AndroidUtilities.dp(sizeDp), AndroidUtilities.dp(sizeDp));
                 put(state, rLottieDrawable);
                 return rLottieDrawable;
             }

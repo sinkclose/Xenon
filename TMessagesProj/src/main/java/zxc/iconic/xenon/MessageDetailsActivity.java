@@ -43,7 +43,7 @@ import zxc.iconic.xenon.helpers.MessageHelper;
 import zxc.iconic.xenon.helpers.UserHelper;
 import zxc.iconic.xenon.helpers.WebAppHelper;
 import zxc.iconic.xenon.settings.BaseNekoSettingsActivity;
-import tw.nekomimi.nekogram.tlv.TlViewer;
+import zxc.iconic.xenon.tlv.TlViewer;
 
 public class MessageDetailsActivity extends BaseNekoSettingsActivity implements NotificationCenter.NotificationCenterDelegate {
 

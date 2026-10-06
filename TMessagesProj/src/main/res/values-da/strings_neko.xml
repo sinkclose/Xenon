@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="NekoSettings">Neko Indstillinger</string>
+    <string name="PreferIPv6">Prefer connecting through IPv6</string>
     <string name="MessageMenu">Meddelelse menu</string>
     <string name="HidePhone">Skjul mit telefonnummer</string>
     <string name="DeleteAllFromSelf">Slet egne beskeder</string>
@@ -25,7 +26,6 @@
     <string name="DeleteDownloadedFile">Slet hentede filer</string>
     <string name="TestBackendOn">Denne konto vil oprette forbindelse til test backend.</string>
     <string name="TestBackendOff">Denne konto vil oprette forbindelse til produktionsbackend.</string>
-    <string name="ViewHistory">Se historik</string>
     <string name="Nya">Meow!</string>
     <string name="StickerSize">Klistermærke størrelse</string>
     <string name="StickerSizeDialogMessage">Åh så sød! En sort kat!</string>
@@ -203,8 +203,4 @@
     <string name="MonoCode">Kode</string>
     <!-- Accessibility -->
     <string name="AccessibilitySettings">Tilgængelighedsindstillinger</string>
-    <string name="AccSeekbarHeading">Indstillinger for søgepanel</string>
-    <string name="AccNumberOfItems">Vis antal elementer</string>
-    <string name="AccIndexOfItem">Vis aktuel position</string>
-    <string name="AccShowValueChanges">Annoncere værdiændringer under manuelle ændringer</string>
 </resources>

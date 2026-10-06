@@ -412,24 +412,19 @@ public class NekoEmojiSettingsActivity extends BaseNekoSettingsActivity implemen
             progressDialog.showDelayed(300);
         }
         Utilities.globalQueue.postRunnable(() -> {
-            int count = 0;
             for (var file : files) {
                 try {
-                    if (EmojiHelper.getInstance().installEmoji(file) != null) {
-                        count++;
-                    }
+                    EmojiHelper.getInstance().installEmoji(file);
                 } catch (Exception e) {
                     FileLog.e("Emoji Font install failed", e);
                 }
             }
-            int finalCount = count;
             AndroidUtilities.runOnUIThread(() -> {
                 if (progressDialog != null) {
                     progressDialog.dismiss();
                     progressDialog = null;
                 }
-                notifyItemRangeInserted(emojiStartRow + emojiPacks.size(), finalCount);
-                updateRows();
+                listView.adapter.update(true);
             });
         });
     }

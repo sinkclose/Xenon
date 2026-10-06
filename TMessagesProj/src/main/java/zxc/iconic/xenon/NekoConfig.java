@@ -160,6 +160,7 @@ public class NekoConfig {
     public static boolean ignoreContentRestriction = false;
     public static boolean showTimeHint = false;
     public static boolean preferOriginalQuality = false;
+    public static boolean forceHttpStreaming = false;
     public static boolean forceFontWeightFallback = false;
     public static boolean minimizedStickerCreator = false;
     public static boolean hideChannelBottomButtons = false;
@@ -432,6 +433,7 @@ public class NekoConfig {
                 transcribeProvider = TRANSCRIBE_PREMIUM;
             }
             preferOriginalQuality = preferences.getBoolean("preferOriginalQuality", false);
+            forceHttpStreaming = preferences.getBoolean("forceHttpStreaming", false);
             forceFontWeightFallback = preferences.getBoolean("forceFontWeightFallback", false);
             minimizedStickerCreator = preferences.getBoolean("minimizedStickerCreator", false);
             hideChannelBottomButtons = preferences.getBoolean("hideChannelBottomButtons", false);
@@ -1650,6 +1652,12 @@ public class NekoConfig {
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("tryToOpenAllLinksInIV", tryToOpenAllLinksInIV);
         editor.apply();
+    }
+
+    public static void setForceHttpStreaming(boolean value) {
+        forceHttpStreaming = value;
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
+                .edit().putBoolean("forceHttpStreaming", value).apply();
     }
 
     public static void toggleFormatTimeWithSeconds() {

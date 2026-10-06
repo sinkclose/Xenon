@@ -93,7 +93,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import tw.nekomimi.nekogram.FragmentPreviewWindow;
+import zxc.iconic.xenon.FragmentPreviewWindow;
 
 import zxc.iconic.xenon.NekoConfig;
 

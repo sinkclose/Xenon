@@ -26,6 +26,7 @@ import android.text.Layout;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.StaticLayout;
+import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.ReplacementSpan;
 import android.view.View;
@@ -40,6 +41,7 @@ import androidx.core.math.MathUtils;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.Emoji;
 import org.telegram.messenger.LiteMode;
+import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.Utilities;
 import org.telegram.messenger.utils.Choreographer60FpsContent;
@@ -814,7 +816,7 @@ public class SpoilerEffect extends Drawable {
         }
         Layout pl = patchedLayoutRef.get();
 
-        if (pl == null || !textLayout.getText().toString().equals(pl.getText().toString()) || textLayout.getWidth() != pl.getWidth() || textLayout.getHeight() != pl.getHeight()) {
+        if (pl == null || !TextUtils.equals(textLayout.getText(), pl.getText()) || textLayout.getWidth() != pl.getWidth() || textLayout.getHeight() != pl.getHeight()) {
             SpannableStringBuilder sb = new SpannableStringBuilder(textLayout.getText());
             if (textLayout.getText() instanceof Spanned) {
                 Spanned sp = (Spanned) textLayout.getText();
@@ -846,15 +848,8 @@ public class SpoilerEffect extends Drawable {
             Layout layout;
             if (patchedLayoutType == 1) {
                 layout = new StaticLayout(sb, textLayout.getPaint(), textLayout.getWidth(), Layout.Alignment.ALIGN_CENTER, 1.0f, dp(1.66f), false);
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                layout = StaticLayout.Builder.obtain(sb, 0, sb.length(), textLayout.getPaint(), textLayout.getWidth())
-                        .setBreakStrategy(StaticLayout.BREAK_STRATEGY_HIGH_QUALITY)
-                        .setHyphenationFrequency(StaticLayout.HYPHENATION_FREQUENCY_NONE)
-                        .setAlignment(textLayout.getAlignment())
-                        .setLineSpacing(textLayout.getSpacingAdd(), textLayout.getSpacingMultiplier())
-                        .build();
             } else {
-                layout = new StaticLayout(sb, textLayout.getPaint(), textLayout.getWidth(), textLayout.getAlignment(), textLayout.getSpacingMultiplier(), textLayout.getSpacingAdd(), false);
+                layout = MessageObject.makeStaticLayout(sb, textLayout.getPaint(), textLayout.getWidth(), textLayout.getSpacingMultiplier(), textLayout.getSpacingAdd(), false, textLayout.getAlignment());
             }
             patchedLayoutRef.set(pl = layout);
         }

@@ -1236,8 +1236,7 @@ public class ProfileActionsView extends View {
         @SuppressLint("UseCompatLoadingForDrawables")
         public void updateDrawable(@RawRes int animatedRes, @DrawableRes int filledRes, @DrawableRes int outlineRes) {
             if (animatedRes != 0) {
-                RLottieDrawable drawable = new RLottieDrawable(animatedRes, String.valueOf(animatedRes),
-                    dp(56), dp(56), false, null);
+                RLottieDrawable drawable = new RLottieDrawable(animatedRes, dp(56), dp(56), false, null);
                 drawable.setMasterParent(ProfileActionsView.this);
                 drawable.start();
                 drawableAnimated = drawable;
@@ -1282,6 +1281,32 @@ public class ProfileActionsView extends View {
             this.filledIcon = filledIcon;
             this.outlineIcon = outlineIcon;
         }
+    }
+
+    @Override
+    protected boolean dispatchHoverEvent(MotionEvent event) {
+        if (event.getAction() == MotionEvent.ACTION_HOVER_ENTER || event.getAction() == MotionEvent.ACTION_HOVER_MOVE) {
+            var x = event.getX();
+            var y = event.getY();
+            Action button = null;
+            for (var action : actions) {
+                if (action.rect.contains(x, y)) {
+                    button = action;
+                    break;
+                }
+            }
+            if (button == null) return false;
+            if (AndroidUtilities.isAccessibilityTouchExplorationEnabled()) {
+                AccessibilityEvent e = AccessibilityEvent.obtain(AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED);
+                e.setPackageName(getContext().getPackageName());
+                e.setSource(this, button.key);
+                if (getParent() != null) {
+                    getParent().requestSendAccessibilityEvent(this, e);
+                }
+                return true;
+            }
+        }
+        return super.dispatchHoverEvent(event);
     }
 
     private AccessibilityNodeProvider accessibilityNodeProvider;

@@ -710,6 +710,13 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         return "a";
     }
 
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (listView == null) return;
+        notifyItemChanged(emojiSetsRow);
+    }
+
     private static class EmojiSetCellFactory extends UItem.UItemFactory<EmojiSetCell> {
         static {
             setup(new EmojiSetCellFactory());

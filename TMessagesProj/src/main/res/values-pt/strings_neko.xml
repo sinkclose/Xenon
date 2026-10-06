@@ -32,7 +32,6 @@
     <string name="DeleteDownloadedFile">Excluir arquivo baixado</string>
     <string name="TestBackendOn">Esta conta conectará ao backend de teste.</string>
     <string name="TestBackendOff">Esta conta conectará ao backend de produção.</string>
-    <string name="ViewHistory">Ver Histórico</string>
     <string name="Nya">Miau!</string>
     <string name="StickerSize">Tamanho da figurinha</string>
     <string name="StickerSizeLeft">Pequeno</string>

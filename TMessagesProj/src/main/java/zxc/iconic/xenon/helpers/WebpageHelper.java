@@ -13,6 +13,10 @@ public class WebpageHelper {
             "fixvx.com"
     );
 
+    public static boolean isXFormerlyTwitter(String siteName) {
+        return "x (formerly twitter)".equals(siteName) || "twitter".equals(siteName);
+    }
+
     public static Uri toNormalUrl(String host, Uri uri) {
         if (host == null) {
             return uri;

@@ -25,7 +25,6 @@
     <string name="DeleteDownloadedFile">Lejupielādētā faila dzēšana</string>
     <string name="TestBackendOn">Šis konts tiks savienots ar testa backend.</string>
     <string name="TestBackendOff">Šis konts tiks savienots ar testa backend.</string>
-    <string name="ViewHistory">Skatīt vēsturi</string>
     <string name="Nya">Mjau!</string>
     <string name="StickerSize">Uzlīmes izmērs</string>
     <string name="StickerSizeLeft">Mazs</string>

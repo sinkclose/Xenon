@@ -2,11 +2,15 @@ import com.android.build.api.variant.FilterConfiguration
 
 plugins {
     id 'com.android.application'
+    id 'androidx.baselineprofile'
+    id 'org.telegram.build-app-plugin'
     id 'com.google.gms.google-services'
 }
 
 dependencies {
     implementation project(':TMessagesProj')
+    implementation 'androidx.profileinstaller:profileinstaller:1.4.1'
+    baselineProfile project(':baselineprofile')
 }
 
 android {
@@ -21,6 +25,10 @@ android {
     Properties localProperties = new Properties()
     if (project.rootProject.file('local.properties').exists()) {
         localProperties.load(project.rootProject.file('local.properties').newDataInputStream())
+    }
+
+    androidResources {
+        noCompress += "pack"
     }
 
     signingConfigs {

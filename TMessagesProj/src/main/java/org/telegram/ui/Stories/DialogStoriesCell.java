@@ -338,12 +338,10 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
         telegramLogoView = new AnimatedTextView(getContext(), true, true, false);
         telegramLogoView.setGravity(Gravity.LEFT);
         telegramLogoView.setTextColor(getTextColor());
-        telegramLogoView.setEllipsizeByGradient(true);
         telegramLogoView.setTypeface(AndroidUtilities.bold());
-        telegramLogoView.setPadding(0, dp(8), 0, dp(8));
         telegramLogoView.setTextSize(dp(!AndroidUtilities.isTablet() && getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE ? 18 : 20));
         telegramLogoView.setText(TypefaceHelper.getTitleText());
-        addView(telegramLogoView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        addView(telegramLogoView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT));
 
         statusDrawable = new AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(null, dp(26));
         statusDrawable.center = true;
