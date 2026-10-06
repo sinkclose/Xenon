@@ -37,6 +37,7 @@ import android.graphics.PixelFormat;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.PowerManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -388,6 +389,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
     private FlagSecureReason flagSecureReason;
     private final LiteMode.BatteryReceiver batteryReceiver = new LiteMode.BatteryReceiver();
+    private final LiteMode.PowerSaveModeReceiver powerSaveModeReceiver = new LiteMode.PowerSaveModeReceiver();
     private WindowAnimatedInsetsProvider rootAnimatedInsetsListener;
 
     public static LaunchActivity instance;
@@ -420,6 +422,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         AndroidUtilities.checkDisplaySize(this, getResources().getConfiguration());
         currentAccount = UserConfig.selectedAccount;
         registerReceiver(batteryReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            registerReceiver(powerSaveModeReceiver, new IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED));
+        }
         if (!UserConfig.getInstance(currentAccount).isClientActivated()) {
             Intent intent = getIntent();
             boolean isProxy = false;
@@ -6726,7 +6731,8 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     private Utilities.Callback<Boolean> onPowerSaverCallback;
 
     private void onPowerSaver(boolean applied) {
-        if (actionBarLayout == null || !applied || LiteMode.getPowerSaverLevel() >= 100) {
+        boolean systemBatterySaver = LiteMode.isSyncWithSystemBatterySaverEnabled() && LiteMode.isSystemBatterySaverEnabled();
+        if (actionBarLayout == null || !applied || (!systemBatterySaver && LiteMode.getPowerSaverLevel() >= 100)) {
             return;
         }
         BaseFragment lastFragment = actionBarLayout.getLastFragment();
@@ -6737,7 +6743,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         BulletinFactory.of(lastFragment).createSimpleBulletin(
             new BatteryDrawable(percent / 100F, Color.WHITE, lastFragment.getThemedColor(Theme.key_dialogSwipeRemove), 1.3f),
             LocaleController.getString(R.string.LowPowerEnabledTitle),
-            LocaleController.formatString("LowPowerEnabledSubtitle", R.string.LowPowerEnabledSubtitle, String.format("%d%%", percent)),
+            systemBatterySaver ? LocaleController.getString(R.string.LowPowerSystemBatterySaverEnabled) : LocaleController.formatString("LowPowerEnabledSubtitle", R.string.LowPowerEnabledSubtitle, String.format("%d%%", percent)),
             LocaleController.getString(R.string.Disable),
             () -> presentFragment(new LiteModeSettingsActivity())
         ).setDuration(Bulletin.DURATION_PROLONG).show();
@@ -7015,6 +7021,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         isActive = false;
         activeInstanceCount--;
         unregisterReceiver(batteryReceiver);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            unregisterReceiver(powerSaveModeReceiver);
+        }
 
         if (activeInstanceCount == 0) {
             onDestroyStaticResources();

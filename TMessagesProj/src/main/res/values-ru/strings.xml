@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="SyncWithSystemBatterySaver">Синхронизировать с системным режимом энергосбережения</string>
+    <string name="SyncWithSystemBatterySaverInfo">Следовать режиму энергосбережения устройства. Пока синхронизация включена, порог заряда не используется.</string>
+    <string name="LowPowerEnabledTitle">Режим энергосбережения включён</string>
+    <string name="LowPowerEnabledSubtitle">Осталось заряда: %s</string>
+    <string name="LowPowerSystemBatterySaverEnabled">Включён системный режим энергосбережения</string>
     <string name="AppName">Telegram</string>
     <string name="AppNameBeta">Telegram Beta</string>
     <string name="LanguageName">Русский</string>

@@ -6261,6 +6261,7 @@
     <string name="LiteBatteryRestricted">Please turn off Low Power Mode to change these settings.</string>
     <string name="LowPowerEnabledTitle">Low Power Mode enabled</string>
     <string name="LowPowerEnabledSubtitle">%s battery remaining</string>
+    <string name="LowPowerSystemBatterySaverEnabled">System battery saver was enabled</string>
     <string name="LiteBatteryWhenBelow">When below %s</string>
     <string name="LiteBatteryDisabled">Off</string>
     <string name="LiteBatteryEnabled">On</string>
@@ -6269,6 +6270,8 @@
     <string name="LiteBatteryInfoDisabled">Never reduce power usage and keep all animations even when your battery is low.</string>
     <string name="LiteBatteryInfoBelow">Automatically reduce power usage and animations when your battery is below %s.</string>
     <string name="LiteBatteryInfoEnabled">Always reduce power usage regardless of your battery level.</string>
+    <string name="SyncWithSystemBatterySaver">Sync with system battery saver</string>
+    <string name="SyncWithSystemBatterySaverInfo">Follow your device’s battery saver. The battery level slider is paused while sync is on.</string>
     <string name="LiteOptionsTitle">Power saving options</string>
     <string name="LiteOptionsAutoplayKeyboard">Autoplay in keyboard</string>
     <string name="LiteOptionsAutoplayChat">Autoplay in chat</string>

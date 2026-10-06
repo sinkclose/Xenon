@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.BatteryManager;
 import android.os.Build;
+import android.os.PowerManager;
 
 import androidx.annotation.RequiresApi;
 import androidx.core.math.MathUtils;
@@ -91,6 +92,7 @@ public class LiteMode {
 
     private static int powerSaverLevel;
     private static boolean lastPowerSaverApplied;
+    private static boolean syncWithSystemBatterySaver;
 
     private static int value;
     private static boolean loaded;
@@ -104,6 +106,19 @@ public class LiteMode {
             loadPreference();
         }
         if (!ignorePowerSaving && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            if (isSyncWithSystemBatterySaverEnabled()) {
+                boolean systemBatterySaverEnabled = isSystemBatterySaverEnabled();
+                if (systemBatterySaverEnabled) {
+                    if (!lastPowerSaverApplied) {
+                        onPowerSaverApplied(lastPowerSaverApplied = true);
+                    }
+                    return PRESET_POWER_SAVER;
+                }
+                if (lastPowerSaverApplied) {
+                    onPowerSaverApplied(lastPowerSaverApplied = false);
+                }
+                return value;
+            }
             if (getBatteryLevel() <= powerSaverLevel && powerSaverLevel > 0) {
                 if (!lastPowerSaverApplied) {
                     onPowerSaverApplied(lastPowerSaverApplied = true);
@@ -282,6 +297,7 @@ public class LiteMode {
             onFlagsUpdate(prevValue, value);
         }
         powerSaverLevel = preferences.getInt("lite_mode_battery_level", batteryDefaultValue);
+        syncWithSystemBatterySaver = preferences.getBoolean("lite_mode_sync_system_battery_saver", false);
         loaded = true;
     }
 
@@ -302,6 +318,30 @@ public class LiteMode {
 
         // check power saver applied
         getValue(false);
+    }
+
+    public static boolean isSyncWithSystemBatterySaverEnabled() {
+        if (!loaded) {
+            loadPreference();
+        }
+        return syncWithSystemBatterySaver;
+    }
+
+    public static void setSyncWithSystemBatterySaverEnabled(boolean enabled) {
+        if (!loaded) {
+            loadPreference();
+        }
+        syncWithSystemBatterySaver = enabled;
+        MessagesController.getGlobalMainSettings().edit().putBoolean("lite_mode_sync_system_battery_saver", enabled).apply();
+        getValue();
+    }
+
+    public static boolean isSystemBatterySaverEnabled() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            return false;
+        }
+        PowerManager powerManager = (PowerManager) ApplicationLoader.applicationContext.getSystemService(Context.POWER_SERVICE);
+        return powerManager != null && powerManager.isPowerSaveMode();
     }
 
     public static boolean isPowerSaverApplied() {
@@ -359,6 +399,13 @@ public class LiteMode {
         @Override
         public void onReceive(Context context, Intent intent) {
             lastBatteryLevelChecked = 0;
+            getValue();
+        }
+    }
+
+    public static class PowerSaveModeReceiver extends BroadcastReceiver {
+        @Override
+        public void onReceive(Context context, Intent intent) {
             getValue();
         }
     }

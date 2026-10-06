@@ -14,6 +14,7 @@ import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.PowerManager;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextUtils;
@@ -123,7 +124,11 @@ public class LiteModeSettingsActivity extends BaseFragment {
             }
             final Item item = items.get(position);
 
-            if (item.viewType == VIEW_TYPE_SWITCH || item.viewType == VIEW_TYPE_CHECKBOX) {
+            if (item.type == SWITCH_TYPE_SYNC_SYSTEM_BATTERY_SAVER) {
+                boolean enabled = !LiteMode.isSyncWithSystemBatterySaverEnabled();
+                LiteMode.setSyncWithSystemBatterySaverEnabled(enabled);
+                updateItems();
+            } else if (item.viewType == VIEW_TYPE_SWITCH || item.viewType == VIEW_TYPE_CHECKBOX) {
                 if (LiteMode.isPowerSaverApplied()) {
                     restrictBulletin = BulletinFactory.of(this).createSimpleBulletin(new BatteryDrawable(.1f, Color.WHITE, Theme.getColor(Theme.key_dialogSwipeRemove), 1.3f), LocaleController.getString(R.string.LiteBatteryRestricted)).show();
                     return;
@@ -174,6 +179,40 @@ public class LiteModeSettingsActivity extends BaseFragment {
     }
 
     private Utilities.Callback<Boolean> onPowerAppliedChange = applied -> updateValues();
+    private boolean lastSystemBatterySaverEnabled;
+
+    private final LiteMode.PowerSaveModeReceiver powerSaveModeReceiver = new LiteMode.PowerSaveModeReceiver() {
+        @Override
+        public void onReceive(Context context, android.content.Intent intent) {
+            boolean wasEnabled = lastSystemBatterySaverEnabled;
+            lastSystemBatterySaverEnabled = LiteMode.isSystemBatterySaverEnabled();
+            super.onReceive(context, intent);
+            if (LiteMode.isSyncWithSystemBatterySaverEnabled() && !wasEnabled && lastSystemBatterySaverEnabled) {
+                AndroidUtilities.runOnUIThread(() -> {
+                    updateValues();
+                });
+            }
+        }
+    };
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && getParentActivity() != null) {
+            lastSystemBatterySaverEnabled = LiteMode.isSystemBatterySaverEnabled();
+            getParentActivity().registerReceiver(powerSaveModeReceiver, new android.content.IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED));
+        }
+    }
+
+    @Override
+    public void onPause() {
+        if (getParentActivity() != null) {
+            try {
+                getParentActivity().unregisterReceiver(powerSaveModeReceiver);
+            } catch (Exception ignore) {}
+        }
+        super.onPause();
+    }
 
     private boolean[] expanded = new boolean[3];
     private int getExpandedIndex(int flags) {
@@ -234,14 +273,9 @@ public class LiteModeSettingsActivity extends BaseFragment {
 
         items.clear();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            items.add(Item.asSwitch(LocaleController.getString(R.string.SyncWithSystemBatterySaver), SWITCH_TYPE_SYNC_SYSTEM_BATTERY_SAVER));
             items.add(Item.asSlider());
-            items.add(Item.asInfo(
-                LiteMode.getPowerSaverLevel() <= 0 ?
-                    LocaleController.getString(R.string.LiteBatteryInfoDisabled) :
-                LiteMode.getPowerSaverLevel() >= 100 ?
-                    LocaleController.getString(R.string.LiteBatteryInfoEnabled) :
-                    LocaleController.formatString(R.string.LiteBatteryInfoBelow, String.format("%d%%", LiteMode.getPowerSaverLevel()))
-            ));
+            items.add(Item.asInfo(getBatteryInfoText()));
         }
 
         items.add(Item.asHeader(LocaleController.getString(R.string.LiteOptionsTitle)));
@@ -293,16 +327,21 @@ public class LiteModeSettingsActivity extends BaseFragment {
 
         if (items.isEmpty()) {
             updateItems();
-        } else if (items.size() >= 2) {
-            items.set(1, Item.asInfo(
-                LiteMode.getPowerSaverLevel() <= 0 ?
-                    LocaleController.getString(R.string.LiteBatteryInfoDisabled) :
-                LiteMode.getPowerSaverLevel() >= 100 ?
-                    LocaleController.getString(R.string.LiteBatteryInfoEnabled) :
-                    LocaleController.formatString(R.string.LiteBatteryInfoBelow, String.format("%d%%", LiteMode.getPowerSaverLevel()))
-            ));
-            adapter.notifyItemChanged(1);
+        } else if (items.size() >= 3) {
+            items.set(2, Item.asInfo(getBatteryInfoText()));
+            adapter.notifyItemChanged(2);
         }
+    }
+
+    private CharSequence getBatteryInfoText() {
+        if (LiteMode.isSyncWithSystemBatterySaverEnabled()) {
+            return LocaleController.getString(R.string.SyncWithSystemBatterySaverInfo);
+        }
+        return LiteMode.getPowerSaverLevel() <= 0 ?
+            LocaleController.getString(R.string.LiteBatteryInfoDisabled) :
+            LiteMode.getPowerSaverLevel() >= 100 ?
+                LocaleController.getString(R.string.LiteBatteryInfoEnabled) :
+                LocaleController.formatString(R.string.LiteBatteryInfoBelow, String.format("%d%%", LiteMode.getPowerSaverLevel()));
     }
 
     private void updateValues() {
@@ -340,6 +379,7 @@ public class LiteModeSettingsActivity extends BaseFragment {
     private static final int VIEW_TYPE_SWITCH2 = 5;
 
     public static final int SWITCH_TYPE_SMOOTH_TRANSITIONS = 1;
+    public static final int SWITCH_TYPE_SYNC_SYSTEM_BATTERY_SAVER = 2;
 
     private class Adapter extends AdapterWithDiffUtils {
 
@@ -413,6 +453,8 @@ public class LiteModeSettingsActivity extends BaseFragment {
                     SharedPreferences preferences = MessagesController.getGlobalMainSettings();
                     boolean animations = preferences.getBoolean("view_animations", true);
                     textCell.setTextAndCheck(item.text, animations, false);
+                } else if (item.type == SWITCH_TYPE_SYNC_SYSTEM_BATTERY_SAVER) {
+                    textCell.setTextAndCheck(item.text, LiteMode.isSyncWithSystemBatterySaverEnabled(), false);
                 }
             }
         }
@@ -876,6 +918,9 @@ public class LiteModeSettingsActivity extends BaseFragment {
 
         public void update() {
             final int percent = LiteMode.getPowerSaverLevel();
+            boolean syncWithSystemBatterySaver = LiteMode.isSyncWithSystemBatterySaverEnabled();
+            seekBarView.setEnabled(!syncWithSystemBatterySaver);
+            seekBarView.setAlpha(syncWithSystemBatterySaver ? 0.45f : 1f);
 
             middleTextView.cancelAnimation();
             if (percent <= 0) {
@@ -890,8 +935,8 @@ public class LiteModeSettingsActivity extends BaseFragment {
             headerOnView.setText((LiteMode.isPowerSaverApplied() ? LocaleController.getString(R.string.LiteBatteryEnabled) : LocaleController.getString(R.string.LiteBatteryDisabled)).toUpperCase());
             updateHeaderOnVisibility(percent > 0 && percent < 100);
 
-            updateOnActive(percent >= 100);
-            updateOffActive(percent <= 0);
+            updateOnActive(syncWithSystemBatterySaver ? LiteMode.isSystemBatterySaverEnabled() : percent >= 100);
+            updateOffActive(!syncWithSystemBatterySaver && percent <= 0);
         }
 
         private boolean headerOnVisible;
