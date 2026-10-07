@@ -1397,6 +1397,7 @@ public class ChatActivity extends BaseFragment implements
 
     public final static int OPTION_VIEW_STATISTICS = 115;
     public final static int OPTION_WELCOME_REVERT = 116;
+    public final static int OPTION_FEED_EXCLUDE_CHANNEL = 117;
 
     private final static int[] allowedNotificationsDuringChatListAnimations = new int[]{
             NotificationCenter.messagesRead,
@@ -35295,6 +35296,15 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
         boolean preserveDim = false;
         switch (option) {
+            case OPTION_FEED_EXCLUDE_CHANNEL: {
+                if (isFeedSearch() && org.telegram.messenger.feed.FeedMessageUtils.isPostRow(selectedObject)) {
+                    long channelId = selectedObject.getDialogId();
+                    closeMenu();
+                    org.telegram.messenger.feed.FeedController.getInstance(currentAccount)
+                            .setChannelExcluded(channelId, true);
+                }
+                break;
+            }
             case OPTION_SELECT: {
                 closeMenu();
                 // the action mode must exist and be visible BEFORE the row is selected:
@@ -49365,6 +49375,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             items.add(getString(R.string.WelcomeMessageRevert));
             options.add(OPTION_WELCOME_REVERT);
             icons.add(R.drawable.outline_revert_24);
+        }
+        if (isFeedSearch() && org.telegram.messenger.feed.FeedMessageUtils.isPostRow(primaryMessage)) {
+            items.add(LocaleController.getString(R.string.FeedExcludeChannel));
+            options.add(OPTION_FEED_EXCLUDE_CHANNEL);
+            icons.add(R.drawable.msg_delete);
         }
     }
 

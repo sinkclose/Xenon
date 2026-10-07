@@ -581,12 +581,14 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
             return;
         }
         ViewGroup.LayoutParams layoutParams = chatAvatarContainer.getLayoutParams();
-        if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
+        if (layoutParams instanceof ViewGroup.MarginLayoutParams
+                && !chatActivity.getActionBar().centerChatHeader && !chatActivity.getActionBar().textOnlyPill) {
             ViewGroup.MarginLayoutParams marginLayoutParams = (ViewGroup.MarginLayoutParams) layoutParams;
             int iDp = 0;
             if (marginLayoutParams.leftMargin != iDp) {
                 marginLayoutParams.leftMargin = iDp;
                 this.chatContainer.chatActivity.avatarContainer.setLayoutParams(marginLayoutParams);
+                chatActivity.getActionBar().checkAvatarContainerWidth(false);
             }
         }
     }
@@ -666,6 +668,7 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
         if (subtitleTextView != null) {
             subtitleTextView.setVisibility(0);
         }
+        chatActivity.getActionBar().checkAvatarContainerWidth(false);
     }
 
 

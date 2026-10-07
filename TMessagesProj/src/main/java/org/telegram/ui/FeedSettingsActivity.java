@@ -3,6 +3,10 @@ package org.telegram.ui;
 import android.view.View;
 import android.content.Context;
 import android.view.Gravity;
+import android.widget.EditText;
+import java.text.Collator;
+import java.util.Locale;
+import org.telegram.ui.ActionBar.ActionBarMenuItem;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.TextCheckCell;
@@ -23,6 +27,26 @@ import zxc.iconic.xenon.settings.BaseNekoSettingsActivity;
 public class FeedSettingsActivity extends BaseNekoSettingsActivity {
     private static final int CHANNEL_ROW_START = 100;
     private final ArrayList<TLRPC.Chat> channels = new ArrayList<>();
+    private String searchQuery = "";
+
+    @Override
+    public View createView(Context context) {
+        View view = super.createView(context);
+        createSearchItem(actionBar.createMenu(), new ActionBarMenuItem.ActionBarMenuItemSearchListener() {
+            @Override
+            public void onSearchCollapse() {
+                searchQuery = "";
+                updateRows();
+            }
+
+            @Override
+            public void onTextChanged(EditText editText) {
+                searchQuery = editText.getText().toString().trim().toLowerCase(Locale.ROOT);
+                updateRows();
+            }
+        });
+        return view;
+    }
 
     @Override
     public boolean onFragmentCreate() {
@@ -31,6 +55,12 @@ public class FeedSettingsActivity extends BaseNekoSettingsActivity {
             if (isFinished || failed) return;
             channels.clear();
             channels.addAll(loaded);
+            Collator collator = Collator.getInstance();
+            collator.setStrength(Collator.PRIMARY);
+            channels.sort((a, b) -> {
+                int result = collator.compare(a.title == null ? "" : a.title, b.title == null ? "" : b.title);
+                return result != 0 ? result : Long.compare(a.id, b.id);
+            });
             if (listView != null) updateRows();
         });
         return true;
@@ -63,6 +93,8 @@ public class FeedSettingsActivity extends BaseNekoSettingsActivity {
     private void addChannels(ArrayList<UItem> items, boolean disabled) {
         for (int i = 0; i < channels.size(); i++) {
             TLRPC.Chat channel = channels.get(i);
+            if (!searchQuery.isEmpty() && (channel.title == null
+                    || !channel.title.toLowerCase(Locale.ROOT).contains(searchQuery))) continue;
             if (FeedController.isChannelExcluded(currentAccount, -channel.id) == disabled) {
                 items.add(ChannelCellFactory.of(CHANNEL_ROW_START + i, channel, !disabled));
             }

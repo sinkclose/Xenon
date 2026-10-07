@@ -919,6 +919,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     }
 
     public void setAvatarPlacement(int placement) {
+        if (avatarPlacement == placement) return;
         avatarPlacement = placement;
         avatarSizeInDp = biggerAvatar ? 48 : 42;
         lastRightAvatarLeft = Integer.MIN_VALUE;

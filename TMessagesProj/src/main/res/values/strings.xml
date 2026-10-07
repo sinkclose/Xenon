@@ -10577,6 +10577,7 @@
     <string name="Feed">Feed</string>
     <string name="FeedAllChannels">All channels</string>
     <string name="FeedAllChannelsExcluded">All feed channels are excluded</string>
+    <string name="FeedExcludeChannel">Exclude channel</string>
     <string name="FeedChannelsOnly">Channels only</string>
     <string name="FeedFolderSelect">Select feed</string>
     <string name="FeedNewFolder">New feed</string>

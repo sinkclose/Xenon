@@ -133,6 +133,10 @@ public class FeedChatIntegration {
     }
 
     private void refreshVisibleReadState() {
+        if (!this.destroyed && this.viewportActive && (!this.host.isListScrollIdle() || this.host.isScrollAnimationRunning())) {
+            AndroidUtilities.runOnUIThread(this.readStateRefreshRunnable, 100L);
+            return;
+        }
         this.readStateRefreshScheduled = false;
         if (!this.destroyed && canMarkVisibleAsRead()) {
             ScrollAnchor anchor = this.host.captureScrollAnchor();
@@ -330,13 +334,15 @@ public class FeedChatIntegration {
         return this.viewportActive && !this.host.getFragment().isPaused() && this.initialScrollApplied && this.readyToMarkAsRead && !this.pendingDividerScroll && this.pendingInitialScrollRestore == null && !this.host.isScrollAnimationRunning() && !BaseFragment.hasSheets(this.host.getFragment());
     }
 
-    public void onPostCellVisible(MessageObject messageObject, boolean z, boolean z2) {
-        if (messageObject == null || messageObject.isSponsored()) {
+    public void onPostCellVisible(MessageObject messageObject, boolean intersectsViewport, boolean passedReadingPosition) {
+        if (!FeedMessageUtils.isPostRow(messageObject)) {
             return;
         }
         requestReactionsRefresh(messageObject);
         if (canMarkVisibleAsRead()) {
-            if (z || z2) {
+            // Mark the post as soon as it intersects the viewport; moving the
+            // unread divider is deferred separately so reading cannot stop a fling.
+            if (intersectsViewport || passedReadingPosition) {
                 FeedController controller = FeedController.getInstance(this.currentAccount);
                 boolean wasUnread = controller.isUnread(messageObject);
                 if (wasUnread) controller.onPostSeen(messageObject.getDialogId(), messageObject.getRealId());
@@ -434,6 +440,13 @@ public class FeedChatIntegration {
 
     public void settleUnreadDivider() {
         int lastVisibleMessageIndex;
+        if (!this.host.isListScrollIdle() || this.host.isScrollAnimationRunning()) {
+            if (!this.readStateRefreshScheduled) {
+                this.readStateRefreshScheduled = true;
+                AndroidUtilities.runOnUIThread(this.readStateRefreshRunnable, 100L);
+            }
+            return;
+        }
         if (canMarkVisibleAsRead() && this.host.isListReady() && (lastVisibleMessageIndex = this.host.getLastVisibleMessageIndex()) != Integer.MIN_VALUE) {
             applyUnreadDivider(false);
             refreshAds();
@@ -475,6 +488,14 @@ public class FeedChatIntegration {
     }
 
     public void onReadStateRefreshed() {
+        if (!this.host.isListScrollIdle() || this.host.isScrollAnimationRunning()) {
+            if (!this.readStateRefreshScheduled) {
+                this.readStateRefreshScheduled = true;
+                AndroidUtilities.runOnUIThread(this.readStateRefreshRunnable, 100L);
+            }
+            updatePagedownCounter();
+            return;
+        }
         ScrollAnchor scrollAnchorCaptureScrollAnchor = this.host.captureScrollAnchor();
         boolean zHasPendingInitialPosition = hasPendingInitialPosition();
         applyUnreadDivider(false);
