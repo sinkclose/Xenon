@@ -126,8 +126,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         super();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             iBlur3SourceTabGlass = new BlurredBackgroundSourceRenderNode(null);
-            // Match Glass Bottom Bar baseline: blur(4dp)
-            iBlur3SourceTabGlass.setGlassBlur(dp(4));
+            blur3_updateTabsBlur();
             iBlur3SourceTabGlass.setupRenderer(new RenderNodeWithHash.Renderer() {
                 @Override
                 public void renderNodeCalculateHash(IBlur3Hash hash) {
@@ -1221,11 +1220,25 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     private final @Nullable BlurredBackgroundSourceRenderNode iBlur3SourceTabGlass;
 
     private final RectF fragmentPosition = new RectF();
+    private void blur3_updateTabsBlur() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || iBlur3SourceTabGlass == null) {
+            return;
+        }
+        if (zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar()) {
+            // Material 3 uses a full-strength ordinary blur, independent of glass settings.
+            iBlur3SourceTabGlass.setPlainBlur(dp(24));
+        } else {
+            // Preserve the Glass Bottom Bar baseline and its glass slider updates.
+            iBlur3SourceTabGlass.setGlassBlur(dp(4));
+        }
+    }
+
     private void blur3_invalidateBlur() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || iBlur3SourceTabGlass == null || fragmentView == null) {
             return;
         }
 
+        blur3_updateTabsBlur();
         final int width = fragmentView.getMeasuredWidth();
         final int height = fragmentView.getMeasuredHeight();
 

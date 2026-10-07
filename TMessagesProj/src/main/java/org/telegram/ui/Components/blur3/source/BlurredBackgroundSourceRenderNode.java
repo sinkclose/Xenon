@@ -304,6 +304,13 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
         renderNode.setRenderEffect(result);
     }
 
+    /** Use a fixed blur without following the liquid glass settings. */
+    @RequiresApi(api = Build.VERSION_CODES.S)
+    public void setPlainBlur(float radius) {
+        glassBlurEnabled = false;
+        setBlur(radius);
+    }
+
     /** Keep advanced glass in sync with the slider, preserving the standard style. */
     @RequiresApi(api = Build.VERSION_CODES.S)
     public void setGlassBlur(float standardRadius) {
