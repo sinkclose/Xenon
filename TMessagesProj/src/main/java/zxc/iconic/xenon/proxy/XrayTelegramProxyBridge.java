@@ -7,6 +7,7 @@ import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.SharedConfig;
 import org.telegram.tgnet.ConnectionsManager;
+import org.telegram.utils.proxy.ProxySettings;
 
 /**
  * Synchronizes Telegram networking proxy state with the local app-only Xray SOCKS endpoint.
@@ -44,8 +45,15 @@ public final class XrayTelegramProxyBridge {
                 .putString(KEY_XRAY_PROXY_OWNED_PASS, proxyPass)
                 .apply();
 
-        SharedConfig.currentProxy = new SharedConfig.ProxyInfo(LOCAL_PROXY_HOST, localPort, proxyUser, proxyPass, "");
-        ConnectionsManager.setProxySettings(true, LOCAL_PROXY_HOST, localPort, proxyUser, proxyPass, "");
+        SharedConfig.currentProxy = new SharedConfig.ProxyInfo(ProxySettings.builder()
+                .setType(ProxySettings.Type.SOCKS5)
+                .setAddress(LOCAL_PROXY_HOST)
+                .setPort(localPort)
+                .setUser(proxyUser)
+                .setPassword(proxyPass)
+                .setSecret("")
+                .build());
+        ConnectionsManager.setProxySettings(true, SharedConfig.currentProxy.settings);
         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.proxySettingsChanged);
     }
 
@@ -71,7 +79,7 @@ public final class XrayTelegramProxyBridge {
                 .remove(KEY_XRAY_PROXY_OWNED_PASS)
                 .apply();
 
-        ConnectionsManager.setProxySettings(false, "", 0, "", "", "");
+        ConnectionsManager.setProxySettings(false, null);
         SharedConfig.currentProxy = null;
         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.proxySettingsChanged);
         return true;

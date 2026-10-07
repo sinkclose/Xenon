@@ -135,7 +135,7 @@ public class ProxyRotationController implements NotificationCenter.NotificationC
         if (!NekoConfig.xrayAppProxyEnabled || !SharedConfig.isProxyEnabled() || SharedConfig.currentProxy == null) {
             return false;
         }
-        String address = SharedConfig.currentProxy.address;
+        String address = SharedConfig.currentProxy.settings.getAddress();
         return "127.0.0.1".equals(address) || "localhost".equalsIgnoreCase(address);
     }
 }

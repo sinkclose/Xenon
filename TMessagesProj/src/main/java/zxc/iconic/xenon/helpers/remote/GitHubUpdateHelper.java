@@ -161,9 +161,9 @@ public class GitHubUpdateHelper {
         URL url = new URL(urlStr);
         java.net.Proxy proxy = java.net.Proxy.NO_PROXY;
         SharedConfig.ProxyInfo info = SharedConfig.isProxyEnabled() ? SharedConfig.currentProxy : null;
-        if (info != null && !XrayTelegramProxyBridge.isLocalProxyAddress(info.address)
-                && (info.secret == null || info.secret.isEmpty())) {
-            proxy = socksProxy(info.address, info.port, info.username, info.password);
+        if (info != null && !XrayTelegramProxyBridge.isLocalProxyAddress(info.settings.getAddress())
+                && (info.settings.getSecret() == null || info.settings.getSecret().isEmpty())) {
+            proxy = socksProxy(info.settings.getAddress(), info.settings.getPort(), info.settings.getUser(), info.settings.getPassword());
         }
         return (HttpURLConnection) url.openConnection(proxy);
     }

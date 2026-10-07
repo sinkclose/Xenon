@@ -190,6 +190,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
     private final @Nullable BlurredBackgroundSourceRenderNode glassBackgroundSourceFrostedRenderNode;
 
     private final @NonNull BlurredBackgroundDrawableViewFactory glassBackgroundDrawableFactory;
+    private final @Nullable BlurredBackgroundDrawableViewFactory glassBackgroundDrawableFactoryFrosted;
 
     private final @Nullable DownscaleScrollableNoiseSuppressor scrollableViewNoiseSuppressor;
     private final int recommendedAdditionalSizeY;
@@ -388,6 +389,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
 
             glassBackgroundSourceRenderNode = null;
             glassBackgroundSourceFrostedRenderNode = null;
+            glassBackgroundDrawableFactoryFrosted = null;
 
             glassBackgroundDrawableFactory = new BlurredBackgroundDrawableViewFactory(navbarContentSourceWallpaper);
             glassBackgroundDrawableFactory.setGlassEngine(glassEngine);

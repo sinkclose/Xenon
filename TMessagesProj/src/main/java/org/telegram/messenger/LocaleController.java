@@ -1464,6 +1464,43 @@ public class LocaleController {
         return localeInfo == null || TextUtils.isEmpty(localeInfo.name) ? getString("LanguageName", R.string.LanguageName) : localeInfo.name;
     }
 
+    /**
+     * Cached Resources tied to the most recently observed default locale tag.
+     * Used for resolving Android XML strings (notably the Neko/Xenon res files
+     * which live outside the Telegram cloud langpack, so they MUST come from
+     * Android resources). We build via {@link Context#createConfigurationContext}
+     * rather than the deprecated {@code Resources.updateConfiguration} so that
+     * locale switches actually take effect on modern Android (API 30+) where
+     * {@code updateConfiguration} is silently ignored for most string lookups ???
+     * the symptom being TG cloud strings rendering in the user's language while
+     * Neko fork strings stayed in the default {@code values/} (English).
+     */
+    private static volatile android.content.res.Resources cachedLocaleResources;
+    private static volatile String cachedLocaleResourcesTag;
+
+    private static android.content.res.Resources getResourcesForCurrentLocale() {
+        final Context ctx = ApplicationLoader.applicationContext;
+        if (ctx == null) return null;
+        final Locale locale = Locale.getDefault();
+        final String tag = locale.toLanguageTag();
+        android.content.res.Resources cached = cachedLocaleResources;
+        if (cached != null && tag.equals(cachedLocaleResourcesTag)) {
+            return cached;
+        }
+        try {
+            Configuration cfg = new Configuration(ctx.getResources().getConfiguration());
+            cfg.setLocale(locale);
+            Context configCtx = ctx.createConfigurationContext(cfg);
+            android.content.res.Resources newRes = configCtx.getResources();
+            cachedLocaleResources = newRes;
+            cachedLocaleResourcesTag = tag;
+            return newRes;
+        } catch (Throwable t) {
+            FileLog.e(t);
+            return ctx.getResources();
+        }
+    }
+
     private String getStringInternal(String key, int res) {
         return getStringInternal(key, null, res);
     }
