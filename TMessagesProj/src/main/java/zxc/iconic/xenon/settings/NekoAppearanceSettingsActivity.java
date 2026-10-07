@@ -27,6 +27,8 @@ import org.telegram.ui.Cells.TextCheckCell;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.ChatAvatarContainer;
 import org.telegram.ui.Components.LayoutHelper;
+import org.telegram.ui.Components.ProfileGooeyView;
+import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
@@ -39,6 +41,50 @@ import zxc.iconic.xenon.helpers.EmojiHelper;
 import zxc.iconic.xenon.helpers.PopupHelper;
 
 public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity implements NotificationCenter.NotificationCenterDelegate {
+
+    private ProfileGooeyView gooeyOffsetPreview;
+
+    @Override
+    public View createView(Context context) {
+        View view = super.createView(context);
+        gooeyOffsetPreview = new ProfileGooeyView(context) {
+            private final int[] screenLocation = new int[2];
+
+            @Override
+            public void draw(Canvas canvas) {
+                getLocationOnScreen(screenLocation);
+                canvas.save();
+                canvas.translate(-screenLocation[0], -screenLocation[1]);
+                drawEndTarget(canvas);
+                canvas.restore();
+            }
+        };
+        gooeyOffsetPreview.setGooeyEndOffsetDp(NekoConfig.gooeyAvatarOffset);
+        gooeyOffsetPreview.setAlpha(0f);
+        contentView.addView(gooeyOffsetPreview, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+        return view;
+    }
+
+    private void setGooeyOffsetPreviewVisible(boolean visible) {
+        if (gooeyOffsetPreview == null) return;
+        gooeyOffsetPreview.animate().cancel();
+        if (visible) {
+            gooeyOffsetPreview.setGooeyEndOffsetDp(NekoConfig.gooeyAvatarOffset);
+            gooeyOffsetPreview.setAlpha(1f);
+        } else {
+            gooeyOffsetPreview.animate().alpha(0f).setDuration(250)
+                    .setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT).start();
+        }
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        if (gooeyOffsetPreview != null) {
+            gooeyOffsetPreview.animate().cancel();
+            gooeyOffsetPreview.setAlpha(0f);
+        }
+    }
 
     private final int emojiSetsRow = rowId++;
     private final int navigationSettingsRow = rowId++;
@@ -90,6 +136,10 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
 
     @Override
     public void onFragmentDestroy() {
+        if (gooeyOffsetPreview != null) {
+            gooeyOffsetPreview.animate().cancel();
+            gooeyOffsetPreview = null;
+        }
         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.emojiLoaded);
         super.onFragmentDestroy();
     }
@@ -120,7 +170,13 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
                 LocaleController.getString(R.string.GooeyAvatarOffsetLeft),
                 LocaleController.getString(R.string.GooeyAvatarOffsetRight),
                 -100, 100, 1,
-                progress -> NekoConfig.setGooeyAvatarOffset(Math.round(progress)));
+                progress -> {
+                    NekoConfig.setGooeyAvatarOffset(Math.round(progress));
+                    if (gooeyOffsetPreview != null) {
+                        gooeyOffsetPreview.setGooeyEndOffsetDp(NekoConfig.gooeyAvatarOffset);
+                    }
+                });
+        offsetConfig.onDragStateChanged = this::setGooeyOffsetPreviewVisible;
         items.add(SeekbarCellFactory.of(gooeyAvatarOffsetRow, offsetConfig, NekoConfig.gooeyAvatarOffset).slug("gooeyAvatarOffset"));
         items.add(UItem.asCheck(keepUnreadChatsOnTopRow, LocaleController.getString(R.string.KeepUnreadChatsOnTop)).setChecked(NekoConfig.keepUnreadChatsOnTop).slug("keepUnreadChatsOnTop"));
         items.add(UItem.asCheck(miniSenderAvatarRow, LocaleController.getString(R.string.MiniSenderAvatar)).setChecked(NekoConfig.miniSenderAvatar).slug("miniSenderAvatar"));

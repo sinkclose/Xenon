@@ -53,6 +53,24 @@ public class AltSeekbar extends FrameLayout {
     private final Theme.ResourcesProvider resourcesProvider;
     private final OnDrag onDrag;
     private java.util.function.Function<Integer, String> valueFormatter;
+    private java.util.function.Consumer<Boolean> onDragStateChanged;
+    private boolean dragging;
+
+    public void setOnDragStateChanged(java.util.function.Consumer<Boolean> listener) {
+        onDragStateChanged = listener;
+    }
+
+    private void setDragging(boolean dragging) {
+        if (this.dragging == dragging) return;
+        this.dragging = dragging;
+        if (onDragStateChanged != null) onDragStateChanged.accept(dragging);
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        setDragging(false);
+        super.onDetachedFromWindow();
+    }
 
     private final int min, max;
     private int step = 1;
@@ -150,6 +168,17 @@ if (subtitle != null) {
             MaterialSliderUiHelper.applyContinuousStyle(materialSlider);
             MaterialSliderUiHelper.applyThemeColors(materialSlider);
             materialSlider.setValueFrom(min);
+            materialSlider.addOnSliderTouchListener(new Slider.OnSliderTouchListener() {
+                @Override
+                public void onStartTrackingTouch(Slider slider) {
+                    setDragging(true);
+                }
+
+                @Override
+                public void onStopTrackingTouch(Slider slider) {
+                    setDragging(false);
+                }
+            });
             materialSlider.setValueTo(max);
             if (step > 1 && (max - min) % step == 0) {
                 // A step that is not a factor of the range would make BaseSlider
@@ -174,14 +203,22 @@ if (subtitle != null) {
             SeekBarView bar = new SeekBarView(getContext(), true, resourcesProvider);
             this.seekBarView = bar;
             bar.setReportChanges(true);
-            bar.setDelegate((stop, progress) -> {
-                currentValue = min + (max - min) * progress;
-                onDrag.run(currentValue);
-                int newRounded = step > 1 ? Math.round(currentValue / step) * step : Math.round(currentValue);
-                if (newRounded != roundedValue) {
-                    roundedValue = newRounded;
-                    updateText();
-                    performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
+            bar.setDelegate(new SeekBarView.SeekBarViewDelegate() {
+                @Override
+                public void onSeekBarPressed(boolean pressed) {
+                    setDragging(pressed);
+                }
+
+                @Override
+                public void onSeekBarDrag(boolean stop, float progress) {
+                    currentValue = min + (max - min) * progress;
+                    onDrag.run(currentValue);
+                    int newRounded = step > 1 ? Math.round(currentValue / step) * step : Math.round(currentValue);
+                    if (newRounded != roundedValue) {
+                        roundedValue = newRounded;
+                        updateText();
+                        performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
+                    }
                 }
             });
             addView(bar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 38 + 6, Gravity.TOP, 6, 68 + subtitleOffset, 6, 0));

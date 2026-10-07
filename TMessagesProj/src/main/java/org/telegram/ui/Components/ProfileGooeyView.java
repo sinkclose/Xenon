@@ -123,6 +123,30 @@ public class ProfileGooeyView extends FrameLayout {
         invalidate();
     }
 
+    /** Draws the stationary black target in screen coordinates, without the gooey blur. */
+    public void drawEndTarget(Canvas canvas) {
+        canvas.save();
+        canvas.translate(0, dp(gooeyEndOffsetDp));
+        if (notchInfo != null) {
+            drawNotchTarget(canvas);
+        } else {
+            canvas.drawRect(0, -dp(BLACK_KING_BAR), getWidth(), 0, blackPaint);
+        }
+        canvas.restore();
+    }
+
+    private void drawNotchTarget(Canvas canvas) {
+        if (notchInfo.isLikelyCircle) {
+            float radius = Math.min(notchInfo.bounds.width(), notchInfo.bounds.height()) / 2f;
+            canvas.drawCircle(notchInfo.bounds.centerX(), notchInfo.bounds.bottom - notchInfo.bounds.width() / 2f, radius, blackPaint);
+        } else if (notchInfo.isAccurate) {
+            canvas.drawPath(notchInfo.path, blackPaint);
+        } else {
+            float radius = Math.max(notchInfo.bounds.width(), notchInfo.bounds.height()) / 2f;
+            canvas.drawRoundRect(notchInfo.bounds, radius, radius, blackPaint);
+        }
+    }
+
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
@@ -218,15 +242,7 @@ public class ProfileGooeyView extends FrameLayout {
                 if (notchInfo != null) {
                     bitmapCanvas.save();
                     bitmapCanvas.translate(-optimizedOffsetX, dp(BLACK_KING_BAR) + dp(gooeyEndOffsetDp));
-                    if (notchInfo.isLikelyCircle) {
-                        float rad = Math.min(notchInfo.bounds.width(), notchInfo.bounds.height()) / 2f;
-                        bitmapCanvas.drawCircle(notchInfo.bounds.centerX(), notchInfo.bounds.bottom - notchInfo.bounds.width() / 2f, rad, blackPaint);
-                    } else if (notchInfo.isAccurate) {
-                        bitmapCanvas.drawPath(notchInfo.path, blackPaint);
-                    } else {
-                        float rad = Math.max(notchInfo.bounds.width(), notchInfo.bounds.height()) / 2f;
-                        bitmapCanvas.drawRoundRect(notchInfo.bounds, rad, rad, blackPaint);
-                    }
+                    drawNotchTarget(bitmapCanvas);
                     bitmapCanvas.restore();
                 } else {
                     bitmapCanvas.save();
@@ -407,10 +423,10 @@ public class ProfileGooeyView extends FrameLayout {
             if (notchInfo != null) {
                 c.translate(-left, -top);
                 c.translate(0, dp(BLACK_KING_BAR));
+                drawNotchTarget(c);
                 if (notchInfo.isLikelyCircle) {
                     float rad = Math.min(notchInfo.bounds.width(), notchInfo.bounds.height()) / 2f;
                     final float cy = notchInfo.bounds.bottom - notchInfo.bounds.width() / 2f;
-                    c.drawCircle(notchInfo.bounds.centerX(), cy, rad, blackPaint);
 
                     path.rewind();
                     path.moveTo(notchInfo.bounds.centerX() - h / 2f, cy);
@@ -418,12 +434,8 @@ public class ProfileGooeyView extends FrameLayout {
                     path.lineTo(notchInfo.bounds.centerX() + h / 2f, cy);
                     path.close();
                     c.drawPath(path, blackPaint);
-                } else if (notchInfo.isAccurate) {
-                    c.drawPath(notchInfo.path, blackPaint);
-                } else {
-                    float rad = Math.max(notchInfo.bounds.width(), notchInfo.bounds.height()) / 2f;
+                } else if (!notchInfo.isAccurate) {
                     temp.set(notchInfo.bounds);
-                    c.drawRoundRect(temp, rad, rad, blackPaint);
 
                     path.rewind();
                     path.moveTo(temp.centerX() - h / 2f, temp.bottom);
