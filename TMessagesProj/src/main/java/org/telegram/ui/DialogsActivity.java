@@ -3469,6 +3469,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             });
             updateDownloadItem.setOnLongClickListener(v -> {
                 var updater = ApplicationLoader.applicationLoaderInstance;
+                if (updater.isDownloadingUpdate()) {
+                    ItemOptions.makeOptions(this, updateDownloadItem)
+                            .setColors(getThemedColor(Theme.key_actionBarDefaultTitle), getThemedColor(Theme.key_actionBarDefaultTitle))
+                            .setDimAlpha(0x08)
+                            .add(R.drawable.msg_delete, getString(R.string.Cancel), true, updater::cancelDownloadingUpdate)
+                            .show();
+                    return true;
+                }
                 if (updater.getDownloadedUpdateFile() == null) return false;
                 ItemOptions.makeOptions(this, updateDownloadItem)
                         .setColors(getThemedColor(Theme.key_actionBarDefaultTitle), getThemedColor(Theme.key_actionBarDefaultTitle))

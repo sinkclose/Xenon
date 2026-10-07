@@ -24,7 +24,8 @@ public class UpdateDownloadButton extends FrameLayout {
     private final TextView label;
     private final LoadingIndicatorView spinner;
     private final Paint progressPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final AnimatedFloat progress = new AnimatedFloat(this);
+    private float displayedProgress;
+    private long lastProgressFrame;
     private final Runnable dismiss;
     private final Runnable listener = this::update;
     private boolean wasDownloading;
@@ -103,16 +104,29 @@ public class UpdateDownloadButton extends FrameLayout {
     }
     @Override protected void dispatchDraw(Canvas canvas) {
         super.dispatchDraw(canvas);
-        float value = progress.set(updater.getDownloadingUpdateProgress());
-        canvas.drawRect(0, getHeight() - AndroidUtilities.dp(3), getWidth() * value, getHeight(), progressPaint);
+        float target = Math.max(0, Math.min(1, updater.getDownloadingUpdateProgress()));
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (lastProgressFrame == 0 || !updater.isDownloadingUpdate() || target < displayedProgress) {
+            displayedProgress = target;
+        } else {
+            // Follow the latest byte progress every frame without restarting an animation.
+            float blend = 1f - (float) Math.exp(-(now - lastProgressFrame) / 80.0);
+            displayedProgress += (target - displayedProgress) * blend;
+            if (Math.abs(target - displayedProgress) < 0.0001f) displayedProgress = target;
+        }
+        lastProgressFrame = now;
+        canvas.drawRect(0, getHeight() - AndroidUtilities.dp(3), getWidth() * displayedProgress, getHeight(), progressPaint);
+        if (updater.isDownloadingUpdate()) postInvalidateOnAnimation();
     }
     @Override protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         updater.addUpdateDownloadListener(listener);
+        lastProgressFrame = 0;
         update();
     }
     @Override protected void onDetachedFromWindow() {
         updater.removeUpdateDownloadListener(listener);
+        lastProgressFrame = 0;
         spinner.animate().cancel();
         label.animate().cancel();
         super.onDetachedFromWindow();

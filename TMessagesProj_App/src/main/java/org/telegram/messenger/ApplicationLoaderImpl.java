@@ -291,6 +291,9 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
             cancelled = true;
             connection = activeConnection;
             downloadCompletions.clear();
+            downloadProgress = 0;
+            downloadBytesDownloaded = 0;
+            retryingUpdate = false;
         }
         if (connection != null) connection.disconnect();
         notifyUpdateDownloadChanged();
