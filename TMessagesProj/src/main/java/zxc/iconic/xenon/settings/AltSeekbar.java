@@ -12,8 +12,6 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import androidx.core.graphics.ColorUtils;
-
 import com.google.android.material.slider.Slider;
 
 import org.telegram.messenger.AndroidUtilities;
@@ -278,25 +276,9 @@ if (subtitle != null) {
     }
 
     private void updateValues() {
-        int middle = (max - min) / 2 + min;
-        if (currentValue >= middle * 1.5f - min * 0.5f) {
-            rightTextView.setTextColor(ColorUtils.blendARGB(
-                    Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider),
-                    Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, resourcesProvider),
-                    (currentValue - (middle * 1.5f - min * 0.5f)) / (max - (middle * 1.5f - min * 0.5f))
-            ));
-            leftTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider));
-        } else if (currentValue <= (middle + min) * 0.5f) {
-            leftTextView.setTextColor(ColorUtils.blendARGB(
-                    Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider),
-                    Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, resourcesProvider),
-                    (currentValue - (middle + min) * 0.5f) / (min - (middle + min) * 0.5f)
-            ));
-            rightTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider));
-        } else {
-            leftTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider));
-            rightTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider));
-        }
+        int textColor = Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider);
+        leftTextView.setTextColor(textColor);
+        rightTextView.setTextColor(textColor);
     }
 
     public float getCurrentValue() {
