@@ -80,6 +80,21 @@ import zxc.iconic.xenon.helpers.Md3FilterTabsHelper;
 public class FilterTabsView extends FrameLayout {
 
     private final Theme.ResourcesProvider resourcesProvider;
+    private boolean forceTextOnly;
+    private boolean feedMode;
+
+    public void setFeedMode(boolean feedMode) {
+        this.feedMode = feedMode;
+    }
+
+    private int getTitleType() {
+        return forceTextOnly ? NekoConfig.TITLE_TYPE_TEXT : NekoConfig.tabsTitleType;
+    }
+
+    public void setForceTextOnly(boolean forceTextOnly) {
+        this.forceTextOnly = forceTextOnly;
+    }
+
 
     public int getCurrentTabStableId() {
         return positionToStableId.get(currentPosition, -1);
@@ -134,14 +149,14 @@ public class FilterTabsView extends FrameLayout {
 
         public Tab(int i, CharSequence title, String emoticon, boolean noanimate) {
             this.id = i;
-            this.title = NekoConfig.tabsTitleType != NekoConfig.TITLE_TYPE_ICON ? title : "";
+            this.title = getTitleType() != NekoConfig.TITLE_TYPE_ICON ? title : "";
             this.realTitle = title;
             this.emoticon = emoticon;
             this.noanimate = noanimate;
         }
 
         public int getWidth(boolean store) {
-            iconWidth = FolderIconHelper.getTotalIconWidth();
+            iconWidth = forceTextOnly ? 0 : FolderIconHelper.getTotalIconWidth();
             int width = titleWidth = (int) Math.ceil(HintView2.measureCorrectly(title, textPaint));
             width += iconWidth;
             int c;
@@ -158,7 +173,7 @@ public class FilterTabsView extends FrameLayout {
             }
 
             final int counterResultWidth;
-            int textSpace = NekoConfig.tabsTitleType != NekoConfig.TITLE_TYPE_ICON ? dp(5) : 0;
+            int textSpace = getTitleType() != NekoConfig.TITLE_TYPE_ICON ? dp(5) : 0;
             if (c > 0) {
                 String counterText = String.format("%d", c);
                 int counterWidth = (int) Math.ceil(textCounterPaint.measureText(counterText));
@@ -181,7 +196,7 @@ public class FilterTabsView extends FrameLayout {
             title = Emoji.replaceEmoji(title, textPaint.getFontMetricsInt(), false);
 //            MessageObject.addEntitiesToText(title, newEntities, false, false, false, true);
             title = MessageObject.replaceAnimatedEmoji(title, newEntities, textPaint.getFontMetricsInt());
-            title = NekoConfig.tabsTitleType != NekoConfig.TITLE_TYPE_ICON ? title : "";
+            title = getTitleType() != NekoConfig.TITLE_TYPE_ICON ? title : "";
             this.noanimate = noanimate;
             return true;
         }
@@ -410,9 +425,9 @@ public class FilterTabsView extends FrameLayout {
             }
 
             tabCounterVisible = (countWidth != 0 && !animateCounterRemove) ? (counterText != null ? 1.0f : editingStartAnimationProgress) : 0;
-            int textSpace = NekoConfig.tabsTitleType != NekoConfig.TITLE_TYPE_ICON ? dp(5) : 0;
+            int textSpace = getTitleType() != NekoConfig.TITLE_TYPE_ICON ? dp(5) : 0;
             float counterSpace = textSpace * (counterText != null ? 1.0f : editingStartAnimationProgress);
-            if (NekoConfig.tabsTitleType != NekoConfig.TITLE_TYPE_ICON) {
+            if (getTitleType() != NekoConfig.TITLE_TYPE_ICON) {
                 tabWidth = currentTab.iconWidth + currentTab.titleWidth + ((countWidth != 0 && !animateCounterRemove) ? (int) (countWidth + counterSpace) : 0);
             } else {
                 tabWidth = currentTab.iconWidth + ((countWidth != 0 && !animateCounterRemove) ? (int) (countWidth + counterSpace) : 0);
@@ -513,7 +528,7 @@ public class FilterTabsView extends FrameLayout {
             }
 
             int folderIconX = 0;
-            if (NekoConfig.tabsTitleType != NekoConfig.TITLE_TYPE_TEXT) {
+            if (getTitleType() != NekoConfig.TITLE_TYPE_TEXT) {
                 int emoticonSize = FolderIconHelper.getIconWidth();
                 if (icon == null || !TextUtils.equals(currentTab.emoticon, currentEmoticon)) {
                     currentEmoticon = currentTab.emoticon;
@@ -775,9 +790,9 @@ public class FilterTabsView extends FrameLayout {
                 countWidth = 0;
             }
             int tabWidth;
-            int textSpace = NekoConfig.tabsTitleType != NekoConfig.TITLE_TYPE_ICON ? dp(5) : 0;
+            int textSpace = getTitleType() != NekoConfig.TITLE_TYPE_ICON ? dp(5) : 0;
             float counterSpace = textSpace * (counterText != null ? 1.0f : editingStartAnimationProgress);
-            if (NekoConfig.tabsTitleType != NekoConfig.TITLE_TYPE_ICON) {
+            if (getTitleType() != NekoConfig.TITLE_TYPE_ICON) {
                 tabWidth = currentTab.iconWidth + currentTab.titleWidth + (countWidth != 0 ? (int) (countWidth + counterSpace) : 0);
             } else {
                 tabWidth = currentTab.iconWidth + (countWidth != 0 ? (int) (countWidth + counterSpace) : 0);
@@ -796,7 +811,7 @@ public class FilterTabsView extends FrameLayout {
                 animateFromIconX = lastIconX;
                 changed = true;
             }
-            if (lastEmoticon != null && currentTab.emoticon != null && !currentTab.emoticon.equals(lastEmoticon)) {
+            if (getTitleType() != NekoConfig.TITLE_TYPE_TEXT && lastEmoticon != null && currentTab.emoticon != null && !currentTab.emoticon.equals(lastEmoticon)) {
                 int emoticonWidth = FolderIconHelper.getIconWidth();
                 android.graphics.Rect bounds = new android.graphics.Rect(0, 0, emoticonWidth, emoticonWidth);
                 iconAnimateOutDrawable = getResources().getDrawable(FolderIconHelper.getTabIcon(lastEmoticon)).mutate();
@@ -1684,12 +1699,27 @@ public class FilterTabsView extends FrameLayout {
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
         clipPath.rewind();
+        if (feedMode) {
+            clipPath.addRoundRect(0, 0, w, h, dp(21), dp(21), Path.Direction.CW);
+            return;
+        }
         clipPath.addRoundRect(dp(9), dp(9), w - dp(9), h - dp(9),
             dp(16), dp(16), Path.Direction.CW);
     }
 
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
+        if (feedMode) {
+            canvas.save();
+            if (Md3FilterTabsHelper.isEnabled()) {
+                canvas.clipRect(0, 0, getMeasuredWidth(), getMeasuredHeight());
+            } else {
+                canvas.clipPath(clipPath);
+            }
+            super.dispatchDraw(canvas);
+            canvas.restore();
+            return;
+        }
         if (Md3FilterTabsHelper.isEnabled()) {
             if (blurHelper != null) {
                 canvas.save();
@@ -1724,10 +1754,10 @@ public class FilterTabsView extends FrameLayout {
         if (!tabs.isEmpty()) {
             final int width = MeasureSpec.getSize(widthMeasureSpec) - listViewPaddingH * 2;
             Tab firstTab = findDefaultTab();
-            if (firstTab != null || NekoConfig.hideAllTab) {
+            if (feedMode || firstTab != null || NekoConfig.hideAllTab) {
                 int trueTabsWidth;
                 boolean titleChanged = false;
-                if (!NekoConfig.hideAllTab) {
+                if (!feedMode && !NekoConfig.hideAllTab) {
                     CharSequence originalTitle = firstTab.title;
                     firstTab.setTitle(LocaleController.getString(R.string.FilterAllChats), null, false);
                     int tabWidth = firstTab.getWidth(false);
@@ -1931,7 +1961,7 @@ public class FilterTabsView extends FrameLayout {
                 requestLayout();
                 allTabsWidth = 0;
                 final FilterTabsView.Tab defaultTab = findDefaultTab();
-                if (defaultTab != null) {
+                if (defaultTab != null && !feedMode) {
                     defaultTab.setTitle(LocaleController.getString(R.string.FilterAllChats), null, false);
                 }
                 for (int b = 0; b < N; b++) {
@@ -1967,7 +1997,7 @@ public class FilterTabsView extends FrameLayout {
             }
             allTabsWidth = 0;
             final FilterTabsView.Tab defaultTab = findDefaultTab();
-            if (defaultTab != null) {
+            if (defaultTab != null && !feedMode) {
                 defaultTab.setTitle(LocaleController.getString(R.string.FilterAllChats), null, false);
             }
             for (int b = 0, N = tabs.size(); b < N; b++) {

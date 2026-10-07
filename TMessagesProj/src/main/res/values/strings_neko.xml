@@ -463,6 +463,7 @@
     <string name="DownloadingUpdate">Downloading update...</string>
     <string name="UpdateDownloaded">Update downloaded!</string>
     <string name="NekoUpdate">Update</string>
+    <string name="AppUpdateInstall">Install</string>
     <string name="ForceUpdate">Force update</string>
     <string name="AutoDownloadUpdate">Automatically download update</string>
     <string name="UpdatesHeader">Updates</string>
@@ -640,6 +641,15 @@
     <string name="SwipeActionOpenIn">Open In</string>
     <string name="SwipeActionReaction">Reaction</string>
     <string name="UpdateDeleteFile">Delete file</string>
+
+    <string name="FeedFolders">Folders</string>
+    <string name="FeedFolder">Folder</string>
+    <string name="FeedManageChannels">Manage channels</string>
+    <string name="FeedMakeMain">Make default</string>
+    <string name="FeedMainFolder">Default folder</string>
+    <string name="FeedDeselectAll">Deselect all</string>
+    <string name="FeedDisabledChannels">Disabled channels</string>
+    <string name="FeedFoldersReorderHint">Hold and drag folders to change their order.</string>
 </resources>
 
 

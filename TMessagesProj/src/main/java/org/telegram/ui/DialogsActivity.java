@@ -3460,12 +3460,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             updateDownloadItem.setContentDescription(getString(R.string.DownloadingUpdate));
             updateDownloadItem.setOnClickListener(v -> {
                 var updater = ApplicationLoader.applicationLoaderInstance;
-                File apk = updater.getDownloadedUpdateFile();
-                if (apk != null) {
-                    zxc.iconic.xenon.helpers.ApkInstaller.installUpdate(getParentActivity(), apk);
-                } else {
-                    updater.showUpdateDownload(getParentActivity(), currentAccount);
-                }
+                updater.showUpdateDownload(getParentActivity(), currentAccount);
             });
             updateDownloadItem.setOnLongClickListener(v -> {
                 var updater = ApplicationLoader.applicationLoaderInstance;

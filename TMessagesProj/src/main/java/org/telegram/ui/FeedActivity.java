@@ -15,6 +15,7 @@ import android.os.Bundle;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewConfiguration;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import androidx.core.graphics.Insets;
@@ -22,6 +23,8 @@ import androidx.core.view.OnApplyWindowInsetsListener;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import org.telegram.messenger.feed.FeedController;
+import org.telegram.messenger.feed.FeedFolders;
+import org.telegram.ui.Components.FilterTabsView;
 import java.util.ArrayList;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
@@ -41,6 +44,77 @@ import org.telegram.ui.Components.LayoutHelper;
 
 public class FeedActivity extends BaseFragment implements NotificationCenter.NotificationCenterDelegate, MainTabsActivity.TabFragmentDelegate {
     private ChatActivityContainer chatContainer;
+    private FilterTabsView folderTabs;
+    private boolean updatingFolderTabs;
+    private String folderTabsSignature;
+
+    private void updateFolderTabs() {
+        if (chatContainer == null || chatContainer.chatActivity.contentView == null) return;
+        FeedFolders folders = FeedFolders.getInstance(currentAccount);
+        StringBuilder signature = new StringBuilder();
+        for (FeedFolders.Folder folder : folders.getVisibleFolders()) {
+            signature.append(folder.id).append(':').append(folder.name.length()).append(':').append(folder.name).append(';');
+        }
+        if (folderTabs == null) {
+            folderTabs = new FilterTabsView(chatContainer.getContext(), getResourceProvider()) {
+                @Override
+                public boolean onInterceptTouchEvent(MotionEvent event) {
+                    getParent().requestDisallowInterceptTouchEvent(true);
+                    return super.onInterceptTouchEvent(event);
+                }
+            };
+            folderTabs.setForceTextOnly(true);
+            folderTabs.setFeedMode(true);
+            folderTabs.setDelegate(new FilterTabsView.FilterTabsViewDelegate() {
+                @Override public void onPageSelected(FilterTabsView.Tab tab, boolean forward) {
+                    if (updatingFolderTabs) return;
+                    chatContainer.chatActivity.saveFeedScrollPosition();
+                    FeedController.getInstance(currentAccount).selectFolder(tab.id);
+                }
+                @Override public void onPageScrolled(float progress) {}
+                @Override public void onSamePageSelected() {}
+                @Override public int getTabCounter(int id) { return 0; }
+                @Override public boolean didSelectTab(FilterTabsView.TabView tab, boolean selected) { return false; }
+                @Override public boolean isTabMenuVisible() { return false; }
+                @Override public void onDeletePressed(int id) {}
+                @Override public void onPageReorder(int fromId, int toId) {}
+                @Override public boolean canPerformActions() { return true; }
+            });
+        }
+        if (!signature.toString().equals(folderTabsSignature)) {
+            updatingFolderTabs = true;
+            folderTabs.stopAnimatingIndicator();
+            folderTabs.setEnabled(true);
+            folderTabs.removeTabs();
+            folderTabs.resetTabId();
+            for (FeedFolders.Folder folder : folders.getVisibleFolders()) {
+                folderTabs.addTab(folder.id, folder.id, folder.name, true, folder.id == FeedFolders.ALL, false);
+            }
+            folderTabs.selectTabWithStableId(folders.getActiveId());
+            folderTabs.finishAddingTabs(false);
+            folderTabsSignature = signature.toString();
+            updatingFolderTabs = false;
+        }
+        chatContainer.chatActivity.setFeedFolderTabs(folderTabs, folders.getFolders().size() > 1);
+    }
+    private boolean switchFeedFolder(boolean forward) {
+        if (folderTabs == null || folderTabs.isAnimatingIndicator()) return false;
+        FeedFolders folders = FeedFolders.getInstance(currentAccount);
+        ArrayList<FeedFolders.Folder> visible = folders.getVisibleFolders();
+        for (int i = 0; i < visible.size(); i++) {
+            if (visible.get(i).id != folders.getActiveId()) continue;
+            int next = i + (forward ? 1 : -1);
+            if (next < 0 || next >= visible.size()) return false;
+            for (int j = 0; j < folderTabs.getTabsCount(); j++) {
+                FilterTabsView.Tab tab = folderTabs.getTab(j);
+                if (tab.id == visible.get(next).id) {
+                    folderTabs.scrollToTab(tab, j);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
     private BlurredBackgroundSourceRenderNode tabsBackgroundSource;
     private final RectF chatPositionForTabs = new RectF();
     private ViewTreeObserver.OnPreDrawListener initialPositionListener;
@@ -146,6 +220,7 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
         }
         this.hasMainTabs = z;
         this.viewportFullyVisible = !z;
+        FeedController.getInstance(currentAccount).selectFolder(FeedFolders.getInstance(currentAccount).getDefaultId());
         NotificationCenter.getInstance(this.currentAccount).addObserver(this, NotificationCenter.didReceiveNewMessages);
         NotificationCenter.getInstance(this.currentAccount).addObserver(this, NotificationCenter.feedNeedReload);
         NotificationCenter.getInstance(this.currentAccount).addObserver(this, NotificationCenter.feedChannelsChanged);
@@ -235,16 +310,68 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
                 this.chatContainer.chatActivity.onFeedChannelsChanged(z);
             }
             updateFeedSubtitle();
+            updateFolderTabs();
         }
     }
 
     @Override // org.telegram.ui.ActionBar.BaseFragment
     public View createView(Context context) {
         destroyEmbeddedChat();
+        folderTabs = null;
+        folderTabsSignature = null;
         this.lastWindowInsets = null;
         this.actionBar.setAddToContainer(false);
         this.actionBar.setVisibility(8);
         FrameLayout frameLayout = new FrameLayout(context) {
+            private float swipeStartX, swipeStartY;
+            private boolean folderSwipeCandidate, folderSwiping;
+            private final int touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
+
+            @Override
+            public boolean onInterceptTouchEvent(MotionEvent event) {
+                if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                    swipeStartX = event.getX();
+                    swipeStartY = event.getY();
+                    folderSwiping = false;
+                    folderSwipeCandidate = folderTabs != null && folderTabs.getVisibility() == View.VISIBLE
+                            && folderTabs.getTabsCount() > 1 && chatContainer != null
+                            && chatContainer.chatActivity.isFeedInitialPositionReady()
+                            && !chatContainer.chatActivity.getActionBar().isActionModeShowed()
+                            && !BaseFragment.hasSheets(chatContainer.chatActivity)
+                            && swipeStartY > chatContainer.chatActivity.getActionBar().getHeight() + folderTabs.getHeight()
+                            && swipeStartX > AndroidUtilities.dp(24) && swipeStartX < getWidth() - AndroidUtilities.dp(24);
+                } else if (event.getActionMasked() == MotionEvent.ACTION_MOVE && folderSwipeCandidate) {
+                    float dx = event.getX() - swipeStartX;
+                    float dy = event.getY() - swipeStartY;
+                    if (Math.abs(dy) > touchSlop && Math.abs(dy) >= Math.abs(dx)) folderSwipeCandidate = false;
+                    else if (Math.abs(dx) > touchSlop * 2 && Math.abs(dx) > Math.abs(dy) * 1.5f) {
+                        folderSwiping = true;
+                        getParent().requestDisallowInterceptTouchEvent(true);
+                        return true;
+                    }
+                } else if (event.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN) {
+                    folderSwipeCandidate = false;
+                }
+                return super.onInterceptTouchEvent(event);
+            }
+
+            @Override
+            public boolean onTouchEvent(MotionEvent event) {
+                if (!folderSwiping) return super.onTouchEvent(event);
+                int action = event.getActionMasked();
+                if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                    float dx = event.getX() - swipeStartX;
+                    if (action == MotionEvent.ACTION_UP && folderSwipeCandidate && Math.abs(dx) >= AndroidUtilities.dp(48)) {
+                        switchFeedFolder((dx < 0) != LocaleController.isRTL);
+                    }
+                    folderSwiping = folderSwipeCandidate = false;
+                    getParent().requestDisallowInterceptTouchEvent(false);
+                } else if (action == MotionEvent.ACTION_POINTER_DOWN) {
+                    folderSwipeCandidate = false;
+                }
+                return true;
+            }
+
             @Override
             protected void onDraw(Canvas canvas) {
                 super.onDraw(canvas);
@@ -300,6 +427,7 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
                 FeedActivity.this.applyFloatingWindowLayout();
                 FeedActivity.this.setupChatActionBar();
                 FeedActivity.this.setupChatTitle();
+                FeedActivity.this.updateFolderTabs();
                 if (FeedActivity.this.lastWindowInsets != null && (view = (feedActivity = FeedActivity.this).fragmentView) != null) {
                     ViewCompat.dispatchApplyWindowInsets(view, feedActivity.lastWindowInsets);
                 }

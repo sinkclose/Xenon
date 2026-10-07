@@ -105,13 +105,7 @@ public class FeedController implements NotificationCenter.NotificationCenterDele
         this.closedRefreshGuid = ConnectionsManager.generateClassGuid();
         this.closedRefreshRunnable = this::runClosedRefresh;
         this.currentAccount = account;
-        SharedPreferences preferences = MessagesController.getMainSettings(account);
-        long savedDialogId = preferences.getLong("feed_scroll_dialog", 0);
-        int savedMessageId = preferences.getInt("feed_scroll_message", 0);
-        if (savedDialogId != 0 && savedMessageId > 0) {
-            this.drawerScrollPosition = new SavedScrollPosition(savedDialogId, savedMessageId,
-                    preferences.getInt("feed_scroll_offset", 0), preferences.getInt("feed_scroll_date", 0));
-        }
+        readFolderScrollPosition();
         this.unreadTracker = new FeedUnreadTracker(account, feedStore.getMessages());
         this.loader = new FeedTimelineLoader(account);
         this.backfill = new FeedBackfillCoordinator(account, this::onBackfillRoundFinished);
@@ -287,12 +281,50 @@ public class FeedController implements NotificationCenter.NotificationCenterDele
         NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.feedNeedReload, true);
     }
 
+    public boolean selectFolder(int id) {
+        if (!FeedFolders.getInstance(currentAccount).setActive(id)) return false;
+        onFoldersChanged(true);
+        return true;
+    }
+
+    public void setFolderChannels(int folderId, ArrayList<Long> dialogIds, boolean included) {
+        FeedFolders.getInstance(currentAccount).setChannels(folderId, dialogIds, included);
+        onFoldersChanged(folderId == FeedFolders.getInstance(currentAccount).getActiveId());
+    }
+
+    public void onFoldersChanged(boolean reload) {
+        this.loader.invalidateChannelCache();
+        if (reload) {
+            cancelLoads();
+            clear();
+            this.initialUnreadScrollPending = true;
+            readFolderScrollPosition();
+        }
+        loadChannels(true, null);
+        NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.feedNeedReload, reload);
+    }
+
+    private String folderScrollKey(String key) {
+        int id = FeedFolders.getInstance(currentAccount).getActiveId();
+        return id == FeedFolders.ALL ? key : key + "_folder_" + id;
+    }
+
+    private void readFolderScrollPosition() {
+        SharedPreferences preferences = MessagesController.getMainSettings(currentAccount);
+        long dialogId = preferences.getLong(folderScrollKey("feed_scroll_dialog"), 0);
+        int messageId = preferences.getInt(folderScrollKey("feed_scroll_message"), 0);
+        this.drawerScrollPosition = dialogId == 0 || messageId <= 0 ? null : new SavedScrollPosition(dialogId, messageId,
+                preferences.getInt(folderScrollKey("feed_scroll_offset"), 0),
+                preferences.getInt(folderScrollKey("feed_scroll_date"), 0));
+    }
+
     public boolean isIncludedChannelPost(long dialogId) {
         if (!DialogObject.isChatDialog(dialogId)) {
             return false;
         }
         TLRPC.Dialog dialog = MessagesController.getInstance(this.currentAccount).dialogs_dict.get(dialogId);
-        return (dialog == null || dialog.folder_id != 1) && !isChannelExcluded(currentAccount, dialogId)
+        FeedFolders folders = FeedFolders.getInstance(currentAccount);
+        return (dialog == null || dialog.folder_id != 1) && folders.isIncluded(folders.getActiveId(), dialogId)
                 && isEligibleChannel(MessagesController.getInstance(this.currentAccount).getChat(-dialogId));
     }
 
@@ -372,10 +404,10 @@ public class FeedController implements NotificationCenter.NotificationCenterDele
         }
         this.drawerScrollPosition = new SavedScrollPosition(dialogId, messageId, offsetTop, date);
         MessagesController.getMainSettings(this.currentAccount).edit()
-                .putLong("feed_scroll_dialog", dialogId)
-                .putInt("feed_scroll_message", messageId)
-                .putInt("feed_scroll_offset", offsetTop)
-                .putInt("feed_scroll_date", date)
+                .putLong(folderScrollKey("feed_scroll_dialog"), dialogId)
+                .putInt(folderScrollKey("feed_scroll_message"), messageId)
+                .putInt(folderScrollKey("feed_scroll_offset"), offsetTop)
+                .putInt(folderScrollKey("feed_scroll_date"), date)
                 .apply();
     }
 

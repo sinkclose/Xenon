@@ -13391,6 +13391,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             chatListViewPaddingTop += actionBar.getMeasuredHeight();
         }
         chatListViewPaddingTop += blurredViewTopOffset;
+        if (isFeedSearch() && feedFolderTabs != null && feedFolderTabs.getVisibility() == View.VISIBLE) {
+            chatListViewPaddingTop += feedFolderTabs.getLayoutParams().height;
+        }
         chatListViewPaddingVisibleOffset = 0;
         chatListViewPaddingTop += contentPanTranslation;
 
@@ -35300,8 +35303,10 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 if (isFeedSearch() && org.telegram.messenger.feed.FeedMessageUtils.isPostRow(selectedObject)) {
                     long channelId = selectedObject.getDialogId();
                     closeMenu();
-                    org.telegram.messenger.feed.FeedController.getInstance(currentAccount)
-                            .setChannelExcluded(channelId, true);
+                    ArrayList<Long> ids = new ArrayList<>();
+                    ids.add(channelId);
+                    org.telegram.messenger.feed.FeedController.getInstance(currentAccount).setFolderChannels(
+                            org.telegram.messenger.feed.FeedFolders.getInstance(currentAccount).getActiveId(), ids, false);
                 }
                 break;
             }
@@ -37725,6 +37730,32 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     private org.telegram.messenger.feed.FeedChatIntegration feedIntegration;
+    private View feedFolderTabs;
+
+    public void setFeedFolderTabs(View tabs, boolean visible) {
+        if (!isFeedSearch() || contentView == null) return;
+        if (feedFolderTabs != tabs) {
+            if (feedFolderTabs != null) contentView.removeView(feedFolderTabs);
+            feedFolderTabs = tabs;
+            if (tabs.getParent() instanceof ViewGroup) ((ViewGroup) tabs.getParent()).removeView(tabs);
+            if (tabs instanceof org.telegram.ui.Components.FilterTabsView) {
+                BlurredBackgroundDrawable background = glassBackgroundDrawableFactory.create(tabs,
+                        BlurredBackgroundProviderImpl.topPanelChatActivity(themeDelegate));
+                background.setRadius(dp(21));
+                background.setPadding(0);
+                tabs.setPadding(0, dp(3), 0, dp(3));
+                ((org.telegram.ui.Components.FilterTabsView) tabs).setBlurredBackground(background);
+            }
+            int horizontalInset = zxc.iconic.xenon.helpers.Md3FilterTabsHelper.isEnabled() ? 0 : 9;
+            contentView.addView(tabs, LayoutHelper.createFrame(-1, 42,
+                    Gravity.TOP, horizontalInset, 0, horizontalInset, 0));
+        }
+        tabs.setVisibility(visible ? View.VISIBLE : View.GONE);
+        invalidateChatListViewTopPadding = true;
+        updateChatListViewTopPadding();
+        contentView.requestLayout();
+        invalidateMessagesVisiblePart();
+    }
     private Runnable feedContentChangedCallback;
     private boolean feedInitialPositionLoadFailed;
 

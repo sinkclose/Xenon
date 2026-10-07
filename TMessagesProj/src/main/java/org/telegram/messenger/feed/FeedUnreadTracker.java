@@ -168,7 +168,8 @@ final class FeedUnreadTracker {
             if (messageObject != null) {
                 long dialogId = messageObject.getDialogId();
                 TLRPC.Dialog dialog = controller.dialogs_dict.get(dialogId);
-                if ((dialog == null || dialog.folder_id != 1) && !FeedController.isChannelExcluded(currentAccount, dialogId)) {
+                FeedFolders folders = FeedFolders.getInstance(currentAccount);
+                if ((dialog == null || dialog.folder_id != 1) && folders.isIncluded(folders.getActiveId(), dialogId)) {
                     dialogsToClear.add(dialogId);
                     int realId = messageObject.getRealId();
                     if (realId > this.readInboxMaxByDialog.get(dialogId, 0)) {
@@ -205,7 +206,7 @@ final class FeedUnreadTracker {
             if (dialog != null && dialog.unread_count > 0) {
                 long dialogId = dialog.id;
                 if (DialogObject.isChatDialog(dialogId) && dialog.folder_id != 1
-                        && !FeedController.isChannelExcluded(currentAccount, dialogId)
+                        && FeedFolders.getInstance(currentAccount).isIncluded(FeedFolders.getInstance(currentAccount).getActiveId(), dialogId)
                         && FeedController.isEligibleChannel(controller.getChat(-dialogId))) {
                     result.add(dialog);
                 }

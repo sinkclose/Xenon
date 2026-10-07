@@ -10581,7 +10581,7 @@
     <string name="FeedChannelsOnly">Channels only</string>
     <string name="FeedFolderSelect">Select feed</string>
     <string name="FeedNewFolder">New feed</string>
-    <string name="FeedFolderName">Feed name</string>
+    <string name="FeedFolderName">Folder name</string>
     <string name="FeedFolderEmpty">No feeds yet</string>
     <string name="FeedFolderEmptyInfo">Create a feed to add channels into it.</string>
     <string name="FeedAddChannelToFolder">Add channel to feed</string>
@@ -10606,7 +10606,7 @@
     <string name="FeedChannelsInFolder">Channels in %1$s</string>
     <string name="FeedFolderChannelsCount">%1$d channels</string>
     <string name="FeedSelectedChannelsCount">Selected %1$d of %2$d channels</string>
-    <string name="FeedAddFolder">Add feed</string>
+    <string name="FeedAddFolder">Add folder</string>
     <string name="FeedNewFolderTitle">New feed</string>
     <string name="FeedRenameFolder">Rename feed</string>
     <string name="FeedDeleteFolder">Delete feed</string>

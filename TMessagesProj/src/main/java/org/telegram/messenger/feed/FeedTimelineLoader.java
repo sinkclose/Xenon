@@ -161,9 +161,11 @@ final class FeedTimelineLoader {
         enumeration.failed = channelSet.failed;
         enumeration.cacheEpoch = epoch;
         enumeration.channels.addAll(channelSet.channels);
+        FeedFolders folders = FeedFolders.getInstance(this.currentAccount);
+        int folderId = folders.getActiveId();
         for (int i = 0; i < channelSet.includedRows.size(); i++) {
             long[] row = channelSet.includedRows.get(i);
-            if (!FeedController.isChannelExcluded(this.currentAccount, row[0])) {
+            if (folders.isIncluded(folderId, row[0])) {
                 enumeration.included.add(new ChannelSnapshot(row[0], (int) row[1], (int) row[2], (int) row[3]));
             }
         }

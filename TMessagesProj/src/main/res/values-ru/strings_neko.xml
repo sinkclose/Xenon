@@ -420,6 +420,7 @@
     <string name="DownloadingUpdate">Загрузка обновления...</string>
     <string name="UpdateDownloaded">Обновление загружено!</string>
     <string name="NekoUpdate">Обновить</string>
+    <string name="AppUpdateInstall">Установить</string>
     <string name="ForceUpdate">Принудительное обновление</string>
     <string name="AutoDownloadUpdate">Автоматически загружать обновление</string>
     <string name="UpdatesHeader">Обновления</string>
@@ -628,5 +629,16 @@
     <string name="SwipeActionOpenIn">Открыть в</string>
     <string name="SwipeActionReaction">Реакция</string>
     <string name="UpdateDeleteFile">Удалить файл</string>
+
+    <string name="FeedFolders">Папки</string>
+    <string name="FeedFolder">Папка</string>
+    <string name="FeedAddFolder">Добавить папку</string>
+    <string name="FeedFolderName">Название папки</string>
+    <string name="FeedManageChannels">Управление каналами</string>
+    <string name="FeedMakeMain">Сделать основной</string>
+    <string name="FeedMainFolder">Основная папка</string>
+    <string name="FeedDeselectAll">Отключить все</string>
+    <string name="FeedDisabledChannels">Отключённые каналы</string>
+    <string name="FeedFoldersReorderHint">Удерживайте папку и перетащите её, чтобы изменить порядок.</string>
 </resources>
 
