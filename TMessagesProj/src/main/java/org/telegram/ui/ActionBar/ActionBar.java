@@ -576,6 +576,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     private boolean isCenterTitle;
     private boolean centerTitleFreeSpace;
     private boolean centeredTitleLaidOut;
+    private boolean centeredOverlayTitleLayoutPending;
     private ValueAnimator centerTitleAnimator;
     private float[] centerTitleAnimationTargets;
 
@@ -1809,9 +1810,10 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             child.layout(childLeft, childTop, childLeft + width, childTop + height);
         }
         if (isCenterTitle) {
-            updateCenteredTitle(centeredTitleLaidOut
+            updateCenteredTitle(centeredTitleLaidOut && !centeredOverlayTitleLayoutPending
                     && (centerTitleFreeSpace || centerTitleAnimator != null && centerTitleAnimator.isRunning()));
         }
+        centeredOverlayTitleLayoutPending = false;
         centeredTitleLaidOut = true;
     }
 
@@ -1960,6 +1962,9 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             }).start();
         }
         titleActionRunnable = action != null ? action : lastRunnable;
+        // Keep this pending until layout, even if the overlay animation finishes in the background.
+        centeredOverlayTitleLayoutPending = true;
+        requestLayout();
     }
 
     public boolean isSearchFieldVisible() {
@@ -2497,7 +2502,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
     @Override
     protected void dispatchDraw(Canvas canvas) {
-        if (isCenterTitle && centerTitleFreeSpace && centeredTitleLaidOut) {
+        if (isCenterTitle && centerTitleFreeSpace && centeredTitleLaidOut && !centeredOverlayTitleLayoutPending) {
             updateCenteredTitle(true);
         }
         final int p = dp(6);
