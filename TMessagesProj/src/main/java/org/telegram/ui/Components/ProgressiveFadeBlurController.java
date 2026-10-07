@@ -27,12 +27,14 @@ public class ProgressiveFadeBlurController {
     private final BlurredBackgroundSourceRenderNode source;
     private final BlurredBackgroundSourceColor underSource;
     private final ChatActivityFadeView fadeView;
+    private final CaptureLayout captureLayout;
     private View captureView;
     private final List<View> additionalCaptureViews = new ArrayList<>();
     private boolean dimEnabled = true;
     private boolean flipped;
     private boolean continuousUpdating;
     private boolean updateAtScreenRefreshRate;
+    private boolean lastCaptureHadEdgeEffects;
     private int drawCount;
     private int lastProcessedDrawCount = -1;
     private final ViewTreeObserver.OnPreDrawListener drawCountListener = new ViewTreeObserver.OnPreDrawListener() {
@@ -47,7 +49,8 @@ public class ProgressiveFadeBlurController {
                 for (int i = 0; i < additionalCaptureViews.size(); i++) {
                     contentDirty |= additionalCaptureViews.get(i).isDirty();
                 }
-                if (contentDirty || captureTransform() != lastCaptureTransform) {
+                if (contentDirty || captureTransform() != lastCaptureTransform
+                        || hasActiveEdgeEffects() || lastCaptureHadEdgeEffects) {
                     capturePending = true;
                     scheduleUpdate(1);
                 }
@@ -93,6 +96,7 @@ public class ProgressiveFadeBlurController {
     public ProgressiveFadeBlurController(ViewGroup parent, View captureView, int insertIndex, IntSupplier backgroundColorProvider) {
         this.backgroundColorProvider = backgroundColorProvider;
         this.captureView = captureView;
+        captureLayout = new CaptureLayout(parent.getContext());
         underSource = new BlurredBackgroundSourceColor();
         source = new BlurredBackgroundSourceRenderNode(null);
         source.setUnderSource(underSource);
@@ -111,6 +115,9 @@ public class ProgressiveFadeBlurController {
             @Override
             public void onViewAttachedToWindow(View v) {
                 v.getViewTreeObserver().addOnPreDrawListener(drawCountListener);
+                if (isEnabled()) {
+                    startContinuousUpdates();
+                }
             }
 
             @Override
@@ -165,6 +172,9 @@ public class ProgressiveFadeBlurController {
     public void syncState() {
         if (isEnabled()) {
             fadeView.setVisibility(fadeViewRequestedVisibility);
+            if (fadeView.isAttachedToWindow() && fadeViewRequestedVisibility == View.VISIBLE) {
+                startContinuousUpdates();
+            }
         } else {
             stopContinuousUpdates();
             fadeView.setVisibility(View.GONE);
@@ -237,11 +247,13 @@ public class ProgressiveFadeBlurController {
         // Ignore the redraw requested by our previous capture, unless the
         // captured content itself is dirty (scrolling/animations can coincide).
         final long transform = captureTransform();
+        final boolean activeEdgeEffects = hasActiveEdgeEffects();
         boolean contentDirty = captureView.isDirty();
         for (int i = 0; i < additionalCaptureViews.size(); i++) {
             contentDirty |= additionalCaptureViews.get(i).isDirty();
         }
-        if (!capturePending && drawCount == lastProcessedDrawCount && !contentDirty && transform == lastCaptureTransform) {
+        if (!capturePending && drawCount == lastProcessedDrawCount && !contentDirty
+                && transform == lastCaptureTransform && !activeEdgeEffects && !lastCaptureHadEdgeEffects) {
             return;
         }
         final int fw = captureView.getWidth();
@@ -295,8 +307,56 @@ public class ProgressiveFadeBlurController {
         // mistaken for a content change on the next draw pass.
         capturePending = false;
         lastCaptureTransform = transform;
+        lastCaptureHadEdgeEffects = activeEdgeEffects;
         lastProcessedDrawCount = drawCount + 1;
         fadeView.invalidate();
+        if (activeEdgeEffects && continuousUpdating) {
+            // Stretch runs in HWUI without changing View translation/scale.
+            // Keep the filter current until release, including the final frame.
+            capturePending = true;
+            scheduleUpdate(interval);
+        }
+    }
+
+    private boolean hasActiveEdgeEffects() {
+        if (hasActiveEdgeEffects(captureView)) {
+            return true;
+        }
+        for (int i = 0; i < additionalCaptureViews.size(); i++) {
+            if (hasActiveEdgeEffects(additionalCaptureViews.get(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasActiveEdgeEffects(View view) {
+        if (view instanceof RecyclerListView && view.getOverScrollMode() != View.OVER_SCROLL_NEVER
+                && ((RecyclerListView) view).hasActiveEdgeEffects()) {
+            return true;
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                if (hasActiveEdgeEffects(group.getChildAt(i))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static class CaptureLayout extends FrameLayout {
+        CaptureLayout(android.content.Context context) {
+            super(context);
+        }
+
+        void capture(Canvas canvas, View view) {
+            // drawChild records the view's actual RenderNode, including Android
+            // 12+ stretch. Calling view.draw directly records a separate copy
+            // and advances EdgeEffect again instead of sharing the on-screen node.
+            super.drawChild(canvas, view, SystemClock.uptimeMillis());
+        }
     }
 
     // RenderNode property animations (folder swipes) need not dirty the view's
@@ -323,6 +383,10 @@ public class ProgressiveFadeBlurController {
     }
 
     private void drawCapturedView(Canvas c, View view) {
+        if (c.isHardwareAccelerated()) {
+            captureLayout.capture(c, view);
+            return;
+        }
         c.save();
         c.translate(view.getLeft() + view.getTranslationX(), view.getTop() + view.getTranslationY());
         final float sx = view.getScaleX();
