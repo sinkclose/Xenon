@@ -13,6 +13,7 @@ import android.graphics.PorterDuffColorFilter;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
+import android.os.SystemClock;
 import android.text.TextPaint;
 import android.view.animation.DecelerateInterpolator;
 
@@ -73,21 +74,97 @@ public class MediaActionDrawable extends Drawable {
     private float downloadProgressAnimationStart;
     private float downloadProgressTime;
 
-    private float indeterminateArcLength = 10;
-    private long indeterminatePhaseStartTime;
-    private int indeterminatePhase;
-    private static final float INDETERMINATE_MIN_ARC = 36;
-    private static final float INDETERMINATE_MAX_ARC = 313;
-    private static final int INDET_GROW = 0;
-    private static final int INDET_SHRINK = 2;
-    private static final int INDET_PAUSE = 3;
-    private static final long INDET_GROW_DURATION = 3354;
-    private static final long INDET_SHRINK_DURATION = 1725;
-    private static final long INDET_PAUSE_DURATION = 1628;
+    // AndroidX Material 3, revision 606942979fae7ceb4ac1d0207aef25609b1b0c6c:
+    // ProgressIndicator.kt (circularIndeterminate*AnimationSpec) and
+    // internal/CircularWavyProgressModifiers.kt. No Compose runtime is required.
+    private static final long INDETERMINATE_DURATION = 6000;
+    private static final long INDETERMINATE_ROTATION_INTERVAL = 1500;
+    private static final long INDETERMINATE_ROTATION_DURATION = 300;
+    private static final float INDETERMINATE_MIN_ARC = 360f * 0.1f;
+    private static final float INDETERMINATE_MAX_ARC = 360f * 0.87f;
+    private static final int WAVY_WAVE_COUNT = 11;
+    private float indeterminateArcLength = INDETERMINATE_MIN_ARC;
+    private long indeterminatePhaseStartTime = -1;
+    private long waveAnimationStartTime = -1;
+    private long amplitudeAnimationStartTime;
+    private float amplitudeAnimationStart = 1f;
+    private float amplitudeAnimationTarget = 1f;
 
-    private long kickPhaseStartTime;
-    private static final long KICK_DURATION = 288;
-    private static final float KICK_SPEED_MULTIPLIER = 3f;
+    // Solve x(t) before evaluating y(t), as Compose's CubicBezierEasing does.
+    private static float materialEasing(float fraction, float x1, float y1, float x2, float y2) {
+        if (fraction <= 0f || fraction >= 1f) {
+            return Math.max(0f, Math.min(1f, fraction));
+        }
+        float low = 0f;
+        float high = 1f;
+        for (int i = 0; i < 24; i++) {
+            float t = (low + high) / 2f;
+            float u = 1f - t;
+            float x = 3f * u * u * t * x1 + 3f * u * t * t * x2 + t * t * t;
+            if (x < fraction) {
+                low = t;
+            } else {
+                high = t;
+            }
+        }
+        float t = (low + high) / 2f;
+        float u = 1f - t;
+        return 3f * u * u * t * y1 + 3f * u * t * t * y2 + t * t * t;
+    }
+
+    private void updateMaterialAnimation(long now, boolean progressVisible) {
+        if (!progressVisible) {
+            indeterminatePhaseStartTime = -1;
+            waveAnimationStartTime = -1;
+            return;
+        }
+        if (waveAnimationStartTime < 0) {
+            waveAnimationStartTime = now;
+        }
+        // The default waveSpeed equals wavelength: one wave passes per second.
+        wavePhaseAngle = ((now - waveAnimationStartTime) % (1000L * WAVY_WAVE_COUNT))
+                * 360f / (1000L * WAVY_WAVE_COUNT);
+
+        float targetAmplitude = downloadProgress < 0.01f
+                || (animatedDownloadProgress > 0.1f && animatedDownloadProgress < 0.95f) ? 1f : 0f;
+        if (targetAmplitude != amplitudeAnimationTarget) {
+            amplitudeAnimationStart = wavyAmplitudeSmooth;
+            amplitudeAnimationTarget = targetAmplitude;
+            amplitudeAnimationStartTime = now;
+        }
+        float amplitudeFraction = Math.min(1f, (now - amplitudeAnimationStartTime) / 500f);
+        float amplitudeEasing = amplitudeAnimationTarget > amplitudeAnimationStart
+                ? materialEasing(amplitudeFraction, 0.2f, 0f, 0f, 1f)
+                : materialEasing(amplitudeFraction, 0.3f, 0f, 0.8f, 0.15f);
+        wavyAmplitudeSmooth = amplitudeAnimationStart
+                + (amplitudeAnimationTarget - amplitudeAnimationStart) * amplitudeEasing;
+
+        if (downloadProgress >= 0.01f) {
+            downloadRadOffset = -90f;
+            indeterminatePhaseStartTime = -1;
+            return;
+        }
+        if (indeterminatePhaseStartTime < 0) {
+            indeterminatePhaseStartTime = now;
+        }
+        long cycleTime = (now - indeterminatePhaseStartTime) % INDETERMINATE_DURATION;
+        long rotationTime = cycleTime % INDETERMINATE_ROTATION_INTERVAL;
+        float additionalRotation = 90f * (cycleTime / INDETERMINATE_ROTATION_INTERVAL)
+                + 90f * Math.min(1f, rotationTime / (float) INDETERMINATE_ROTATION_DURATION);
+        downloadRadOffset = getCircleValue(1080f * cycleTime / INDETERMINATE_DURATION
+                + additionalRotation + 90f);
+        float arcFraction;
+        if (cycleTime <= INDETERMINATE_DURATION / 2) {
+            // Keyframes use linear easing unless set on the interval's START keyframe.
+            arcFraction = cycleTime / (INDETERMINATE_DURATION / 2f);
+        } else {
+            float shrinkFraction = (cycleTime - INDETERMINATE_DURATION / 2)
+                    / (INDETERMINATE_DURATION / 2f);
+            arcFraction = 1f - materialEasing(shrinkFraction, 0.2f, 0f, 0f, 1f);
+        }
+        indeterminateArcLength = INDETERMINATE_MIN_ARC
+                + (INDETERMINATE_MAX_ARC - INDETERMINATE_MIN_ARC) * arcFraction;
+    }
 
     private final Path wavyProgressPath = new Path();
     private final PathMeasure wavyProgressPathMeasure = new PathMeasure();
@@ -97,7 +174,6 @@ public class MediaActionDrawable extends Drawable {
     private float wavePhaseAngle;
     private float wavyAmplitudeSmooth = 1f;
     private float wavyLastAmplitudeSmooth = 1f;
-    private float bgThicknessScale;
 
     private void drawWavyArc(Canvas canvas, RectF oval, float startAngle, float sweepAngle, Paint paint) {
         if (!oval.equals(wavyLastOval) || wavyLastGeneration != 0 || wavyLastAmplitudeSmooth != wavyAmplitudeSmooth) {
@@ -109,7 +185,7 @@ public class MediaActionDrawable extends Drawable {
             float baseRadius = Math.min(oval.width(), oval.height()) / 2f;
 
             float amplitude = NekoConfig.wavyProgressEnabled ? baseRadius * 0.05f * wavyAmplitudeSmooth : 0f;
-            int waves = 11;
+            int waves = WAVY_WAVE_COUNT;
             int steps = 180;
 
             for (int i = 0; i <= steps; i++) {
@@ -277,7 +353,7 @@ public class MediaActionDrawable extends Drawable {
             animatedDownloadProgress = 0.0f;
             downloadProgressAnimationStart = 0.0f;
             downloadProgressTime = 0.0f;
-            kickPhaseStartTime = System.currentTimeMillis();
+            indeterminatePhaseStartTime = -1;
         }
         invalidateSelf();
         return true;
@@ -308,9 +384,8 @@ public class MediaActionDrawable extends Drawable {
         downloadProgress = value;
         downloadProgressTime = 0;
         if (value < 0.01f && wasDeterminate) {
-            indeterminatePhaseStartTime = 0;
+            indeterminatePhaseStartTime = -1;
             indeterminateArcLength = INDETERMINATE_MIN_ARC;
-            indeterminatePhase = INDET_GROW;
         }
         invalidateSelf();
     }
@@ -383,6 +458,16 @@ public class MediaActionDrawable extends Drawable {
     @Override
     public void draw(Canvas canvas) {
         android.graphics.Rect bounds = getBounds();
+        long materialTime = SystemClock.uptimeMillis();
+        boolean materialProgressVisible = currentIcon == ICON_CANCEL || currentIcon == ICON_CANCEL_FILL
+                || currentIcon == ICON_NONE && (nextIcon == ICON_CANCEL_FILL || nextIcon == ICON_CANCEL)
+                || currentIcon == ICON_EMPTY || nextIcon == ICON_EMPTY || currentIcon == ICON_CANCEL_PERCENT;
+        if (NekoConfig.wavyEnabled) {
+            updateMaterialAnimation(materialTime, materialProgressVisible);
+        } else {
+            indeterminatePhaseStartTime = -1;
+            waveAnimationStartTime = -1;
+        }
 
         if (messageDrawable != null && messageDrawable.hasGradient() && !hasOverlayImage) {
             Shader shader = messageDrawable.getGradientShader();
@@ -1029,8 +1114,9 @@ public class MediaActionDrawable extends Drawable {
             canvas.restore();
         }
 
-        long newTime = System.currentTimeMillis();
-        long dt = newTime - lastAnimationTime;
+        long newTime = materialTime;
+        long materialDt = lastAnimationTime == 0 ? 0 : Math.max(0, newTime - lastAnimationTime);
+        long dt = materialDt;
         if (dt > 17) {
             dt = 17;
         }
@@ -1056,85 +1142,17 @@ public class MediaActionDrawable extends Drawable {
                 invalidateSelf();
             }
         } else {
-        wavePhaseAngle += (dt * 50.0f) / 1000f;
-        wavePhaseAngle %= 360f;
-
-        float targetScale = (downloadProgress < 0.01f || (downloadProgress > 0.13f && downloadProgress < 0.85f)) ? 1f : 0f;
-        if (downloadProgress >= 0.01f && downloadProgress <= 0.13f) {
-            wavyAmplitudeSmooth = 0f;
-        } else {
-            wavyAmplitudeSmooth += (targetScale - wavyAmplitudeSmooth) * Math.min(1f, dt / 80f);
-        }
-
-        float progressFade = (downloadProgress > 0.90f) ? Math.max(0f, (1f - downloadProgress) / 0.05f) : 1f;
-        bgThicknessScale += (progressFade - bgThicknessScale) * Math.min(1f, dt / 50f);
-
-        if (downloadProgress >= 0.01f) {
-            downloadRadOffset = -90;
-        } else if (currentIcon == ICON_CANCEL || currentIcon == ICON_CANCEL_FILL || currentIcon == ICON_NONE && nextIcon == ICON_CANCEL_FILL || currentIcon == ICON_EMPTY || currentIcon == ICON_CANCEL_PERCENT) {
-            long kickElapsed = newTime - kickPhaseStartTime;
-            float rotSpeed = 360 / 2395.0f;
-            if (kickElapsed < KICK_DURATION) {
-                rotSpeed *= KICK_SPEED_MULTIPLIER;
-            }
-            downloadRadOffset += rotSpeed * dt;
-            downloadRadOffset = getCircleValue(downloadRadOffset);
-        }
-
-        if (currentIcon == ICON_CANCEL || currentIcon == ICON_CANCEL_FILL || currentIcon == ICON_NONE && nextIcon == ICON_CANCEL_FILL || currentIcon == ICON_EMPTY || currentIcon == ICON_CANCEL_PERCENT) {
+        if (materialProgressVisible) {
             if (nextIcon != ICON_DOWNLOAD) {
                 float progressDiff = downloadProgress - downloadProgressAnimationStart;
                 if (progressDiff > 0) {
-                    downloadProgressTime += dt;
-                    if (downloadProgressTime >= 1000.0f) {
+                    downloadProgressTime += materialDt;
+                    if (downloadProgressTime >= 500.0f) {
                         animatedDownloadProgress = downloadProgress;
                         downloadProgressAnimationStart = downloadProgress;
                         downloadProgressTime = 0;
                     } else {
-                        animatedDownloadProgress = downloadProgressAnimationStart + progressDiff * interpolator.getInterpolation(downloadProgressTime / 1000.0f);
-                    }
-                }
-            }
-
-            if (downloadProgress < 0.01f) {
-                if (indeterminatePhaseStartTime == 0) {
-                    indeterminatePhaseStartTime = newTime;
-                    kickPhaseStartTime = newTime;
-                }
-                long elapsed = newTime - indeterminatePhaseStartTime;
-                switch (indeterminatePhase) {
-                    case INDET_GROW: {
-                        float t = Math.min(1f, (float) elapsed / INDET_GROW_DURATION);
-                        float smooth = t * t * (3 - 2 * t);
-                        indeterminateArcLength = INDETERMINATE_MIN_ARC + (INDETERMINATE_MAX_ARC - INDETERMINATE_MIN_ARC) * smooth;
-                        if (elapsed >= INDET_GROW_DURATION / 2 && kickPhaseStartTime == indeterminatePhaseStartTime) {
-                            kickPhaseStartTime = newTime;
-                        }
-                        if (smooth >= 0.99f) {
-                            indeterminatePhase = INDET_SHRINK;
-                            indeterminatePhaseStartTime = newTime;
-                            kickPhaseStartTime = newTime;
-                        }
-                        break;
-                    }
-                    case INDET_SHRINK: {
-                        float t = Math.min(1f, (float) elapsed / INDET_SHRINK_DURATION);
-                        float eased = interpolator.getInterpolation(t);
-                        indeterminateArcLength = INDETERMINATE_MAX_ARC - (INDETERMINATE_MAX_ARC - INDETERMINATE_MIN_ARC) * eased;
-                        if (eased >= 0.99f) {
-                            indeterminatePhase = INDET_PAUSE;
-                            indeterminatePhaseStartTime = newTime;
-                            kickPhaseStartTime = newTime;
-                        }
-                        break;
-                    }
-                    case INDET_PAUSE: {
-                        if (elapsed >= INDET_PAUSE_DURATION) {
-                            indeterminatePhase = INDET_GROW;
-                            indeterminatePhaseStartTime = newTime;
-                            kickPhaseStartTime = newTime;
-                        }
-                        break;
+                        animatedDownloadProgress = downloadProgressAnimationStart + progressDiff * (downloadProgressTime / 500.0f);
                     }
                 }
             }
