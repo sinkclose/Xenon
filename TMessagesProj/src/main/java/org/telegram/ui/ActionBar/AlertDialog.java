@@ -739,7 +739,7 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
         @Override
         protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
             if (progressViewStyle == ALERT_TYPE_SPINNER) {
-                final int spinnerCardMeasure = zxc.iconic.xenon.NekoConfig.wavyEnabled ? dp(47) : dp(86);
+                final int spinnerCardMeasure = zxc.iconic.xenon.NekoConfig.wavyEnabled ? dp(56) : dp(86);
                 progressViewContainer.measure(MeasureSpec.makeMeasureSpec(spinnerCardMeasure, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(spinnerCardMeasure, MeasureSpec.EXACTLY));
                 setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.getSize(heightMeasureSpec));
             } else {
@@ -1251,10 +1251,9 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
 
             progressViewContainer = new FrameLayout(getContext());
             backgroundColor = getThemedColor(Theme.key_dialog_inlineProgressBackground);
-            // With M3 indicators the card becomes a circle hugging the spinner:
-            // 10% bigger than the 43dp progress, the indicator itself unchanged.
+            // With M3 indicators use a circular card with padding around the 43dp spinner.
             final boolean m3spinnerCard = zxc.iconic.xenon.NekoConfig.wavyEnabled;
-            final int spinnerCardSize = m3spinnerCard ? dp(47) : dp(86);
+            final int spinnerCardSize = m3spinnerCard ? dp(56) : dp(86);
             if (!(blurredBackground && !blurredNativeBackground)) {
                 progressViewContainer.setBackgroundDrawable(Theme.createRoundRectDrawable(m3spinnerCard ? spinnerCardSize / 2 : dp(18), backgroundColor));
             }
