@@ -89,6 +89,11 @@ public class TextAnimationEditText extends EditTextCaption {
         animPaint.setStyle(Paint.Style.FILL);
         cursorPaint.setStyle(Paint.Style.FILL);
         addTextChangedListener(new TextWatcher() {
+            private int changeStart;
+            private int changeBefore;
+            private int changeCount;
+            private boolean changePending;
+
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {
                 if (!NekoConfig.textAnimationEnabled) {
@@ -137,6 +142,13 @@ public class TextAnimationEditText extends EditTextCaption {
 
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
+                changeStart = start;
+                changeBefore = before;
+                changeCount = count;
+                changePending = true;
+            }
+
+            private void updateAnimations(Editable s, int start, int before, int count) {
                 if (!NekoConfig.textAnimationEnabled) {
                     // Kill-switch: same as in beforeTextChanged — finish pending
                     // animations so no hidden character can outlive them.
@@ -222,6 +234,16 @@ public class TextAnimationEditText extends EditTextCaption {
 
             @Override
             public void afterTextChanged(Editable s) {
+                if (changePending) {
+                    final int start = changeStart;
+                    final int before = changeBefore;
+                    final int count = changeCount;
+                    changePending = false;
+                    // Span notifications invalidate selection handles. Wait until all
+                    // onTextChanged callbacks have refreshed the Editor's word iterator;
+                    // otherwise Quote's inserted newline can leave it using old bounds.
+                    updateAnimations(s, start, before, count);
+                }
                 Iterator<CharAnim> it = charAnims.iterator();
                 while (it.hasNext()) {
                     CharAnim anim = it.next();
