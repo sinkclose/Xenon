@@ -365,6 +365,15 @@ public class NekoMentionSettingsActivity extends BaseNekoSettingsActivity {
         }
 
         @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            // Give the weighted input an exact available width instead of sizing the row to its text.
+            super.onMeasure(
+                    MeasureSpec.makeMeasureSpec(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(56), MeasureSpec.EXACTLY)
+            );
+        }
+
+        @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
             if (needDivider) {
