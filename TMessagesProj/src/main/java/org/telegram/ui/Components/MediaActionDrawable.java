@@ -1152,7 +1152,7 @@ public class MediaActionDrawable extends Drawable {
                         downloadProgressAnimationStart = downloadProgress;
                         downloadProgressTime = 0;
                     } else {
-                        animatedDownloadProgress = downloadProgressAnimationStart + progressDiff * (downloadProgressTime / 500.0f);
+                        animatedDownloadProgress = downloadProgressAnimationStart + progressDiff * interpolator.getInterpolation(downloadProgressTime / 500.0f);
                     }
                 }
             }
