@@ -246,7 +246,6 @@ import org.telegram.ui.Components.ChatAttachAlert;
 import org.telegram.ui.Components.CheckBox;
 import org.telegram.ui.Components.ClippingImageView;
 import org.telegram.ui.Components.ColoredImageSpan;
-import org.telegram.ui.Components.CombinedDrawable;
 import org.telegram.ui.Components.Crop.CropTransform;
 import org.telegram.ui.Components.Crop.CropView;
 import org.telegram.ui.Components.CubicBezierInterpolator;
@@ -279,12 +278,11 @@ import org.telegram.ui.Components.PhotoViewerPollAttachButtons;
 import org.telegram.ui.Components.PhotoViewerWebView;
 import org.telegram.ui.Components.PickerBottomLayoutViewer;
 import org.telegram.ui.Components.PipVideoOverlay;
-import org.telegram.ui.Components.PlayPauseDrawable;
 import org.telegram.ui.Components.Premium.LimitReachedBottomSheet;
 import org.telegram.ui.Components.Premium.PremiumFeatureBottomSheet;
 import org.telegram.ui.Components.QuoteSpan;
 import org.telegram.ui.Components.RLottieDrawable;
-import org.telegram.ui.Components.RadialProgressView;
+import org.telegram.ui.Components.MediaActionDrawable;
 import org.telegram.ui.Components.Reactions.ReactionsLayoutInBubble;
 import org.telegram.ui.Components.RectOld;
 import org.telegram.ui.Components.RecyclerListView;
@@ -941,7 +939,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     private PickerBottomLayoutViewer editorDoneLayout;
     private TextView resetButton;
     private PhotoProgressView[] photoProgressViews = new PhotoProgressView[3];
-    private RadialProgressView miniProgressView;
+    private MediaActionProgressView miniProgressView;
     private ImageView paintItem;
     private ImageView cropItem;
     private ImageView mirrorItem;
@@ -1014,6 +1012,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     private boolean isDocumentsPicker;
     private boolean needCaptionLayout;
     private AnimatedFileDrawable currentAnimation;
+    private AnimatedFileDrawable controlledGif;
     private boolean allowShare;
     private boolean openedFullScreenVideo;
     private boolean dontChangeCaptionPosition;
@@ -1487,12 +1486,87 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         }
     }
 
+    private AnimatedFileDrawable getCurrentGif() {
+        if (videoPlayer != null || centerImage == null || isCurrentVideo) {
+            return null;
+        }
+        boolean gif = currentMessageObject != null && currentMessageObject.isGif()
+                || currentBotInlineResult != null && "gif".equals(currentBotInlineResult.type)
+                || pageBlocksAdapter != null && currentIndex >= 0 && pageBlocksAdapter.isHardwarePlayer(currentIndex) && !pageBlocksAdapter.isVideo(currentIndex);
+        return gif ? centerImage.getAnimation() : null;
+    }
+
+    private void resetGifControls() {
+        if (controlledGif == null) {
+            return;
+        }
+        controlledGif.setPaused(false);
+        controlledGif.start();
+        controlledGif = null;
+        isPlaying = false;
+        AndroidUtilities.cancelRunOnUIThread(updateProgressRunnable);
+    }
+
+    private void updateGifProgress() {
+        AnimatedFileDrawable gif = getCurrentGif();
+        if (gif == null || gif != controlledGif) {
+            return;
+        }
+        if (!videoPlayerSeekbar.isDragging()) {
+            long duration = gif.getDurationMs();
+            float progress = duration > 0 ? gif.getCurrentProgressMs() / (float) duration : 0;
+            videoPlayerSeekbar.setProgress(Math.max(0f, Math.min(1f, progress)), false);
+        }
+        videoPlayerSeekbar.setBufferedProgress(1f);
+        videoPlayerSeekbarView.invalidate();
+        updateVideoPlayerTime();
+    }
+
+    private boolean handleGifTap(float x, float y) {
+        if (getCurrentGif() == null || controlledGif == null) {
+            return false;
+        }
+        PhotoProgressView progress = photoProgressViews[0];
+        if (isActionBarVisible && progress.isVisible()
+                && x >= progress.getX() && x <= progress.getX() + dp(64)
+                && y >= progress.getY() && y <= progress.getY() + dp(64)) {
+            manuallyPaused = true;
+            toggleVideoPlayer();
+        } else {
+            toggleActionBar(!isActionBarVisible, true);
+        }
+        return true;
+    }
+
+    private void updateGifControls() {
+        AnimatedFileDrawable gif = getCurrentGif();
+        if (!isVisible || gif == null || gif.getDurationMs() <= 0 || gif == controlledGif) {
+            return;
+        }
+        resetGifControls();
+        controlledGif = gif;
+        gif.setAllowDecodeSingleFrame(true);
+        playerLooping = true;
+        playerWasReady = true;
+        setVideoPlayerControlVisible(true, false);
+        videoPlayerControlFrameLayout.setSeekBarTransitionEnabled(false);
+        videoPlayerControlFrameLayout.requestLayout();
+        isPlaying = gif.isRunning();
+        photoProgressViews[0].setBackgroundState(isPlaying ? PROGRESS_PAUSE : PROGRESS_PLAY, false, true);
+        photoProgressViews[0].setIndexedAlpha(1, isActionBarVisible ? 1f : 0f, false);
+        videoPlayerControlFrameLayout.setProgress(isActionBarVisible ? 1f : 0f);
+        AndroidUtilities.cancelRunOnUIThread(updateProgressRunnable);
+        AndroidUtilities.runOnUIThread(updateProgressRunnable);
+        updateGifProgress();
+    }
+
     private long getCurrentVideoPosition() {
         if (photoViewerWebView != null && photoViewerWebView.isControllable()) {
             return photoViewerWebView.getCurrentPosition();
         } else {
             if (videoPlayer == null) {
-                return 0;
+                AnimatedFileDrawable gif = getCurrentGif();
+                return gif == null ? 0 : gif.getCurrentProgressMs();
             }
             return videoPlayer.getCurrentPosition();
         }
@@ -1503,7 +1577,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             return photoViewerWebView.getVideoDuration();
         } else {
             if (videoPlayer == null) {
-                return 0;
+                AnimatedFileDrawable gif = getCurrentGif();
+                return gif == null ? 0 : gif.getDurationMs();
             }
             return videoPlayer.getDuration();
         }
@@ -1514,6 +1589,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             photoViewerWebView.seekTo(position);
         } else if (videoPlayer != null) {
             videoPlayer.seekTo(position);
+        } else if (getCurrentGif() != null) {
+            getCurrentGif().seekTo(Math.max(0, Math.min(position, getVideoDuration())), true, true);
+            updateGifProgress();
         }
         updateVideoPlayerTime();
     }
@@ -1522,13 +1600,20 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         if (photoViewerWebView != null && photoViewerWebView.isControllable()) {
             return photoViewerWebView.isPlaying();
         } else {
-            return videoPlayer != null && videoPlayer.isPlaying();
+            return videoPlayer != null ? videoPlayer.isPlaying() : getCurrentGif() != null && getCurrentGif().isRunning();
         }
     }
 
     private Runnable updateProgressRunnable = new Runnable() {
         @Override
         public void run() {
+            if (controlledGif != null && getCurrentGif() == controlledGif) {
+                updateGifProgress();
+                if (isVisible && isVideoPlaying()) {
+                    AndroidUtilities.runOnUIThread(this, 17);
+                }
+                return;
+            }
             if (videoPlayer != null || photoViewerWebView != null && photoViewerWebView.isControllable()) {
                 if (isCurrentVideo) {
                     if (!videoTimelineView.isDragging()) {
@@ -1557,7 +1642,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                         updateVideoPlayerTime();
                     }
                 } else {
-                    float progress = getCurrentVideoPosition() / (float) getVideoDuration();
+                    float progress = getVideoDuration() > 0 ? getCurrentVideoPosition() / (float) getVideoDuration() : 0;
                     if (shownControlsByEnd && !actionBarWasShownBeforeByEnd) {
                         progress = 0;
                     }
@@ -2228,8 +2313,6 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     private final static int ads_separator = 104;
     private final static int ads_remove = 105;
 
-    private static DecelerateInterpolator decelerateInterpolator;
-    private static Paint progressPaint;
 
     private AnimationNotificationsLocker transitionNotificationLocker = new AnimationNotificationsLocker(new int[]{
             NotificationCenter.dialogsNeedReload,
@@ -2500,48 +2583,60 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         }
     }
 
+    private static class MediaActionProgressView extends View {
+        private final MediaActionDrawable drawable = new MediaActionDrawable();
+        private boolean useSelfAlpha;
+
+        public MediaActionProgressView(Context context) {
+            super(context);
+            drawable.setColor(0xffffffff);
+            drawable.setIcon(MediaActionDrawable.ICON_EMPTY, false);
+            drawable.setDelegate(this::invalidate);
+        }
+
+        public void setUseSelfAlpha(boolean value) {
+            useSelfAlpha = value;
+        }
+
+        @Override
+        public void draw(Canvas canvas) {
+            int layer = canvas.saveLayerAlpha(0, 0, getWidth(), getHeight(),
+                    useSelfAlpha ? (int) (255 * getAlpha()) : 255, Canvas.ALL_SAVE_FLAG);
+            super.draw(canvas);
+            canvas.restoreToCount(layer);
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            int size = Math.min(getWidth(), getHeight()) - dp(8);
+            int x = (getWidth() - size) / 2;
+            int y = (getHeight() - size) / 2;
+            drawable.setBounds(x, y, x + size, y + size);
+            drawable.draw(canvas);
+        }
+    }
+
     private class PhotoProgressView {
 
         private long lastUpdateTime = 0;
-        private float radOffset = 0;
-        private float currentProgress = 0;
-        private float animationProgressStart = 0;
-        private long currentProgressTime = 0;
-        private float animatedProgressValue = 0;
-        private RectF progressRect = new RectF();
         private int backgroundState = -1;
         private View parent;
         private int size = dp(64);
-        private int previousBackgroundState = -2;
-        private float animatedAlphaValue = 1.0f;
         private float[] animAlphas = new float[3];
         private float[] alphas = new float[3];
         private float scale = 1.0f;
         private boolean visible;
 
-        private final CombinedDrawable playDrawable;
-        private final PlayPauseDrawable playPauseDrawable;
+        private final MediaActionDrawable mediaActionDrawable = new MediaActionDrawable();
 
         public PhotoProgressView(View parentView) {
-            if (decelerateInterpolator == null) {
-                decelerateInterpolator = new DecelerateInterpolator(1.5f);
-                progressPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-                progressPaint.setStyle(Paint.Style.STROKE);
-                progressPaint.setStrokeCap(Paint.Cap.ROUND);
-                progressPaint.setStrokeWidth(dp(3));
-                progressPaint.setColor(0xffffffff);
-            }
             parent = parentView;
+            mediaActionDrawable.setColor(0xffffffff);
+            mediaActionDrawable.setDelegate(() -> parent.invalidate());
             resetAlphas();
-
-            playPauseDrawable = new PlayPauseDrawable(28);
-            playPauseDrawable.setDuration(200);
-
-            Drawable circleDrawable = ContextCompat.getDrawable(parentActivity, R.drawable.circle_big);
-            playDrawable = new CombinedDrawable(circleDrawable.mutate(), playPauseDrawable);
         }
 
-        private void updateAnimation(boolean withProgressAnimation) {
+        private void updateAnimation() {
             long newTime = System.currentTimeMillis();
             long dt = newTime - lastUpdateTime;
             if (dt > 18) {
@@ -2550,33 +2645,6 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             lastUpdateTime = newTime;
 
             boolean postInvalidate = false;
-
-            if (withProgressAnimation) {
-                if (animatedProgressValue != 1 || currentProgress != 1) {
-                    radOffset += 360 * dt / 3000.0f;
-                    float progressDiff = currentProgress - animationProgressStart;
-                    if (Math.abs(progressDiff) > 0) {
-                        currentProgressTime += dt;
-                        if (currentProgressTime >= 300) {
-                            animatedProgressValue = currentProgress;
-                            animationProgressStart = currentProgress;
-                            currentProgressTime = 0;
-                        } else {
-                            animatedProgressValue = animationProgressStart + progressDiff * decelerateInterpolator.getInterpolation(currentProgressTime / 300.0f);
-                        }
-                    }
-                    postInvalidate = true;
-                }
-
-                if (animatedAlphaValue > 0 && previousBackgroundState != -2) {
-                    animatedAlphaValue -= dt / 200.0f;
-                    if (animatedAlphaValue <= 0) {
-                        animatedAlphaValue = 0.0f;
-                        previousBackgroundState = -2;
-                    }
-                    postInvalidate = true;
-                }
-            }
 
             for (int i = 0; i < alphas.length; i++) {
                 if (alphas[i] > animAlphas[i]) {
@@ -2593,15 +2661,13 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             }
         }
 
+        public boolean isLoadingProgress() {
+            return mediaActionDrawable.getCurrentIcon() == MediaActionDrawable.ICON_EMPTY
+                    || mediaActionDrawable.getPreviousIcon() == MediaActionDrawable.ICON_EMPTY;
+        }
+
         public void setProgress(float value, boolean animated) {
-            if (!animated) {
-                animatedProgressValue = value;
-                animationProgressStart = value;
-            } else {
-                animationProgressStart = animatedProgressValue;
-            }
-            currentProgress = value;
-            currentProgressTime = 0;
+            mediaActionDrawable.setProgress(value, animated);
             parent.invalidate();
         }
 
@@ -2609,23 +2675,13 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             if (backgroundState == state) {
                 return;
             }
-            if (playPauseDrawable != null) {
-                boolean animatePlayPause = animateIcon && (backgroundState == PROGRESS_PLAY || backgroundState == PROGRESS_PAUSE);
-                if (state == PROGRESS_PLAY) {
-                    playPauseDrawable.setPause(false, animatePlayPause);
-                } else if (state == PROGRESS_PAUSE) {
-                    playPauseDrawable.setPause(true, animatePlayPause);
-                }
-                playPauseDrawable.setParent(parent);
-                playPauseDrawable.invalidateSelf();
-            }
             lastUpdateTime = System.currentTimeMillis();
-            if (animated && backgroundState != state) {
-                previousBackgroundState = backgroundState;
-                animatedAlphaValue = 1.0f;
-            } else {
-                previousBackgroundState = -2;
-            }
+            int icon = state == PROGRESS_EMPTY ? MediaActionDrawable.ICON_EMPTY
+                    : state == PROGRESS_CANCEL ? MediaActionDrawable.ICON_CANCEL
+                    : state == PROGRESS_LOAD ? MediaActionDrawable.ICON_DOWNLOAD
+                    : state == PROGRESS_PLAY ? MediaActionDrawable.ICON_PLAY
+                    : state == PROGRESS_PAUSE ? MediaActionDrawable.ICON_PAUSE : MediaActionDrawable.ICON_NONE;
+            mediaActionDrawable.setIcon(icon, animated || animateIcon);
             onBackgroundStateUpdated(backgroundState = state);
             parent.invalidate();
         }
@@ -2712,51 +2768,21 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
 
             final float alpha = calculateAlpha();
 
-            if (previousBackgroundState >= 0 && previousBackgroundState < progressDrawables.length + 2) {
-                Drawable drawable;
-                if (previousBackgroundState < progressDrawables.length) {
-                    drawable = progressDrawables[previousBackgroundState];
-                } else {
-                    drawable = playDrawable;
-                }
-                if (drawable != null) {
-                    drawable.setAlpha((int) (255 * animatedAlphaValue * alpha));
-                    drawable.setBounds(x, y, x + sizeScaled, y + sizeScaled);
-                    drawable.draw(canvas);
+            if (backgroundState != PROGRESS_NONE) {
+                Drawable circle = progressDrawables[PROGRESS_EMPTY];
+                if (circle != null) {
+                    circle.setAlpha((int) (255 * alpha));
+                    circle.setBounds(x, y, x + sizeScaled, y + sizeScaled);
+                    circle.draw(canvas);
                 }
             }
-
-            if (backgroundState >= 0 && backgroundState < progressDrawables.length + 2) {
-                Drawable drawable;
-                if (backgroundState < progressDrawables.length) {
-                    drawable = progressDrawables[backgroundState];
-                } else {
-                    drawable = playDrawable;
-                }
-                if (drawable != null) {
-                    if (previousBackgroundState != -2) {
-                        drawable.setAlpha((int) (255 * (1.0f - animatedAlphaValue) * alpha));
-                    } else {
-                        drawable.setAlpha((int) (255 * alpha));
-                    }
-                    drawable.setBounds(x, y, x + sizeScaled, y + sizeScaled);
-                    drawable.draw(canvas);
-                }
-            }
-
-            if (backgroundState == PROGRESS_EMPTY || backgroundState == PROGRESS_CANCEL || previousBackgroundState == PROGRESS_EMPTY || previousBackgroundState == PROGRESS_CANCEL) {
-                int diff = dp(4);
-                if (previousBackgroundState != -2) {
-                    progressPaint.setAlpha((int) (255 * animatedAlphaValue * alpha));
-                } else {
-                    progressPaint.setAlpha((int) (255 * alpha));
-                }
-                progressRect.set(x + diff, y + diff, x + sizeScaled - diff, y + sizeScaled - diff);
-                canvas.drawArc(progressRect, -90 + radOffset, Math.max(4, 360 * animatedProgressValue), false, progressPaint);
-                updateAnimation(true);
-            } else {
-                updateAnimation(false);
-            }
+            // MediaActionDrawable's overrideAlpha does not affect its play/pause paints.
+            // Composite the entire drawable so every icon follows the viewer's alpha.
+            int layer = canvas.saveLayerAlpha(x, y, x + sizeScaled, y + sizeScaled, (int) (255 * alpha), Canvas.ALL_SAVE_FLAG);
+            mediaActionDrawable.setBounds(x + dp(4), y + dp(4), x + sizeScaled - dp(4), y + sizeScaled - dp(4));
+            mediaActionDrawable.draw(canvas);
+            canvas.restoreToCount(layer);
+            updateAnimation();
         }
     }
 
@@ -3632,7 +3658,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             } else if (photoViewerWebView != null && photoViewerWebView.isControllable()) {
                 duration = photoViewerWebView.getVideoDuration();
             } else {
-                duration = 0;
+                duration = getVideoDuration();
             }
             duration /= 1000;
 
@@ -3659,8 +3685,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
             super.onLayout(changed, left, top, right, bottom);
             float progress = 0;
-            if (videoPlayer != null) {
-                progress = videoPlayer.getCurrentPosition() / (float) videoPlayer.getDuration();
+            if (videoPlayer != null || getCurrentGif() != null) {
+                long duration = getVideoDuration();
+                progress = duration > 0 ? getCurrentVideoPosition() / (float) duration : 0;
             }
             if (playerWasReady) {
                 videoPlayerSeekbar.setProgress(progress);
@@ -6151,7 +6178,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             photoProgressViews[a].setBackgroundState(PROGRESS_EMPTY, false, true);
         }
 
-        miniProgressView = new RadialProgressView(activityContext, resourcesProvider) {
+        miniProgressView = new MediaActionProgressView(activityContext) {
             @Override
             public void setAlpha(float alpha) {
                 super.setAlpha(alpha);
@@ -6169,8 +6196,6 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             }
         };
         miniProgressView.setUseSelfAlpha(true);
-        miniProgressView.setProgressColor(0xffffffff);
-        miniProgressView.setSize(dp(54));
         miniProgressView.setBackgroundResource(R.drawable.circle_big);
         miniProgressView.setVisibility(View.INVISIBLE);
         miniProgressView.setAlpha(0.0f);
@@ -6178,8 +6203,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
 
         createVideoControlsInterface();
 
-        progressView = new RadialProgressView(parentActivity, resourcesProvider);
-        progressView.setProgressColor(0xffffffff);
+        progressView = new MediaActionProgressView(parentActivity);
         progressView.setBackgroundResource(R.drawable.circle_big);
         progressView.setVisibility(View.INVISIBLE);
         containerView.addView(progressView, LayoutHelper.createFrame(54, 54, Gravity.CENTER));
@@ -9693,7 +9717,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         final VideoPlayerSeekBar.SeekBarDelegate seekBarDelegate = new VideoPlayerSeekBar.SeekBarDelegate() {
             @Override
             public void onSeekBarDrag(float progress) {
-                if (videoPlayer != null || photoViewerWebView != null && photoViewerWebView.isControllable()) {
+                if (videoPlayer != null || getCurrentGif() != null || photoViewerWebView != null && photoViewerWebView.isControllable()) {
                     if (!inPreview && videoTimelineViewContainer.getVisibility() == View.VISIBLE) {
                         progress = videoTimelineView.getLeftProgress() + (videoTimelineView.getRightProgress() - videoTimelineView.getLeftProgress()) * progress;
                     }
@@ -9710,6 +9734,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
 
             @Override
             public void onSeekBarContinuousDrag(float progress) {
+                if (getCurrentGif() != null) {
+                    seekVideoOrWebToProgress(progress);
+                    return;
+                }
                 if (photoViewerWebView != null && photoViewerWebView.isYouTube() && videoPreviewFrame != null) {
                     videoPreviewFrame.setProgressForYouTube(photoViewerWebView, progress, videoPlayerSeekbar.getWidth());
                 } else if (videoPlayer != null && videoPreviewFrame != null) {
@@ -10039,12 +10067,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     private void updateVideoPlayerTime() {
         Arrays.fill(videoPlayerCurrentTime, 0);
         Arrays.fill(videoPlayerTotalTime, 0);
-        if (videoPlayer != null) {
-            long current = Math.max(0, videoPlayer.getCurrentPosition());
+        if (videoPlayer != null || getCurrentGif() != null) {
+            long current = Math.max(0, getCurrentVideoPosition());
             if (shownControlsByEnd && !actionBarWasShownBeforeByEnd) {
                 current = 0;
             }
-            long total = Math.max(0, videoPlayer.getDuration());
+            long total = Math.max(0, getVideoDuration());
             if (!inPreview && videoTimelineViewContainer.getVisibility() == View.VISIBLE) {
                 total *= (videoTimelineView.getRightProgress() - videoTimelineView.getLeftProgress());
                 current -= videoTimelineView.getLeftProgress() * total;
@@ -10411,6 +10439,17 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     }
 
     private void playVideoOrWeb() {
+        if (getCurrentGif() != null) {
+            getCurrentGif().setPaused(false);
+            getCurrentGif().start();
+            isPlaying = true;
+            photoProgressViews[0].setBackgroundState(PROGRESS_PAUSE, false, true);
+            photoProgressViews[0].setIndexedAlpha(1, isActionBarVisible ? 1f : 0f, true);
+            AndroidUtilities.cancelRunOnUIThread(updateProgressRunnable);
+            AndroidUtilities.runOnUIThread(updateProgressRunnable);
+            updateVideoPlayerTime();
+            return;
+        }
         if (videoPlayer != null) {
             videoPlayer.play();
         } else if (photoViewerWebView != null) {
@@ -10419,6 +10458,15 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     }
 
     private void pauseVideoOrWeb() {
+        if (getCurrentGif() != null) {
+            getCurrentGif().setPaused(true);
+            isPlaying = false;
+            photoProgressViews[0].setBackgroundState(PROGRESS_PLAY, false, true);
+            photoProgressViews[0].setIndexedAlpha(1, isActionBarVisible ? 1f : 0f, true);
+            AndroidUtilities.cancelRunOnUIThread(updateProgressRunnable);
+            updateVideoPlayerTime();
+            return;
+        }
         if (videoPlayer != null) {
             videoPlayer.pause();
         } else if (photoViewerWebView != null) {
@@ -10427,6 +10475,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     }
 
     private void seekVideoOrWebToProgress(float progress) {
+        if (getCurrentGif() != null) {
+            seekVideoOrWebTo((long) (progress * getVideoDuration()));
+            return;
+        }
         if (videoPlayer != null) {
             videoPlayer.seekTo((long) (progress * videoPlayer.getDuration()));
         } else if (photoViewerWebView != null) {
@@ -11057,6 +11109,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     }
 
     private void releasePlayer(boolean onClose) {
+        resetGifControls();
         usedSurfaceView = false;
         if (pipSource != null) {
             pipSource.destroy();
@@ -13445,7 +13498,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
 
         final float offsetY = dpf2(24);
 
-        videoPlayerControlFrameLayout.setSeekBarTransitionEnabled(params.enableTranslationAnimation && playerLooping);
+        videoPlayerControlFrameLayout.setSeekBarTransitionEnabled(params.enableTranslationAnimation && playerLooping && getCurrentGif() == null);
         videoPlayerControlFrameLayout.setTranslationYAnimationEnabled(params.enableTranslationAnimation);
 
         if (animated) {
@@ -13629,10 +13682,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     }
 
     private void toggleVideoPlayer() {
-        if (videoPlayer == null && (photoViewerWebView == null || !photoViewerWebView.isControllable())) {
+        if (videoPlayer == null && getCurrentGif() == null && (photoViewerWebView == null || !photoViewerWebView.isControllable())) {
             return;
         }
-        boolean playing = videoPlayer != null ? isPlaying : photoViewerWebView.isPlaying();
+        boolean playing = isVideoPlaying();
         cancelVideoPlayRunnable();
         AndroidUtilities.cancelRunOnUIThread(hideActionBarRunnable);
         if (playing) {
@@ -16717,6 +16770,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                         }
                         photoProgressViews[a].setProgress(progress, false);
                     }
+                    if (a == 0 && controlledGif != null && controlledGif == getCurrentGif()) {
+                        photoProgressViews[0].setBackgroundState(isVideoPlaying() ? PROGRESS_PAUSE : PROGRESS_PLAY, animated, true);
+                    }
                     if (a == 0) {
                         canZoom = !isEmbedVideo && (!imagesArrLocals.isEmpty() || (currentFileNames[0] != null && photoProgressViews[0].backgroundState != 0));
                     }
@@ -19660,6 +19716,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
 
     @SuppressLint({"NewApi", "DrawAllocation"})
     private void onDraw(Canvas canvas) {
+        updateGifControls();
         Canvas realCanvas = canvas;
         if (BLUR_RENDERNODE()) {
             if (renderNode == null) {
@@ -21032,6 +21089,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                 return true;
             }
         }
+        if (handleGifTap(x, y)) {
+            return true;
+        }
         if (containerView.getTag() != null) {
             boolean drawTextureView = aspectRatioFrameLayout != null && aspectRatioFrameLayout.getVisibility() == View.VISIBLE || photoViewerWebView != null && photoViewerWebView.isControllable();
 
@@ -21196,7 +21256,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     // video edit start
     private QualityChooseView qualityChooseView;
     private PickerBottomLayoutViewer qualityPicker;
-    private RadialProgressView progressView;
+    private MediaActionProgressView progressView;
     private FrameLayout videoTimelineViewContainer;
     private VideoTimelinePlayView videoTimelineView;
     private TextView videoAvatarTooltip;
@@ -21567,7 +21627,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         if (request == 1) {
             if (resultHeight == originalHeight && resultWidth == originalWidth) {
                 tryStartRequestPreviewOnFinish = false;
-                photoProgressViews[0].setProgress(0,photoProgressViews[0].backgroundState == 0 || photoProgressViews[0].previousBackgroundState == 0);
+                photoProgressViews[0].setProgress(0, photoProgressViews[0].isLoadingProgress());
                 photoProgressViews[0].setBackgroundState(PROGRESS_PLAY, false, true);
                 if (!wasRequestingPreview) {
                     preparePlayer(currentPlayingVideoQualityFiles, currentPlayingVideoFile, false, false, editState.savedFilterState, false, 0);
@@ -21620,7 +21680,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                 }
                 requestingPreview = true;
 
-                photoProgressViews[0].setProgress(0,photoProgressViews[0].backgroundState == 0 || photoProgressViews[0].previousBackgroundState == 0);
+                photoProgressViews[0].setProgress(0, photoProgressViews[0].isLoadingProgress());
                 photoProgressViews[0].setBackgroundState(PROGRESS_EMPTY, false, true);
             }
         } else {
