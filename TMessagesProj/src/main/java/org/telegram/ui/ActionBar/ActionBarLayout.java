@@ -46,7 +46,6 @@ import android.view.MotionEvent;
 import android.view.RoundedCorner;
 import android.view.VelocityTracker;
 import android.view.View;
-import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.Window;
@@ -772,6 +771,9 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
     protected boolean startedTracking;
     private float startedTrackingX;
     private float startedTrackingY;
+    private ValueAnimator swipeStartAnimator;
+    private float swipeStartProgress = 1f;
+    private float swipeTargetTranslationX;
     protected boolean animationInProgress;
     private VelocityTracker velocityTracker;
     private View layoutToIgnore;
@@ -1526,6 +1528,34 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
         setInnerTranslationX(0);
     }
 
+    private void cancelSwipeStartAnimation() {
+        if (swipeStartAnimator != null) {
+            swipeStartAnimator.cancel();
+            swipeStartAnimator = null;
+        }
+        swipeStartProgress = 1f;
+    }
+
+    private void applySwipeTranslation() {
+        float translation = swipeTargetTranslationX * swipeStartProgress;
+        containerView.setTranslationX(translation);
+        setInnerTranslationX(translation);
+    }
+
+    private void animateSwipeStart() {
+        cancelSwipeStartAnimation();
+        swipeStartProgress = 0f;
+        swipeTargetTranslationX = 0f;
+        swipeStartAnimator = ValueAnimator.ofFloat(0f, 1f);
+        swipeStartAnimator.setDuration(120);
+        swipeStartAnimator.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
+        swipeStartAnimator.addUpdateListener(animation -> {
+            swipeStartProgress = (float) animation.getAnimatedValue();
+            applySwipeTranslation();
+        });
+        swipeStartAnimator.start();
+    }
+
     private void prepareForMoving() {
         maybeStartTracking = false;
         startedTracking = true;
@@ -1587,6 +1617,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
         if (!checkTransitionAnimation() && !inActionMode && !animationInProgress && !predictiveBackInProgress) {
             if (fragmentsStack.size() > 1 && allowSwipe()) {
                 if (ev != null && ev.getAction() == MotionEvent.ACTION_DOWN) {
+                    cancelSwipeStartAnimation();
                     BaseFragment currentFragment = fragmentsStack.get(fragmentsStack.size() - 1);
                     if (!currentFragment.isSwipeBackEnabled(ev)) {
                         maybeStartTracking = false;
@@ -1609,15 +1640,14 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                     }
                     float dx = Math.max(0f, ev.getX() - startedTrackingX);
                     float dy = Math.abs(ev.getY() - startedTrackingY);
-                    int touchSlop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
                     velocityTracker.addMovement(ev);
-                    if (!transitionAnimationInProgress && !inPreviewMode && maybeStartTracking && !startedTracking && dx > touchSlop && dx / 3 > dy) {
+                    if (!transitionAnimationInProgress && !inPreviewMode && maybeStartTracking && !startedTracking && dx >= AndroidUtilities.getPixelsInCM(0.4f, true) && dx / 3 > dy) {
                         BaseFragment currentFragment = fragmentsStack.get(fragmentsStack.size() - 1);
                         if (currentFragment.canBeginSlide() && findScrollingChild(this, ev.getX(), ev.getY()) == null) {
-                            // Consume only the recognition slop, retaining this event's movement.
-                            startedTrackingX += touchSlop;
-                            dx = Math.max(0f, ev.getX() - startedTrackingX);
+                            startedTrackingX = ev.getX();
+                            dx = 0f;
                             prepareForMoving();
+                            animateSwipeStart();
                         } else {
                             maybeStartTracking = false;
                         }
@@ -1632,12 +1662,11 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                             beginTrackingSent = true;
                         }
                         if (newBackTransitions()) {
-                            containerView.setTranslationX(dx / (float) getWidth() * (5 * dp(56)));
-                            setInnerTranslationX(dx / (float) getWidth() * (5 * dp(56)));
+                            swipeTargetTranslationX = dx / (float) getWidth() * (5 * dp(56));
                         } else {
-                            containerView.setTranslationX(dx);
-                            setInnerTranslationX(dx);
+                            swipeTargetTranslationX = dx;
                         }
+                        applySwipeTranslation();
                     }
                 } else if (ev != null && ev.getPointerId(0) == startedTrackingPointerId && (ev.getAction() == MotionEvent.ACTION_CANCEL || ev.getAction() == MotionEvent.ACTION_UP || ev.getAction() == MotionEvent.ACTION_POINTER_UP)) {
                     if (velocityTracker == null) {
@@ -1679,6 +1708,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                         velocityTracker = null;
                     }
                 } else if (ev == null) {
+                    cancelSwipeStartAnimation();
                     maybeStartTracking = false;
                     startedTracking = false;
                     layoutToIgnore = null;
@@ -1777,6 +1807,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
     private boolean backAnimatorIsBack;
     private AnimatorSet backAnimator;
     private void animateBackEndAnimation(boolean backAnimation) {
+        cancelSwipeStartAnimation();
         final BaseFragment currentFragment = !fragmentsStack.isEmpty() ? fragmentsStack.get(fragmentsStack.size() - 1) : null;
         if (currentFragment == null) return;
 
