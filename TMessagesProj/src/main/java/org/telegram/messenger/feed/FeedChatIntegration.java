@@ -40,6 +40,10 @@ public class FeedChatIntegration {
     private static final int NEAR_NEWEST_THRESHOLD = AndroidUtilities.dp(160.0f);
     private int preserveScrollLoadIndex = -1;
     private int lastPagedownCount = -1;
+    private boolean pagedownJumpedToUnread;
+    private final Runnable saveScrollRunnable = this::saveDrawerScrollPosition;
+    private boolean readStateRefreshScheduled;
+    private final Runnable readStateRefreshRunnable = this::refreshVisibleReadState;
     private final Runnable settleAtNewestRunnable = new Runnable() {
         @Override // java.lang.Runnable
         public final void run() {
@@ -128,6 +132,36 @@ public class FeedChatIntegration {
         }
     }
 
+    private void refreshVisibleReadState() {
+        this.readStateRefreshScheduled = false;
+        if (!this.destroyed && canMarkVisibleAsRead()) {
+            ScrollAnchor anchor = this.host.captureScrollAnchor();
+            applyUnreadDivider(false);
+            this.host.restoreScrollAnchor(anchor);
+            updatePagedownCounter();
+            this.host.invalidateVisiblePart();
+        }
+    }
+
+    private boolean markOlderPostsRead() {
+        int oldestVisible = this.host.getLastVisibleMessageIndex();
+        ArrayList<MessageObject> messages = this.host.getMessages();
+        if (oldestVisible < 0 || oldestVisible >= messages.size()) return false;
+        FeedController controller = FeedController.getInstance(this.currentAccount);
+        boolean changed = false;
+        // The timeline is newest first. Only clear posts above the reading
+        // position; newer posts below it must remain unread.
+        for (int i = oldestVisible + 1; i < messages.size(); i++) {
+            MessageObject post = messages.get(i);
+            if (FeedMessageUtils.isPostRow(post) && controller.isUnread(post)) {
+                controller.onPostSeen(post.getDialogId(), post.getRealId());
+                post.setIsRead();
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
     public void settleAtNewestNow() {
         this.settleAtNewestScheduled = false;
         if (this.destroyed || !this.viewportActive || !this.host.isListReady() || this.host.isScrollAnimationRunning() || this.host.canScrollToNewer()) {
@@ -159,6 +193,9 @@ public class FeedChatIntegration {
 
     public void resetUiState() {
         resetMetadataRefresh();
+        AndroidUtilities.cancelRunOnUIThread(this.readStateRefreshRunnable);
+        this.readStateRefreshScheduled = false;
+        AndroidUtilities.cancelRunOnUIThread(this.saveScrollRunnable);
         this.initialScrollApplied = false;
         this.readyToMarkAsRead = false;
         this.pendingDividerScroll = false;
@@ -168,6 +205,7 @@ public class FeedChatIntegration {
         this.unreadDivider = null;
         this.lastPagedownCount = -1;
         this.pagedownShownByScroll = false;
+        this.pagedownJumpedToUnread = false;
         this.totalScrollDy = 0;
         this.pendingHideDialogId = 0L;
         if (this.settleAtNewestScheduled) {
@@ -189,19 +227,42 @@ public class FeedChatIntegration {
     public void onMessagesLoaded() {
         if (!this.host.getFragment().isPaused() && this.host.isListReady() && hasMaterializedPostRows()) {
             if (!this.initialScrollApplied) {
-                this.initialScrollApplied = true;
                 FeedController feedController = FeedController.getInstance(this.currentAccount);
-                boolean zConsumeInitialUnreadScroll = feedController.consumeInitialUnreadScroll();
+
                 FeedController.SavedScrollPosition drawerScrollPosition = this.restoreDrawerScrollPosition ? feedController.getDrawerScrollPosition() : null;
                 MessageObject message = drawerScrollPosition != null ? feedController.getMessage(drawerScrollPosition.dialogId, drawerScrollPosition.messageId) : null;
+                if (drawerScrollPosition != null && message == null && !feedController.getStore().isEndReached()) {
+                    FeedTimelineLoader.Cursor oldest = feedController.getStore().getOldestCursor();
+                    if (drawerScrollPosition.date == 0 || oldest.isEmpty()
+                            || FeedStore.compareTimeline(oldest.date, oldest.uid, oldest.mid,
+                            drawerScrollPosition.date, drawerScrollPosition.dialogId, drawerScrollPosition.messageId) > 0) {
+                        this.host.requestOlderFeedPage();
+                        return;
+                    }
+                }
+                // Deleted posts fall back to the closest surviving post by date.
+                if (message == null && drawerScrollPosition != null && drawerScrollPosition.date > 0) {
+                    long distance = Long.MAX_VALUE;
+                    for (MessageObject row : this.host.getMessages()) {
+                        if (FeedMessageUtils.isPostRow(row)) {
+                            long nextDistance = Math.abs((long) row.messageOwner.date - drawerScrollPosition.date);
+                            if (nextDistance < distance) {
+                                distance = nextDistance;
+                                message = row;
+                            }
+                        }
+                    }
+                }
+                this.initialScrollApplied = true;
+                boolean scrollToUnread = feedController.consumeInitialUnreadScroll();
                 if (message != null && this.host.getMessages().contains(message)) {
-                    applyUnreadDivider(false);
-                    refreshAds();
                     this.pendingInitialScrollRestore = new ScrollAnchor(message, drawerScrollPosition.offsetTop);
+                    applyUnreadDivider(false);
                     requestPendingInitialPosition();
                 } else {
-                    applyUnreadDivider((zConsumeInitialUnreadScroll || this.host.getDistanceToNewerPx() > NEAR_NEWEST_THRESHOLD) ? zConsumeInitialUnreadScroll : true);
+                    applyUnreadDivider(scrollToUnread);
                 }
+                this.host.invalidateVisiblePart();
             }
             refreshAds();
         }
@@ -244,6 +305,9 @@ public class FeedChatIntegration {
         }
         this.viewportActive = z;
         if (!z) {
+            this.pagedownJumpedToUnread = false;
+            saveDrawerScrollPosition();
+            FeedController.getInstance(this.currentAccount).flushPendingRead();
             if (this.settleAtNewestScheduled) {
                 AndroidUtilities.cancelRunOnUIThread(this.settleAtNewestRunnable);
                 this.settleAtNewestScheduled = false;
@@ -258,8 +322,12 @@ public class FeedChatIntegration {
         onVisiblePartInvalidated();
     }
 
+    public boolean isInitialPositionReady() {
+        return this.initialScrollApplied && !hasPendingInitialPosition();
+    }
+
     public boolean canMarkVisibleAsRead() {
-        return this.viewportActive && !this.host.getFragment().isPaused() && this.initialScrollApplied && this.readyToMarkAsRead && !this.pendingDividerScroll && this.pendingInitialScrollRestore == null && !BaseFragment.hasSheets(this.host.getFragment());
+        return this.viewportActive && !this.host.getFragment().isPaused() && this.initialScrollApplied && this.readyToMarkAsRead && !this.pendingDividerScroll && this.pendingInitialScrollRestore == null && !this.host.isScrollAnimationRunning() && !BaseFragment.hasSheets(this.host.getFragment());
     }
 
     public void onPostCellVisible(MessageObject messageObject, boolean z, boolean z2) {
@@ -269,7 +337,14 @@ public class FeedChatIntegration {
         requestReactionsRefresh(messageObject);
         if (canMarkVisibleAsRead()) {
             if (z || z2) {
-                FeedController.getInstance(this.currentAccount).onPostSeen(messageObject.getDialogId(), messageObject.getRealId());
+                FeedController controller = FeedController.getInstance(this.currentAccount);
+                boolean wasUnread = controller.isUnread(messageObject);
+                if (wasUnread) controller.onPostSeen(messageObject.getDialogId(), messageObject.getRealId());
+                messageObject.setIsRead();
+                if (wasUnread && !this.readStateRefreshScheduled) {
+                    this.readStateRefreshScheduled = true;
+                    AndroidUtilities.runOnUIThread(this.readStateRefreshRunnable, 100L);
+                }
             }
         }
     }
@@ -360,17 +435,6 @@ public class FeedChatIntegration {
     public void settleUnreadDivider() {
         int lastVisibleMessageIndex;
         if (canMarkVisibleAsRead() && this.host.isListReady() && (lastVisibleMessageIndex = this.host.getLastVisibleMessageIndex()) != Integer.MIN_VALUE) {
-            ArrayList<MessageObject> messages = this.host.getMessages();
-            int iMin = this.host.canScrollToNewer() ? Math.min(lastVisibleMessageIndex, messages.size() - 1) : messages.size() - 1;
-            if (iMin >= 0) {
-                FeedController feedController = FeedController.getInstance(this.currentAccount);
-                for (int i = 0; i <= iMin; i++) {
-                    MessageObject messageObject = messages.get(i);
-                    if (messageObject != null && !messageObject.isDateObject && messageObject.type != 6 && !messageObject.isSponsored()) {
-                        feedController.onPostSeen(messageObject.getDialogId(), messageObject.getRealId());
-                    }
-                }
-            }
             applyUnreadDivider(false);
             refreshAds();
             updatePagedownCounter();
@@ -386,6 +450,10 @@ public class FeedChatIntegration {
     }
 
     public void destroy() {
+        saveDrawerScrollPosition();
+        FeedController.getInstance(this.currentAccount).flushPendingRead();
+        AndroidUtilities.cancelRunOnUIThread(this.saveScrollRunnable);
+        AndroidUtilities.cancelRunOnUIThread(this.readStateRefreshRunnable);
         this.destroyed = true;
         resetMetadataRefresh();
         if (this.settleAtNewestScheduled) {
@@ -396,11 +464,14 @@ public class FeedChatIntegration {
     }
 
     public void saveDrawerScrollPosition() {
+        if (!this.initialScrollApplied || hasPendingInitialPosition() || this.host.isScrollAnimationRunning()) {
+            return;
+        }
         ScrollAnchor scrollAnchorCaptureScrollAnchor = this.host.captureScrollAnchor();
         if (scrollAnchorCaptureScrollAnchor == null || scrollAnchorCaptureScrollAnchor.row == null) {
             return;
         }
-        FeedController.getInstance(this.currentAccount).saveDrawerScrollPosition(scrollAnchorCaptureScrollAnchor.row.getDialogId(), scrollAnchorCaptureScrollAnchor.row.getRealId(), scrollAnchorCaptureScrollAnchor.offsetTop);
+        FeedController.getInstance(this.currentAccount).saveDrawerScrollPosition(scrollAnchorCaptureScrollAnchor.row.getDialogId(), scrollAnchorCaptureScrollAnchor.row.getRealId(), scrollAnchorCaptureScrollAnchor.offsetTop, scrollAnchorCaptureScrollAnchor.row.messageOwner.date);
     }
 
     public void onReadStateRefreshed() {
@@ -526,6 +597,23 @@ public class FeedChatIntegration {
         return true;
     }
 
+    public boolean onPageDownClicked(boolean skipUnread) {
+        if (!this.host.isListReady() || this.host.isScrollAnimationRunning()) return true;
+        if (skipUnread || this.pagedownJumpedToUnread) {
+            this.pagedownJumpedToUnread = false;
+            return false;
+        }
+        applyUnreadDivider(false);
+        int index = this.unreadDivider == null ? -1 : this.host.getMessages().indexOf(this.unreadDivider);
+        if (index < 0) return false;
+        // Reading visible posts moves the divider. Keep the second click aimed
+        // at the bottom instead of following that moving divider again.
+        this.pagedownJumpedToUnread = true;
+        this.host.scrollToMessageAnimated(index, AndroidUtilities.dp(48.0f));
+        this.host.invalidateVisiblePart();
+        return true;
+    }
+
     private static int findDividerInsertIndex(ArrayList<MessageObject> arrayList, int i) {
         MessageObject messageObject = arrayList.get(i);
         long groupId = messageObject.getGroupId();
@@ -549,11 +637,20 @@ public class FeedChatIntegration {
         }
         ScrollAnchor scrollAnchor = this.pendingInitialScrollRestore;
         if (scrollAnchor != null) {
-            this.host.restoreScrollAnchor(scrollAnchor);
             this.pendingInitialScrollRestore = null;
+            this.host.restoreScrollAnchor(scrollAnchor);
+            this.readyToMarkAsRead = true;
         }
         maybeScrollToDivider();
+        if (canMarkVisibleAsRead() && markOlderPostsRead() && !this.readStateRefreshScheduled) {
+            this.readStateRefreshScheduled = true;
+            AndroidUtilities.runOnUIThread(this.readStateRefreshRunnable, 100L);
+        }
         updatePagedownCounter();
+        if (this.initialScrollApplied && !hasPendingInitialPosition()) {
+            AndroidUtilities.cancelRunOnUIThread(this.saveScrollRunnable);
+            AndroidUtilities.runOnUIThread(this.saveScrollRunnable, 500L);
+        }
     }
 
     private void maybeScrollToDivider() {

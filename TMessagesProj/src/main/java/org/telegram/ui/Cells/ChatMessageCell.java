@@ -1578,6 +1578,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     private int viaWidth;
     private int viaNameWidth;
     private boolean viaOnly;
+    private boolean nameStatusOutsideLayout;
     private TypefaceSpan viaSpan1;
     private TypefaceSpan viaSpan2;
     private int availableTimeWidth;
@@ -2274,7 +2275,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     }
 
     private boolean checkNameStatusMotionEvent(MotionEvent event) {
-        if (!drawNameLayout || nameLayout == null || nameLayoutSelector == null || currentUser == null && currentChat == null || currentNameStatus == null || currentNameStatusDrawable == null) {
+        if (!drawNameLayout || nameLayout == null || nameStatusSelector == null || currentUser == null && currentChat == null || currentNameStatus == null || currentNameStatusDrawable == null || currentNameStatusDrawable.isEmpty()) {
             nameStatusPressed = false;
             return false;
         }
@@ -18992,6 +18993,14 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             }
             customBadgeDrawable = CustomBadgeController.getInstance()
                     .updateBadgeDrawable(customBadgeDrawable, badgeCheckId, currentAccount, this, attachedToWindow, true, getResourcesProvider());
+            // A custom badge can use the same document as the native author status.
+            // Keep one visible emoji and remove the duplicate's layout/click slot.
+            if (currentNameStatus instanceof Long
+                    && CustomBadgeController.isSameEmojiBadge(customBadgeDrawable, (Long) currentNameStatus)) {
+                currentNameStatus = null;
+                nameStatusSlug = null;
+            }
+            nameStatusOutsideLayout = currentNameStatus != null && !viaBot;
             int additionalWidth = dp(currentMessageObject.isSponsored() ? -24 : 0);
             CharSequence nameStringFinal = AndroidUtilities.removeDiacritics(currentNameString.replace('\n', ' ').replace('\u200F', ' '));
             try {
@@ -19005,6 +19014,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             }
             if (adminString != null) {
                 nameWidth -= dp(8);
+            }
+            if (customBadgeDrawable != null) {
+                nameWidth -= customBadgeDrawable.getIntrinsicWidth() + dp(4);
             }
             nameStringFinal = TextUtils.ellipsize(nameStringFinal, Theme.chat_namePaint, nameWidth + additionalWidth - (viaBot ? viaWidth : 0), TextUtils.TruncateAt.END);
 
@@ -20217,20 +20229,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     @Override
     protected void onDraw(Canvas canvas) {
         drawInternal(canvas);
-        // Only draw the badge when the author name header is actually visible;
-        // never fall back to a floating badge in the message corner.
-        if (customBadgeDrawable != null && drawNameLayout && nameLayout != null) {
-            int w = customBadgeDrawable.getIntrinsicWidth();
-            int h = customBadgeDrawable.getIntrinsicHeight();
-            // Skip past the emoji status reservation so the badge doesn't overlap it
-            // (viaNameWidth already includes this reservation when set).
-            float statusOffset = viaNameWidth <= 0 && currentNameStatus != null ? dp(4 + 12 + 4) : 0;
-            float badgeX = nameX + nameOffsetX + (viaNameWidth > 0 ? viaNameWidth : nameLayoutWidth + statusOffset) + dp(4);
-            float badgeY = nameY + nameLayout.getHeight() / 2f;
-            customBadgeDrawable.setBounds((int) badgeX, (int) (badgeY - h / 2f), (int) (badgeX + w), (int) (badgeY - h / 2f) + h);
-            CustomBadgeController.applyBadgeColor(customBadgeDrawable, Theme.chat_namePaint.getColor());
-            customBadgeDrawable.draw(canvas);
-        }
+
     }
     public void drawInternal(Canvas canvas) {
         if (currentMessageObject == null) {
@@ -22318,6 +22317,20 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             oldAlpha = Theme.chat_namePaint.getAlpha();
             Theme.chat_namePaint.setAlpha((int) (oldAlpha * nameAlpha));
             nameLayout.draw(canvas);
+            if (customBadgeDrawable != null && nameLayout.getLineCount() > 0) {
+                // Use the same translated canvas as the name, including avatar and
+                // transition offsets. viaNameWidth is also used by forwarded headers
+                // and must not determine the position of the author's badge.
+                int w = customBadgeDrawable.getIntrinsicWidth();
+                int h = customBadgeDrawable.getIntrinsicHeight();
+                float statusOffset = nameStatusOutsideLayout ? dp(4 + 12 + 4) : 0;
+                int badgeLeft = (int) Math.ceil(nameLayout.getLineRight(0) + statusOffset + dp(4));
+                int badgeTop = (nameLayout.getLineTop(0) + nameLayout.getLineBottom(0) - h) / 2;
+                customBadgeDrawable.setBounds(badgeLeft, badgeTop, badgeLeft + w, badgeTop + h);
+                CustomBadgeController.applyBadgeColor(customBadgeDrawable, Theme.chat_namePaint.getColor());
+                customBadgeDrawable.setAlpha((int) (oldAlpha * nameAlpha));
+                customBadgeDrawable.draw(canvas);
+            }
             Theme.chat_namePaint.setAlpha(oldAlpha);
             canvas.restore();
 

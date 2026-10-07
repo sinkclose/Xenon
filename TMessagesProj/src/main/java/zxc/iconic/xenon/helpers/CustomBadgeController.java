@@ -293,6 +293,16 @@ public class CustomBadgeController {
         }
     }
 
+    public static boolean isSameEmojiBadge(Drawable badge, long documentId) {
+        if (badge instanceof BadgeEmojiDrawable) {
+            return ((BadgeEmojiDrawable) badge).getDocumentId() == documentId;
+        }
+        if (badge instanceof AnimatedEmojiWithStarsDrawable) {
+            return ((AnimatedEmojiWithStarsDrawable) badge).emoji.getDocumentId() == documentId;
+        }
+        return false;
+    }
+
     public static void applyBadgeColor(Drawable badge, int color) {
         if (badge instanceof BadgeEmojiDrawable || badge instanceof AnimatedEmojiWithStarsDrawable) {
             badge.setColorFilter(new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN));

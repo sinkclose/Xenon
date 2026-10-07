@@ -46,6 +46,7 @@ import android.view.MotionEvent;
 import android.view.RoundedCorner;
 import android.view.VelocityTracker;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.Window;
@@ -769,8 +770,8 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
 
     private boolean maybeStartTracking;
     protected boolean startedTracking;
-    private int startedTrackingX;
-    private int startedTrackingY;
+    private float startedTrackingX;
+    private float startedTrackingY;
     protected boolean animationInProgress;
     private VelocityTracker velocityTracker;
     private View layoutToIgnore;
@@ -1111,6 +1112,11 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
     @Keep
     public void setInnerTranslationX(float value) {
         innerTranslationX = value;
+        if (startedTracking && !predictiveBackInProgress && !m3PredictiveActive) {
+            // Keep the previous screen's parallax in sync during dragging and settling.
+            float width = containerView.getMeasuredWidth();
+            containerViewBack.setTranslationX(-0.25f * Math.max(0f, width - value));
+        }
         invalidate();
 
         if (fragmentsStack.size() >= 2 && containerView.getMeasuredWidth() > 0) {
@@ -1571,6 +1577,9 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
         BaseFragment currentFragment = fragmentsStack.get(fragmentsStack.size() - 1);
         currentFragment.prepareFragmentToSlide(true, true);
         lastFragment.prepareFragmentToSlide(false, true);
+        if (!predictiveBackInProgress && !m3PredictiveActive) {
+            containerViewBack.setTranslationX(-0.25f * containerView.getMeasuredWidth());
+        }
     }
 
     @Override
@@ -1589,8 +1598,8 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                     }
                     startedTrackingPointerId = ev.getPointerId(0);
                     maybeStartTracking = true;
-                    startedTrackingX = (int) ev.getX();
-                    startedTrackingY = (int) ev.getY();
+                    startedTrackingX = ev.getX();
+                    startedTrackingY = ev.getY();
                     if (velocityTracker != null) {
                         velocityTracker.clear();
                     }
@@ -1598,18 +1607,22 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                     if (velocityTracker == null) {
                         velocityTracker = VelocityTracker.obtain();
                     }
-                    int dx = Math.max(0, (int) (ev.getX() - startedTrackingX));
-                    int dy = Math.abs((int) ev.getY() - startedTrackingY);
+                    float dx = Math.max(0f, ev.getX() - startedTrackingX);
+                    float dy = Math.abs(ev.getY() - startedTrackingY);
+                    int touchSlop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
                     velocityTracker.addMovement(ev);
-                    if (!transitionAnimationInProgress && !inPreviewMode && maybeStartTracking && !startedTracking && dx >= AndroidUtilities.getPixelsInCM(0.4f, true) && Math.abs(dx) / 3 > dy) {
+                    if (!transitionAnimationInProgress && !inPreviewMode && maybeStartTracking && !startedTracking && dx > touchSlop && dx / 3 > dy) {
                         BaseFragment currentFragment = fragmentsStack.get(fragmentsStack.size() - 1);
                         if (currentFragment.canBeginSlide() && findScrollingChild(this, ev.getX(), ev.getY()) == null) {
-                            startedTrackingX = (int) ev.getX();
+                            // Consume only the recognition slop, retaining this event's movement.
+                            startedTrackingX += touchSlop;
+                            dx = Math.max(0f, ev.getX() - startedTrackingX);
                             prepareForMoving();
                         } else {
                             maybeStartTracking = false;
                         }
-                    } else if (startedTracking) {
+                    }
+                    if (startedTracking) {
                         if (!beginTrackingSent) {
                             if (parentActivity.getCurrentFocus() != null) {
                                 AndroidUtilities.hideKeyboard(parentActivity.getCurrentFocus());

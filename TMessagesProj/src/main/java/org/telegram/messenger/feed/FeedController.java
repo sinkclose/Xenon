@@ -1,5 +1,6 @@
 package org.telegram.messenger.feed;
 
+import android.content.SharedPreferences;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
 import androidx.collection.LongSparseArray;
@@ -49,6 +50,9 @@ public class FeedController implements NotificationCenter.NotificationCenterDele
     private final FeedStore store;
     private int uiActiveClients;
     private final FeedUnreadTracker unreadTracker;
+    private boolean unreadCountUpdateScheduled;
+    private int lastUnreadCount = -1;
+    private final Runnable unreadCountUpdateRunnable = this::dispatchUnreadCount;
 
     public interface ChannelsCallback {
         void onChannels(ArrayList<TLRPC.Chat> chats, int count, boolean failed);
@@ -83,11 +87,13 @@ public class FeedController implements NotificationCenter.NotificationCenterDele
         public final long dialogId;
         public final int messageId;
         public final int offsetTop;
+        public final int date;
 
-        private SavedScrollPosition(long dialogId, int messageId, int offsetTop) {
+        private SavedScrollPosition(long dialogId, int messageId, int offsetTop, int date) {
             this.dialogId = dialogId;
             this.messageId = messageId;
             this.offsetTop = offsetTop;
+            this.date = date;
         }
     }
 
@@ -99,6 +105,13 @@ public class FeedController implements NotificationCenter.NotificationCenterDele
         this.closedRefreshGuid = ConnectionsManager.generateClassGuid();
         this.closedRefreshRunnable = this::runClosedRefresh;
         this.currentAccount = account;
+        SharedPreferences preferences = MessagesController.getMainSettings(account);
+        long savedDialogId = preferences.getLong("feed_scroll_dialog", 0);
+        int savedMessageId = preferences.getInt("feed_scroll_message", 0);
+        if (savedDialogId != 0 && savedMessageId > 0) {
+            this.drawerScrollPosition = new SavedScrollPosition(savedDialogId, savedMessageId,
+                    preferences.getInt("feed_scroll_offset", 0), preferences.getInt("feed_scroll_date", 0));
+        }
         this.unreadTracker = new FeedUnreadTracker(account, feedStore.getMessages());
         this.loader = new FeedTimelineLoader(account);
         this.backfill = new FeedBackfillCoordinator(account, this::onBackfillRoundFinished);
@@ -112,11 +125,16 @@ public class FeedController implements NotificationCenter.NotificationCenterDele
         nc.addObserver(this, NotificationCenter.messagesDeleted);
         nc.addObserver(this, NotificationCenter.historyCleared);
         nc.addObserver(this, NotificationCenter.didReceiveNewMessages);
+        nc.addObserver(this, NotificationCenter.updateInterfaces);
+        nc.addObserver(this, NotificationCenter.dialogsNeedReload);
         FeedChannelRegistry.getInstance(account).addListener(this::onFeedChannelsChanged);
     }
 
     private void onFeedChannelsChanged(HashSet<Long> added, HashSet<Long> removed) {
         this.loader.invalidateChannelCache();
+        if (!added.isEmpty() && this.store.isEmpty()) {
+            this.store.setEndReached(false);
+        }
         for (Long id : removed) {
             deleteHistory(id, Integer.MAX_VALUE);
         }
@@ -204,8 +222,8 @@ public class FeedController implements NotificationCenter.NotificationCenterDele
     public void clear() {
         this.sessionGeneration++;
         this.unreadTracker.clear();
-        this.drawerScrollPosition = null;
         this.store.clear();
+        scheduleUnreadCountUpdate();
         this.loading = false;
         this.loadingNewer = false;
         this.olderPagingBoundsDirty = false;
@@ -251,11 +269,31 @@ public class FeedController implements NotificationCenter.NotificationCenterDele
         this.store.trim(getInactiveCacheCap());
     }
 
+    public static boolean isChannelExcluded(int account, long dialogId) {
+        return MessagesController.getMainSettings(account).getStringSet("feed_excluded_channels", new HashSet<>())
+                .contains(Long.toString(dialogId));
+    }
+
+    public void setChannelExcluded(long dialogId, boolean excluded) {
+        HashSet<String> ids = new HashSet<>(MessagesController.getMainSettings(currentAccount)
+                .getStringSet("feed_excluded_channels", new HashSet<>()));
+        boolean changed = excluded ? ids.add(Long.toString(dialogId)) : ids.remove(Long.toString(dialogId));
+        if (!changed) return;
+        MessagesController.getMainSettings(currentAccount).edit().putStringSet("feed_excluded_channels", ids).apply();
+        this.store.setHidden(dialogId, excluded);
+        this.loader.invalidateChannelCache();
+        loadChannels(true, null);
+        scheduleUnreadCountUpdate();
+        NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.feedNeedReload, true);
+    }
+
     public boolean isIncludedChannelPost(long dialogId) {
         if (!DialogObject.isChatDialog(dialogId)) {
             return false;
         }
-        return isEligibleChannel(MessagesController.getInstance(this.currentAccount).getChat(-dialogId));
+        TLRPC.Dialog dialog = MessagesController.getInstance(this.currentAccount).dialogs_dict.get(dialogId);
+        return (dialog == null || dialog.folder_id != 1) && !isChannelExcluded(currentAccount, dialogId)
+                && isEligibleChannel(MessagesController.getInstance(this.currentAccount).getChat(-dialogId));
     }
 
     public static boolean isEligibleChannel(TLRPC.Chat chat) {
@@ -269,19 +307,50 @@ public class FeedController implements NotificationCenter.NotificationCenterDele
         return v;
     }
 
-    public int getUnreadCount() {
-        if (ExtraConfig.getShowFeedUnreadCounter()) {
-            return this.unreadTracker.getUnreadCount();
+    public void ensureUnreadCountLoaded() {
+        if (this.store.isEmpty() && !this.store.isEndReached() && !isLoading()) {
+            loadInitial(this.closedRefreshGuid, 0);
         }
-        return 0;
+    }
+
+    public int getUnreadCount() {
+        ArrayList<MessageObject> visibleMessages = this.store.getVisibleMessages();
+        return this.unreadTracker.countUnreadBelow(visibleMessages, visibleMessages.size());
+    }
+
+    private void scheduleUnreadCountUpdate() {
+        if (!this.unreadCountUpdateScheduled) {
+            this.unreadCountUpdateScheduled = true;
+            AndroidUtilities.runOnUIThread(this.unreadCountUpdateRunnable);
+        }
+    }
+
+    private void dispatchUnreadCount() {
+        this.unreadCountUpdateScheduled = false;
+        int count = getUnreadCount();
+        if (count != this.lastUnreadCount) {
+            this.lastUnreadCount = count;
+            NotificationCenter.getInstance(this.currentAccount)
+                    .postNotificationName(NotificationCenter.feedUnreadCountChanged);
+        }
+    }
+
+    public boolean isUnread(MessageObject message) {
+        return this.unreadTracker.isUnread(message);
     }
 
     public void onPostSeen(long dialogId, int maxReadId) {
         this.unreadTracker.onPostSeen(dialogId, maxReadId);
+        scheduleUnreadCountUpdate();
+    }
+
+    public void flushPendingRead() {
+        this.unreadTracker.flushPendingRead();
     }
 
     public void markAllRead() {
         this.unreadTracker.markAllRead();
+        scheduleUnreadCountUpdate();
     }
 
     public int findFirstUnreadIndex(ArrayList<MessageObject> messages) {
@@ -292,11 +361,22 @@ public class FeedController implements NotificationCenter.NotificationCenterDele
         return this.unreadTracker.countUnreadBelow(messages, fromIndex);
     }
 
-    public void saveDrawerScrollPosition(long dialogId, int messageId, int offsetTop) {
+    public void saveDrawerScrollPosition(long dialogId, int messageId, int offsetTop, int date) {
         if (dialogId == 0 || messageId <= 0) {
             return;
         }
-        this.drawerScrollPosition = new SavedScrollPosition(dialogId, messageId, offsetTop);
+        SavedScrollPosition previous = this.drawerScrollPosition;
+        if (previous != null && previous.dialogId == dialogId && previous.messageId == messageId
+                && previous.offsetTop == offsetTop && previous.date == date) {
+            return;
+        }
+        this.drawerScrollPosition = new SavedScrollPosition(dialogId, messageId, offsetTop, date);
+        MessagesController.getMainSettings(this.currentAccount).edit()
+                .putLong("feed_scroll_dialog", dialogId)
+                .putInt("feed_scroll_message", messageId)
+                .putInt("feed_scroll_offset", offsetTop)
+                .putInt("feed_scroll_date", date)
+                .apply();
     }
 
     public SavedScrollPosition getDrawerScrollPosition() {
@@ -437,6 +517,7 @@ public class FeedController implements NotificationCenter.NotificationCenterDele
             includedIds.add(enumeration.included.get(i).dialogId);
         }
         this.store.applyIncludedDialogs(includedIds);
+        scheduleUnreadCountUpdate();
         boolean truncated = windowPage != null && windowPage.truncated;
         if (windowPage != null && !truncated && !created.isEmpty()) {
             MessagesController controller = MessagesController.getInstance(this.currentAccount);
@@ -631,6 +712,7 @@ public class FeedController implements NotificationCenter.NotificationCenterDele
     }
 
     private void postFeedCount(int guid) {
+        scheduleUnreadCountUpdate();
         NotificationCenter.getInstance(this.currentAccount).postNotificationNameOnUIThread(NotificationCenter.hashtagSearchUpdated,
                 guid, this.store.getCount(), this.store.isEndReached(), 0, 0, 0);
     }
@@ -658,9 +740,14 @@ public class FeedController implements NotificationCenter.NotificationCenterDele
         if (enumeration.failed) {
             return;
         }
+        scheduleUnreadCountUpdate();
         this.hasChannels = enumeration.hasChannels;
         this.hasIncludedChannels = !enumeration.included.isEmpty();
-        this.cachedIncludedChannelCount = enumeration.included.size();
+        int includedCount = enumeration.included.size();
+        if (this.cachedIncludedChannelCount != includedCount) {
+            this.cachedIncludedChannelCount = includedCount;
+            NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.feedChannelsChanged);
+        }
         for (int i = 0; i < enumeration.included.size(); i++) {
             FeedTimelineLoader.ChannelSnapshot snapshot = enumeration.included.get(i);
             int readInboxMax = snapshot.readInboxMax;
@@ -888,6 +975,7 @@ public class FeedController implements NotificationCenter.NotificationCenterDele
     }
 
     private void onFeedRowsRemoved() {
+        scheduleUnreadCountUpdate();
         if (this.loading) {
             this.olderPagingBoundsDirty = true;
         }
@@ -982,7 +1070,9 @@ public class FeedController implements NotificationCenter.NotificationCenterDele
         if (account != this.currentAccount) {
             return;
         }
-        if (id == NotificationCenter.messagesDidLoad) {
+        if (id == NotificationCenter.updateInterfaces || id == NotificationCenter.dialogsNeedReload) {
+            scheduleUnreadCountUpdate();
+        } else if (id == NotificationCenter.messagesDidLoad) {
             this.backfill.onMessagesDidLoad(args);
         } else if (id == NotificationCenter.loadingMessagesFailed) {
             this.backfill.onLoadingMessagesFailed(args);
@@ -1007,6 +1097,11 @@ public class FeedController implements NotificationCenter.NotificationCenterDele
                 deleteHistory(dialogId, ((Integer) args[1]));
             }
         } else if (id == NotificationCenter.didReceiveNewMessages) {
+            if (!((Boolean) args[2]) && this.store.isEmpty() && isIncludedChannelPost(((Long) args[0]))) {
+                this.store.setEndReached(false);
+                if (!isUiActive()) ensureUnreadCountLoaded();
+                return;
+            }
             if (isUiActive() || ((Boolean) args[2]) || this.store.isEmpty()
                     || this.store.getNewestCursor().isEmpty()
                     || !isIncludedChannelPost(((Long) args[0]))) {

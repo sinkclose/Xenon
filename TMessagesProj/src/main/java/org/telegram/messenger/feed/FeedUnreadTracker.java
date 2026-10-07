@@ -40,16 +40,26 @@ final class FeedUnreadTracker {
     }
 
     public boolean isUnread(MessageObject messageObject) {
-        return messageObject != null && !messageObject.isSponsored()
+        return FeedMessageUtils.isPostRow(messageObject) && !messageObject.isOut()
                 && messageObject.getRealId() > getEffectiveReadInboxMax(messageObject.getDialogId());
     }
 
     private int getEffectiveReadInboxMax(long dialogId) {
-        return Math.max(this.readInboxMaxByDialog.get(dialogId, 0), this.pendingMaxReadId.get(dialogId, 0));
+        return Math.max(getReadInboxMax(dialogId), this.pendingMaxReadId.get(dialogId, 0));
+    }
+
+    private int getReadInboxMax(long dialogId) {
+        MessagesController controller = MessagesController.getInstance(this.currentAccount);
+        TLRPC.Dialog dialog = controller.dialogs_dict.get(dialogId);
+        int readMax = controller.dialogs_read_inbox_max.getOrDefault(dialogId, 0);
+        if (dialog != null) {
+            readMax = Math.max(readMax, dialog.read_inbox_max_id);
+        }
+        return Math.max(readMax, this.readInboxMaxByDialog.get(dialogId, 0));
     }
 
     public int findFirstUnreadIndex(ArrayList<MessageObject> messages) {
-        if (messages != null && !this.readInboxMaxByDialog.isEmpty()) {
+        if (messages != null) {
             for (int i = messages.size() - 1; i >= 0; i--) {
                 if (isUnread(messages.get(i))) {
                     return i;
@@ -60,7 +70,7 @@ final class FeedUnreadTracker {
     }
 
     public int countUnreadBelow(ArrayList<MessageObject> messages, int fromIndex) {
-        if (messages == null || this.readInboxMaxByDialog.isEmpty()) {
+        if (messages == null) {
             return 0;
         }
         int limit = Math.min(fromIndex, messages.size());
@@ -90,6 +100,11 @@ final class FeedUnreadTracker {
         }
     }
 
+    public void flushPendingRead() {
+        AndroidUtilities.cancelRunOnUIThread(this.flushRunnable);
+        flush();
+    }
+
     private void flush() {
         this.flushScheduled = false;
         if (this.pendingMaxReadId.isEmpty()) {
@@ -105,7 +120,7 @@ final class FeedUnreadTracker {
                 long dialogId = pending.keyAt(i);
                 Integer maxReadId = this.pendingMaxReadId.valueAt(i);
                 int maxId = maxReadId;
-                int prevRead = this.readInboxMaxByDialog.get(dialogId, 0);
+                int prevRead = getReadInboxMax(dialogId);
                 if (maxId > prevRead) {
                     this.readInboxMaxByDialog.put(dialogId, maxReadId);
                     controller.markDialogAsRead(dialogId, maxId, 0, currentTime, false, 0L,
@@ -123,7 +138,8 @@ final class FeedUnreadTracker {
         int count = 0;
         for (int i = 0; i < this.timeline.size(); i++) {
             MessageObject messageObject = this.timeline.get(i);
-            if (messageObject != null && messageObject.getDialogId() == dialogId) {
+            if (FeedMessageUtils.isPostRow(messageObject) && !messageObject.isOut()
+                    && messageObject.getDialogId() == dialogId) {
                 int realId = messageObject.getRealId();
                 if (realId > prevReadId && realId <= maxReadId) {
                     count++;
@@ -152,7 +168,7 @@ final class FeedUnreadTracker {
             if (messageObject != null) {
                 long dialogId = messageObject.getDialogId();
                 TLRPC.Dialog dialog = controller.dialogs_dict.get(dialogId);
-                if (dialog == null || dialog.folder_id != 1) {
+                if ((dialog == null || dialog.folder_id != 1) && !FeedController.isChannelExcluded(currentAccount, dialogId)) {
                     dialogsToClear.add(dialogId);
                     int realId = messageObject.getRealId();
                     if (realId > this.readInboxMaxByDialog.get(dialogId, 0)) {
@@ -189,6 +205,7 @@ final class FeedUnreadTracker {
             if (dialog != null && dialog.unread_count > 0) {
                 long dialogId = dialog.id;
                 if (DialogObject.isChatDialog(dialogId) && dialog.folder_id != 1
+                        && !FeedController.isChannelExcluded(currentAccount, dialogId)
                         && FeedController.isEligibleChannel(controller.getChat(-dialogId))) {
                     result.add(dialog);
                 }

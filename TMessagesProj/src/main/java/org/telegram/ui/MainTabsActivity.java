@@ -376,6 +376,16 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
             return;
         }
 
+        GlassTabView feedTab = getTabAt(MainTabsManager.getPosition(MainTabsManager.TabType.FEED));
+        if (feedTab != null) {
+            org.telegram.messenger.feed.FeedController feedController = org.telegram.messenger.feed.FeedController.getInstance(currentAccount);
+            feedController.ensureUnreadCountLoaded();
+            int feedUnreadCount = feedController.getUnreadCount();
+            feedTab.setCounter(feedUnreadCount > 0 ? LocaleController.formatNumber(feedUnreadCount, ',') : null,
+                    false, animated);
+            feedTab.invalidate();
+            tabsView.invalidate();
+        }
         final int unreadCount = MessagesStorage.getInstance(currentAccount).getMainUnreadCount();
         int chatsPosition = MainTabsManager.getPosition(MainTabsManager.TabType.CHATS);
         GlassTabView chatsTab = getTabAt(chatsPosition);
@@ -977,7 +987,9 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
-        if (id == NotificationCenter.notificationsCountUpdated || id == NotificationCenter.updateInterfaces) {
+        if (id == NotificationCenter.notificationsCountUpdated || id == NotificationCenter.updateInterfaces
+                || id == NotificationCenter.dialogsNeedReload || id == NotificationCenter.feedNeedReload
+                || id == NotificationCenter.feedUnreadCountChanged) {
             checkUnreadCount(fragmentView != null && fragmentView.isAttachedToWindow());
         } else if (id == NotificationCenter.appUpdateLoading) {
             if (updateLayout != null) {
@@ -1036,6 +1048,9 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
             .add(NotificationCenter.fileLoadFailed)
             .add(NotificationCenter.notificationsCountUpdated)
             .add(NotificationCenter.updateInterfaces)
+            .add(NotificationCenter.dialogsNeedReload)
+            .add(NotificationCenter.feedNeedReload)
+            .add(NotificationCenter.feedUnreadCountChanged)
             .add(NotificationCenter.callTabsVisibleToggled)
             .add(NotificationCenter.mainUserInfoChanged)
             .add(NotificationCenter.contactsPermissionBadgeCheck)
@@ -1126,6 +1141,16 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     /* * */
 
     private class MainTabsActivityControllerImpl implements MainTabsActivityController {
+        @Override
+        public void invalidateTabsBackground() {
+            if (tabsView != null) {
+                tabsView.invalidate();
+            }
+            if (contentView != null) {
+                contentView.invalidate();
+            }
+        }
+
         @Override
         public void setTabsVisible(boolean visible) {
             animatorTabsVisible.setValue(visible, true);

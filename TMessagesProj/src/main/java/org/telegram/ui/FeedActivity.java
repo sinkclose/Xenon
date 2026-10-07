@@ -1,11 +1,22 @@
 package org.telegram.ui;
 
 import android.content.Context;
+import android.content.SharedPreferences;
+import org.telegram.messenger.ApplicationLoader;
+import android.graphics.Canvas;
+import android.graphics.RectF;
+import android.os.Build;
+import android.view.ViewTreeObserver;
+import org.telegram.ui.Components.chat.ViewPositionWatcher;
+import org.telegram.ui.Components.CircularProgressDrawable;
+import org.telegram.ui.Components.blur3.RenderNodeWithHash;
+import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode;
 import android.os.Bundle;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import androidx.core.graphics.Insets;
 import androidx.core.view.OnApplyWindowInsetsListener;
 import androidx.core.view.ViewCompat;
@@ -28,8 +39,56 @@ import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.ChatAvatarContainer;
 import org.telegram.ui.Components.LayoutHelper;
 
-public class FeedActivity extends BaseFragment implements NotificationCenter.NotificationCenterDelegate {
+public class FeedActivity extends BaseFragment implements NotificationCenter.NotificationCenterDelegate, MainTabsActivity.TabFragmentDelegate {
     private ChatActivityContainer chatContainer;
+    private BlurredBackgroundSourceRenderNode tabsBackgroundSource;
+    private final RectF chatPositionForTabs = new RectF();
+    private ViewTreeObserver.OnPreDrawListener initialPositionListener;
+    private final SharedPreferences.OnSharedPreferenceChangeListener headerSettingsListener = (preferences, key) -> {
+        if ("material3ChatHeaders".equals(key) || "centerChatHeader".equals(key)
+                || "biggerAvatar".equals(key) || "avatarPlacement".equals(key)) {
+            refreshFeedHeader();
+        }
+    };
+
+    private void refreshFeedHeader() {
+        if (chatContainer == null || chatContainer.chatActivity.avatarContainer == null) return;
+        ActionBarMenu menu = chatContainer.chatActivity.getActionBar().createMenu();
+        if (menu.getItem(78) == null) menu.addItem(78, 0, chatContainer.chatActivity.themeDelegate);
+        chatContainer.chatActivity.refreshFeedHeaderConfiguration(menu.getItem(78));
+        chatContainer.chatActivity.avatarContainer.getAvatarImageView().setOnClickListener(v -> presentFragment(new FeedSettingsActivity()));
+        invalidateTabsBackground();
+    }
+
+    @Override
+    public BlurredBackgroundSourceRenderNode getGlassSource() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || fragmentView == null || chatContainer == null
+                || chatContainer.getAlpha() == 0f || chatContainer.chatActivity.contentView == null) return null;
+        if (tabsBackgroundSource == null) {
+            tabsBackgroundSource = new BlurredBackgroundSourceRenderNode(null);
+            tabsBackgroundSource.setupRenderer(new RenderNodeWithHash.Renderer() {
+                @Override
+                public void renderNodeUpdateDisplayList(Canvas canvas) {
+                    canvas.drawColor(getThemedColor(Theme.key_windowBackgroundWhite));
+                    ChatActivity chat = chatContainer.chatActivity;
+                    if (ViewPositionWatcher.computeRectInParent(chat.contentView, fragmentView, chatPositionForTabs)) {
+                        canvas.save();
+                        canvas.translate(chatPositionForTabs.left, chatPositionForTabs.top);
+                        chat.drawFeedForTabs(canvas);
+                        canvas.restore();
+                    }
+                }
+            });
+        }
+        tabsBackgroundSource.setSize(fragmentView.getWidth(), fragmentView.getHeight());
+        tabsBackgroundSource.updateDisplayListIfNeeded();
+        return tabsBackgroundSource;
+    }
+
+    private void invalidateTabsBackground() {
+        if (fragmentView != null) fragmentView.invalidate();
+        if (mainTabsActivityController != null) mainTabsActivityController.invalidateTabsBackground();
+    }
     private boolean embeddedChatCreated;
     private boolean hasMainTabs;
     private MainTabsActivityController mainTabsActivityController;
@@ -89,6 +148,9 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
         this.viewportFullyVisible = !z;
         NotificationCenter.getInstance(this.currentAccount).addObserver(this, NotificationCenter.didReceiveNewMessages);
         NotificationCenter.getInstance(this.currentAccount).addObserver(this, NotificationCenter.feedNeedReload);
+        NotificationCenter.getInstance(this.currentAccount).addObserver(this, NotificationCenter.feedChannelsChanged);
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Context.MODE_PRIVATE)
+                .registerOnSharedPreferenceChangeListener(headerSettingsListener);
         return super.onFragmentCreate();
     }
 
@@ -107,6 +169,9 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
         Bulletin.removeDelegate(this);
         NotificationCenter.getInstance(this.currentAccount).removeObserver(this, NotificationCenter.didReceiveNewMessages);
         NotificationCenter.getInstance(this.currentAccount).removeObserver(this, NotificationCenter.feedNeedReload);
+        NotificationCenter.getInstance(this.currentAccount).removeObserver(this, NotificationCenter.feedChannelsChanged);
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Context.MODE_PRIVATE)
+                .unregisterOnSharedPreferenceChangeListener(headerSettingsListener);
         super.onFragmentDestroy();
     }
 
@@ -114,16 +179,22 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
         ChatActivity chatActivity;
         ChatActivityContainer chatActivityContainer = this.chatContainer;
         if (chatActivityContainer != null && (chatActivity = chatActivityContainer.chatActivity) != null) {
-            if (!this.hasMainTabs && this.embeddedChatCreated) {
+            if (initialPositionListener != null && chatActivityContainer.getViewTreeObserver().isAlive()) {
+                chatActivityContainer.getViewTreeObserver().removeOnPreDrawListener(initialPositionListener);
+                initialPositionListener = null;
+            }
+            if (this.embeddedChatCreated) {
                 chatActivity.saveFeedScrollPosition();
             }
             this.chatContainer.chatActivity.setFeedChannelsChangedCallback(null);
+            this.chatContainer.chatActivity.setFeedContentChangedCallback(null);
             if (this.embeddedChatCreated) {
                 this.chatContainer.chatActivity.onFragmentDestroy();
             }
         }
         this.embeddedChatCreated = false;
         this.chatContainer = null;
+        this.tabsBackgroundSource = null;
     }
 
     @Override // org.telegram.ui.ActionBar.BaseFragment
@@ -151,6 +222,10 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
             AndroidUtilities.runOnUIThread(this.loadNewPosts, 1000L);
             return;
         }
+        if (i == NotificationCenter.feedChannelsChanged) {
+            setFeedSubtitle(FeedController.getInstance(currentAccount).getIncludedChannelCount());
+            return;
+        }
         if (i == NotificationCenter.feedNeedReload) {
             ChatActivityContainer chatActivityContainer = this.chatContainer;
             if (chatActivityContainer != null && chatActivityContainer.chatActivity != null) {
@@ -169,7 +244,16 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
         this.lastWindowInsets = null;
         this.actionBar.setAddToContainer(false);
         this.actionBar.setVisibility(8);
-        FrameLayout frameLayout = new FrameLayout(context);
+        FrameLayout frameLayout = new FrameLayout(context) {
+            @Override
+            protected void onDraw(Canvas canvas) {
+                super.onDraw(canvas);
+                if (chatContainer != null && chatContainer.getAlpha() == 0f) {
+                    chatContainer.chatActivity.drawFeedWallpaper(canvas, getWidth(), getHeight());
+                }
+            }
+        };
+        frameLayout.setWillNotDraw(false);
         this.fragmentView = frameLayout;
         frameLayout.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
         if (this.hasMainTabs) {
@@ -223,6 +307,30 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
         };
         this.chatContainer = chatActivityContainer;
         ChatActivity chatActivity = chatActivityContainer.chatActivity;
+        chatActivity.setFeedContentChangedCallback(this::invalidateTabsBackground);
+        if (FeedController.getInstance(currentAccount).getDrawerScrollPosition() != null) {
+            // Keep the initial default position out of the first displayed frame.
+            chatActivityContainer.setAlpha(0f);
+            ImageView initialProgress = new ImageView(context);
+            initialProgress.setImageDrawable(new CircularProgressDrawable(
+                    AndroidUtilities.dp(40), AndroidUtilities.dp(2.25f), getThemedColor(Theme.key_progressCircle)));
+            frameLayout2.addView(initialProgress, LayoutHelper.createFrame(48, 48, android.view.Gravity.CENTER));
+            initialPositionListener = new ViewTreeObserver.OnPreDrawListener() {
+                @Override
+                public boolean onPreDraw() {
+                    if (chatActivity.isFeedInitialPositionReady() || FeedController.getInstance(currentAccount).getStore().isEndReached()
+                            && FeedController.getInstance(currentAccount).getStore().getVisibleCount() == 0) {
+                        chatActivityContainer.getViewTreeObserver().removeOnPreDrawListener(this);
+                        initialPositionListener = null;
+                        chatActivityContainer.setAlpha(1f);
+                        frameLayout2.removeView(initialProgress);
+                        invalidateTabsBackground();
+                    }
+                    return true;
+                }
+            };
+            chatActivityContainer.getViewTreeObserver().addOnPreDrawListener(initialPositionListener);
+        }
         chatActivity.isInsideContainer = false;
         chatActivity.setFeedChannelsChangedCallback(new Runnable() { // from class: org.telegram.messenger.feed.ui.FeedActivity$$ExternalSyntheticLambda3
             @Override // java.lang.Runnable
@@ -288,6 +396,7 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
         ChatActivityContainer chatActivityContainer2 = this.chatContainer;
         if (chatActivityContainer2 != null) {
             chatActivityContainer2.onResume();
+            refreshFeedHeader();
             updateFeedViewportActive(this.viewportFullyVisible);
         }
         if (!this.uiResumedHeld) {
@@ -396,6 +505,11 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
         if (actionBarMenuCreateMenu.getItem(76) == null) {
             actionBarMenuCreateMenu.addItem(76, R.drawable.msg_markread, this.chatContainer.chatActivity.themeDelegate).setContentDescription(LocaleController.getString(R.string.FeedMarkAllRead));
         }
+        if (actionBarMenuCreateMenu.getItem(77) == null) {
+            actionBarMenuCreateMenu.addItem(77, R.drawable.msg_settings, this.chatContainer.chatActivity.themeDelegate)
+                    .setContentDescription(LocaleController.getString(R.string.Settings));
+        }
+        refreshFeedHeader();
         if (this.hasMainTabs) {
             applyMainTabsHeaderLayout();
         }
@@ -416,6 +530,10 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
                         return;
                     }
                     FeedActivity.this.finishFragment();
+                    return;
+                }
+                if (i == 77 || i == 78) {
+                    FeedActivity.this.presentFragment(new FeedSettingsActivity());
                     return;
                 }
                 if (i == 76) {

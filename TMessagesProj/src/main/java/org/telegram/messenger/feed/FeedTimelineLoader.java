@@ -163,7 +163,9 @@ final class FeedTimelineLoader {
         enumeration.channels.addAll(channelSet.channels);
         for (int i = 0; i < channelSet.includedRows.size(); i++) {
             long[] row = channelSet.includedRows.get(i);
-            enumeration.included.add(new ChannelSnapshot(row[0], (int) row[1], (int) row[2], (int) row[3]));
+            if (!FeedController.isChannelExcluded(this.currentAccount, row[0])) {
+                enumeration.included.add(new ChannelSnapshot(row[0], (int) row[1], (int) row[2], (int) row[3]));
+            }
         }
         return enumeration;
     }

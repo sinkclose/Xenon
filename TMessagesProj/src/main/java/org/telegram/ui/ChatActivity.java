@@ -448,6 +448,7 @@ public class ChatActivity extends BaseFragment implements
     private final @NonNull BlurredBackgroundDrawableViewFactory navbarContentDrawableFactory;
 
     private final @NonNull BlurredBackgroundSourceWrapped navbarContentSourceWallpaperSharp;
+    private final @Nullable BlurredBackgroundSourceRenderNode fadeWallpaperSource;
     private final @NonNull BlurredBackgroundDrawableViewFactory dimWallpaperDrawableFactory;
 
     private final @Nullable BlurredBackgroundSourceRenderNode fadeBlurSource;
@@ -2914,7 +2915,10 @@ public class ChatActivity extends BaseFragment implements
 
         navbarContentSourceWallpaper = new BlurredBackgroundSourceWrapped();
         navbarContentSourceWallpaperSharp = new BlurredBackgroundSourceWrapped();
-        dimWallpaperDrawableFactory = new BlurredBackgroundDrawableViewFactory(navbarContentSourceWallpaperSharp);
+        fadeWallpaperSource = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                ? new BlurredBackgroundSourceRenderNode(null) : null;
+        dimWallpaperDrawableFactory = new BlurredBackgroundDrawableViewFactory(
+                fadeWallpaperSource != null ? fadeWallpaperSource : navbarContentSourceWallpaperSharp);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SharedConfig.chatBlurEnabled()) {
             scrollableViewNoiseSuppressor = new DownscaleScrollableNoiseSuppressor();
 
@@ -2961,7 +2965,8 @@ public class ChatActivity extends BaseFragment implements
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && NekoConfig.blurredFadeViewEnabled()) {
             fadeBlurSource = new BlurredBackgroundSourceRenderNode(null);
-            fadeBlurSource.setUnderSource(navbarContentSourceWallpaper);
+            fadeBlurSource.setUnderSource(NekoConfig.blurredFadeDimming
+                    ? fadeWallpaperSource : navbarContentSourceWallpaper);
             fadeBlurFactory = new BlurredBackgroundDrawableViewFactory(fadeBlurSource);
         } else {
             fadeBlurSource = null;
@@ -8119,6 +8124,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
         chatActivityFadeView = new ChatActivityFadeView(context);
         if (fadeBlurFactory != null) {
             chatActivityFadeView.setup(fadeBlurFactory, dimWallpaperDrawableFactory);
+            chatActivityFadeView.setDim(NekoConfig.blurredFadeDimming ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
             chatActivityFadeView.setOpaqueFade(true);
             chatActivityFadeView.setFadeHeightTop(dp(48), false);
             chatActivityFadeView.setFadeHeightBottom(dp(48), false);
@@ -11962,6 +11968,13 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         final Runnable inCaseLoading = () -> {
             sideControlsButtonsLayout.setButtonLoading(ChatActivitySideControlsButtonsLayout.BUTTON_PAGE_DOWN, true, true);
         };
+        if (isFeedSearch()) {
+            if (!feedIntegration().onPageDownClicked(clearStack)) {
+                scrollToLastMessage(true, false, inCaseLoading);
+                forceScrollToMessageBottom = false;
+            }
+            return;
+        }
         if (createUnreadMessageAfterId != 0) {
             scrollToMessageId(createUnreadMessageAfterId, 0, false, returnToLoadIndex, true, 0, null, inCaseLoading);
         } else if (!clearStack && !returnToMessageIdStack.empty()) {
@@ -14316,7 +14329,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
         animatorSearchResultAsListVisibility.setValue(show, true);
 
-        if (!show && chatMode == MODE_SEARCH) {
+        if (!show && chatMode == MODE_SEARCH && !isFeedSearch()) {
             LinearLayoutManager messagesSearchLayoutManager = (LinearLayoutManager) messagesSearchListView.getLayoutManager();
             Object item = messagesSearchAdapter.getItem((messagesSearchLayoutManager.findFirstVisibleItemPosition() + messagesSearchLayoutManager.findLastVisibleItemPosition()) / 2);
 
@@ -17277,6 +17290,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
     public void invalidateMessagesVisiblePart() {
         invalidateMessagesVisiblePart = true;
+        if (feedContentChangedCallback != null) feedContentChangedCallback.run();
         if (isFeedSearch() && feedIntegration != null) {
             feedIntegration().onVisiblePartInvalidated();
         }
@@ -17462,6 +17476,10 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
             if (messageCell != null) {
                 messageObject = messageCell.getMessageObject();
+                if (isFeedSearch()) {
+                    feedIntegration().onPostCellVisible(messageObject,
+                            bottom > clipTopFinal && top < clipBottomFinal, false);
+                }
                 if (messageObject.getDialogId() == dialog_id && messageObject.getId() > maxVisibleId) {
                     maxVisibleId = messageObject.getId();
                     maxVisibleMessageObject = messageObject;
@@ -17565,6 +17583,10 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             } else if (view instanceof ChatActionCell) {
                 ChatActionCell cell = (ChatActionCell) view;
                 messageObject = cell.getMessageObject();
+                if (isFeedSearch() && org.telegram.messenger.feed.FeedMessageUtils.isPostRow(messageObject)) {
+                    feedIntegration().onPostCellVisible(messageObject,
+                            bottom > clipTopFinal && top < clipBottomFinal, false);
+                }
                 if (messageObject != null && messageObject.getDialogId() == dialog_id && messageObject.getId() > maxVisibleId) {
                     maxVisibleId = Math.max(maxVisibleId, messageObject.getId());
                 }
@@ -18698,6 +18720,12 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
             navbarContentSourceWallpaper.setSource(source);
             navbarContentSourceWallpaperSharp.setSource(wallpaperBitmapProvider.updateSharpSourceFromBackgroundViewDrawable(drawable));
+            if (fadeBlurSource != null) {
+                // A drawable can cache the first wallpaper before its image has
+                // loaded. Redraw its source, not only the enclosing fade view.
+                fadeBlurSource.invalidateDisplayListForDrawables();
+            }
+            if (feedContentChangedCallback != null) feedContentChangedCallback.run();
             // The wallpaper bitmap may have just finished loading (per-chat /
             // premium wallpapers resolve asynchronously inside the same
             // ChatBackgroundDrawable): re-record the GPU wallpaper layer.
@@ -23464,6 +23492,17 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 }
             }
         }
+        if (isFeedSearch() && args.length > 16 && Boolean.TRUE.equals(args[16])) {
+            feedInitialPositionLoadFailed = true;
+        }
+        if (isFeedSearch() && !feedInitialPositionLoadFailed) {
+            AndroidUtilities.runOnUIThread(() -> {
+                if (feedIntegration != null && !isFinished) {
+                    feedIntegration.onMessagesLoaded();
+                    invalidateMessagesVisiblePart();
+                }
+            });
+        }
     }
 
     private void didReceivedNotification2(int id, int account, final Object... args) {
@@ -26147,12 +26186,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     messagesSearchListView.getLayoutManager().scrollToPosition(0);
                 }
                 messagesSearchAdapter.notifyDataSetChanged();
-                // Feed: scroll to the bottom (newest post) on initial load, like a channel.
-                if (isFeedSearch() && !firstMessagesLoadedScrolled && messagesSearchAdapter.loadedCount > 0
-                        && messagesSearchListView.getLayoutManager() != null) {
-                    firstMessagesLoadedScrolled = true;
-                    messagesSearchListView.getLayoutManager().scrollToPosition(messagesSearchAdapter.getItemCount() - 1);
-                }
+                // FeedChatIntegration owns initial positioning, including the saved anchor.
             }
             if (isFeedSearch()) {
                 org.telegram.messenger.feed.FeedController feedController = org.telegram.messenger.feed.FeedController.getInstance(currentAccount);
@@ -37681,6 +37715,71 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     private org.telegram.messenger.feed.FeedChatIntegration feedIntegration;
+    private Runnable feedContentChangedCallback;
+    private boolean feedInitialPositionLoadFailed;
+
+    public void setFeedContentChangedCallback(Runnable callback) {
+        feedContentChangedCallback = callback;
+    }
+
+    public boolean isFeedInitialPositionReady() {
+        return feedInitialPositionLoadFailed || feedIntegration != null && feedIntegration.isInitialPositionReady()
+                && chatLayoutManager != null && !chatLayoutManager.hasPendingScrollPosition()
+                && chatListView != null && chatListView.getChildCount() > 0;
+    }
+
+    public void drawFeedForTabs(Canvas canvas) {
+        if (contentView == null || !isFeedSearch()) return;
+        int width = contentView.getWidth();
+        int height = contentView.getHeight();
+        navbarContentSourceWallpaperSharp.draw(canvas, 0, 0, width, height);
+        contentView.drawList(canvas, new RectF(0, 0, width, height));
+    }
+
+    public void drawFeedWallpaper(Canvas canvas, int width, int height) {
+        if (contentView != null && contentView.backgroundView != null && contentView.backgroundView.getWidth() > 0) {
+            contentView.backgroundView.draw(canvas);
+        } else {
+            navbarContentSourceWallpaperSharp.draw(canvas, 0, 0, width, height);
+        }
+    }
+
+    public void refreshFeedHeaderConfiguration(View avatarAnchor) {
+        if (!isFeedSearch() || avatarContainer == null || actionBar == null) return;
+        boolean nonIsland = NonIslandHelper.chatElements();
+        int placement = nonIsland ? NekoConfig.AVATAR_PLACEMENT_LEFT : NekoConfig.avatarPlacement;
+        if (!NekoConfig.centerChatHeader && placement == NekoConfig.AVATAR_PLACEMENT_CENTER) {
+            placement = NekoConfig.AVATAR_PLACEMENT_LEFT;
+        }
+        boolean centered = NekoConfig.centerChatHeader && !nonIsland;
+        boolean textOnly = centered && placement != NekoConfig.AVATAR_PLACEMENT_CENTER;
+        avatarOnRight = placement == NekoConfig.AVATAR_PLACEMENT_RIGHT;
+        actionBar.nonIsland = nonIsland;
+        actionBar.m3ChatHeader = NekoConfig.material3ChatHeaders && !nonIsland;
+        actionBar.centerChatHeader = centered && placement == NekoConfig.AVATAR_PLACEMENT_CENTER;
+        actionBar.textOnlyPill = textOnly;
+        actionBar.avatarRightBigger = avatarOnRight && NekoConfig.biggerAvatar;
+        avatarContainer.setM3HeaderMode(NekoConfig.material3ChatHeaders);
+        avatarContainer.setBiggerAvatar(NekoConfig.biggerAvatar);
+        avatarContainer.setFeedAvatar();
+        avatarContainer.setAvatarPlacement(placement);
+        avatarContainer.setTextOnlyPill(textOnly);
+        avatarContainer.setRightTextInset(textOnly || avatarOnRight ? dp(16) : 0);
+        avatarContainer.setRightAnchorView(avatarOnRight ? avatarAnchor : null);
+        if (avatarAnchor != null) avatarAnchor.setVisibility(avatarOnRight ? View.VISIBLE : View.GONE);
+        ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) avatarContainer.getLayoutParams();
+        params.rightMargin = dp(avatarOnRight ? 6 : 52);
+        avatarContainer.setLayoutParams(params);
+        actionBar.setChatAvatarContainer(centered ? avatarContainer : null);
+        avatarContainer.setActionBar(actionBar);
+        avatarContainer.setTranslationX(0);
+        avatarContainer.setAvatarOffset(0);
+        avatarContainer.updateSubtitle();
+        avatarContainer.requestLayout();
+        actionBar.checkAvatarContainerWidth(false);
+        actionBar.requestLayout();
+        actionBar.invalidate();
+    }
 
     public org.telegram.messenger.feed.FeedChatIntegration feedIntegration() {
         if (feedIntegration == null) {
@@ -37744,7 +37843,8 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     return chatListView != null && chatListView.getScrollState() == 0;
                 }
                 @Override public boolean isScrollAnimationRunning() {
-                    return chatListView != null && chatListView.isFastScrollAnimationRunning();
+                    return chatListView != null && (chatListView.isFastScrollAnimationRunning()
+                            || chatLayoutManager != null && chatLayoutManager.hasPendingScrollPosition());
                 }
                 @Override public void setPagedownCount(int i) {
                     if (sideControlsButtonsLayout != null) sideControlsButtonsLayout.setButtonCount(1, i, true);
@@ -37788,17 +37888,24 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 }
                 @Override public org.telegram.messenger.feed.FeedChatIntegration.ScrollAnchor captureScrollAnchor() {
                     if (chatListView == null || chatAdapter == null) return null;
+                    View anchorView = null;
+                    org.telegram.messenger.MessageObject anchorMessage = null;
                     for (int i = 0; i < chatListView.getChildCount(); i++) {
                         View child = chatListView.getChildAt(i);
                         org.telegram.messenger.MessageObject mo;
                         if (child instanceof ChatMessageCell) mo = ((ChatMessageCell) child).getMessageObject();
                         else if (child instanceof ChatActionCell) mo = ((ChatActionCell) child).getMessageObject();
                         else mo = null;
-                        if (org.telegram.messenger.feed.FeedMessageUtils.isPostRow(mo)) {
-                            return new org.telegram.messenger.feed.FeedChatIntegration.ScrollAnchor(mo, getScrollingOffsetForView(child));
+                        if (org.telegram.messenger.feed.FeedMessageUtils.isPostRow(mo)
+                                && child.getBottom() > chatListViewPaddingTop - chatListViewPaddingVisibleOffset
+                                && child.getTop() < chatListView.getHeight() - blurredViewBottomOffset
+                                && (anchorView == null || child.getTop() < anchorView.getTop())) {
+                            anchorView = child;
+                            anchorMessage = mo;
                         }
                     }
-                    return null;
+                    return anchorView == null ? null : new org.telegram.messenger.feed.FeedChatIntegration.ScrollAnchor(
+                            anchorMessage, getScrollingOffsetForView(anchorView));
                 }
                 @Override public void restoreScrollAnchor(org.telegram.messenger.feed.FeedChatIntegration.ScrollAnchor anchor) {
                     if (anchor == null || chatLayoutManager == null || chatAdapter == null) return;
@@ -37855,7 +37962,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 @Override public org.telegram.ui.ActionBar.BaseFragment getFragment() {
                     return ChatActivity.this;
                 }
-            }, !hasMainTabs);
+            }, true);
         }
         return feedIntegration;
     }
@@ -37879,12 +37986,13 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     public void saveFeedScrollPosition() {
-        if (!isFeedSearch() || hasMainTabs || feedIntegration == null) return;
+        if (!isFeedSearch() || feedIntegration == null) return;
         feedIntegration.saveDrawerScrollPosition();
     }
 
     public void reloadFeed() {
         if (!isFeedSearch()) return;
+        feedInitialPositionLoadFailed = false;
         if (feedIntegration != null) feedIntegration.resetUiState();
         if (messagesSearchAdapter == null) {
             org.telegram.messenger.feed.FeedController.getInstance(currentAccount).clear();
@@ -50099,6 +50207,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     private void invalidateMergedVisibleBlurredPositionsAndSources(int flags) {
+        if (feedContentChangedCallback != null) feedContentChangedCallback.run();
         if (parentChatActivity != null) {
             parentChatActivity.invalidateMergedVisibleBlurredPositionsAndSources(flags);
         }
@@ -50275,10 +50384,38 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             fadeBlurSource.setBlur(AndroidUtilities.dpf2(NekoConfig.blurredFadeBlurStrength));
             fadeBlurSource.setPixelation(NekoConfig.blurredFadePixelation);
         }
+        // Capture the actual chat background separately, preserving patterns and
+        // custom drawables that the wallpaper bitmap provider cannot reproduce.
+        Canvas wallpaperCanvas = fadeWallpaperSource.beginRecording(fw, fh);
+        try {
+            wallpaperCanvas.drawColor(wallpaperColor);
+            if (contentView.backgroundView != null && contentView.backgroundView.getWidth() > 0) {
+                wallpaperCanvas.save();
+                wallpaperCanvas.translate(contentView.backgroundView.getX(), contentView.backgroundView.getY());
+                contentView.backgroundView.draw(wallpaperCanvas);
+                wallpaperCanvas.restore();
+            } else {
+                navbarContentSourceWallpaperSharp.draw(wallpaperCanvas, 0, 0, fw, fh);
+            }
+        } finally {
+            fadeWallpaperSource.endRecording();
+        }
+        // Only messages pass through the blur effect in dimming mode. Their
+        // background is drawn underneath, outside that effect.
+        final BlurredBackgroundSource underSource = NekoConfig.blurredFadeDimming
+                ? fadeWallpaperSource : navbarContentSourceWallpaper;
+        if (fadeBlurSource.underSource != underSource) {
+            fadeBlurSource.setUnderSource(underSource);
+            // Source composition is recorded inside the edge drawables. A view
+            // invalidation alone would keep their previous wallpaper layer.
+            fadeBlurSource.invalidateDisplayListForDrawables();
+        }
         Canvas c = fadeBlurSource.beginRecording(fw, fh);
         try {
-            c.drawColor(wallpaperColor);
-            navbarContentSourceWallpaper.draw(c, 0, 0, fw, fh);
+            if (!NekoConfig.blurredFadeDimming) {
+                c.drawColor(wallpaperColor);
+                navbarContentSourceWallpaper.draw(c, 0, 0, fw, fh);
+            }
             contentView.drawList(c, fadeBlurCaptureRect);
         } finally {
             fadeBlurSource.endRecording();

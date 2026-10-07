@@ -94,6 +94,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     private ChatActivity parentFragment;
     private StatusDrawable[] statusDrawables = new StatusDrawable[6];
     private AvatarDrawable avatarDrawable = new AvatarDrawable();
+    private RLottieDrawable feedAvatarIcon;
     private int currentAccount = UserConfig.selectedAccount;
     private boolean occupyStatusBar = true;
     private int leftPadding = dp(8);
@@ -109,6 +110,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     private View rightAnchorView;
     private int lastRightAvatarLeft = Integer.MIN_VALUE;
     private int lastRightAvatarTop = Integer.MIN_VALUE;
+    private int lastRightAvatarCenterX = Integer.MIN_VALUE;
     StatusDrawable currentTypingDrawable;
 
     private int lastWidth = -1;
@@ -430,11 +432,26 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
 
     @Override
     protected void dispatchDraw(Canvas canvas) {
+        syncRightAvatarPosition();
         canvas.save();
         final float s = bounce.getScale(.02f);
         canvas.scale(s, s, getPivotX(), getHeight() - ActionBar.getCurrentActionBarHeight() / 2f);
         super.dispatchDraw(canvas);
         canvas.restore();
+    }
+
+    private void syncRightAvatarPosition() {
+        if (avatarPlacement != zxc.iconic.xenon.NekoConfig.AVATAR_PLACEMENT_RIGHT
+                || avatarImageView == null || avatarImageView.getVisibility() != VISIBLE) return;
+        boolean transitioning = actionBar != null
+                && (actionBar.getSearchFactor() > 0f || actionBar.getActionModeFactor() > 0f);
+        int[] anchor = transitioning ? null : anchorCenterInParent();
+        if (anchor != null) lastRightAvatarCenterX = anchor[0];
+        if (lastRightAvatarCenterX == Integer.MIN_VALUE) return;
+        // Layout and glass animations can move the container independently of
+        // the menu. Resolve the avatar's position from their live coordinates.
+        setAvatarOffset(lastRightAvatarCenterX - getX() - avatarImageView.getLeft()
+                - avatarImageView.getWidth() / 2f);
     }
 
     /**
@@ -482,8 +499,9 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         }
         boolean result;
         if (child == avatarImageView) {
-            final boolean hasTimer = timeItem != null && timeItem.getVisibility() == VISIBLE;
-            final boolean hasCommunity = communityItem != null && communityItem.getVisibility() == VISIBLE;
+            final boolean feed = parentFragment != null && parentFragment.isFeedSearch();
+            final boolean hasTimer = !feed && timeItem != null && timeItem.getVisibility() == VISIBLE;
+            final boolean hasCommunity = !feed && communityItem != null && communityItem.getVisibility() == VISIBLE;
             if (hasTimer || hasCommunity) {
                 AndroidUtilities.rectTmp.set(child.getX(), child.getY(), child.getX() + child.getWidth(), child.getY() + child.getHeight());
                 AndroidUtilities.rectTmp.inset(-dp(3), -dp(3));
@@ -905,6 +923,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         avatarSizeInDp = biggerAvatar ? 48 : 42;
         lastRightAvatarLeft = Integer.MIN_VALUE;
         lastRightAvatarTop = Integer.MIN_VALUE;
+        lastRightAvatarCenterX = Integer.MIN_VALUE;
         if (avatarImageView != null) {
             avatarImageView.setRoundRadius(getAvatarCornerRadius());
         }
@@ -920,6 +939,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     }
 
     public void setRightAnchorView(View anchorView) {
+        if (rightAnchorView != anchorView) lastRightAvatarCenterX = Integer.MIN_VALUE;
         this.rightAnchorView = anchorView;
     }
 
@@ -1018,7 +1038,8 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
             int[] anchor = avatarTransitioning ? null : anchorCenterInParent();
             android.view.ViewGroup.MarginLayoutParams lp = (android.view.ViewGroup.MarginLayoutParams) getLayoutParams();
             if (anchor != null) {
-                avatarLeft = anchor[0] - avatarImageView.getMeasuredWidth() / 2 - lp.leftMargin;
+                lastRightAvatarCenterX = anchor[0];
+                avatarLeft = anchor[0] - avatarImageView.getMeasuredWidth() / 2 - getLeft();
                 avatarTop = anchor[1] - avatarImageView.getMeasuredHeight() / 2 + dp(0.3f);
                 lastRightAvatarLeft = avatarLeft;
                 lastRightAvatarTop = avatarTop;
@@ -1134,8 +1155,8 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         // not resolve: following it mid-transition teleports the avatar (e.g. to
         // the left) instead of keeping it glued to the pill.
         if (rightAnchorView == null || !rightAnchorView.isLaidOut() || rightAnchorView.getVisibility() != VISIBLE) return null;
-        int x = rightAnchorView.getLeft();
-        int y = rightAnchorView.getTop();
+        int x = Math.round(rightAnchorView.getX());
+        int y = Math.round(rightAnchorView.getY());
         ViewParent actionBar = getParent();
         ViewParent p = rightAnchorView.getParent();
         while (p != null && p != actionBar && p instanceof View) {
@@ -1144,6 +1165,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
             y += pv.getTop() + (int) pv.getTranslationY();
             p = pv.getParent();
         }
+        if (p != actionBar) return null;
         x += rightAnchorView.getWidth() / 2;
         y += rightAnchorView.getHeight() / 2;
         return new int[]{x, y};
@@ -1185,6 +1207,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
 
 
     public void showTimeItem(boolean animated) {
+        if (parentFragment != null && parentFragment.isFeedSearch()) return;
         animatorTimeVisible.setValue(true, animated);
     }
 
@@ -1428,6 +1451,14 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
 
     public void updateSubtitle(boolean animated) {
         if (parentFragment == null) {
+            return;
+        }
+        if (parentFragment.isFeedSearch()) {
+            setSubtitle(LocaleController.formatPluralString("Channels",
+                    org.telegram.messenger.feed.FeedController.getInstance(currentAccount).getIncludedChannelCount()));
+            if (getSubtitleTextView() != null) getSubtitleTextView().setVisibility(VISIBLE);
+            setFeedAvatar();
+            requestLayout();
             return;
         }
         if (parentFragment.getChatMode() == ChatActivity.MODE_EDIT_BUSINESS_LINK) {
@@ -1726,11 +1757,24 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     }
 
     public void setFeedAvatar() {
-        avatarDrawable.setInfo(UserConfig.getInstance(currentAccount).getClientUserId());
-        avatarDrawable.setAvatarType(1);
-        avatarDrawable.setCustomIcon(Theme.avatarDrawables[25]);
+        allowDrawStories = false;
+        avatarImageIsHidden = false;
+        avatarImageView.setVisibility(VISIBLE);
+        hideTimeItem(false);
+        setCommunityItemVisible(false);
+        if (feedAvatarIcon == null) {
+            feedAvatarIcon = new RLottieDrawable(R.raw.tab_article, dp(24), dp(24));
+            feedAvatarIcon.addParentView(avatarImageView.getImageReceiver());
+            feedAvatarIcon.setProgress(0.99f);
+        }
+        feedAvatarIcon.setLayerColor("**", getThemedColor(Theme.key_avatar_text));
+        avatarDrawable.setAvatarType(AvatarDrawable.AVATAR_TYPE_SAVED);
+        avatarDrawable.setColor(getThemedColor(Theme.key_avatar_backgroundSaved));
+        avatarDrawable.setCustomIcon(feedAvatarIcon);
         if (avatarImageView != null) {
+            avatarImageView.setRoundRadius(getAvatarCornerRadius());
             avatarImageView.setImage(null, null, avatarDrawable, null);
+            avatarImageView.invalidate();
         }
     }
 
@@ -1768,6 +1812,10 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
 
     public void checkAndUpdateAvatar() {
         if (parentFragment == null) {
+            return;
+        }
+        if (parentFragment.isFeedSearch()) {
+            setFeedAvatar();
             return;
         }
 
