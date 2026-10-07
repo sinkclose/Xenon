@@ -13,6 +13,7 @@ import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.TextCheckCell;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.UItem;
+import org.telegram.ui.Components.ItemOptions;
 import org.telegram.ui.Components.UniversalAdapter;
 
 import java.util.ArrayList;
@@ -20,6 +21,8 @@ import java.util.ArrayList;
 import zxc.iconic.xenon.NekoConfig;
 
 public class NekoBlurSettingsActivity extends BaseNekoSettingsActivity {
+
+    private boolean advancedSettings;
 
     private final int testBottomSheetRow = rowId++;
     private final int blurOverlayRow = rowId++;
@@ -30,6 +33,44 @@ public class NekoBlurSettingsActivity extends BaseNekoSettingsActivity {
     private final int blurSmoothlyRow = rowId++;
     private final int blurAnimationDurationRow = rowId++;
     private final int disableBlurBsRow = rowId++;
+
+    @Override
+    public View createView(android.content.Context context) {
+        advancedSettings = org.telegram.messenger.ApplicationLoader.applicationContext
+                .getSharedPreferences("nekoconfig", android.app.Activity.MODE_PRIVATE)
+                .getBoolean("sheetBlurAdvanced", false);
+        View result = super.createView(context);
+        org.telegram.ui.ActionBar.ActionBarMenuItem more = actionBar.createMenu().addItem(900, R.drawable.ic_ab_other);
+        more.setOnClickListener(v -> {
+            ItemOptions options = ItemOptions.makeOptions(this, more);
+            options.add(0, LocaleController.getString(advancedSettings
+                    ? R.string.HideAdvancedSettings : R.string.ShowAdvancedSettings), () -> {
+                advancedSettings = !advancedSettings;
+                if (!advancedSettings) {
+                    saveAdvancedSettings(false);
+                    applySimpleIntensity(NekoConfig.blurOverlayRadius);
+                }
+                listView.adapter.update(true);
+            });
+            options.show();
+        });
+        return result;
+    }
+
+    private void saveAdvancedSettings(boolean advanced) {
+        org.telegram.messenger.ApplicationLoader.applicationContext
+                .getSharedPreferences("nekoconfig", android.app.Activity.MODE_PRIVATE)
+                .edit().putBoolean("sheetBlurAdvanced", advanced).apply();
+    }
+
+    private void markAdvancedChange() {
+        saveAdvancedSettings(true);
+    }
+
+    private void applySimpleIntensity(int blur) {
+        NekoConfig.setBlurOverlayRadius(blur);
+        NekoConfig.setBlurPixelation(BlurIntensity.sheetPixelation(blur));
+    }
 
     @Override
     protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
@@ -45,22 +86,32 @@ public class NekoBlurSettingsActivity extends BaseNekoSettingsActivity {
             SeekbarConfig radiusConfig = new SeekbarConfig(
                     LocaleController.getString(R.string.BlurOverlayRadius),
                     "2", "20", 2, 20, 1,
-                    progress -> NekoConfig.setBlurOverlayRadius(Math.round(progress)));
+                    progress -> {
+                        int blur = Math.round(progress);
+                        if (advancedSettings) {
+                            markAdvancedChange();
+                            NekoConfig.setBlurOverlayRadius(blur);
+                        } else {
+                            applySimpleIntensity(blur);
+                        }
+                    });
             items.add(SeekbarCellFactory.of(blurOverlayRadiusRow, radiusConfig, NekoConfig.blurOverlayRadius).slug("blurOverlayRadius"));
+            if (advancedSettings) {
             SeekbarConfig pixelationConfig = new SeekbarConfig(
                     LocaleController.getString(R.string.BlurPixelation),
                     "0", "100", 0, 100, 1,
-                    progress -> NekoConfig.setBlurPixelation(Math.round(progress)));
+                    progress -> { markAdvancedChange(); NekoConfig.setBlurPixelation(Math.round(progress)); });
             items.add(SeekbarCellFactory.of(blurPixelationRow, pixelationConfig, NekoConfig.blurPixelation).slug("blurPixelation"));
+            }
             items.add(UItem.asCheck(blurSmoothlyRow, LocaleController.getString(R.string.BlurSmoothly)).setChecked(NekoConfig.blurSmoothly).slug("blurSmoothly"));
-            if (NekoConfig.blurSmoothly) {
+            if (NekoConfig.blurSmoothly && advancedSettings) {
                 SeekbarConfig animDurationConfig = new SeekbarConfig(
                         LocaleController.getString(R.string.BlurAnimationDuration),
                         "100", "1000", 100, 1000, 10,
-                        progress -> NekoConfig.setBlurAnimationDuration(Math.round(progress / 10f) * 10));
+                        progress -> { markAdvancedChange(); NekoConfig.setBlurAnimationDuration(Math.round(progress / 10f) * 10); });
                 items.add(SeekbarCellFactory.of(blurAnimationDurationRow, animDurationConfig, NekoConfig.blurAnimationDuration).slug("blurAnimationDuration"));
             }
-            items.add(UItem.asCheck(disableBlurBsRow, LocaleController.getString(R.string.DisableBlurBs)).setChecked(NekoConfig.disableBlurBs).slug("disableBlurBs"));
+
         }
     }
 

@@ -11469,4 +11469,7 @@
     <string name="RoundVideoComposition">Composition</string>
     <string name="RoundVideoCompositionEnabled">Round video styling</string>
     <string name="RoundVideoCompositionInfo">Disable styling to record a plain square without outside-circle blur, dimming or Telegram overlays.</string>
+    <string name="ShowAdvancedSettings">Show advanced settings</string>
+    <string name="HideAdvancedSettings">Hide advanced settings</string>
+    <string name="ProgressiveIntensity">Progressive intensity</string>
 </resources>

@@ -111,6 +111,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     private int lastRightAvatarLeft = Integer.MIN_VALUE;
     private int lastRightAvatarTop = Integer.MIN_VALUE;
     private int lastRightAvatarCenterX = Integer.MIN_VALUE;
+    private int lastRightAvatarCenterY = Integer.MIN_VALUE;
     StatusDrawable currentTypingDrawable;
 
     private int lastWidth = -1;
@@ -920,6 +921,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
 
     public void setAvatarPlacement(int placement) {
         if (avatarPlacement == placement) return;
+        setAvatarOffset(0);
         avatarPlacement = placement;
         avatarSizeInDp = biggerAvatar ? 48 : 42;
         lastRightAvatarLeft = Integer.MIN_VALUE;
@@ -1040,17 +1042,24 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
             android.view.ViewGroup.MarginLayoutParams lp = (android.view.ViewGroup.MarginLayoutParams) getLayoutParams();
             if (anchor != null) {
                 lastRightAvatarCenterX = anchor[0];
+                lastRightAvatarCenterY = anchor[1];
                 avatarLeft = anchor[0] - avatarImageView.getMeasuredWidth() / 2 - getLeft();
                 avatarTop = anchor[1] - avatarImageView.getMeasuredHeight() / 2 + dp(0.3f);
                 lastRightAvatarLeft = avatarLeft;
                 lastRightAvatarTop = avatarTop;
             } else {
                 if (lastRightAvatarLeft != Integer.MIN_VALUE) {
-                    avatarLeft = lastRightAvatarLeft;
-                    avatarTop = lastRightAvatarTop;
+                    // Cache the anchor in parent coordinates, not a child position
+                    // that becomes stale when the container or avatar size changes.
+                    avatarLeft = lastRightAvatarCenterX - getLeft() - avatarImageView.getMeasuredWidth() / 2;
+                    avatarTop = lastRightAvatarCenterY - avatarImageView.getMeasuredHeight() / 2 + dp(0.3f);
                 } else {
                     final int parentWidth = getParent() instanceof View ? ((View) getParent()).getWidth() : getWidth() + lp.leftMargin;
-                    avatarLeft = parentWidth - lp.leftMargin - dp(16) - avatarImageView.getMeasuredWidth();
+                    avatarLeft = parentWidth - getLeft() - dp(16) - avatarImageView.getMeasuredWidth();
+                    lastRightAvatarCenterX = getLeft() + avatarLeft + avatarImageView.getMeasuredWidth() / 2;
+                    lastRightAvatarCenterY = avatarTop + avatarImageView.getMeasuredHeight() / 2 - dp(0.3f);
+                    lastRightAvatarLeft = avatarLeft;
+                    lastRightAvatarTop = avatarTop;
                 }
                 if (rightAnchorView != null && !rightAnchorView.isLaidOut()) {
                     post(() -> requestLayout());

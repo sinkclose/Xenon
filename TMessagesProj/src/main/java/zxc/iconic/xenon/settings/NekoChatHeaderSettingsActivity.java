@@ -43,6 +43,8 @@ import zxc.iconic.xenon.helpers.NonIslandHelper;
 
 public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
 
+    private boolean advancedSettings;
+
     private final int removeHeaderPillRow = rowId++;
     private final int centerHeaderRow = rowId++;
     private final int avatarPlacementRow = rowId++;
@@ -69,6 +71,47 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
     private boolean wallpaperCaptured;
 
     @Override
+    public View createView(android.content.Context context) {
+        advancedSettings = org.telegram.messenger.ApplicationLoader.applicationContext
+                .getSharedPreferences("nekoconfig", android.app.Activity.MODE_PRIVATE)
+                .getBoolean("headerBlurAdvanced", false);
+        View result = super.createView(context);
+        org.telegram.ui.ActionBar.ActionBarMenuItem more = actionBar.createMenu().addItem(900, R.drawable.ic_ab_other);
+        more.setOnClickListener(v -> {
+            ItemOptions options = ItemOptions.makeOptions(this, more);
+            options.add(0, LocaleController.getString(advancedSettings
+                    ? R.string.HideAdvancedSettings : R.string.ShowAdvancedSettings), () -> {
+                advancedSettings = !advancedSettings;
+                if (!advancedSettings) {
+                    saveAdvancedSettings(false);
+                    applySimpleIntensity((NekoConfig.progressiveFadeBlur ? NekoConfig.progressiveFadeBlurMaxRadius : NekoConfig.blurredFadeBlurStrength));
+                }
+                listView.adapter.update(true);
+            });
+            options.show();
+        });
+        return result;
+    }
+
+    private void saveAdvancedSettings(boolean advanced) {
+        org.telegram.messenger.ApplicationLoader.applicationContext
+                .getSharedPreferences("nekoconfig", android.app.Activity.MODE_PRIVATE)
+                .edit().putBoolean("headerBlurAdvanced", advanced).apply();
+    }
+
+    private void markAdvancedChange() {
+        saveAdvancedSettings(true);
+    }
+
+    private void applySimpleIntensity(int blur) {
+        NekoConfig.setBlurredFadeBlurStrength(blur);
+        NekoConfig.setProgressiveFadeBlurMaxRadius(blur);
+        NekoConfig.setProgressiveFadeBlurSamples(BlurIntensity.samples(blur));
+        NekoConfig.setBlurredFadePixelation(BlurIntensity.headerPixelation(blur));
+        NekoConfig.setProgressiveFadeBlurRefreshRate(120);
+    }
+
+    @Override
     protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
         items.add(UItem.asHeader("Preview"));
         items.add(UItem.asCustom(getOrCreatePreviewContainer()));
@@ -86,13 +129,14 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
         if (NekoConfig.blurredFadeView) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 items.add(UItem.asCheck(progressiveFadeBlurRow, LocaleController.getString(R.string.ProgressiveFadeBlur)).setChecked(NekoConfig.progressiveFadeBlur).slug("progressiveFadeBlur"));
-                if (NekoConfig.progressiveFadeBlur) {
+                if (NekoConfig.progressiveFadeBlur && advancedSettings) {
                     items.add(SeekbarCellFactory.of(progressiveFadeBlurSamplesRow,
                             new SeekbarConfig(LocaleController.getString(R.string.ProgressiveFadeBlurSamples),
                                     "3", "25", 3, 25, 2,
                                     progress -> {
                                         int v = Math.max(3, Math.min(25, Math.round(progress)));
                                         if (v != NekoConfig.progressiveFadeBlurSamples) {
+                                            markAdvancedChange();
                                             NekoConfig.setProgressiveFadeBlurSamples(v);
                                         }
                                     }),
@@ -103,6 +147,7 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
                                     progress -> {
                                         int v = Math.max(15, Math.min(120, Math.round(progress)));
                                         if (v != NekoConfig.progressiveFadeBlurRefreshRate) {
+                                            markAdvancedChange();
                                             NekoConfig.setProgressiveFadeBlurRefreshRate(v);
                                         }
                                     }),
@@ -110,36 +155,45 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
                 }
             }
             items.add(SeekbarCellFactory.of(blurredFadeBlurAmountRow,
-                    new SeekbarConfig(LocaleController.getString(R.string.BlurredFadeBlurAmount),
+                    new SeekbarConfig(LocaleController.getString(!advancedSettings && NekoConfig.progressiveFadeBlur ? R.string.ProgressiveIntensity : R.string.BlurredFadeBlurAmount),
                             "0", "40", 0, 40,
                             progress -> {
                                 int v = Math.max(0, Math.min(40, Math.round(progress)));
+                                if (!advancedSettings) {
+                                    applySimpleIntensity(v);
+                                    return;
+                                }
+                                markAdvancedChange();
                                 if (v != NekoConfig.blurredFadeBlurStrength || v != NekoConfig.progressiveFadeBlurMaxRadius) {
                                     NekoConfig.setBlurredFadeBlurStrength(v);
                                     NekoConfig.setProgressiveFadeBlurMaxRadius(v);
                                 }
                             }),
                     NekoConfig.progressiveFadeBlur ? NekoConfig.progressiveFadeBlurMaxRadius : NekoConfig.blurredFadeBlurStrength).slug("blurredFadeBlurAmount"));
+            if (advancedSettings) {
             items.add(SeekbarCellFactory.of(blurredFadePixelationRow,
                     new SeekbarConfig(LocaleController.getString(R.string.BlurredFadePixelation),
                             "1", "16", 1, 16,
                             progress -> {
                                 int v = Math.max(1, Math.min(16, Math.round(progress)));
                                 if (v != NekoConfig.blurredFadePixelation) {
+                                            markAdvancedChange();
                                     NekoConfig.setBlurredFadePixelation(v);
                                 }
                             }),
                     NekoConfig.blurredFadePixelation).slug("blurredFadePixelation"));
+            }
         }
         if (NekoConfig.blurredFadeView) {
             items.add(UItem.asCheck(blurredFadeDimmingRow, LocaleController.getString(R.string.BlurredFadeDimming)).setChecked(NekoConfig.blurredFadeDimming).slug("blurredFadeDimming"));
-            if (NekoConfig.blurredFadeDimming) {
+            if (NekoConfig.blurredFadeDimming && advancedSettings) {
                 items.add(SeekbarCellFactory.of(blurredFadeDimStrengthRow,
                         new SeekbarConfig(LocaleController.getString(R.string.BlurredFadeDimStrength),
                                 "0", "100", 0, 100,
                                 progress -> {
                                     int v = Math.max(0, Math.min(100, Math.round(progress)));
                                     if (v != NekoConfig.blurredFadeDimStrength) {
+                                            markAdvancedChange();
                                         NekoConfig.setBlurredFadeDimStrength(v);
                                     }
                                 }),
@@ -206,6 +260,7 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
             // with no fade view (controller null).
             final boolean otherWasActive = NekoConfig.progressiveFadeBlurOtherActivitiesEnabled();
             NekoConfig.toggleProgressiveFadeBlur();
+            if (NekoConfig.progressiveFadeBlur && !advancedSettings) applySimpleIntensity(NekoConfig.progressiveFadeBlurMaxRadius);
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.progressiveFadeBlur);
             }
@@ -402,9 +457,7 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
             previewActionBar.avatarRightBigger = avatarRight && NekoConfig.biggerAvatar;
         }
         previewAvatar.setTranslationX(0);
-        if (!previewCenter) {
-            previewAvatar.setAvatarOffset(0);
-        }
+        previewAvatar.setAvatarOffset(0);
         previewActionBar.requestLayout();
         previewAvatar.requestLayout();
         previewContainer.post(() -> {

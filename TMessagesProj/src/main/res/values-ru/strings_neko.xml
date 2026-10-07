@@ -640,5 +640,8 @@
     <string name="FeedDeselectAll">Отключить все</string>
     <string name="FeedDisabledChannels">Отключённые каналы</string>
     <string name="FeedFoldersReorderHint">Удерживайте папку и перетащите её, чтобы изменить порядок.</string>
+    <string name="ShowAdvancedSettings">Показать расширенные настройки</string>
+    <string name="HideAdvancedSettings">Скрыть расширенные настройки</string>
+    <string name="ProgressiveIntensity">Интенсивность прогрессивного блюра</string>
 </resources>
 

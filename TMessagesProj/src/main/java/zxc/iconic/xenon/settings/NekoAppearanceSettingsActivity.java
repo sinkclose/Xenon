@@ -43,6 +43,8 @@ import zxc.iconic.xenon.helpers.PopupHelper;
 public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity implements NotificationCenter.NotificationCenterDelegate {
 
     private ProfileGooeyView gooeyOffsetPreview;
+    private final int material3Row = rowId++;
+    private boolean material3Expanded;
 
     @Override
     public View createView(Context context) {
@@ -189,19 +191,21 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         items.add(UItem.asCheck(appBarShadowRow, LocaleController.getString(R.string.DisableAppBarShadow)).slug("appBarShadow").setChecked(NekoConfig.disableAppBarShadow));
         items.add(UItem.asCheck(formatTimeWithSecondsRow, LocaleController.getString(R.string.FormatWithSeconds)).slug("formatTimeWithSeconds").setChecked(NekoConfig.formatTimeWithSeconds));
         items.add(UItem.asCheck(disableNumberRoundingRow, LocaleController.getString(R.string.DisableNumberRounding), "4.8K -> 4777").slug("disableNumberRounding").setChecked(NekoConfig.disableNumberRounding));
-        items.add(UItem.asShadow(null));
-
-        items.add(UItem.asHeader("Material Design 3"));
-        items.add(UItem.asCheck(material3SwitchesRow, LocaleController.getString(R.string.Switches)).setChecked(NekoConfig.material3Switches).slug("material3Switches"));
-        items.add(UItem.asCheck(m3SectionsStyleRow, LocaleController.getString(R.string.ListItems)).setChecked(NekoConfig.m3SectionsStyle).slug("m3SectionsStyle"));
-        items.add(UItem.asCheck(materialSlidersRow, LocaleController.getString(R.string.MaterialSliders)).setChecked(NekoConfig.materialSliders).slug("materialSliders"));
-        items.add(UItem.asCheck(material3BottomNavigationBarRow, LocaleController.getString(R.string.BottomNavigationBar)).setChecked(NekoConfig.material3BottomNavigationBar).slug("material3BottomNavigationBar"));
-        items.add(UItem.asCheck(md3FoldersRow, LocaleController.getString(R.string.Md3Folders)).setChecked(NekoConfig.md3Folders).slug("md3Folders"));
-        items.add(InfoCheckCellFactory.of(loadingIndicatorsRow, LocaleController.getString(R.string.LoadingIndicators), NekoConfig.wavyEnabled, () -> showLoadingIndicatorsInfo()).slug("loadingIndicators"));
+        items.add(UItem.asExpandableSwitch(material3Row, "Material Design 3", material3Count() + "/8")
+                .setChecked(material3Count() > 0).setCollapsed(!material3Expanded)
+                .setClickCallback(v -> setMaterial3Enabled(material3Count() == 0)).slug("material3"));
+        if (material3Expanded) {
+        items.add(UItem.asRoundCheckbox(material3SwitchesRow, LocaleController.getString(R.string.Switches)).setChecked(NekoConfig.material3Switches).slug("material3Switches"));
+        items.add(UItem.asRoundCheckbox(m3SectionsStyleRow, LocaleController.getString(R.string.ListItems)).setChecked(NekoConfig.m3SectionsStyle).slug("m3SectionsStyle"));
+        items.add(UItem.asRoundCheckbox(materialSlidersRow, LocaleController.getString(R.string.MaterialSliders)).setChecked(NekoConfig.materialSliders).slug("materialSliders"));
+        items.add(UItem.asRoundCheckbox(material3BottomNavigationBarRow, LocaleController.getString(R.string.BottomNavigationBar)).setChecked(NekoConfig.material3BottomNavigationBar).slug("material3BottomNavigationBar"));
+        items.add(UItem.asRoundCheckbox(md3FoldersRow, LocaleController.getString(R.string.Md3Folders)).setChecked(NekoConfig.md3Folders).slug("md3Folders"));
+        items.add(UItem.asRoundCheckbox(loadingIndicatorsRow, LocaleController.getString(R.string.LoadingIndicators)).setChecked(NekoConfig.wavyEnabled).slug("loadingIndicators"));
         if (NekoConfig.wavyEnabled) {
-            items.add(UItem.asCheck(wavyProgressRow, LocaleController.getString(R.string.WavyProgressIndicator)).setChecked(NekoConfig.wavyProgressEnabled).slug("wavyProgress"));
+            items.add(UItem.asRoundCheckbox(wavyProgressRow, LocaleController.getString(R.string.WavyProgressIndicator)).setChecked(NekoConfig.wavyProgressEnabled).slug("wavyProgress"));
         }
-        items.add(InfoCheckCellFactory.of(material3DialogsRow, LocaleController.getString(R.string.Material3Dialogs), NekoConfig.material3Dialogs, () -> showDialogsInfo()).slug("material3Dialogs"));
+        items.add(UItem.asRoundCheckbox(material3DialogsRow, LocaleController.getString(R.string.Material3Dialogs)).setChecked(NekoConfig.material3Dialogs).slug("material3Dialogs"));
+        }
         items.add(TextSettingsCellFactory.of(avatarShapeRow, LocaleController.getString(R.string.Avatars), "›").slug("avatarShape"));
         items.add(UItem.asShadow(null));
 
@@ -239,10 +243,32 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
 
     }
 
+    private int material3Count() {
+        return (NekoConfig.material3Switches ? 1 : 0) + (NekoConfig.m3SectionsStyle ? 1 : 0) + (NekoConfig.materialSliders ? 1 : 0) + (NekoConfig.material3BottomNavigationBar ? 1 : 0) + (NekoConfig.md3Folders ? 1 : 0) + (NekoConfig.wavyEnabled ? 1 : 0) + (NekoConfig.wavyProgressEnabled ? 1 : 0) + (NekoConfig.material3Dialogs ? 1 : 0);
+    }
+
+    private void setMaterial3Enabled(boolean enabled) {
+        if (enabled && NekoConfig.replaceDialogsWithSheet) NekoConfig.toggleReplaceDialogsWithSheet();
+        if (NekoConfig.material3Switches != enabled) NekoConfig.toggleMaterial3Switches();
+        if (NekoConfig.m3SectionsStyle != enabled) NekoConfig.toggleM3SectionsStyle();
+        if (NekoConfig.materialSliders != enabled) NekoConfig.toggleMaterialSliders();
+        if (NekoConfig.material3BottomNavigationBar != enabled) NekoConfig.toggleMaterial3BottomNavigationBar();
+        if (NekoConfig.md3Folders != enabled) NekoConfig.toggleMd3Folders();
+        if (NekoConfig.wavyEnabled != enabled) NekoConfig.toggleWavyEnabled();
+        if (NekoConfig.wavyProgressEnabled != enabled) NekoConfig.toggleWavyProgressEnabled();
+        if (NekoConfig.material3Dialogs != enabled) NekoConfig.toggleMaterial3Dialogs();
+        listView.adapter.update(true);
+        parentLayout.rebuildAllFragmentViews(false, false);
+        showRestartBulletin();
+    }
+
     @Override
     protected void onItemClick(UItem item, View view, int position, float x, float y) {
         var id = item.id;
-        if (id == textAnimationSettingsRow) {
+        if (id == material3Row) {
+            material3Expanded = !material3Expanded;
+            listView.adapter.update(true);
+        } else if (id == textAnimationSettingsRow) {
             presentFragment(new NekoTextAnimationSettingsActivity());
         } else if (id == navigationSettingsRow) {
             presentFragment(new NekoNavigationSettingsActivity());
@@ -462,6 +488,11 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
                     }
                 }
             }
+        }
+        if (id == material3SwitchesRow || id == m3SectionsStyleRow || id == materialSlidersRow
+                || id == material3BottomNavigationBarRow || id == md3FoldersRow
+                || id == loadingIndicatorsRow || id == wavyProgressRow || id == material3DialogsRow) {
+            listView.adapter.update(true);
         }
     }
 
