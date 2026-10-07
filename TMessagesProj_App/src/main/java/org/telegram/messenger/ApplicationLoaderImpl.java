@@ -37,6 +37,7 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
     // Remains set until the worker closes its streams and removes its partial file.
     private Thread downloadWorker;
     private int checkCounter;
+    private UpdateAppAlertDialog updateDownloadDialog;
 
     @Override public void onCreate() {
         super.onCreate();
@@ -215,7 +216,8 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
             if (completed) {
                 File apk = getDownloadedUpdateFile();
                 Activity activity = getUpdateActivity();
-                if (apk != null && activity != null && !activity.isFinishing()) {
+                if (apk != null && activity != null && !activity.isFinishing()
+                        && (updateDownloadDialog == null || updateDownloadDialog.isDismissed())) {
                     BulletinFactory.global().createSimpleBulletin(R.raw.ic_download,
                             LocaleController.getString(R.string.UpdateDownloaded),
                             LocaleController.getString(R.string.NekoUpdate),
@@ -342,6 +344,7 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
         return true;
     }
     @Override public boolean showCustomUpdateAppPopup(Context context, BetaUpdate update, int account) {
+        if (updateDownloadDialog != null && !updateDownloadDialog.isDismissed()) return true;
         if (update == null || pendingRelease == null) return false;
         TLRPC.TL_help_appUpdate info = new TLRPC.TL_help_appUpdate();
         GitHubUpdateHelper.GitHubRelease release = pendingRelease;
@@ -351,6 +354,10 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
         info.flags |= 4;
         UpdateAppAlertDialog dialog = new UpdateAppAlertDialog(context, info, account);
         dialog.bindUpdateDownload();
+        updateDownloadDialog = dialog;
+        dialog.setOnDismissListener(() -> {
+            if (updateDownloadDialog == dialog) updateDownloadDialog = null;
+        });
         GitHubUpdateHelper.loadChangelog(release, dialog::setChangelog);
         dialog.show();
         return true;

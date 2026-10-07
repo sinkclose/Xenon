@@ -26,14 +26,11 @@ public class UpdateDownloadButton extends FrameLayout {
     private final Paint progressPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private float displayedProgress;
     private long lastProgressFrame;
-    private final Runnable dismiss;
     private final Runnable listener = this::update;
-    private boolean wasDownloading;
     private boolean connecting;
 
-    public UpdateDownloadButton(Context context, Runnable dismiss) {
+    public UpdateDownloadButton(Context context) {
         super(context);
-        this.dismiss = dismiss;
         setBackground(Theme.createRoundRectDrawable(AndroidUtilities.dp(24), Theme.getColor(Theme.key_featuredStickers_addButton)));
         setClipToOutline(true);
         setOutlineProvider(android.view.ViewOutlineProvider.BACKGROUND);
@@ -65,11 +62,6 @@ public class UpdateDownloadButton extends FrameLayout {
     private void update() {
         boolean downloading = updater.isDownloadingUpdate();
         File apk = updater.getDownloadedUpdateFile();
-        if (wasDownloading && !downloading && apk != null) {
-            dismiss.run();
-            return;
-        }
-        wasDownloading = downloading;
         boolean nextConnecting = downloading && updater.getDownloadBytesDownloaded() == 0;
         if (nextConnecting != connecting) {
             connecting = nextConnecting;
@@ -97,7 +89,7 @@ public class UpdateDownloadButton extends FrameLayout {
             if (total > 0) size += String.format(Locale.US, " / %.1f MB", total / 1048576.0);
             label.setText(LocaleController.getString(R.string.Downloading) + "... " + size);
         } else {
-            label.setText(LocaleController.getString(apk != null ? R.string.NekoUpdate : R.string.AppUpdateDownloadNow));
+            label.setText(LocaleController.getString(apk != null ? R.string.AppUpdateInstall : R.string.AppUpdateDownloadNow));
         }
         setContentDescription(label.getText());
         invalidate();

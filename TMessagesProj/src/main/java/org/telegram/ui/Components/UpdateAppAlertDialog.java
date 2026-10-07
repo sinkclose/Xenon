@@ -317,7 +317,7 @@ public class UpdateAppAlertDialog extends BottomSheet {
         android.view.ViewGroup parent = (android.view.ViewGroup) downloadButton.getParent();
         android.view.ViewGroup.LayoutParams params = downloadButton.getLayoutParams();
         parent.removeView(downloadButton);
-        parent.addView(new UpdateDownloadButton(getContext(), this::dismiss), params);
+        parent.addView(new UpdateDownloadButton(getContext()), params);
     }
 
     public void setChangelog(String text) {
