@@ -20228,6 +20228,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             float badgeX = nameX + nameOffsetX + (viaNameWidth > 0 ? viaNameWidth : nameLayoutWidth + statusOffset) + dp(4);
             float badgeY = nameY + nameLayout.getHeight() / 2f;
             customBadgeDrawable.setBounds((int) badgeX, (int) (badgeY - h / 2f), (int) (badgeX + w), (int) (badgeY - h / 2f) + h);
+            CustomBadgeController.applyBadgeColor(customBadgeDrawable, Theme.chat_namePaint.getColor());
             customBadgeDrawable.draw(canvas);
         }
     }

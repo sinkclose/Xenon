@@ -32,8 +32,7 @@ public class OctagonBadgeDrawable extends Drawable {
     private final RectF boundsRect = new RectF();
 
     private float size = AndroidUtilities.dp(22);
-    private float lastBoundsWidth = -1;
-    private float lastBoundsHeight = -1;
+    private final RectF lastPathBounds = new RectF();
     private final Particle[] particles = new Particle[14];
     private long lastUpdateTime;
 
@@ -245,10 +244,9 @@ public class OctagonBadgeDrawable extends Drawable {
             textPaint.setTextSize(textSize * (innerRadius * 1.6f / measuredW));
         }
 
-        if (bounds.width() != lastBoundsWidth || bounds.height() != lastBoundsHeight) {
+        if (!bounds.equals(lastPathBounds)) {
             buildOctagonPath(bounds);
-            lastBoundsWidth = bounds.width();
-            lastBoundsHeight = bounds.height();
+            lastPathBounds.set(bounds);
         }
         if (octagonPath.isEmpty()) {
             return;

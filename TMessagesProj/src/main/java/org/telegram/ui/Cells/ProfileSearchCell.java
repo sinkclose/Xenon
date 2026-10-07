@@ -1029,6 +1029,7 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
                     bx = (int) (nameLeft + nameLayout.getLineRight(0) + dp(6) + statusW);
                 }
                 setDrawableBounds(customBadgeDrawable, bx, nameTop + (nameLayout.getHeight() - customBadgeDrawable.getIntrinsicHeight()) / 2f);
+                CustomBadgeController.applyBadgeColor(customBadgeDrawable, Theme.getColor(Theme.key_chats_verifiedBackground, resourcesProvider));
                 customBadgeDrawable.draw(canvas);
             }
         }

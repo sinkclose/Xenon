@@ -1010,6 +1010,7 @@ public class SimpleTextView extends View implements Drawable.Callback {
                 y = getPaddingTop() + (textHeight - dh) / 2 + rightDrawableTopPadding;
             }
             rightDrawable2.setBounds(x, y, x + dw, y + dh);
+            CustomBadgeController.applyBadgeColor(rightDrawable2, textPaint.getColor());
             rightDrawable2.draw(canvas);
             totalWidth += drawablePadding + dw;
         }
@@ -1056,6 +1057,7 @@ public class SimpleTextView extends View implements Drawable.Callback {
                     y = getPaddingTop() + (textHeight - dh) / 2 + rightDrawableTopPadding;
                 }
                 rightDrawable2.setBounds(x, y, x + dw, y + dh);
+                CustomBadgeController.applyBadgeColor(rightDrawable2, textPaint.getColor());
                 rightDrawable2.draw(canvas);
             }
         }
@@ -1151,6 +1153,7 @@ public class SimpleTextView extends View implements Drawable.Callback {
                     y = getPaddingTop() + (textHeight - dh) / 2 + rightDrawableTopPadding;
                 }
                 rightDrawable2.setBounds(x, y, x + dw, y + dh);
+                CustomBadgeController.applyBadgeColor(rightDrawable2, textPaint.getColor());
                 rightDrawable2.draw(canvas);
                 totalWidth += drawablePadding + dw;
             }
@@ -1245,6 +1248,7 @@ public class SimpleTextView extends View implements Drawable.Callback {
                 y = Math.max(0, getMeasuredHeight() - dh);
             }
             rightDrawable2.setBounds(x, y, x + dw, y + dh);
+            CustomBadgeController.applyBadgeColor(rightDrawable2, textPaint.getColor());
             rightDrawable2.draw(canvas);
         }
     }

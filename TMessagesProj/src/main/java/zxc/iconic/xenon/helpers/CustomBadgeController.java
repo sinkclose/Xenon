@@ -5,6 +5,8 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.Paint;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
 import android.graphics.Path;
 import android.graphics.PixelFormat;
 import android.graphics.RectF;
@@ -233,8 +235,11 @@ public class CustomBadgeController {
         if (info.badgeDocumentId > 1) {
             // Animated premium emoji – same pipeline as emoji status
             long docId = getDocIdForBadge(info);
-            AnimatedEmojiDrawable emoji = AnimatedEmojiDrawable.make(
-                    currentAccount, AnimatedEmojiDrawable.CACHE_TYPE_EMOJI_STATUS, docId);
+            // Bounds, alpha, tint and callbacks belong to this badge host, not the global cache.
+            AnimatedEmojiDrawable emoji = new BadgeEmojiDrawable(
+                    AnimatedEmojiDrawable.CACHE_TYPE_EMOJI_STATUS, currentAccount, docId);
+            emoji.setColorFilter(new PorterDuffColorFilter(
+                    Theme.getColor(Theme.key_chats_verifiedBackground, rp), PorterDuff.Mode.SRC_IN));
             if (info.badgeDocumentId == 3) {
                 emoji.sizedp = 20;
                 AnimatedEmojiWithStarsDrawable wrapper = new AnimatedEmojiWithStarsDrawable(emoji);
@@ -251,11 +256,14 @@ public class CustomBadgeController {
             }
         } else if (info.badgeDocumentId == 1) {
             // Plain text badge, no background
-            return new TextBadgeDrawable(info.getDisplayText(), small, rp);
+            TextBadgeDrawable d = new TextBadgeDrawable(info.getDisplayText(), small, rp);
+            d.setCallback(callbackView);
+            return d;
         } else {
             // Animated octagon badge (badge_id == 0)
             OctagonBadgeDrawable d = new OctagonBadgeDrawable(info.getDisplayText(), rp);
             d.setSize(sizePx);
+            d.setCallback(callbackView);
             return d;
         }
     }
@@ -267,6 +275,28 @@ public class CustomBadgeController {
     public Drawable createBadge(long entityId, View callbackView, boolean small,
                                 Theme.ResourcesProvider rp) {
         return createBadge(entityId, UserConfig.selectedAccount, callbackView, small, rp);
+    }
+
+    private static class BadgeEmojiDrawable extends AnimatedEmojiDrawable {
+        private ColorFilter badgeColorFilter;
+
+        BadgeEmojiDrawable(int cacheType, int account, long documentId) {
+            super(cacheType, account, documentId);
+        }
+
+        @Override
+        public void setColorFilter(ColorFilter filter) {
+            if (badgeColorFilter instanceof PorterDuffColorFilter
+                    && badgeColorFilter.equals(filter)) return;
+            badgeColorFilter = filter;
+            super.setColorFilter(filter);
+        }
+    }
+
+    public static void applyBadgeColor(Drawable badge, int color) {
+        if (badge instanceof BadgeEmojiDrawable || badge instanceof AnimatedEmojiWithStarsDrawable) {
+            badge.setColorFilter(new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN));
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -439,7 +469,7 @@ public class CustomBadgeController {
         // layout pass and keeps the particle animation state instead of restarting it.
         if (info != null && current != null) {
             String text = info.getDisplayText();
-            if (info.badgeDocumentId > 1
+            if (info.badgeDocumentId > 1 && info.badgeDocumentId != 3
                     && current instanceof AnimatedEmojiDrawable
                     && ((AnimatedEmojiDrawable) current).getDocumentId() == getDocIdForBadge(info)) {
                 return current;
@@ -554,7 +584,9 @@ public class CustomBadgeController {
         }
 
         @Override
-        public void setColorFilter(ColorFilter colorFilter) {}
+        public void setColorFilter(ColorFilter colorFilter) {
+            emoji.setColorFilter(colorFilter);
+        }
 
         @Override
         public int getOpacity() {

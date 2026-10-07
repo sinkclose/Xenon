@@ -4576,6 +4576,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                     badgeLeft + size,
                     y + badgeH
                 );
+                CustomBadgeController.applyBadgeColor(customBadgeDrawable, Theme.getColor(Theme.key_chats_verifiedBackground, resourcesProvider));
                 customBadgeDrawable.draw(canvas);
             }
 
