@@ -363,7 +363,7 @@ public class TextSettingsCell extends FrameLayout {
         if (isEnabled()) valueTextView.setAlpha(1f - drawLoadingProgress);
         super.dispatchDraw(canvas);
 
-        if (needDivider) {
+        if (needDivider && zxc.iconic.xenon.helpers.M3SectionsHelper.shouldDrawDivider(this)) {
             int offset = AndroidUtilities.dp(imageView.getVisibility() == View.VISIBLE ? 58 : 20);
             canvas.drawLine(LocaleController.isRTL ? 0 : offset, getMeasuredHeight() - 1, getMeasuredWidth() - (LocaleController.isRTL ? offset : 0), getMeasuredHeight() - 1, Theme.dividerPaint);
         }

@@ -542,7 +542,7 @@ public class CheckBoxCell extends FrameLayout {
 
     @Override
     protected void onDraw(Canvas canvas) {
-        if (needDivider) {
+        if (needDivider && zxc.iconic.xenon.helpers.M3SectionsHelper.shouldDrawDivider(this)) {
             int offset = dp(isCheckboxRound() ? 60 : 20) + (int) Math.abs(textView.getTranslationX());
             if (currentType == TYPE_CHECK_BOX_USER) {
                 offset += dp(39);

@@ -271,7 +271,7 @@ public class TextDetailCell extends FrameLayout {
 
     @Override
     protected void onDraw(Canvas canvas) {
-        if (needDivider) {
+        if (needDivider && zxc.iconic.xenon.helpers.M3SectionsHelper.shouldDrawDivider(this)) {
             Paint paint = resourcesProvider != null ? resourcesProvider.getPaint(Theme.key_paint_divider) : Theme.dividerPaint;
             if (paint == null) paint = Theme.dividerPaint;
             canvas.drawLine(

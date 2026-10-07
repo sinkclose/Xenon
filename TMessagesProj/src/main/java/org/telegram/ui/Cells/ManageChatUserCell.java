@@ -395,7 +395,7 @@ public class ManageChatUserCell extends FrameLayout {
 
     @Override
     protected void onDraw(Canvas canvas) {
-        if (needDivider) {
+        if (needDivider && zxc.iconic.xenon.helpers.M3SectionsHelper.shouldDrawDivider(this)) {
             if (dividerColor >= 0) {
                 Theme.dividerExtraPaint.setColor(Theme.getColor(dividerColor, resourcesProvider));
             }

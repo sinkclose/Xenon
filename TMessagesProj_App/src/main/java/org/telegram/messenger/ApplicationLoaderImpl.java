@@ -38,6 +38,27 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
     private Thread downloadWorker;
     private int checkCounter;
 
+    @Override public void onCreate() {
+        super.onCreate();
+        // Installation replaces the process, so clean up on the next launch.
+        // Version codes can stay the same between builds; use the actual install time.
+        File apk = new File(applicationContext.getCacheDir(), APK_DIR + "/xenon_update.apk");
+        if (!apk.exists()) return;
+        try {
+            long installedAt = applicationContext.getPackageManager()
+                    .getPackageInfo(applicationContext.getPackageName(), 0).lastUpdateTime;
+            if (installedAt <= apk.lastModified()) return;
+            if (!apk.delete()) {
+                FileLog.e("Cannot delete installed update APK");
+                return;
+            }
+            File identity = new File(apk.getParent(), apk.getName() + ".url");
+            if (identity.exists() && !identity.delete()) FileLog.e("Cannot delete installed update identity");
+        } catch (Exception e) {
+            FileLog.e("Cannot clean up installed update", e);
+        }
+    }
+
     @Override protected String onGetApplicationId() { return BuildConfig.APPLICATION_ID; }
     @Override protected boolean isStandalone() { return Extra.isDirectApp(); }
     @Override public boolean isCustomUpdate() { return true; }

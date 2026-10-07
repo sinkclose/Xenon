@@ -221,6 +221,11 @@ public class HeaderCell extends FrameLayout {
         info.setEnabled(true);
     }
 
+    @Override
+    public void setBackgroundColor(int color) {
+        super.setBackgroundColor(zxc.iconic.xenon.helpers.M3SectionsHelper.isEnabled() ? android.graphics.Color.TRANSPARENT : color);
+    }
+
     private int getThemedColor(int key) {
         return Theme.getColor(key, resourcesProvider);
     }

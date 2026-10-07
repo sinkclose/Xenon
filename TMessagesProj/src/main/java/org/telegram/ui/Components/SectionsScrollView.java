@@ -19,11 +19,15 @@ import androidx.recyclerview.widget.RecyclerView;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.ShadowSectionCell;
+import org.telegram.ui.Cells.HeaderCell;
 import org.telegram.ui.Cells.TextInfoPrivacyCell;
 import org.telegram.ui.FiltersSetupActivity;
 
 import java.util.ArrayList;
 import java.util.Objects;
+import java.util.WeakHashMap;
+
+import zxc.iconic.xenon.helpers.M3SectionsHelper;
 
 public class SectionsScrollView extends ScrollView {
 
@@ -35,6 +39,7 @@ public class SectionsScrollView extends ScrollView {
 
     public static boolean isSectionView(View view) {
         return !Objects.equals(view.getTag(), RecyclerListView.TAG_NOT_SECTION) && !(
+            (M3SectionsHelper.isEnabled() && view instanceof HeaderCell) ||
             view instanceof TextInfoPrivacyCell ||
             view instanceof ShadowSectionCell ||
             view instanceof FiltersSetupActivity.HintInnerCell
@@ -88,6 +93,35 @@ public class SectionsScrollView extends ScrollView {
     }
 
     private ArrayList<View> children = new ArrayList<>();
+    private final WeakHashMap<View, Integer> originalTopMargins = new WeakHashMap<>();
+
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        children.clear();
+        gatherChildren(contentView, 0, 0);
+        boolean changed = false;
+        View prev = null;
+        for (View child : children) {
+            if (child.getLayoutParams() instanceof MarginLayoutParams) {
+                MarginLayoutParams lp = (MarginLayoutParams) child.getLayoutParams();
+                Integer original = originalTopMargins.get(child);
+                if (original == null) {
+                    original = lp.topMargin;
+                    originalTopMargins.put(child, original);
+                }
+                int margin = original + (M3SectionsHelper.isEnabled() && isSectionView(child)
+                    && prev != null && isSectionView(prev) ? 2 * M3SectionsHelper.getGap() : 0);
+                if (lp.topMargin != margin) {
+                    lp.topMargin = margin;
+                    child.setLayoutParams(lp);
+                    changed = true;
+                }
+            }
+            prev = child;
+        }
+        if (changed) super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+    }
     private void gatherChildren(ViewGroup layout, float x, float y) {
         for (int i = 0; i < layout.getChildCount(); ++i) {
             final View child = layout.getChildAt(i);
@@ -111,6 +145,26 @@ public class SectionsScrollView extends ScrollView {
     private void drawSectionsBackgrounds(Canvas canvas) {
         children.clear();
         gatherChildren(contentView, 0, 0);
+
+        if (M3SectionsHelper.isEnabled()) {
+            for (int i = 0; i < children.size(); i++) {
+                View child = children.get(i);
+                if (!isSectionView(child)) continue;
+                float[] radii = M3SectionsHelper.scrollRadii(child,
+                    i > 0 && isSectionView(children.get(i - 1)),
+                    i + 1 < children.size() && isSectionView(children.get(i + 1)));
+                MarginLayoutParams lp = child.getLayoutParams() instanceof MarginLayoutParams
+                    ? (MarginLayoutParams) child.getLayoutParams() : null;
+                Integer originalTop = originalTopMargins.get(child);
+                float topMargin = originalTop != null ? originalTop : (lp != null ? lp.topMargin : 0);
+                AndroidUtilities.rectTmp.set(contentView.getX() + contentView.getPaddingLeft(),
+                    getChildY(child) - topMargin,
+                    contentView.getX() + contentView.getWidth() - contentView.getPaddingRight(),
+                    getChildY(child) + child.getHeight() + (lp != null ? lp.bottomMargin : 0));
+                RecyclerListView.drawBackgroundRect(canvas, AndroidUtilities.rectTmp, radii[0], radii[1], child.getAlpha(), resourcesProvider);
+            }
+            return;
+        }
 
         View start = null, prev = null;
         for (View child : children) {
@@ -173,6 +227,22 @@ public class SectionsScrollView extends ScrollView {
         if (child == null || !isSectionView(child))
             return;
 
+        if (M3SectionsHelper.isEnabled()) {
+            int index = children.indexOf(child);
+            if (index < 0) return; // Flattened containers are clipped by their own layout.
+            float[] radii = M3SectionsHelper.scrollRadii(child,
+                index > 0 && isSectionView(children.get(index - 1)),
+                index + 1 < children.size() && isSectionView(children.get(index + 1)));
+            AndroidUtilities.rectTmp.set(child.getX(), child.getY(),
+                child.getX() + child.getWidth(), child.getY() + child.getHeight());
+            clipPath.rewind();
+            clipPath.addRoundRect(AndroidUtilities.rectTmp, new float[] {
+                radii[0], radii[0], radii[0], radii[0], radii[1], radii[1], radii[1], radii[1]
+            }, Path.Direction.CW);
+            canvas.clipPath(clipPath);
+            return;
+        }
+
         boolean prev, next;
         int position = contentView.indexOfChild(child);
         final View prevChild = position - 1 < 0 ? null : contentView.getChildAt(position - 1);
@@ -213,7 +283,24 @@ public class SectionsScrollView extends ScrollView {
         }
 
         @Override
+        public void setBackgroundColor(int color) {
+            super.setBackgroundColor(M3SectionsHelper.isEnabled() ? android.graphics.Color.TRANSPARENT : color);
+        }
+
+        @Override
         protected boolean drawChild(@NonNull Canvas canvas, View child, long drawingTime) {
+            if (M3SectionsHelper.isEnabled()) {
+                for (android.view.ViewParent parent = getParent(); parent != null; parent = parent.getParent()) {
+                    if (parent instanceof SectionsScrollView) {
+                        canvas.save();
+                        ((SectionsScrollView) parent).clipChild(canvas, child);
+                        boolean result = super.drawChild(canvas, child, drawingTime);
+                        canvas.restore();
+                        return result;
+                    }
+                }
+                return super.drawChild(canvas, child, drawingTime);
+            }
             if (getParent() instanceof SectionsScrollView) {
                 final SectionsScrollView scrollView = (SectionsScrollView) getParent();
                 canvas.save();

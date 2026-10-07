@@ -291,7 +291,7 @@ public class TextRadioCell extends FrameLayout {
             float animatedRad = rad * animationProgress;
             canvas.drawCircle(cx, cy, animatedRad, animationPaint);
         }
-        if (needDivider) {
+        if (needDivider && zxc.iconic.xenon.helpers.M3SectionsHelper.shouldDrawDivider(this)) {
             canvas.drawLine(LocaleController.isRTL ? 0 : AndroidUtilities.dp(64), getMeasuredHeight() - 1, getMeasuredWidth() - (LocaleController.isRTL ? AndroidUtilities.dp(64) : 0), getMeasuredHeight() - 1, Theme.dividerPaint);
         }
     }

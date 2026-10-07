@@ -10,6 +10,7 @@ import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.util.TypedValue;
 import android.view.View;
+import android.view.ViewParent;
 import android.widget.ImageView;
 
 import androidx.core.graphics.ColorUtils;
@@ -21,6 +22,7 @@ import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.HeaderCell;
 import org.telegram.ui.Cells.TextCheckCell;
 import org.telegram.ui.Components.RecyclerListView;
+import org.telegram.ui.Components.SectionsScrollView;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.SettingsActivity;
@@ -40,6 +42,26 @@ public class M3SectionsHelper {
 
     public static boolean isEnabled() {
         return NekoConfig.m3SectionsStyle;
+    }
+
+    public static boolean shouldDrawDivider(View view) {
+        if (!isEnabled()) return true;
+        View row = view;
+        for (ViewParent parent = view.getParent(); parent != null; parent = parent.getParent()) {
+            if (parent instanceof RecyclerListView) {
+                RecyclerListView list = (RecyclerListView) parent;
+                return list.sectionsItemDecoration == null || !list.sectionsItemDecoration.isSectionItem.run(row);
+            }
+            if (parent instanceof SectionsScrollView) {
+                return !SectionsScrollView.isSectionView(view);
+            }
+            if (parent instanceof View) row = (View) parent;
+        }
+        return true;
+    }
+
+    public static float[] scrollRadii(View child, boolean prev, boolean next) {
+        return m3Radii(child, prev, next);
     }
 
     public static int shadowHeightDp(UItem nextItem, int stockDp) {

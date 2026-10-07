@@ -670,7 +670,7 @@ public class ChatEditActivity extends BaseFragment implements ImageUpdater.Image
 
         actionBar.setTitle(getString(R.string.ChannelEdit));
 
-        avatarContainer = new LinearLayout(context);
+        avatarContainer = new SectionsScrollView.SectionsLinearLayout(context);
         avatarContainer.setOrientation(LinearLayout.VERTICAL);
         avatarContainer.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
         linearLayout1.addView(avatarContainer, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
@@ -789,7 +789,7 @@ public class ChatEditActivity extends BaseFragment implements ImageUpdater.Image
         nameTextView.setFilters(inputFilters);
         frameLayout.addView(nameTextView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL, LocaleController.isRTL ? 5 : 96, 0, LocaleController.isRTL ? 96 : 5, 0));
 
-        settingsContainer = new LinearLayout(context);
+        settingsContainer = new SectionsScrollView.SectionsLinearLayout(context);
         settingsContainer.setOrientation(LinearLayout.VERTICAL);
         linearLayout1.addView(settingsContainer, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
@@ -797,6 +797,7 @@ public class ChatEditActivity extends BaseFragment implements ImageUpdater.Image
             setAvatarCell = new TextCell(context) {
                 @Override
                 protected void onDraw(Canvas canvas) {
+                    if (!zxc.iconic.xenon.helpers.M3SectionsHelper.shouldDrawDivider(this)) return;
                     canvas.drawLine(LocaleController.isRTL ? 0 : dp(20), getMeasuredHeight() - 1, getMeasuredWidth() - (LocaleController.isRTL ? dp(20) : 0), getMeasuredHeight() - 1, Theme.dividerPaint);
                 }
             };
@@ -859,7 +860,7 @@ public class ChatEditActivity extends BaseFragment implements ImageUpdater.Image
         settingsTopSectionCell = new ShadowSectionCell(context);
         linearLayout1.addView(settingsTopSectionCell, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
-        typeEditContainer = new LinearLayout(context);
+        typeEditContainer = new SectionsScrollView.SectionsLinearLayout(context);
         typeEditContainer.setOrientation(LinearLayout.VERTICAL);
         linearLayout1.addView(typeEditContainer, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
@@ -1021,7 +1022,7 @@ public class ChatEditActivity extends BaseFragment implements ImageUpdater.Image
                     BottomSheet.Builder builder = new BottomSheet.Builder(context);
                     builder.setApplyTopPadding(false);
 
-                    LinearLayout linearLayout = new LinearLayout(context);
+                    LinearLayout linearLayout = new SectionsScrollView.SectionsLinearLayout(context);
                     linearLayout.setOrientation(LinearLayout.VERTICAL);
 
                     HeaderCell headerCell = new HeaderCell(context, Theme.key_dialogTextBlue2, 23, 15, false);
@@ -1029,7 +1030,7 @@ public class ChatEditActivity extends BaseFragment implements ImageUpdater.Image
                     headerCell.setText(getString("ChatHistory", R.string.ChatHistory));
                     linearLayout.addView(headerCell);
 
-                    LinearLayout linearLayoutInviteContainer = new LinearLayout(context);
+                    LinearLayout linearLayoutInviteContainer = new SectionsScrollView.SectionsLinearLayout(context);
                     linearLayoutInviteContainer.setOrientation(LinearLayout.VERTICAL);
                     linearLayout.addView(linearLayoutInviteContainer, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
@@ -1183,7 +1184,7 @@ public class ChatEditActivity extends BaseFragment implements ImageUpdater.Image
             linearLayout1.addView(settingsSectionCell, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
         }
 
-        infoContainer = new LinearLayout(context);
+        infoContainer = new SectionsScrollView.SectionsLinearLayout(context);
         infoContainer.setOrientation(LinearLayout.VERTICAL);
         linearLayout1.addView(infoContainer, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
@@ -1425,7 +1426,7 @@ public class ChatEditActivity extends BaseFragment implements ImageUpdater.Image
 
             if (currentUser.bot && currentUser.bot_can_edit) {
 
-                balanceContainer = new LinearLayout(context);
+                balanceContainer = new SectionsScrollView.SectionsLinearLayout(context);
                 balanceContainer.setOrientation(LinearLayout.VERTICAL);
                 linearLayout1.addView(balanceContainer, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 

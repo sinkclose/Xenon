@@ -3290,7 +3290,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
     }
     public void setSections(int padding, float roundRadius, boolean topPadding) {
         setSections(
-            view -> !(view instanceof TextInfoPrivacyCell || view instanceof ShadowSectionCell || view instanceof FiltersSetupActivity.HintInnerCell || view instanceof GraySectionCell || view instanceof CollapseTextCell) && !Objects.equals(view.getTag(), TAG_NOT_SECTION),
+            view -> !(M3SectionsHelper.isEnabled() && view instanceof org.telegram.ui.Cells.HeaderCell) && !(view instanceof TextInfoPrivacyCell || view instanceof ShadowSectionCell || view instanceof FiltersSetupActivity.HintInnerCell || view instanceof GraySectionCell || view instanceof CollapseTextCell) && !Objects.equals(view.getTag(), TAG_NOT_SECTION),
             padding,
             roundRadius,
             this::drawBackgroundRect,
@@ -3392,6 +3392,9 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
             @NonNull RecyclerView parent,
             @NonNull RecyclerView.State state
         ) {
+            if (M3SectionsHelper.isEnabled() && view instanceof org.telegram.ui.Cells.HeaderCell) {
+                outRect.left = outRect.right = padding;
+            }
             if (isSectionItem.run(view)) {
                 outRect.left = outRect.right = padding;
 

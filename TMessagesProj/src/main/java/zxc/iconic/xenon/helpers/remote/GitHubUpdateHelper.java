@@ -113,6 +113,7 @@ public class GitHubUpdateHelper {
             throw new Exception("Release commit is unavailable");
         }
         StringBuilder text = new StringBuilder();
+        java.util.ArrayList<String> entries = new java.util.ArrayList<>();
         java.util.HashSet<String> seen = new java.util.HashSet<>();
         int total = -1;
         for (int page = 1; ; page++) {
@@ -132,13 +133,15 @@ public class GitHubUpdateHelper {
                 String sha = commit.get("sha").getAsString();
                 if (!seen.add(sha)) continue;
                 String message = commit.getAsJsonObject("commit").get("message").getAsString();
-                if (seen.size() > 1) text.append("\n\n");
-                text.append(sha.substring(0, Math.min(7, sha.length())))
-                        .append(": ").append(message.split("\n", 2)[0]);
+                entries.add(sha.substring(0, Math.min(7, sha.length()))
+                        + ": " + message.split("\n", 2)[0]);
             }
             if (seen.size() >= total) break;
             if (seen.size() == before) throw new Exception("Incomplete commit history");
         }
+        // Reverse the complete range so newer commits come first across all pages.
+        java.util.Collections.reverse(entries);
+        text.append(TextUtils.join("\n\n", entries));
         return seen.isEmpty() ? "No new commits in this build." : text.toString();
     }
 

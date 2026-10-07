@@ -2453,6 +2453,9 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
                         messagesCell.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
                     }
                     view = messagesCell;
+                    if (zxc.iconic.xenon.helpers.M3SectionsHelper.isEnabled()) {
+                        view.setTag(RecyclerListView.TAG_NOT_SECTION);
+                    }
                     break;
                 case TYPE_DEFAULT_THEMES_PREVIEW:
                     DefaultThemesPreviewCell cell = new DefaultThemesPreviewCell(mContext, ThemeActivity.this, currentType);

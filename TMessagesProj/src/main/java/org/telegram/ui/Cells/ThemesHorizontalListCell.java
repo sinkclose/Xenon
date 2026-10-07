@@ -797,7 +797,7 @@ public class ThemesHorizontalListCell extends RecyclerListView implements Notifi
     @Override
     public void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        if (drawDivider) {
+        if (drawDivider && zxc.iconic.xenon.helpers.M3SectionsHelper.shouldDrawDivider(this)) {
             canvas.drawLine(LocaleController.isRTL ? 0 : AndroidUtilities.dp(20), getMeasuredHeight() - 1, getMeasuredWidth() - (LocaleController.isRTL ? AndroidUtilities.dp(20) : 0), getMeasuredHeight() - 1, Theme.dividerPaint);
         }
     }

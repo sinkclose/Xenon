@@ -2581,7 +2581,7 @@ public class PeerColorActivity extends BaseFragment implements NotificationCente
                         .draw(canvas, LocaleController.isRTL ? dp(15 + 9) : getMeasuredWidth() - dp(15 + 9) - w, getMeasuredHeight() / 2f);
             }
 
-            if (needDivider) {
+            if (needDivider && zxc.iconic.xenon.helpers.M3SectionsHelper.shouldDrawDivider(this)) {
                 Paint paint = resourcesProvider != null ? resourcesProvider.getPaint(Theme.key_paint_divider) : null;
                 if (paint == null) {
                     paint = Theme.dividerPaint;
@@ -2886,7 +2886,7 @@ public class PeerColorActivity extends BaseFragment implements NotificationCente
                     buttons[i].draw(canvas);
                 }
             }
-            if (needDivider) {
+            if (needDivider && zxc.iconic.xenon.helpers.M3SectionsHelper.shouldDrawDivider(this)) {
                 dividerPaint.setColor(Theme.getColor(Theme.key_divider, resourcesProvider));
                 canvas.drawRect(dp(21), getMeasuredHeight() - 1, getMeasuredWidth() - dp(21), getMeasuredHeight(), dividerPaint);
             }
