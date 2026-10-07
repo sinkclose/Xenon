@@ -383,10 +383,14 @@ public class ProgressiveFadeBlurController {
     }
 
     private void drawCapturedView(Canvas c, View view) {
-        if (c.isHardwareAccelerated()) {
+        if (c.isHardwareAccelerated() && view instanceof RecyclerListView) {
             captureLayout.capture(c, view);
             return;
         }
+        // Record page containers in their parent's coordinates explicitly.
+        // The detached CaptureLayout cannot reliably apply their animated
+        // RenderNode properties. Children still use their normal hardware
+        // drawChild path, preserving RecyclerView stretch effects.
         c.save();
         c.translate(view.getLeft() + view.getTranslationX(), view.getTop() + view.getTranslationY());
         final float sx = view.getScaleX();
