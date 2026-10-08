@@ -227,7 +227,9 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
 
     private int touchSlop;
     private boolean useFastDismiss;
-    protected Interpolator openInterpolator = CubicBezierInterpolator.EASE_OUT_QUINT;
+    private static final long OPEN_SPRING_DURATION_MS = 500;
+    private static final Interpolator DEFAULT_OPEN_INTERPOLATOR = BottomSheet::getOpenSpringInterpolation;
+    protected Interpolator openInterpolator = DEFAULT_OPEN_INTERPOLATOR;
 
     private TextView titleView;
 
@@ -2045,6 +2047,20 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
         return 0;
     }
 
+    private static float getOpenSpringInterpolation(float progress) {
+        if (progress <= 0f) return 0f;
+        if (progress >= 1f) return 1f;
+        // Material 3 Expressive default spatial spring: stiffness 380, damping ratio 0.8.
+        // Evaluate in seconds, with unit mass and zero initial velocity.
+        final double omega = Math.sqrt(380.0);
+        final double dampingRatio = 0.8;
+        final double dampedOmega = omega * Math.sqrt(1.0 - dampingRatio * dampingRatio);
+        final double time = progress * OPEN_SPRING_DURATION_MS / 1000.0;
+        return (float) (1.0 - Math.exp(-dampingRatio * omega * time)
+                * (Math.cos(dampedOmega * time)
+                + dampingRatio * omega / dampedOmega * Math.sin(dampedOmega * time)));
+    }
+
     private void startOpenAnimation() {
         if (dismissed) {
             return;
@@ -2088,15 +2104,20 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
             animators.add(navigationBarAnimation);
             appendOpenAnimator(true, animators);
             currentSheetAnimation.playTogether(animators);
-            if (transitionFromRight) {
-                currentSheetAnimation.setDuration(250);
-                currentSheetAnimation.setInterpolator(CubicBezierInterpolator.DEFAULT);
-            } else {
-                currentSheetAnimation.setDuration(400);
-                currentSheetAnimation.setInterpolator(openInterpolator);
+            // Only spatial motion may overshoot; alpha and scrim effects stay monotonic.
+            for (Animator animator : animators) {
+                animator.setDuration(transitionFromRight ? 250 : 400);
+                animator.setInterpolator(transitionFromRight
+                        ? CubicBezierInterpolator.DEFAULT : CubicBezierInterpolator.EASE_OUT_QUINT);
             }
+            if (!transitionFromRight) {
+                anim.setInterpolator(openInterpolator);
+                if (openInterpolator == DEFAULT_OPEN_INTERPOLATOR) {
+                    anim.setDuration(OPEN_SPRING_DURATION_MS);
+                }
+            }
+            navigationBarAnimation.setDuration(250);
             currentSheetAnimation.setStartDelay(waitingKeyboard ? 0 : 20);
-            currentSheetAnimation.setInterpolator(openInterpolator);
             int finalAccount = currentAccount;
             notificationsLocker.lock();
             currentSheetAnimation.addListener(new AnimatorListenerAdapter() {
