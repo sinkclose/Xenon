@@ -91,15 +91,17 @@ public final class BottomSheetPredictiveBack {
             if (view.getWidth() <= 0 || view.getHeight() <= 0) return;
             float intensity = Math.max(0f, NekoConfig.predictiveBackIntensity / 10f);
             float progress = Math.max(0f, Math.min(1f, lastProgress * intensity));
-            // Google's helper anchors the bottom and compensates child aspect ratios.
+            // Use the helper's easing and bottom anchor, but scale the entire sheet
+            // uniformly so its background and content share the same geometry.
             helper.updateBackProgress(progress);
-            view.setScaleX(view.getScaleX() * scaleX);
-            view.setScaleY(view.getScaleY() * scaleY);
+            float sheetScale = view.getScaleX();
+            view.setScaleX(sheetScale * scaleX);
+            view.setScaleY(sheetScale * scaleY);
             for (ChildTransform child : children) {
-                // Telegram's children can extend beyond the visible sheet viewport.
-                // Compensate around the same bottom edge, rather than the viewport's top.
-                child.view.setPivotY(view.getHeight() - child.view.getY());
-                child.view.setScaleY(child.view.getScaleY() * child.scaleY);
+                // Uniform parent scaling already preserves the content's aspect ratio.
+                // Undo the helper's child compensation, including its pivot change.
+                child.view.setPivotY(child.pivotY);
+                child.view.setScaleY(child.scaleY);
             }
             sheet.getContainer().invalidate();
         }
