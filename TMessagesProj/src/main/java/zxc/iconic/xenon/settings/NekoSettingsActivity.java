@@ -434,10 +434,10 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
                         }
                     }
                     NekoConfig.importConfigs(sb.toString());
-                    BulletinFactory.global().createSimpleBulletin(R.raw.chats_infotip, "Settings restored!").show();
+                    BulletinFactory.global().createSimpleBulletin(R.raw.chats_infotip, LocaleController.getString(R.string.ImportSettingsSuccess)).show();
                 } catch (Exception e) {
                     FileLog.e(e);
-                    BulletinFactory.global().createSimpleBulletin(R.raw.chats_infotip, "Failed to restore settings").show();
+                    BulletinFactory.global().createSimpleBulletin(R.raw.chats_infotip, LocaleController.getString(R.string.ImportSettingsFailed)).show();
                 }
             }
         }

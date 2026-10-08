@@ -79,6 +79,17 @@ public class AutoBackupService extends JobService {
         if (!enabled()) return null;
         int account = account();
         if (!validAccount(account)) return null; // Never fall back to a different logged-in user.
+        return sendBackup(account, forced);
+    }
+    public static int targetAccount(int fallback) {
+        return validAccount(account()) ? account() : fallback;
+    }
+    public static String saveNow(int account) {
+        initialize();
+        return sendBackup(account, true);
+    }
+    private static String sendBackup(int account, boolean forced) {
+        if (account < 0 || account >= UserConfig.MAX_ACCOUNT_COUNT || !UserConfig.getInstance(account).isClientActivated()) return null;
         SharedPreferences p = prefs();
         long user = UserConfig.getInstance(account).getClientUserId();
         String key = "pending_" + user;

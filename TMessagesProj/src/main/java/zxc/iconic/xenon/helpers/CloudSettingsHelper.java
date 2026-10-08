@@ -44,16 +44,21 @@ public class CloudSettingsHelper {
 
         AlertDialog.Builder builder = new AlertDialog.Builder(context, resourcesProvider);
         builder.setTitle(LocaleController.getString(R.string.CloudConfig));
-        builder.setMessage(AndroidUtilities.replaceTags(LocaleController.getString(R.string.CloudConfigDesc)));
+        builder.setMessage(AndroidUtilities.replaceTags(LocaleController.getString(R.string.XenonCloudBackupDescription)));
         builder.setTopImage(R.drawable.cloud, Theme.getColor(Theme.key_dialogTopBackground, resourcesProvider));
 
         LinearLayout linearLayout = new LinearLayout(context);
         linearLayout.setOrientation(LinearLayout.VERTICAL);
 
         ButtonWithCounterView saveButton = new ButtonWithCounterView(context, true, resourcesProvider).setRound();
-        saveButton.setText(LocaleController.getString(R.string.SaveSettingsToFile), false);
+        saveButton.setText(LocaleController.getString(R.string.XenonSaveToSavedMessages), false);
         linearLayout.addView(saveButton, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48, 16, 0, 16, 0));
         saveButton.setOnClickListener(view -> {
+            String caption = AutoBackupService.saveNow(AutoBackupService.targetAccount(parentFragment.getCurrentAccount()));
+            BulletinFactory.global().createSimpleBulletin(R.raw.chats_infotip,
+                    LocaleController.getString(caption == null ? R.string.XenonBackupSaveFailed : R.string.XenonBackupQueued)).show();
+        });
+        saveButton.setOnLongClickListener(view -> {
             try {
                 String json = NekoConfig.exportConfigs();
                 File dir = new File(ApplicationLoader.applicationContext.getFilesDir(), "cache");
@@ -67,21 +72,32 @@ public class CloudSettingsHelper {
                 share.setType("application/json");
                 share.putExtra(Intent.EXTRA_STREAM, uri);
                 share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                context.startActivity(Intent.createChooser(share, "Save Xenon Settings"));
+                context.startActivity(Intent.createChooser(share, LocaleController.getString(R.string.SaveSettingsToFile)));
             } catch (Exception e) {
                 FileLog.e(e);
-                BulletinFactory.global().createSimpleBulletin(R.raw.chats_infotip, "Failed to save settings").show();
+                BulletinFactory.global().createSimpleBulletin(R.raw.chats_infotip, LocaleController.getString(R.string.XenonBackupSaveFailed)).show();
             }
+            return true;
         });
 
         ButtonWithCounterView restoreButton = new ButtonWithCounterView(context, false, resourcesProvider).setRound();
-        restoreButton.setText(LocaleController.getString(R.string.RestoreSettingsFromFile), false);
+        restoreButton.setText(LocaleController.getString(R.string.XenonRestoreLastFromSavedMessages), false);
         linearLayout.addView(restoreButton, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48, 16, 8, 16, 0));
         restoreButton.setOnClickListener(view -> {
+            restoreButton.setLoading(true);
+            restoreButton.setEnabled(false);
+            CloudBackupRestore.restore(AutoBackupService.targetAccount(parentFragment.getCurrentAccount()), result -> {
+                restoreButton.setLoading(false);
+                restoreButton.setEnabled(true);
+                BulletinFactory.global().createSimpleBulletin(R.raw.chats_infotip, LocaleController.getString(result)).show();
+            });
+        });
+        restoreButton.setOnLongClickListener(view -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
             intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.setType("*/*");
             parentFragment.startActivityForResult(intent, 2001);
+            return true;
         });
 
         android.widget.ScrollView scroll = new android.widget.ScrollView(context);
@@ -133,17 +149,17 @@ public class CloudSettingsHelper {
             org.telegram.tgnet.TLRPC.User user = org.telegram.messenger.UserConfig.getInstance(i).getCurrentUser();
             if (user != null && org.telegram.messenger.UserConfig.getInstance(i).isClientActivated()) {
                 accounts.add(i);
-                names.add(org.telegram.messenger.UserObject.getUserName(user) + " (" + org.telegram.PhoneFormat.PhoneFormat.getInstance().format("+" + user.phone) + ")");
+                names.add(org.telegram.messenger.ContactsController.formatName(user.first_name, user.last_name));
             }
         }
         if (accounts.size() > 1) {
             org.telegram.ui.Cells.TextSettingsCell account = new org.telegram.ui.Cells.TextSettingsCell(context);
             Runnable update = () -> {
-                int selected = accounts.indexOf(AutoBackupService.account());
+                int selected = accounts.indexOf(AutoBackupService.targetAccount(fragment.getCurrentAccount()));
                 account.setTextAndValue(LocaleController.getString(R.string.XenonBackupAccount), selected >= 0 ? names.get(selected).toString() : LocaleController.getString(R.string.XenonBackupChooseAccount), false);
             };
             update.run();
-            options.addView(account, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 56));
+            layout.addView(account, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 56));
             account.setOnClickListener(v -> fragment.showDialog(new AlertDialog.Builder(context, provider)
                     .setTitle(LocaleController.getString(R.string.XenonBackupAccount)).setItems(names.toArray(new CharSequence[0]), (dialog, which) -> {
                         AutoBackupService.selectAccount(accounts.get(which)); update.run();

@@ -671,6 +671,15 @@
     <string name="XenonBackupHourUnit">h</string>
     <string name="XenonBackupDayUnit">d</string>
     <string name="XenonBackupIntervalPlaceholder">min:hours:days</string>
+    <string name="AnimationStyleSlide">Slide</string>
+    <string name="AnimationStyleAospLegacy">AOSP (10–12)</string>
+    <string name="XenonCloudBackupDescription">Save your configuration to Saved Messages or restore the latest backup. Hold either button to save or restore a file.</string>
+    <string name="XenonSaveToSavedMessages">Save to Saved Messages</string>
+    <string name="XenonRestoreLastFromSavedMessages">Restore latest from Saved Messages</string>
+    <string name="XenonBackupSaveFailed">Could not save the configuration</string>
+    <string name="XenonBackupQueued">Configuration added to the send queue</string>
+    <string name="XenonBackupNotFound">No Xenon configuration found in Saved Messages</string>
+    <string name="AnimationStyleAosp9">AOSP 9</string>
 </resources>
 
 

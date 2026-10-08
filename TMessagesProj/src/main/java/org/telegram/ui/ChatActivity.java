@@ -44416,7 +44416,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     }
                 }
                 String docNameLower = message.getDocumentName().toLowerCase();
-                if (docNameLower.endsWith("xenon_settings_backup.json")) {
+                if (zxc.iconic.xenon.helpers.AutoBackupPolicy.isConfigFile(docNameLower)) {
                     File cfgFile = null;
                     if (message.messageOwner.attachPath != null && message.messageOwner.attachPath.length() != 0) {
                         File f = new File(message.messageOwner.attachPath);

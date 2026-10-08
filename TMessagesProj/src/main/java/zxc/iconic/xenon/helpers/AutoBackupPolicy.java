@@ -7,6 +7,12 @@ import java.util.TreeMap;
 
 /** Platform-independent interval validation and stable configuration fingerprint. */
 public final class AutoBackupPolicy {
+    public static boolean isConfigFile(String name) {
+        if (name == null) return false;
+        String lower = name.toLowerCase(java.util.Locale.ROOT);
+        return lower.contains("xenon") && lower.contains(".json");
+    }
+
     public static long parseInterval(String text) {
         String[] parts = text.trim().split(":", -1);
         if (parts.length != 3) throw new IllegalArgumentException();

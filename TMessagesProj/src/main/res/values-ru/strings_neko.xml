@@ -664,5 +664,14 @@
     <string name="XenonBackupHourUnit">ч</string>
     <string name="XenonBackupDayUnit">д</string>
     <string name="XenonBackupIntervalPlaceholder">мин:часы:дни</string>
+    <string name="AnimationStyleSlide">Slide</string>
+    <string name="AnimationStyleAospLegacy">AOSP (10–12)</string>
+    <string name="XenonCloudBackupDescription">Сохраните конфиг в «Избранное» или восстановите последний бекап. Удерживайте кнопку, чтобы сохранить или открыть файл.</string>
+    <string name="XenonSaveToSavedMessages">Сохранить в «Избранное»</string>
+    <string name="XenonRestoreLastFromSavedMessages">Восстановить последний из «Избранного»</string>
+    <string name="XenonBackupSaveFailed">Не удалось сохранить конфиг</string>
+    <string name="XenonBackupQueued">Конфиг добавлен в очередь отправки</string>
+    <string name="XenonBackupNotFound">В «Избранном» нет конфигов Xenon</string>
+    <string name="AnimationStyleAosp9">AOSP 9</string>
 </resources>
 
