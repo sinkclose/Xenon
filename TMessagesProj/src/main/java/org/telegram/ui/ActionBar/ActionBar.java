@@ -65,6 +65,8 @@ import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.EllipsizeSpanAnimator;
 import org.telegram.ui.Components.FireworksEffect;
 import org.telegram.ui.Components.LayoutHelper;
+import org.telegram.ui.Components.LiquidTouchEffect;
+import org.telegram.ui.Components.LiquidPressAnimationSuppressor;
 import org.telegram.ui.Components.SectionsScrollView;
 import org.telegram.ui.Components.SizeNotifierFrameLayout;
 import org.telegram.ui.Components.SnowflakesEffect;
@@ -425,6 +427,9 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             return true;
         }
 
+        LiquidTouchEffect liquid = child == backButtonImageView ? liquidBack
+                : child == menu ? liquidMenu : null;
+        final int liquidSave = beginLiquid(canvas, liquid);
         boolean clip = shouldClipChild(child);
         if (clip) {
             canvas.save();
@@ -470,6 +475,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         if (clip) {
             canvas.restore();
         }
+        if (liquidSave != -1) canvas.restoreToCount(liquidSave);
         return result;
     }
 
@@ -940,6 +946,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         };
         actionMode.setTranslationX(glassMode && !nonIsland ? -dp(10) : 0);
         actionMode.setGlassMode(glassMode);
+        actionMode.setLiquidTouchEnabled(liquidTouchEnabled);
         actionMode.isActionMode = true;
         actionMode.setClickable(true);
         if (!glassMode) {
@@ -2083,7 +2090,10 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
                     child = findChildUnder(this, x, y, null);
                 }
                 if (child == chatAvatarContainer) {
-                    return super.dispatchTouchEvent(ev);
+                    observeLiquidTouch(ev);
+                    boolean handled = super.dispatchTouchEvent(ev);
+                    if (!handled) resetLiquidTouch();
+                    return handled;
                 }
 
                 boolean contains = false;
@@ -2099,7 +2109,10 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             }
         }
 
-        return super.dispatchTouchEvent(ev);
+        observeLiquidTouch(ev);
+        boolean handled = super.dispatchTouchEvent(ev);
+        if (!handled) resetLiquidTouch();
+        return handled;
     }
 
     public static View findChildUnder(ViewGroup parent, float x, float y, View exclude) {
@@ -2225,6 +2238,8 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
     @Override
     protected void onDetachedFromWindow() {
+        resetLiquidTouch();
+        liquidPressAnimations.restore();
         super.onDetachedFromWindow();
         if (centerTitleAnimator != null) {
             centerTitleAnimator.cancel();
@@ -2498,6 +2513,88 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         }
     }
 
+    private final LiquidPressAnimationSuppressor liquidPressAnimations = new LiquidPressAnimationSuppressor();
+    private boolean liquidTouchEnabled;
+    private ChatAvatarContainer liquidAvatar;
+    private LiquidTouchEffect liquidBack, liquidMenu, liquidTitle;
+
+    public void setLiquidTouchAvatar(ChatAvatarContainer avatar) {
+        liquidAvatar = avatar;
+        setLiquidTouchEnabled(zxc.iconic.xenon.NekoConfig.liquidChatElements);
+        if (liquidBack == null) {
+            liquidBack = new LiquidTouchEffect(this);
+            liquidMenu = new LiquidTouchEffect(this);
+            liquidTitle = new LiquidTouchEffect(this);
+        }
+        avatar.setLiquidTitleEffect(liquidTitle);
+        liquidTitle.setContentView(avatar);
+        liquidMenu.setContentView(avatar);
+        avatar.setLiquidMenuEffect(liquidMenu);
+    }
+
+    public void setLiquidTouchEnabled(boolean enabled) {
+        liquidTouchEnabled = enabled;
+        if (liquidAvatar != null) liquidAvatar.setLiquidTouchEnabled(enabled);
+        if (actionMode != null) actionMode.setLiquidTouchEnabled(enabled);
+        if (!enabled) {
+            resetLiquidTouch();
+            liquidPressAnimations.restore();
+        }
+        invalidate();
+    }
+
+    private void resetLiquidTouch() {
+        if (liquidBack != null) {
+            liquidBack.reset();
+            liquidMenu.reset();
+            liquidTitle.reset();
+        }
+    }
+
+    private boolean liquidTouchAllowed() {
+        return liquidTouchEnabled && liquidBack != null && glassMode && !nonIsland;
+    }
+
+    private boolean liquidTitleTouchAllowed() {
+        return liquidTouchAllowed() && !isSearchFieldVisible && !actionModeVisible
+                && searchFactor <= 0f && getActionModeFactor() <= 0f;
+    }
+
+    private int beginLiquid(Canvas canvas, LiquidTouchEffect effect) {
+        return liquidTouchAllowed() && effect != null && (effect != liquidTitle || liquidTitleTouchAllowed())
+                ? effect.begin(canvas) : -1;
+    }
+
+    private void observeLiquidTouch(MotionEvent event) {
+        if (liquidBack == null) return;
+        boolean enabled = liquidTouchAllowed();
+        liquidPressAnimations.sync(this, enabled);
+        if (liquidAvatar != null) {
+            MotionEvent local = MotionEvent.obtain(event);
+            local.offsetLocation(-liquidAvatar.getX(), -liquidAvatar.getY());
+            liquidAvatar.observeLiquidAvatarTouch(local, liquidTitleTouchAllowed());
+            local.recycle();
+        }
+        boolean avatarHit = false;
+        if (liquidAvatar != null && liquidAvatar.getVisibility() == VISIBLE) {
+            View avatar = liquidAvatar.getAvatarImageView();
+            if (avatar != null && avatar.getVisibility() == VISIBLE) {
+                float x = event.getX() - liquidAvatar.getX() - avatar.getX();
+                float y = event.getY() - liquidAvatar.getY() - avatar.getY();
+                avatarHit = x >= 0 && x < avatar.getWidth() && y >= 0 && y < avatar.getHeight();
+            }
+        }
+        liquidBack.onTouchEvent(event, enabled && backButtonImageView != null
+                && backButtonImageView.getVisibility() == VISIBLE && backButtonImageView.isEnabled(),
+                !avatarHit && liquidBack.contains(event.getX(), event.getY()));
+        boolean avatarOnMenu = liquidAvatar != null && liquidAvatar.isLiquidAvatarOnMenu();
+        liquidMenu.onTouchEvent(event, enabled && menu != null && menu.getVisibility() == VISIBLE && !actionModeVisible,
+                avatarHit && avatarOnMenu || !avatarHit && liquidMenu.contains(event.getX(), event.getY()));
+        boolean separateAvatar = liquidAvatar != null && liquidAvatar.hasSeparateLiquidAvatar();
+        liquidTitle.onTouchEvent(event, liquidTitleTouchAllowed() && liquidAvatar != null && liquidAvatar.getVisibility() == VISIBLE,
+                !avatarHit && liquidTitle.contains(event.getX(), event.getY()) || avatarHit && !separateAvatar);
+    }
+
     public boolean doNotDrawGlassMenu;
 
     @Override
@@ -2505,6 +2602,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         if (isCenterTitle && centerTitleFreeSpace && centeredTitleLaidOut && !centeredOverlayTitleLayoutPending) {
             updateCenteredTitle(true);
         }
+        liquidPressAnimations.sync(this, liquidTouchAllowed());
         final int p = dp(6);
         final int s = dp(46);
 
@@ -2516,6 +2614,9 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
         final int t = getHeight() - (getCurrentActionBarHeight() + s) / 2 - p;
         final int b = t + s + p * 2;
+        if (actionMode != null) {
+            actionMode.setLiquidSurfaceBounds(getWidth() - Math.max(s, menuWidth) - p * 2, t, getWidth(), b);
+        }
 
         final int menuWidthWithPadding = menuWidth + ((hasForcedMenuWidth || hasForcedMenuMinWidth) ? (menuWidth > 0 ? p : 0) : (int) (p * animatorHasMenuItems.getFloatValue()));
         final int rightOffset = lerp(menuWidthWithPadding, Math.max(menuWidthWithPadding, p + s), chatAvatarContainer == null ? 0f : 1f - animatorAvatarContainerHasAvatar.getFloatValue());
@@ -2548,6 +2649,17 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             right = rightDefault;
         }
 
+        if (liquidBack != null) {
+            liquidBack.setBounds(0, t, s + p * 2, b);
+            liquidMenu.setBounds(getWidth() - Math.max(s, menuWidth) - p * 2, t, getWidth(), b);
+            if (chatAvatarContainer != null) {
+                liquidTitle.setBounds(left, t, right, b);
+            } else if (liquidAvatar != null) {
+                liquidTitle.setBounds(liquidAvatar.getX(), liquidAvatar.getY(),
+                        liquidAvatar.getX() + liquidAvatar.getWidth(), liquidAvatar.getY() + liquidAvatar.getHeight());
+            }
+        }
+
         if (glassDrawable != null && !glassOnlyBack && !m3ChatHeader) {
             if (nonIsland) {
                 glassDrawable.setBounds(0, 0, getWidth(), getHeight());
@@ -2562,20 +2674,37 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             } else {
                 glassDrawable.setAlpha(255);
             }
+            int save = beginLiquid(canvas, liquidTitle);
             glassDrawable.draw(canvas);
+            if (liquidTitleTouchAllowed()) liquidTitle.drawHighlight(canvas, dp(23), dp(6));
+            if (save != -1) canvas.restoreToCount(save);
         }
         if (glassDrawableBack != null && hasBackButton && !nonIsland) {
             glassDrawableBack.setBounds(0, t, s + p * 2, b);
+            int save = beginLiquid(canvas, liquidBack);
             glassDrawableBack.draw(canvas);
+            if (liquidTouchAllowed()) liquidBack.drawHighlight(canvas, dp(23), dp(6));
+            if (save != -1) canvas.restoreToCount(save);
         }
         if (plainBackCircle && hasBackButton && !nonIsland) {
             plainBackCirclePaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider));
+            int save = beginLiquid(canvas, liquidBack);
             canvas.drawCircle(dp(35), (t + b) / 2f, dp(23), plainBackCirclePaint);
+            if (liquidTouchAllowed()) liquidBack.drawHighlight(canvas, dp(23), dp(6));
+            if (save != -1) canvas.restoreToCount(save);
         }
         if (glassDrawableMenu != null && menuWidth > 0 && !nonIsland && !glassOnlyBack && !doNotDrawGlassMenu && !avatarRightBigger) {
             glassDrawableMenu.setBounds(getWidth() - Math.max(s, menuWidth) - p * 2, t, getWidth(), b);
             glassDrawableMenu.setAlpha(hasForcedMenuWidth ? 255 : (int) (255 * animatorHasMenuItems.getFloatValue()));
+            boolean liquidSelection = actionModeVisible && actionMode != null && liquidTouchAllowed();
+            int save = liquidSelection ? actionMode.beginLiquidBackground(canvas) : beginLiquid(canvas, liquidMenu);
             glassDrawableMenu.draw(canvas);
+            if (liquidSelection) {
+                actionMode.drawLiquidHighlight(canvas);
+            } else if (liquidTouchAllowed()) {
+                liquidMenu.drawHighlight(canvas, dp(23), dp(6));
+            }
+            if (save != -1) canvas.restoreToCount(save);
         }
 
         if (blurredBackground && actionBarColor != Color.TRANSPARENT) {

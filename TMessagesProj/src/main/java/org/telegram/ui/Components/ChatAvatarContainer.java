@@ -394,6 +394,55 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         botVerificationDrawable = new AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(titleTextView, dp(17));
     }
 
+    private boolean liquidTouchEnabled;
+    private LiquidTouchEffect liquidTitleEffect;
+    private LiquidTouchEffect liquidMenuEffect;
+    private final LiquidTouchEffect liquidDetachedAvatar = new LiquidTouchEffect(this);
+    private final LiquidPressAnimationSuppressor liquidPressAnimations = new LiquidPressAnimationSuppressor();
+
+    public void setLiquidTitleEffect(LiquidTouchEffect effect) {
+        liquidTitleEffect = effect;
+    }
+
+    public void setLiquidMenuEffect(LiquidTouchEffect effect) {
+        liquidMenuEffect = effect;
+    }
+
+    public boolean isLiquidAvatarOnMenu() {
+        return avatarPlacement == zxc.iconic.xenon.NekoConfig.AVATAR_PLACEMENT_RIGHT;
+    }
+
+    public boolean hasSeparateLiquidAvatar() {
+        return isAvatarSeparateFromPill();
+    }
+
+    public void observeLiquidAvatarTouch(MotionEvent event, boolean enabled) {
+        syncRightAvatarPosition();
+        liquidDetachedAvatar.setBounds(avatarImageView.getX(), avatarImageView.getY(),
+                avatarImageView.getX() + avatarImageView.getWidth(), avatarImageView.getY() + avatarImageView.getHeight());
+        liquidDetachedAvatar.onTouchEvent(event, enabled && hasSeparateLiquidAvatar() && !isLiquidAvatarOnMenu()
+                && avatarImageView.getVisibility() == VISIBLE);
+    }
+
+    private boolean liquidTouchAllowed() {
+        return liquidTouchEnabled && !zxc.iconic.xenon.helpers.NonIslandHelper.chatElements()
+                && (actionBar == null || actionBar.getSearchFactor() <= 0f && actionBar.getActionModeFactor() <= 0f);
+    }
+
+    public void setLiquidTouchEnabled(boolean enabled) {
+        liquidTouchEnabled = enabled;
+        if (!enabled) {
+            liquidDetachedAvatar.reset();
+            liquidPressAnimations.restore();
+        }
+        invalidate();
+    }
+
+    private float getPressBounceScale() {
+        return liquidTouchEnabled && !zxc.iconic.xenon.helpers.NonIslandHelper.chatElements()
+                ? 1f : bounce.getScale(.02f);
+    }
+
     public ButtonBounce bounce = new ButtonBounce(this);
     private Runnable onLongClick = () -> {
         pressed = false;
@@ -434,8 +483,9 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     @Override
     protected void dispatchDraw(Canvas canvas) {
         syncRightAvatarPosition();
+        liquidPressAnimations.sync(this, liquidTouchAllowed());
         canvas.save();
-        final float s = bounce.getScale(.02f);
+        final float s = getPressBounceScale();
         canvas.scale(s, s, getPivotX(), getHeight() - ActionBar.getCurrentActionBarHeight() / 2f);
         super.dispatchDraw(canvas);
         canvas.restore();
@@ -468,11 +518,20 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     protected boolean drawChild(@NonNull Canvas canvas, View child, long drawingTime) {
         final boolean avatarChild = child == avatarImageView || child == communityItem || child == timeItem || child == starBgItem || child == starFgItem;
         final boolean unbounceAvatarChild = avatarChild && isAvatarSeparateFromPill();
+        int liquidSave = -1;
+        if (liquidTouchAllowed()) {
+            if (unbounceAvatarChild) {
+                liquidSave = isLiquidAvatarOnMenu() && liquidMenuEffect != null
+                        ? liquidMenuEffect.beginInChild(canvas, getX(), getY()) : liquidDetachedAvatar.begin(canvas);
+            } else if (liquidTitleEffect != null) {
+                liquidSave = liquidTitleEffect.beginInChild(canvas, getX(), getY());
+            }
+        }
         float bounceScale = 1f;
         if (unbounceAvatarChild) {
             // dispatchDraw scales the whole container around the pill pivot:
             // cancel it for the detached avatar (and its corner badges) so it stays put.
-            bounceScale = bounce.getScale(.02f);
+            bounceScale = getPressBounceScale();
             if (bounceScale != 1f && bounceScale > 0f) {
                 canvas.save();
                 canvas.scale(1f / bounceScale, 1f / bounceScale, getPivotX(), getHeight() - ActionBar.getCurrentActionBarHeight() / 2f);
@@ -533,6 +592,10 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         if (unbounceAvatarChild && bounceScale != 1f) {
             canvas.restore();
         }
+        if (child == avatarImageView && unbounceAvatarChild && !isLiquidAvatarOnMenu() && liquidTouchAllowed()) {
+            liquidDetachedAvatar.drawHighlight(canvas, avatarImageView.getWidth() / 2f);
+        }
+        if (liquidSave != -1) canvas.restoreToCount(liquidSave);
         return result;
     }
 
@@ -1954,6 +2017,8 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
 
     @Override
     protected void onDetachedFromWindow() {
+        liquidDetachedAvatar.reset();
+        liquidPressAnimations.restore();
         super.onDetachedFromWindow();
         if (parentFragment != null) {
             NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.didUpdateConnectionState);

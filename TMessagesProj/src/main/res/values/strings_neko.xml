@@ -680,6 +680,11 @@
     <string name="XenonBackupQueued">Configuration added to the send queue</string>
     <string name="XenonBackupNotFound">No Xenon configuration found in Saved Messages</string>
     <string name="AnimationStyleAosp9">AOSP 9</string>
+    <string name="LiquidChatElements">Liquid chat elements</string>
+    <string name="ChatPopupSection">Popup</string>
+    <string name="CustomizeMentionMenu">Customize mention menu</string>
+    <string name="MarkdownParserXenon">Xenon</string>
+    <string name="MarkdownParserTelegram">Telegram</string>
 </resources>
 
 

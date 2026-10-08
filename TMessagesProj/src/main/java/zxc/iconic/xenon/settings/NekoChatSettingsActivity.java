@@ -53,6 +53,7 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
     private final int showTimeHintRow = rowId++;
     private final int reducedColorsRow = rowId++;
 
+    private final int liquidChatElementsRow = rowId++;
     private final int ignoreBlockedRow = rowId++;
     private final int quickForwardRow = rowId++;
     private final int otherSwipeActionsRow = rowId++;
@@ -167,6 +168,7 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
         items.add(UItem.asShadow(null));
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.Chat)));
+        items.add(UItem.asCheck(liquidChatElementsRow, LocaleController.getString(R.string.LiquidChatElements)).slug("liquidChatElements").setChecked(NekoConfig.liquidChatElements));
         items.add(UItem.asCheck(ignoreBlockedRow, LocaleController.getString(R.string.IgnoreBlocked), LocaleController.getString(R.string.IgnoreBlockedAbout)).slug("ignoreBlocked").setChecked(NekoConfig.ignoreBlocked));
         items.add(UItem.asCheck(quickForwardRow, LocaleController.getString(R.string.QuickForward)).slug("quickForward").setChecked(NekoConfig.quickForward));
         items.add(TextSettingsCellFactory.of(otherSwipeActionsRow, LocaleController.getString(R.string.OtherSwipeActions)).slug("otherSwipeActions"));
@@ -183,7 +185,7 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
         items.add(TextSettingsCellFactory.of(maxRecentStickersRow, LocaleController.getString(R.string.MaxRecentStickers), String.valueOf(NekoConfig.maxRecentStickers)).slug("maxRecentStickers"));
         items.add(UItem.asShadow(null));
 
-        items.add(UItem.asHeader("Popup"));
+        items.add(UItem.asHeader(LocaleController.getString(R.string.ChatPopupSection)));
         items.add(UItem.asCheck(blurPopupInChatRow, LocaleController.getString(R.string.BlurPopupInChat)).setChecked(NekoConfig.blurPopupInChat).slug("blurPopupInChat"));
         items.add(UItem.asCheck(holdToOpenPopupRow, LocaleController.getString(R.string.HoldToOpenPopup)).setChecked(NekoConfig.holdToOpenPopup).slug("holdToOpenPopup"));
         if (NekoConfig.holdToOpenPopup) {
@@ -209,7 +211,7 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.Markdown)));
         items.add(UItem.asCheck(markdownEnableRow, LocaleController.getString(R.string.MarkdownEnableByDefault)).slug("markdownEnable").setChecked(!NekoConfig.disableMarkdownByDefault));
-        items.add(TextSettingsCellFactory.of(markdownParserRow, LocaleController.getString(R.string.MarkdownParser), NekoConfig.newMarkdownParser ? "Xenon" : "Telegram").slug("markdownParser"));
+        items.add(TextSettingsCellFactory.of(markdownParserRow, LocaleController.getString(R.string.MarkdownParser), NekoConfig.newMarkdownParser ? LocaleController.getString(R.string.MarkdownParserXenon) : LocaleController.getString(R.string.MarkdownParserTelegram)).slug("markdownParser"));
         if (NekoConfig.newMarkdownParser) {
             items.add(UItem.asCheck(markdownParseLinksRow, LocaleController.getString(R.string.MarkdownParseLinks)).slug("markdownParseLinks").setChecked(NekoConfig.markdownParseLinks));
         }
@@ -240,7 +242,7 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
         items.add(UItem.asShadow(LocaleController.getString(R.string.SpoilerExtendToLineEndInfoExtra)));
         items.add(UItem.asShadow(null));
 
-        items.add(TextSettingsCellFactory.of(customizeMentionMenuRow, "Customize mention menu").slug("customizeMentionMenu"));
+        items.add(TextSettingsCellFactory.of(customizeMentionMenuRow, LocaleController.getString(R.string.CustomizeMentionMenu)).slug("customizeMentionMenu"));
         items.add(UItem.asShadow(null));
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.MessageMenu)));
@@ -263,7 +265,12 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
     @Override
     protected void onItemClick(UItem item, View view, int position, float x, float y) {
         var id = item.id;
-        if (id == ignoreBlockedRow) {
+        if (id == liquidChatElementsRow) {
+            NekoConfig.toggleLiquidChatElements();
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.liquidChatElements);
+            }
+        } else if (id == ignoreBlockedRow) {
             NekoConfig.toggleIgnoreBlocked();
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.ignoreBlocked);
@@ -493,8 +500,8 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
             updateStickerCell();
         } else if (id == markdownParserRow) {
             ArrayList<String> arrayList = new ArrayList<>();
-            arrayList.add("Xenon");
-            arrayList.add("Telegram");
+            arrayList.add(LocaleController.getString(R.string.MarkdownParserXenon));
+            arrayList.add(LocaleController.getString(R.string.MarkdownParserTelegram));
             boolean oldParser = NekoConfig.newMarkdownParser;
             showPopup(arrayList, NekoConfig.newMarkdownParser ? 0 : 1, item, view, i -> {
                 NekoConfig.setNewMarkdownParser(i == 0);

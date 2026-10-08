@@ -29,6 +29,28 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout {
         updateColors();
     }
 
+    private LiquidTouchEffect liquidTouch;
+    private final LiquidPressAnimationSuppressor liquidPressAnimations = new LiquidPressAnimationSuppressor();
+
+    public void setLiquidTouchEnabled(boolean enabled) {
+        if (enabled == (liquidTouch != null)) return;
+        if (liquidTouch != null) liquidTouch.reset();
+        liquidTouch = enabled ? new LiquidTouchEffect(this) : null;
+        if (!enabled) liquidPressAnimations.restore();
+        invalidate();
+    }
+
+    private boolean liquidTouchAllowed() {
+        return liquidTouch != null && !NonIslandHelper.chatElements();
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        if (liquidTouch != null) liquidTouch.reset();
+        liquidPressAnimations.restore();
+        super.onDetachedFromWindow();
+    }
+
     BlurredBackgroundDrawable backgroundDrawable;
 
     public void setBlurredBackground(BlurredBackgroundDrawable background) {
@@ -57,8 +79,12 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout {
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
-        return super.dispatchTouchEvent(ev)
+        liquidPressAnimations.sync(this, liquidTouchAllowed());
+        if (liquidTouch != null) liquidTouch.onTouchEvent(ev, liquidTouchAllowed());
+        boolean handled = super.dispatchTouchEvent(ev)
                 || ev.getAction() == MotionEvent.ACTION_DOWN && backgroundDrawable != null && backgroundDrawable.getBounds().contains((int) ev.getX(), (int) ev.getY());
+        if (!handled && liquidTouch != null) liquidTouch.reset();
+        return handled;
     }
 
     private final Path clipPath = new Path();
@@ -69,6 +95,7 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout {
         final float bgAlpha = NonIslandHelper.chatElements() ? 1 : getMetadata().getTotalVisibility();
 
         clipRectF.set(getPaddingLeft(), getPaddingTop(), getMeasuredWidth() - getPaddingRight(), getPaddingTop() + bgHeight);
+        if (liquidTouch != null) liquidTouch.setBounds(clipRectF.left, clipRectF.top, clipRectF.right, clipRectF.bottom);
 
         final float r = NonIslandHelper.chatElements() ? 0 : Math.min(dp(18), Math.min(clipRectF.width(), clipRectF.height()) / 2f);
         clipPath.rewind();
@@ -109,9 +136,13 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout {
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
         if (getMetadata().getTotalVisibility() == 0) return;
+        checkBoundsAndClipping();
+        liquidPressAnimations.sync(this, liquidTouchAllowed());
+        final int liquidSave = liquidTouchAllowed() ? liquidTouch.begin(canvas) : -1;
 
         if (backgroundDrawable != null) {
             backgroundDrawable.draw(canvas);
+            if (liquidTouchAllowed()) liquidTouch.drawHighlight(canvas, dp(18));
         }
 
         boolean callDrawn = false;
@@ -177,5 +208,6 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout {
             canvas.drawLine(getPaddingLeft(), getPaddingTop(), getWidth() - getPaddingRight(), getPaddingTop(), Theme.dividerPaint);
         }
         canvas.restore();
+        if (liquidSave != -1) canvas.restoreToCount(liquidSave);
     }
 }

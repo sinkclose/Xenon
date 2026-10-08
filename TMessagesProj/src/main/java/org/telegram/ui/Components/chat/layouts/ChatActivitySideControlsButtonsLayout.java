@@ -5,6 +5,8 @@ import static org.telegram.messenger.AndroidUtilities.lerp;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.graphics.Canvas;
+import android.view.View;
 import android.view.Gravity;
 import android.widget.FrameLayout;
 
@@ -77,6 +79,26 @@ public class ChatActivitySideControlsButtonsLayout extends FrameLayout implement
         this.blurredBackgroundDrawableViewFactory = blurredBackgroundDrawableViewFactory;
         this.colorProvider = colorProvider;
         this.resourcesProvider = resourcesProvider;
+        setClipChildren(false);
+        setClipToPadding(false);
+    }
+
+    @Override
+    protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
+        int save = child instanceof ChatActivityBlurredRoundPageDownButton
+                ? ((ChatActivityBlurredRoundPageDownButton) child).beginLiquidDraw(canvas) : -1;
+        boolean result = super.drawChild(canvas, child, drawingTime);
+        if (save != -1) canvas.restoreToCount(save);
+        return result;
+    }
+
+    private boolean liquidTouchEnabled;
+
+    public void setLiquidTouchEnabled(boolean enabled) {
+        liquidTouchEnabled = enabled;
+        for (ButtonHolder holder : buttonHolders) {
+            if (holder != null) holder.button.setLiquidTouchEnabled(enabled);
+        }
     }
 
     private int gravity = Gravity.LEFT | Gravity.BOTTOM;
@@ -261,6 +283,7 @@ public class ChatActivitySideControlsButtonsLayout extends FrameLayout implement
             }
 
             addView(button, LayoutHelper.createFrame(size, size + 8, gravity));
+            button.setLiquidTouchEnabled(liquidTouchEnabled);
 
             buttonHolders[buttonId] = new ButtonHolder(button, visibilityAnimator, counterVisibilityAnimator);
 

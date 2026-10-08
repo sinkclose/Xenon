@@ -5,6 +5,8 @@ import static org.telegram.messenger.AndroidUtilities.lerp;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.graphics.Canvas;
+import android.view.MotionEvent;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -14,6 +16,7 @@ import androidx.annotation.DrawableRes;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.CounterView;
 import org.telegram.ui.Components.LayoutHelper;
+import org.telegram.ui.Components.LiquidTouchEffect;
 import org.telegram.ui.Components.ScaleStateListAnimator;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
 import org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundColorProvider;
@@ -25,6 +28,52 @@ public class ChatActivityBlurredRoundPageDownButton extends FrameLayout {
 
     private ChatActivityBlurredRoundButton buttonView;
     private CounterView counterView;
+    private LiquidTouchEffect liquidTouch;
+
+    public void setLiquidTouchEnabled(boolean enabled) {
+        if (enabled == (liquidTouch != null)) return;
+        if (liquidTouch != null) liquidTouch.reset();
+        liquidTouch = enabled ? new LiquidTouchEffect(this) : null;
+        if (liquidTouch != null && getParent() instanceof View) liquidTouch.setContentView((View) getParent());
+        // The spring replaces the old press scale; visibility scale remains on the View.
+        if (enabled) {
+            setStateListAnimator(null);
+        } else {
+            ScaleStateListAnimator.apply(this, .13f, 2f);
+        }
+    }
+
+    private boolean liquidTouchAllowed() {
+        return liquidTouch != null && isEnabled()
+                && !zxc.iconic.xenon.helpers.NonIslandHelper.chatElements();
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        if (liquidTouch != null) {
+            liquidTouch.setBounds(0, getHeight() - getWidth(), getWidth(), getHeight());
+            liquidTouch.onTouchEvent(event, liquidTouchAllowed());
+        }
+        boolean handled = super.dispatchTouchEvent(event);
+        if (!handled && event.getActionMasked() == MotionEvent.ACTION_DOWN && liquidTouch != null) liquidTouch.reset();
+        return handled;
+    }
+
+    public int beginLiquidDraw(Canvas canvas) {
+        return liquidTouchAllowed() ? liquidTouch.beginInParent(canvas, getX(), getY()) : -1;
+    }
+
+    @Override
+    public void draw(Canvas canvas) {
+        super.draw(canvas);
+        if (liquidTouchAllowed()) liquidTouch.drawHighlight(canvas, dp(22), dp(6));
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        if (liquidTouch != null) liquidTouch.reset();
+        super.onDetachedFromWindow();
+    }
 
     public ChatActivityBlurredRoundPageDownButton(Context context, Theme.ResourcesProvider resourcesProvider) {
         super(context);

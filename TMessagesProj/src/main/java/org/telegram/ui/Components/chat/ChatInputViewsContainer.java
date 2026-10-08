@@ -18,6 +18,9 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 
 import org.telegram.ui.Components.LayoutHelper;
+import org.telegram.ui.Components.chat.layouts.ChatActivityActionsButtonsLayout;
+import org.telegram.ui.Components.LiquidTouchEffect;
+import org.telegram.ui.Components.LiquidPressAnimationSuppressor;
 import org.telegram.ui.Components.blur3.BlurredBackgroundWithFadeDrawable;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
 import org.telegram.ui.Components.inset.InAppKeyboardInsetView;
@@ -30,6 +33,44 @@ public class ChatInputViewsContainer extends FrameLayout {
     public static final int INPUT_BUBBLE_BOTTOM = 9;
 
     private WindowInsetsProvider windowInsetsProvider;
+
+    private LiquidTouchEffect liquidTouch;
+    private final LiquidPressAnimationSuppressor liquidPressAnimations = new LiquidPressAnimationSuppressor();
+
+    public void setLiquidTouchEnabled(boolean enabled) {
+        if (enabled == (liquidTouch != null)) return;
+        if (liquidTouch != null) liquidTouch.reset();
+        liquidTouch = enabled ? new LiquidTouchEffect(this) : null;
+        if (liquidTouch != null) liquidTouch.setDragStrength(1.65f);
+        if (!enabled) liquidPressAnimations.restore();
+    }
+
+    private boolean liquidTouchAllowed() {
+        if (liquidTouch == null || !drawInputBackground || zxc.iconic.xenon.helpers.NonIslandHelper.chatElements()) return false;
+        for (int i = 0; i < inputIslandBubbleContainer.getChildCount(); i++) {
+            View child = inputIslandBubbleContainer.getChildAt(i);
+            if (child instanceof ChatActivityActionsButtonsLayout && ((ChatActivityActionsButtonsLayout) child).hasVisibleButtons()) {
+                return false; // Selection actions have independent liquid surfaces.
+            }
+        }
+        return true;
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        liquidPressAnimations.sync(inputIslandBubbleContainer, liquidTouchAllowed());
+        if (liquidTouch != null) liquidTouch.onTouchEvent(event, liquidTouchAllowed());
+        boolean handled = super.dispatchTouchEvent(event);
+        if (!handled && liquidTouch != null) liquidTouch.reset();
+        return handled;
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        if (liquidTouch != null) liquidTouch.reset();
+        liquidPressAnimations.restore();
+        super.onDetachedFromWindow();
+    }
 
     private final View fadeView;
     private final FrameLayout inputIslandBubbleContainer;
@@ -282,8 +323,13 @@ public class ChatInputViewsContainer extends FrameLayout {
         }
 
         blurredBackgroundDrawable.setBounds(tmpRect);
-        if (drawInputBackground)
+        if (liquidTouch != null) liquidTouch.setBounds(tmpRect.left, tmpRect.top, tmpRect.right, tmpRect.bottom);
+        if (drawInputBackground) {
+            int save = liquidTouchAllowed() ? liquidTouch.begin(canvas) : -1;
             blurredBackgroundDrawable.draw(canvas);
+            if (liquidTouchAllowed()) liquidTouch.drawHighlight(canvas, dp(INPUT_BUBBLE_RADIUS), dp(7));
+            if (save != -1) canvas.restoreToCount(save);
+        }
 
         if (needDrawInAppKeyboard) {
             underKeyboardBackgroundDrawable.draw(canvas);
@@ -294,6 +340,8 @@ public class ChatInputViewsContainer extends FrameLayout {
 
     @Override
     protected boolean drawChild(@NonNull Canvas canvas, View child, long drawingTime) {
+        if (child == inputIslandBubbleContainer) liquidPressAnimations.sync(child, liquidTouchAllowed());
+        final int liquidSave = child == inputIslandBubbleContainer && liquidTouchAllowed() ? liquidTouch.begin(canvas) : -1;
         final boolean needClip = child == inAppKeyboardBubbleContainer;
         if (needClip) {
             canvas.save();
@@ -305,6 +353,7 @@ public class ChatInputViewsContainer extends FrameLayout {
             canvas.restore();
         }
 
+        if (liquidSave != -1) canvas.restoreToCount(liquidSave);
         return result;
     }
 

@@ -4493,6 +4493,7 @@ if (feedIntegration != null) {
         });
 
         topPanelLayout = new ChatActivityTopPanelLayout(context);
+        topPanelLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
         topPanelLayout.setOnAnimatedHeightChangedListener(() -> {
             invalidateChatListViewTopPadding();
             invalidateMessagesVisiblePart();
@@ -5008,6 +5009,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
         actionBar.textOnlyPill = textOnlyPill;
         avatarContainer.setAvatarPlacement(avatarPlacement);
         avatarContainer.setTextOnlyPill(textOnlyPill);
+        actionBar.setLiquidTouchAvatar(avatarContainer);
         actionBar.setupGlass(
             glassBackgroundDrawableFactory,
             BlurredBackgroundProviderImpl.topPanelChatActivity(themeDelegate),
@@ -5047,6 +5049,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
         }
 
         chatInputViewsContainer = new ChatInputViewsContainer(context);
+        chatInputViewsContainer.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
         chatInputViewsContainer.setClipChildren(false);
         chatInputViewsContainer.setWindowInsetsProvider(windowInsetsStateHolder);
         chatInputViewsContainer.setInputIslandBubbleDrawable(
@@ -8324,6 +8327,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
         // contentView.addView(topButtonsLayout, LayoutHelper.createFrame(57, 300, Gravity.RIGHT | Gravity.TOP));
 
         sideControlsButtonsLayout = new ChatActivitySideControlsButtonsLayout(context, resourceProvider, blurredBackgroundColorProvider, glassBackgroundDrawableFactory);
+        sideControlsButtonsLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
         sideControlsButtonsLayout.setOnClickListener(this::onSideControlButtonOnClick);
         sideControlsButtonsLayout.setOnLongClickListener(this::onSideControlButtonOnLongClick);
         {
@@ -9295,6 +9299,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
         }
 
         actionsButtonsLayout = new ChatActivityActionsButtonsLayout(context, resourceProvider, blurredBackgroundColorProvider, glassBackgroundDrawableFactory);
+        actionsButtonsLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
         actionsButtonsLayout.setSelectButtonOnClickListener(v -> {
             ArrayList<Integer> ids = new ArrayList<>();
             for (int a = 1; a >= 0; a--) {
@@ -31551,6 +31556,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     @Override
     public void onResume() {
         super.onResume();
+        if (actionBar != null) actionBar.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
+        if (chatInputViewsContainer != null) chatInputViewsContainer.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
+        if (sideControlsButtonsLayout != null) sideControlsButtonsLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
+        if (topPanelLayout != null) topPanelLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
+        if (actionsButtonsLayout != null) actionsButtonsLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
         zxc.iconic.xenon.plugins.PluginManager.setCurrentDialogId(dialog_id);
         checkShowBlur(false);
         activityResumeTime = System.currentTimeMillis();

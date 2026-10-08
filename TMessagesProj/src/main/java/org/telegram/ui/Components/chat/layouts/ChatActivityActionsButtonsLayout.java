@@ -5,6 +5,8 @@ import static org.telegram.messenger.AndroidUtilities.lerp;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.graphics.Canvas;
+import android.view.MotionEvent;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Drawable;
@@ -25,6 +27,8 @@ import org.telegram.ui.ActionBar.ActionBarMenuItem;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.LayoutHelper;
+import org.telegram.ui.Components.LiquidTouchEffect;
+import org.telegram.ui.Components.LiquidPressAnimationSuppressor;
 import org.telegram.ui.Components.ScaleStateListAnimator;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
 import org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundColorProvider;
@@ -39,6 +43,10 @@ import zxc.iconic.xenon.forward.ForwardItem;
 @SuppressLint("ViewConstructor")
 public class ChatActivityActionsButtonsLayout extends LinearLayout {
     private final Theme.ResourcesProvider resourcesProvider;
+
+    private final LiquidPressAnimationSuppressor liquidPressAnimations = new LiquidPressAnimationSuppressor();
+    private FrameLayout leftLayout;
+    private LiquidTouchEffect leftLiquid, forwardLiquid;
 
     private final ButtonHolder replyButton = new ButtonHolder();
     private final ButtonHolder selectButton = new ButtonHolder();
@@ -74,12 +82,85 @@ public class ChatActivityActionsButtonsLayout extends LinearLayout {
 
         setOrientation(HORIZONTAL);
         setClipChildren(false);
+        setClipToPadding(false);
 
-        var leftLayout = new FrameLayout(context);
+        leftLayout = new FrameLayout(context);
+        leftLayout.setClipChildren(false);
+        leftLayout.setClipToPadding(false);
         leftLayout.addView(replyButton.button, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
         leftLayout.addView(selectButton.button, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
         addView(leftLayout, LayoutHelper.createLinear(0, 56, 1f, 1, 0, -1, 0));
         addView(forwardButton.optionsView, LayoutHelper.createLinear(0, 56, 1f, -1, 0, 1, 0));
+    }
+
+    public boolean hasVisibleButtons() {
+        return totalVisibilityFactor > 0f && (replyButton.visibilityAnimator.getFloatValue() > 0f
+                || selectButton.visibilityAnimator.getFloatValue() > 0f || forwardButton.visibilityAnimator.getFloatValue() > 0f);
+    }
+
+    public void setLiquidTouchEnabled(boolean enabled) {
+        if (enabled == (leftLiquid != null)) return;
+        if (leftLiquid != null) {
+            leftLiquid.reset();
+            forwardLiquid.reset();
+        }
+        leftLiquid = enabled ? new LiquidTouchEffect(this) : null;
+        forwardLiquid = enabled ? new LiquidTouchEffect(this) : null;
+        if (!enabled) liquidPressAnimations.restore();
+        invalidate();
+    }
+
+    private boolean liquidTouchAllowed() {
+        return leftLiquid != null && !zxc.iconic.xenon.helpers.NonIslandHelper.chatElements();
+    }
+
+    private void updateLiquidBounds() {
+        if (leftLiquid == null) return;
+        leftLiquid.setBounds(leftLayout.getX(), leftLayout.getY(),
+                leftLayout.getX() + leftLayout.getWidth(), leftLayout.getY() + leftLayout.getHeight());
+        View forward = forwardButton.optionsView;
+        forwardLiquid.setBounds(forward.getX(), forward.getY(), forward.getX() + forward.getWidth(), forward.getY() + forward.getHeight());
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        boolean enabled = liquidTouchAllowed();
+        liquidPressAnimations.sync(this, enabled);
+        updateLiquidBounds();
+        if (leftLiquid != null) {
+            leftLiquid.onTouchEvent(event, enabled && (replyButton.button.getVisibility() == VISIBLE && replyButton.button.isEnabled()
+                    || selectButton.button.getVisibility() == VISIBLE && selectButton.button.isEnabled()));
+            // Observe before the options wrapper can intercept a forward-button gesture.
+            forwardLiquid.onTouchEvent(event, enabled && forwardButton.button.getVisibility() == VISIBLE && forwardButton.button.isEnabled());
+        }
+        boolean handled = super.dispatchTouchEvent(event);
+        if (!handled && event.getActionMasked() == MotionEvent.ACTION_DOWN && leftLiquid != null) {
+            leftLiquid.reset();
+            forwardLiquid.reset();
+        }
+        return handled;
+    }
+
+    @Override
+    protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
+        liquidPressAnimations.sync(this, liquidTouchAllowed());
+        updateLiquidBounds();
+        LiquidTouchEffect effect = child == leftLayout ? leftLiquid : child == forwardButton.optionsView ? forwardLiquid : null;
+        int save = liquidTouchAllowed() && effect != null ? effect.begin(canvas) : -1;
+        boolean result = super.drawChild(canvas, child, drawingTime);
+        if (liquidTouchAllowed() && effect != null) effect.drawHighlight(canvas, dp(22), dp(6));
+        if (save != -1) canvas.restoreToCount(save);
+        return result;
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        if (leftLiquid != null) {
+            leftLiquid.reset();
+            forwardLiquid.reset();
+        }
+        liquidPressAnimations.restore();
+        super.onDetachedFromWindow();
     }
 
     public void setReplyButtonOnClickListener(View.OnClickListener listener) {
@@ -113,6 +194,8 @@ public class ChatActivityActionsButtonsLayout extends LinearLayout {
         if (button == this.forwardButton) {
             var optionsView = new ActionBarMenuItem(getContext(), null, 0, 0);
             optionsView.setSubMenuOpenSide(2);
+            optionsView.setClipChildren(false);
+            optionsView.setClipToPadding(false);
             optionsView.addView(button.button, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.CENTER));
             button.optionsView = optionsView;
         }

@@ -12,6 +12,7 @@ import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.AndroidUtilities.find;
 
 import android.content.Context;
+import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
 import android.util.Log;
 import android.view.MotionEvent;
@@ -25,6 +26,8 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.Utilities;
 import org.telegram.ui.Adapters.FiltersView;
 import org.telegram.ui.Components.CubicBezierInterpolator;
+import org.telegram.ui.Components.LiquidTouchEffect;
+import org.telegram.ui.Components.LiquidPressAnimationSuppressor;
 import org.telegram.ui.Components.RLottieDrawable;
 
 import java.util.ArrayList;
@@ -38,6 +41,61 @@ public class ActionBarMenu extends LinearLayout {
     protected ActionBar parentActionBar;
     protected boolean isActionMode;
     private boolean glassMode;
+    private LiquidTouchEffect liquidTouch;
+    private final LiquidPressAnimationSuppressor liquidPressAnimations = new LiquidPressAnimationSuppressor();
+
+    public void setLiquidTouchEnabled(boolean enabled) {
+        if (enabled == (liquidTouch != null)) return;
+        if (liquidTouch != null) liquidTouch.reset();
+        liquidTouch = enabled ? new LiquidTouchEffect(this) : null;
+        if (liquidTouch != null) liquidTouch.setContentView(parentActionBar);
+        if (!enabled) liquidPressAnimations.restore();
+        setClipChildren(!enabled);
+        setClipToPadding(!enabled);
+        invalidate();
+    }
+
+    private boolean liquidTouchAllowed() {
+        return liquidTouch != null && isActionMode && glassMode
+                && !zxc.iconic.xenon.helpers.NonIslandHelper.chatElements();
+    }
+
+    /** The visible glass pill is drawn by ActionBar, outside this full-width menu. */
+    public void setLiquidSurfaceBounds(float left, float top, float right, float bottom) {
+        if (liquidTouch != null) {
+            liquidTouch.setBounds(left - getX(), top - getY(), right - getX(), bottom - getY());
+        }
+    }
+
+    public int beginLiquidBackground(Canvas canvas) {
+        return liquidTouchAllowed() ? liquidTouch.beginInParent(canvas, getX(), getY()) : -1;
+    }
+
+    public void drawLiquidHighlight(Canvas canvas) {
+        if (!liquidTouchAllowed()) return;
+        int save = canvas.save();
+        canvas.translate(getX(), getY());
+        liquidTouch.drawHighlight(canvas, dp(23), dp(6));
+        canvas.restoreToCount(save);
+    }
+
+    @Override
+    protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
+        // All toolbar icons share the pill's transform. The weighted selection
+        // count/title child and the status-bar padding stay outside that surface.
+        int save = child instanceof ActionBarMenuItem && liquidTouchAllowed()
+                ? liquidTouch.begin(canvas) : -1;
+        boolean result = super.drawChild(canvas, child, drawingTime);
+        if (save != -1) canvas.restoreToCount(save);
+        return result;
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        if (liquidTouch != null) liquidTouch.reset();
+        liquidPressAnimations.restore();
+        super.onDetachedFromWindow();
+    }
 
     private ArrayList<Integer> ids;
 
@@ -687,7 +745,14 @@ public class ActionBarMenu extends LinearLayout {
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
-        return super.dispatchTouchEvent(ev);
+        boolean enabled = liquidTouchAllowed();
+        liquidPressAnimations.sync(this, enabled);
+        if (liquidTouch != null) {
+            liquidTouch.onTouchEvent(ev, enabled);
+        }
+        boolean handled = super.dispatchTouchEvent(ev);
+        if (!handled && ev.getActionMasked() == MotionEvent.ACTION_DOWN && liquidTouch != null) liquidTouch.reset();
+        return handled;
     }
 
     @Override

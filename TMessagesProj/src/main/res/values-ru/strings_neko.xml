@@ -673,5 +673,10 @@
     <string name="XenonBackupQueued">Конфиг добавлен в очередь отправки</string>
     <string name="XenonBackupNotFound">В «Избранном» нет конфигов Xenon</string>
     <string name="AnimationStyleAosp9">AOSP 9</string>
+    <string name="LiquidChatElements">Жидкие элементы чата</string>
+    <string name="ChatPopupSection">Всплывающее меню</string>
+    <string name="CustomizeMentionMenu">Настройка меню упоминаний</string>
+    <string name="MarkdownParserXenon">Xenon</string>
+    <string name="MarkdownParserTelegram">Telegram</string>
 </resources>
 

@@ -11,6 +11,7 @@ import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.os.Build;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 
@@ -23,6 +24,8 @@ import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.CircularProgressDrawable;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.LayoutHelper;
+import org.telegram.ui.Components.LiquidTouchEffect;
+import org.telegram.ui.Components.LiquidPressAnimationSuppressor;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
 import org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundColorProvider;
@@ -36,6 +39,41 @@ public class ChatActivityBlurredRoundButton extends FrameLayout implements Facto
 
     public ChatActivityBlurredRoundButton(Context context) {
         super(context);
+    }
+
+    private LiquidTouchEffect liquidTouch;
+    private final LiquidPressAnimationSuppressor liquidPressAnimations = new LiquidPressAnimationSuppressor();
+
+    public void setLiquidTouchEnabled(boolean enabled) {
+        if (enabled == (liquidTouch != null)) return;
+        if (liquidTouch != null) liquidTouch.reset();
+        liquidTouch = enabled ? new LiquidTouchEffect(this) : null;
+        liquidPressAnimations.sync(this, liquidTouchAllowed());
+        invalidate();
+    }
+
+    private boolean liquidTouchAllowed() {
+        return liquidTouch != null && isEnabled()
+                && !zxc.iconic.xenon.helpers.NonIslandHelper.chatElements();
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        liquidPressAnimations.sync(this, liquidTouchAllowed());
+        if (liquidTouch != null) {
+            liquidTouch.setBounds(0, 0, getWidth(), getHeight());
+            liquidTouch.onTouchEvent(event, liquidTouchAllowed());
+        }
+        boolean handled = super.dispatchTouchEvent(event);
+        if (!handled && event.getActionMasked() == MotionEvent.ACTION_DOWN && liquidTouch != null) liquidTouch.reset();
+        return handled;
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        if (liquidTouch != null) liquidTouch.reset();
+        liquidPressAnimations.restore();
+        super.onDetachedFromWindow();
     }
 
     private static final int ANIMATOR_ID_LOADING_VISIBILITY = 0;
@@ -57,12 +95,16 @@ public class ChatActivityBlurredRoundButton extends FrameLayout implements Facto
 
     @Override
     public void draw(@NonNull Canvas canvas) {
+        liquidPressAnimations.sync(this, liquidTouchAllowed());
+        int save = liquidTouchAllowed() ? liquidTouch.begin(canvas) : -1;
         if (backgroundDrawable != null) backgroundDrawable.draw(canvas);
         super.draw(canvas);
+        if (save != -1) canvas.restoreToCount(save);
     }
 
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
+        if (liquidTouchAllowed()) liquidTouch.drawHighlight(canvas, dp(22), dp(6));
         super.dispatchDraw(canvas);
     }
 
