@@ -257,10 +257,16 @@ public class WindowInsetsStateHolder implements WindowInsetsProvider, WindowInse
     private @Nullable WindowAnimatedInsetsProvider animatedInsetsProvider;
     private @Nullable View animatedInsetsProviderTarget;
     private int animatedImeInset;
+    private boolean useDispatchedInsetsAfterAnimation;
 
     public void setupAnimatedInsetsProvider(WindowAnimatedInsetsProvider provider, View target) {
+        setupAnimatedInsetsProvider(provider, target, false);
+    }
+
+    public void setupAnimatedInsetsProvider(WindowAnimatedInsetsProvider provider, View target, boolean useDispatchedInsetsAfterAnimation) {
         animatedInsetsProvider = provider;
         animatedInsetsProviderTarget = target;
+        this.useDispatchedInsetsAfterAnimation = useDispatchedInsetsAfterAnimation;
         animatedInsetsProvider.subscribeToWindowInsetsAnimation(this);
     }
 
@@ -288,7 +294,10 @@ public class WindowInsetsStateHolder implements WindowInsetsProvider, WindowInse
             animatedInsetsProviderTarget.postOnAnimation(() -> {
                 activeAnimations--;
                 if (activeAnimations == 0) {
-                    setInsets(WindowAnimatedInsetsProvider.calculateWindowInsets(animatedInsetsProviderTarget), false);
+                    // Embedded feeds receive a navigation inset that also includes the main tabs.
+                    // Root geometry cannot recover that adjustment after a keyboard animation.
+                    setInsets(useDispatchedInsetsAfterAnimation ? lastInsets :
+                        WindowAnimatedInsetsProvider.calculateWindowInsets(animatedInsetsProviderTarget), false);
                 }
             });
         }

@@ -122,6 +122,10 @@ import android.widget.Space;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.window.OnBackInvokedDispatcher;
+import android.window.OnBackInvokedCallback;
+import android.window.OnBackAnimationCallback;
+import android.window.BackEvent;
+import android.view.PixelCopy;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
@@ -2017,6 +2021,22 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     }
 
     private float[][] animationValues = new float[2][13];
+    private OnBackInvokedDispatcher photoBackDispatcher;
+    private OnBackInvokedCallback photoBackCallback;
+    private PlaceProviderObject predictiveBackPlace;
+    private ClippingImageView[] predictiveBackViews;
+    private ValueAnimator predictiveBackAnimator;
+    private float predictiveBackProgress;
+    private boolean predictiveBackCommitting;
+    private boolean predictiveBackActive;
+    private float predictiveBackEndAlpha;
+    private int predictiveBackGeneration;
+    private int predictiveBackBackgroundAlpha;
+    private float predictiveBackContainerAlpha, predictiveBackNavigationAlpha;
+    private int predictiveBackSurfaceVisibility;
+    private final float[] predictiveBackTarget = new float[13];
+    private long predictiveBackTargetTime;
+    private final Runnable predictiveBackTargetUpdater = this::updatePredictiveBackTargetFrame;
 
     private ChatActivity parentChatActivity;
     private BaseFragment parentFragment;
@@ -9617,6 +9637,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     }
 
     private void onHideView() {
+        unregisterPhotoBackCallback();
+        resetPredictiveBack();
         if (parentActivity instanceof LaunchActivity) {
             LaunchActivity launchActivity = (LaunchActivity) parentActivity;
             launchActivity.removeOnUserLeaveHintListener(onUserLeaveHintListener);
@@ -17690,30 +17712,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             wm.addView(windowView, windowLayoutParams);
             onShowView();
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                final OnBackInvokedDispatcher dispatcher = windowView.findOnBackInvokedDispatcher();
-                if (dispatcher != null) {
-                    dispatcher.registerOnBackInvokedCallback(
-                        OnBackInvokedDispatcher.PRIORITY_DEFAULT,
-                        () -> {
-                            if (textSelectionHelper.isInSelectionMode()) {
-                                textSelectionHelper.clear();
-                            }
-                            if (isCaptionOpen()) {
-                                closeCaptionEnter(true);
-                                return;
-                            }
-                            if (parentActivity instanceof LaunchActivity) {
-                                ((LaunchActivity) parentActivity).onBackPressed();
-                            } else {
-                                if (isVisible()) {
-                                    closePhoto(true, false);
-                                }
-                            }
-                        }
-                    );
-                }
-            }
+            registerPhotoBackCallback();
         } catch (Exception e) {
             FileLog.e(e);
             return false;
@@ -18306,7 +18305,440 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         }
     }
 
+    private void registerPhotoBackCallback() {
+        if (Build.VERSION.SDK_INT < 33) {
+            return;
+        }
+        unregisterPhotoBackCallback();
+        photoBackDispatcher = windowView.findOnBackInvokedDispatcher();
+        if (photoBackDispatcher == null) {
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= 34) {
+            photoBackCallback = new OnBackAnimationCallback() {
+                @Override
+                public void onBackStarted(BackEvent event) {
+                    startPredictiveBack();
+                }
+
+                @Override
+                public void onBackProgressed(BackEvent event) {
+                    if (predictiveBackActive && predictiveBackAnimator == null) {
+                        float intensity = Math.max(NekoConfig.predictiveBackIntensity / 10f, 0.001f);
+                        // Leave a small remaining distance so commit can retarget without a jump.
+                        setPredictiveBackProgress(Math.min(event.getProgress() * intensity, 0.99f));
+                    }
+                }
+
+                @Override
+                public void onBackCancelled() {
+                    if (!predictiveBackActive || predictiveBackAnimator != null) {
+                        return;
+                    }
+                    predictiveBackAnimator = ValueAnimator.ofFloat(predictiveBackProgress, 0f);
+                    predictiveBackAnimator.setDuration(200);
+                    predictiveBackAnimator.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
+                    predictiveBackAnimator.addUpdateListener(animation -> setPredictiveBackProgress((float) animation.getAnimatedValue()));
+                    predictiveBackAnimator.addListener(new AnimatorListenerAdapter() {
+                        @Override
+                        public void onAnimationEnd(Animator animation) {
+                            resetPredictiveBack();
+                        }
+                    });
+                    predictiveBackAnimator.start();
+                }
+
+                @Override
+                public void onBackInvoked() {
+                    if (predictiveBackActive && predictiveBackAnimator == null) {
+                        updatePredictiveBackTarget(true);
+                        predictiveBackCommitting = true;
+                        // Keep the prepared frame and geometry until closePhoto takes over.
+                        predictiveBackGeneration++;
+                        closePhoto(true, false);
+                    } else if (predictiveBackAnimator == null) {
+                        handlePhotoBack();
+                    }
+                }
+            };
+        } else {
+            photoBackCallback = this::handlePhotoBack;
+        }
+        photoBackDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, photoBackCallback);
+    }
+
+    private void unregisterPhotoBackCallback() {
+        if (Build.VERSION.SDK_INT >= 33 && photoBackDispatcher != null && photoBackCallback != null) {
+            photoBackDispatcher.unregisterOnBackInvokedCallback(photoBackCallback);
+        }
+        photoBackDispatcher = null;
+        photoBackCallback = null;
+    }
+
+    private void handlePhotoBack() {
+        if (textSelectionHelper != null && textSelectionHelper.isInSelectionMode()) {
+            textSelectionHelper.clear();
+        }
+        if (isCaptionOpen()) {
+            closeCaptionEnter(true);
+            return;
+        }
+        if (parentActivity instanceof LaunchActivity) {
+            ((LaunchActivity) parentActivity).onBackPressed();
+        } else if (isVisible()) {
+            closePhoto(true, false);
+        }
+    }
+
+    private void startPredictiveBack() {
+        if (predictiveBackActive || !NekoConfig.predictiveBackAnimation || !isVisible || isInline
+                || parentActivity == null || placeProvider == null || animationInProgress != 0
+                || animationStartTime != 0 || currentEditMode != EDIT_MODE_NONE || switchingToMode >= 0
+                || sendPhotoType != 0 || isCaptionOpen() || visibleDialog != null
+                || qualityChooseView != null && qualityChooseView.getTag() != null
+                || textSelectionHelper != null && textSelectionHelper.isInSelectionMode()
+                || pipAnimationInProgress || switchingInlineMode || photoViewerWebView != null
+                || draggingDown || moving || zooming) {
+            return;
+        }
+        PlaceProviderObject object = readPredictiveBackTarget(0, 0, true);
+        predictiveBackBackgroundAlpha = backgroundDrawable.getAlpha();
+        predictiveBackContainerAlpha = containerView.getAlpha();
+        predictiveBackNavigationAlpha = navigationBar.getAlpha();
+        predictiveBackSurfaceVisibility = videoSurfaceView == null ? View.INVISIBLE : videoSurfaceView.getVisibility();
+        predictiveBackPlace = object;
+        predictiveBackActive = true;
+        // Draw in the viewer window, including when the provider has its own transition view.
+        predictiveBackViews = new ClippingImageView[] { animatingImageView };
+        prepareCloseTransition(object, predictiveBackViews, true);
+        if (object == null) {
+            fillCloseFallbackTarget(predictiveBackTarget);
+        }
+        predictiveBackEndAlpha = object == null || object.fadeIn ? 0f : 1f;
+        System.arraycopy(predictiveBackTarget, 0, animationValues[1], 0, predictiveBackTarget.length);
+        if (animatingImageView.getBitmap() == null) {
+            resetPredictiveBack();
+            return;
+        }
+        animatingImageView.setAlpha(1f);
+        setPredictiveBackProgress(0f);
+        predictiveBackTargetTime = SystemClock.uptimeMillis();
+        containerView.postOnAnimation(predictiveBackTargetUpdater);
+        final int generation = ++predictiveBackGeneration;
+        if (videoPlayer != null && (usedSurfaceView ? firstFrameRendered : textureUploaded)) {
+            try {
+                if (usedSurfaceView && videoSurfaceView != null && videoSurfaceView.getWidth() > 0 && videoSurfaceView.getHeight() > 0) {
+                    Bitmap frame = Bitmap.createBitmap(videoSurfaceView.getWidth(), videoSurfaceView.getHeight(), Bitmap.Config.ARGB_8888);
+                    PixelCopy.request(videoSurfaceView, frame, result -> {
+                        if (result == PixelCopy.SUCCESS && generation == predictiveBackGeneration && predictiveBackActive) {
+                            animatingImageView.setOrientation(0, 0);
+                            animatingImageView.setImageBitmap(new ImageReceiver.BitmapHolder(frame));
+                        } else {
+                            frame.recycle();
+                        }
+                        if (generation == predictiveBackGeneration && predictiveBackActive) {
+                            videoSurfaceView.setVisibility(View.INVISIBLE);
+                        }
+                    }, ApplicationLoader.applicationHandler);
+                } else if (videoTextureView != null) {
+                    Bitmap frame = videoTextureView.getBitmap();
+                    if (frame != null) {
+                        animatingImageView.setOrientation(0, 0);
+                        animatingImageView.setImageBitmap(new ImageReceiver.BitmapHolder(frame));
+                    }
+                }
+            } catch (Throwable e) {
+                FileLog.e(e);
+                if (usedSurfaceView && videoSurfaceView != null) {
+                    videoSurfaceView.setVisibility(View.INVISIBLE);
+                }
+            }
+        }
+    }
+
+    private PlaceProviderObject readPredictiveBackTarget(float width, float height, boolean needPreview) {
+        if (placeProvider == null) {
+            return null;
+        }
+        View fragmentView = parentFragment == null ? null : parentFragment.getFragmentView();
+        View alertView = parentAlert == null ? null : parentAlert.getContainer();
+        float fragmentScaleX = fragmentView == null ? 1f : fragmentView.getScaleX();
+        float fragmentScaleY = fragmentView == null ? 1f : fragmentView.getScaleY();
+        float alertScaleX = alertView == null ? 1f : alertView.getScaleX();
+        float alertScaleY = alertView == null ? 1f : alertView.getScaleY();
+        try {
+            // Measure the destination at the final chat scale, then restore it before drawing.
+            // This also normalizes the parent's clipping bounds, not just the image origin.
+            if (fragmentView != null) {
+                fragmentView.setScaleX(1f);
+                fragmentView.setScaleY(1f);
+            }
+            if (alertView != null) {
+                alertView.setScaleX(1f);
+                alertView.setScaleY(1f);
+            }
+            PlaceProviderObject object = placeProvider.getPlaceForPhoto(currentMessageObject, getFileLocation(currentFileLocation), currentIndex, needPreview, true);
+            if (object == null || object.imageReceiver == null || object.parentView == null
+                    || object.imageReceiver.getDrawRegion().width() <= 0 || object.imageReceiver.getDrawRegion().height() <= 0) {
+                return null;
+            }
+            fillCloseTarget(object, predictiveBackTarget, width, height);
+            return object;
+        } finally {
+            if (alertView != null) {
+                alertView.setScaleX(alertScaleX);
+                alertView.setScaleY(alertScaleY);
+            }
+            if (fragmentView != null) {
+                fragmentView.setScaleX(fragmentScaleX);
+                fragmentView.setScaleY(fragmentScaleY);
+            }
+        }
+    }
+
+    private void updatePredictiveBackTargetFrame() {
+        if (!predictiveBackActive || predictiveBackCommitting || !isVisible) {
+            return;
+        }
+        updatePredictiveBackTarget(false);
+        containerView.postOnAnimation(predictiveBackTargetUpdater);
+    }
+
+    private void updatePredictiveBackTarget(boolean committing) {
+        long now = SystemClock.uptimeMillis();
+        float blend = 1f - (float) Math.exp(-Math.min(32, Math.max(0, now - predictiveBackTargetTime)) / 80f);
+        predictiveBackTargetTime = now;
+        ViewGroup.LayoutParams layout = animatingImageView.getLayoutParams();
+        PlaceProviderObject object = readPredictiveBackTarget(layout.width, layout.height, false);
+        if (object == null) {
+            fillCloseFallbackTarget(predictiveBackTarget);
+        }
+        predictiveBackPlace = object;
+        float endAlpha = object == null || object.fadeIn ? 0f : 1f;
+        if (!committing) {
+            predictiveBackEndAlpha += (endAlpha - predictiveBackEndAlpha) * blend;
+        }
+        for (int i = 0; i < predictiveBackTarget.length; i++) {
+            if (committing) {
+                // Finish at the latest position without jumping from the smoothed preview.
+                float p = predictiveBackProgress;
+                if (p < 0.999f) {
+                    float current = animationValues[0][i] * (1f - p) + animationValues[1][i] * p;
+                    animationValues[0][i] = (current - predictiveBackTarget[i] * p) / (1f - p);
+                }
+                animationValues[1][i] = predictiveBackTarget[i];
+            } else {
+                animationValues[1][i] += (predictiveBackTarget[i] - animationValues[1][i]) * blend;
+            }
+        }
+        animatingImageView.setAnimationProgress(predictiveBackProgress);
+        animatingImageView.setAlpha(1f - predictiveBackProgress + predictiveBackEndAlpha * predictiveBackProgress);
+        containerView.invalidate();
+        invalidateBlur();
+    }
+
+    private void setPredictiveBackProgress(float progress) {
+        predictiveBackProgress = Math.max(0f, Math.min(1f, progress));
+        animatingImageView.setAnimationProgress(predictiveBackProgress);
+        animatingImageView.setAlpha(1f - predictiveBackProgress + predictiveBackEndAlpha * predictiveBackProgress);
+        clippingImageProgress = predictiveBackProgress;
+        backgroundDrawable.setAlpha((int) (predictiveBackBackgroundAlpha * (1f - predictiveBackProgress)));
+        containerView.setAlpha(predictiveBackContainerAlpha * (1f - predictiveBackProgress));
+        navigationBar.setAlpha(predictiveBackNavigationAlpha * (1f - predictiveBackProgress));
+        containerView.invalidate();
+        invalidateBlur();
+    }
+
+    private void resetPredictiveBack() {
+        if (containerView != null) {
+            containerView.removeCallbacks(predictiveBackTargetUpdater);
+        }
+        predictiveBackGeneration++;
+        if (predictiveBackAnimator != null) {
+            ValueAnimator animator = predictiveBackAnimator;
+            predictiveBackAnimator = null;
+            animator.removeAllListeners();
+            animator.cancel();
+        }
+        if (!predictiveBackActive) {
+            return;
+        }
+        predictiveBackPlace = null;
+        predictiveBackActive = false;
+        predictiveBackViews = null;
+        predictiveBackCommitting = false;
+        predictiveBackProgress = 0f;
+        clippingImageProgress = 0f;
+        animatingImageView.setVisibility(View.GONE);
+        animatingImageView.setImageBitmap(null);
+        animatingImageView.setAlpha(1f);
+        backgroundDrawable.setAlpha(predictiveBackBackgroundAlpha);
+        containerView.setAlpha(predictiveBackContainerAlpha);
+        navigationBar.setAlpha(predictiveBackNavigationAlpha);
+        if (usedSurfaceView && videoSurfaceView != null) {
+            videoSurfaceView.setVisibility(predictiveBackSurfaceVisibility);
+        }
+        containerView.invalidate();
+        invalidateBlur();
+    }
+
+    private void fillCloseFallbackTarget(float[] target) {
+        System.arraycopy(animationValues[0], 0, target, 0, target.length);
+        target[3] = -(AndroidUtilities.displaySize.y + (isStatusBarVisible() ? AndroidUtilities.statusBarHeight : 0));
+    }
+
+    private void fillCloseTarget(PlaceProviderObject object, float[] target, float width, float height) {
+        RectF drawRegion = object.imageReceiver.getDrawRegion();
+        if (width <= 0 || height <= 0) {
+            width = drawRegion.width();
+            height = drawRegion.height();
+        }
+        int clipHorizontal = (int) Math.abs(drawRegion.left - object.imageReceiver.getImageX());
+        int clipVertical = (int) Math.abs(drawRegion.top - object.imageReceiver.getImageY());
+
+        if (object.imageReceiver.isAspectFit()) {
+            clipHorizontal = 0;
+        }
+
+        int[] coords2 = new int[2];
+        object.parentView.getLocationInWindow(coords2);
+        int clipTop = (int) (coords2[1] - 0 - (object.viewY + drawRegion.top) + object.clipTopAddition);
+        if (clipTop < 0) {
+            clipTop = 0;
+        }
+        int clipBottom = (int) (object.viewY + drawRegion.top + (drawRegion.bottom - drawRegion.top) - (coords2[1] + object.parentView.getHeight() - 0) + object.clipBottomAddition);
+        if (clipBottom < 0) {
+            clipBottom = 0;
+        }
+
+        clipTop = Math.max(clipTop, clipVertical);
+        clipBottom = Math.max(clipBottom, clipVertical);
+
+        target[0] = object.scale * drawRegion.width() / width;
+        target[1] = object.scale * drawRegion.height() / height;
+        target[2] = object.viewX + drawRegion.left * object.scale;
+        target[3] = object.viewY + drawRegion.top * object.scale;
+        target[4] = clipHorizontal * object.scale;
+        target[5] = clipTop * object.scale;
+        target[6] = clipBottom * object.scale;
+        for (int a = 0; a < 4; a++) {
+            target[7 + a] = object.radius != null ? object.radius[a] : 0;
+        }
+        target[11] = clipVertical * object.scale;
+        target[12] = clipHorizontal * object.scale;
+    }
+
+    private ImageReceiver.BitmapHolder getPredictiveBackBitmap(PlaceProviderObject object) {
+        ImageReceiver.BitmapHolder bitmap = centerImage.getBitmapSafe();
+        if (bitmap != null && centerImage.getAnimation() != null) {
+            // The GIF decoder can replace or recycle its frame while the gesture is held.
+            Bitmap frame = Bitmap.createBitmap(bitmap.bitmap);
+            bitmap.release();
+            bitmap = new ImageReceiver.BitmapHolder(frame);
+        }
+        if (bitmap == null && object != null && object.thumb != null && !object.thumb.isRecycled()) {
+            bitmap = new ImageReceiver.BitmapHolder(Bitmap.createBitmap(object.thumb.bitmap));
+        }
+        return bitmap;
+    }
+
+    private void prepareCloseTransition(PlaceProviderObject object, ClippingImageView[] animatingImageViews, boolean predictive) {
+        for (int i = 0; i < animatingImageViews.length; i++) {
+            animatingImageViews[i].setAnimationValues(animationValues, false, object == null ? false : object.fadeIn);
+            animatingImageViews[i].setVisibility(View.VISIBLE);
+        }
+
+        final ViewGroup.LayoutParams layoutParams = animatingImageView.getLayoutParams();
+        RectF drawRegion = null;
+        if (object != null) {
+            drawRegion = object.imageReceiver.getDrawRegion();
+            layoutParams.width = (int) drawRegion.width();
+            layoutParams.height = (int) drawRegion.height();
+            int orientation = object.imageReceiver.getOrientation();
+            int animatedOrientation = object.imageReceiver.getAnimatedOrientation();
+            if (animatedOrientation != 0) {
+                orientation = animatedOrientation;
+            }
+            for (int i = 0; i < animatingImageViews.length; i++) {
+                animatingImageViews[i].setOrientation(orientation, object.imageReceiver.getInvert());
+                ImageReceiver.BitmapHolder bitmap = predictive ? getPredictiveBackBitmap(object) : object.thumb;
+                animatingImageViews[i].setImageBitmap(bitmap);
+            }
+        } else {
+            layoutParams.width = (int) centerImage.getImageWidth();
+            layoutParams.height = (int) centerImage.getImageHeight();
+            for (int i = 0; i < animatingImageViews.length; i++) {
+                animatingImageViews[i].setOrientation(centerImage.getOrientation(), centerImage.getInvert());
+                animatingImageViews[i].setImageBitmap(predictive ? getPredictiveBackBitmap(null) : centerImage.getBitmapSafe());
+            }
+        }
+        if (layoutParams.width <= 0) {
+            layoutParams.width = 100;
+        }
+        if (layoutParams.height <= 0) {
+            layoutParams.height = 100;
+        }
+
+        float scaleX;
+        float scaleY;
+        float scale2;
+        if (sendPhotoType == SELECT_TYPE_AVATAR) {
+            float statusBarHeight = (isStatusBarVisible() ? AndroidUtilities.statusBarHeight : 0);
+            float measuredHeight = (float) photoCropView.getMeasuredHeight() - dp(64) - statusBarHeight;
+            float minSide = Math.min(photoCropView.getMeasuredWidth(), measuredHeight) - 2 * dp(16);
+            scaleX = minSide / layoutParams.width;
+            scaleY = minSide / layoutParams.height;
+            scale2 = Math.max(scaleX, scaleY);
+        } else {
+            scaleX = (float) windowView.getMeasuredWidth() / layoutParams.width;
+            scaleY = (float) (AndroidUtilities.displaySize.y + (isStatusBarVisible() ? AndroidUtilities.statusBarHeight : 0)) / layoutParams.height;
+            scale2 = Math.min(scaleX, scaleY);
+        }
+        float width = layoutParams.width * scale * scale2;
+        float height = layoutParams.height * scale * scale2;
+        float xPos = (windowView.getMeasuredWidth() - width) / 2.0f;
+        float yPos;
+        if (sendPhotoType == SELECT_TYPE_AVATAR) {
+            float statusBarHeight = (isStatusBarVisible() ? AndroidUtilities.statusBarHeight : 0);
+            float measuredHeight = (float) photoCropView.getMeasuredHeight() - statusBarHeight;
+            yPos = (measuredHeight - height) / 2.0f;
+        } else {
+            yPos = ((AndroidUtilities.displaySize.y + (isStatusBarVisible() ? AndroidUtilities.statusBarHeight : 0)) - height) / 2.0f;
+        }
+        for (int i = 0; i < animatingImageViews.length; i++) {
+            animatingImageViews[i].setLayoutParams(layoutParams);
+            animatingImageViews[i].setTranslationX(xPos + translationX);
+            animatingImageViews[i].setTranslationY(yPos + translationY);
+            animatingImageViews[i].setScaleX(scale * scale2);
+            animatingImageViews[i].setScaleY(scale * scale2);
+        }
+
+        animationValues[0][0] = animatingImageView.getScaleX();
+        animationValues[0][1] = animatingImageView.getScaleY();
+        animationValues[0][2] = animatingImageView.getTranslationX();
+        animationValues[0][3] = animatingImageView.getTranslationY();
+        animationValues[0][4] = 0;
+        animationValues[0][5] = 0;
+        animationValues[0][6] = 0;
+        animationValues[0][7] = 0;
+        animationValues[0][8] = 0;
+        animationValues[0][9] = 0;
+        animationValues[0][10] = 0;
+        animationValues[0][11] = 0;
+        animationValues[0][12] = 0;
+
+        if (object != null) {
+            fillCloseTarget(object, animationValues[1], layoutParams.width, layoutParams.height);
+
+        }
+    }
+
     public void closePhoto(boolean animated, boolean fromEditMode) {
+        final boolean continuingPredictiveBack = predictiveBackCommitting && predictiveBackActive;
+        final float closeProgress = continuingPredictiveBack ? predictiveBackProgress : 0f;
+        if (!continuingPredictiveBack) {
+            resetPredictiveBack();
+        }
         if (stickerMakerView != null) {
             stickerMakerView.isThanosInProgress = false;
             if (cutOutBtn.isCancelState()) {
@@ -18430,7 +18862,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         }
         final boolean[] allowStart = new boolean[] { true };
         final Runnable[] start = new Runnable[1];
-        final PlaceProviderObject object = placeProvider == null ? null : placeProvider.getPlaceForPhoto(currentMessageObject, getFileLocation(currentFileLocation), currentIndex, true, true);
+        final PlaceProviderObject object = continuingPredictiveBack ? predictiveBackPlace : placeProvider == null ? null : placeProvider.getPlaceForPhoto(currentMessageObject, getFileLocation(currentFileLocation), currentIndex, true, true);
         if (videoPlayer != null && object != null) {
             AnimatedFileDrawable animation = object.imageReceiver.getAnimation();
             if (animation != null) {
@@ -18533,131 +18965,16 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             }
         } else {
             if (animated) {
-                final ClippingImageView[] animatingImageViews = getAnimatingImageViews(object);
+                final ClippingImageView[] animatingImageViews = continuingPredictiveBack ? predictiveBackViews : getAnimatingImageViews(object);
 
-                for (int i = 0; i < animatingImageViews.length; i++) {
-                    animatingImageViews[i].setAnimationValues(animationValues, false, object == null ? false : object.fadeIn);
-                    animatingImageViews[i].setVisibility(View.VISIBLE);
+                if (!continuingPredictiveBack) {
+                    prepareCloseTransition(object, animatingImageViews, false);
                 }
-
                 final AnimatorSet animatorSet = new AnimatorSet();
-
-                final ViewGroup.LayoutParams layoutParams = animatingImageView.getLayoutParams();
-                RectF drawRegion = null;
-                if (object != null) {
-                    drawRegion = object.imageReceiver.getDrawRegion();
-                    layoutParams.width = (int) drawRegion.width();
-                    layoutParams.height = (int) drawRegion.height();
-                    int orientation = object.imageReceiver.getOrientation();
-                    int animatedOrientation = object.imageReceiver.getAnimatedOrientation();
-                    if (animatedOrientation != 0) {
-                        orientation = animatedOrientation;
-                    }
-                    for (int i = 0; i < animatingImageViews.length; i++) {
-                        animatingImageViews[i].setOrientation(orientation, object.imageReceiver.getInvert());
-                        animatingImageViews[i].setImageBitmap(object.thumb);
-                    }
-                } else {
-                    layoutParams.width = (int) centerImage.getImageWidth();
-                    layoutParams.height = (int) centerImage.getImageHeight();
-                    for (int i = 0; i < animatingImageViews.length; i++) {
-                        animatingImageViews[i].setOrientation(centerImage.getOrientation(), centerImage.getInvert());
-                        animatingImageViews[i].setImageBitmap(centerImage.getBitmapSafe());
-                    }
-                }
-                if (layoutParams.width <= 0) {
-                    layoutParams.width = 100;
-                }
-                if (layoutParams.height <= 0) {
-                    layoutParams.height = 100;
-                }
-
-                float scaleX;
-                float scaleY;
-                float scale2;
-                if (sendPhotoType == SELECT_TYPE_AVATAR) {
-                    float statusBarHeight = (isStatusBarVisible() ? AndroidUtilities.statusBarHeight : 0);
-                    float measuredHeight = (float) photoCropView.getMeasuredHeight() - dp(64) - statusBarHeight;
-                    float minSide = Math.min(photoCropView.getMeasuredWidth(), measuredHeight) - 2 * dp(16);
-                    scaleX = minSide / layoutParams.width;
-                    scaleY = minSide / layoutParams.height;
-                    scale2 = Math.max(scaleX, scaleY);
-                } else {
-                    scaleX = (float) windowView.getMeasuredWidth() / layoutParams.width;
-                    scaleY = (float) (AndroidUtilities.displaySize.y + (isStatusBarVisible() ? AndroidUtilities.statusBarHeight : 0)) / layoutParams.height;
-                    scale2 = Math.min(scaleX, scaleY);
-                }
-                float width = layoutParams.width * scale * scale2;
-                float height = layoutParams.height * scale * scale2;
-                float xPos = (windowView.getMeasuredWidth() - width) / 2.0f;
-                float yPos;
-                if (sendPhotoType == SELECT_TYPE_AVATAR) {
-                    float statusBarHeight = (isStatusBarVisible() ? AndroidUtilities.statusBarHeight : 0);
-                    float measuredHeight = (float) photoCropView.getMeasuredHeight() - statusBarHeight;
-                    yPos = (measuredHeight - height) / 2.0f;
-                } else {
-                    yPos = ((AndroidUtilities.displaySize.y + (isStatusBarVisible() ? AndroidUtilities.statusBarHeight : 0)) - height) / 2.0f;
-                }
-                for (int i = 0; i < animatingImageViews.length; i++) {
-                    animatingImageViews[i].setLayoutParams(layoutParams);
-                    animatingImageViews[i].setTranslationX(xPos + translationX);
-                    animatingImageViews[i].setTranslationY(yPos + translationY);
-                    animatingImageViews[i].setScaleX(scale * scale2);
-                    animatingImageViews[i].setScaleY(scale * scale2);
-                }
-
-                if (object != null) {
-                    int clipHorizontal = (int) Math.abs(drawRegion.left - object.imageReceiver.getImageX());
-                    int clipVertical = (int) Math.abs(drawRegion.top - object.imageReceiver.getImageY());
-
-                    if (object.imageReceiver.isAspectFit()) {
-                        clipHorizontal = 0;
-                    }
-
-                    int[] coords2 = new int[2];
-                    object.parentView.getLocationInWindow(coords2);
-                    int clipTop = (int) (coords2[1] - 0 - (object.viewY + drawRegion.top) + object.clipTopAddition);
-                    if (clipTop < 0) {
-                        clipTop = 0;
-                    }
-                    int clipBottom = (int) (object.viewY + drawRegion.top + (drawRegion.bottom - drawRegion.top) - (coords2[1] + object.parentView.getHeight() - 0) + object.clipBottomAddition);
-                    if (clipBottom < 0) {
-                        clipBottom = 0;
-                    }
-
-                    clipTop = Math.max(clipTop, clipVertical);
-                    clipBottom = Math.max(clipBottom, clipVertical);
-
-                    animationValues[0][0] = animatingImageView.getScaleX();
-                    animationValues[0][1] = animatingImageView.getScaleY();
-                    animationValues[0][2] = animatingImageView.getTranslationX();
-                    animationValues[0][3] = animatingImageView.getTranslationY();
-                    animationValues[0][4] = 0;
-                    animationValues[0][5] = 0;
-                    animationValues[0][6] = 0;
-                    animationValues[0][7] = 0;
-                    animationValues[0][8] = 0;
-                    animationValues[0][9] = 0;
-                    animationValues[0][10] = 0;
-                    animationValues[0][11] = 0;
-                    animationValues[0][12] = 0;
-
-                    animationValues[1][0] = object.scale;
-                    animationValues[1][1] = object.scale;
-                    animationValues[1][2] = object.viewX + drawRegion.left * object.scale;
-                    animationValues[1][3] = object.viewY + drawRegion.top * object.scale;
-                    animationValues[1][4] = clipHorizontal * object.scale;
-                    animationValues[1][5] = clipTop * object.scale;
-                    animationValues[1][6] = clipBottom * object.scale;
-                    for (int a = 0; a < 4; a++) {
-                        animationValues[1][7 + a] = object.radius != null ? object.radius[a] : 0;
-                    }
-                    animationValues[1][11] = clipVertical * object.scale;
-                    animationValues[1][12] = clipHorizontal * object.scale;
-
+                if (object != null || continuingPredictiveBack) {
                     ArrayList<Animator> animators = new ArrayList<>((sendPhotoType == SELECT_TYPE_AVATAR ? 3 : 2) + animatingImageViews.length + (animatingImageViews.length > 1 ? 1 : 0));
                     for (int i = 0; i < animatingImageViews.length; i++) {
-                        ObjectAnimator animator = ObjectAnimator.ofFloat(animatingImageViews[i], AnimationProperties.CLIPPING_IMAGE_VIEW_PROGRESS, 0.0f, 1.0f);
+                        ObjectAnimator animator = ObjectAnimator.ofFloat(animatingImageViews[i], AnimationProperties.CLIPPING_IMAGE_VIEW_PROGRESS, closeProgress, 1.0f);
                         if (i == 0) {
                             animator.addUpdateListener(animation -> {
                                 clippingImageProgress = (float) animation.getAnimatedValue();
@@ -18665,6 +18982,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                             });
                         }
                         animators.add(animator);
+                    }
+                    if (continuingPredictiveBack) {
+                        animators.add(ObjectAnimator.ofFloat(animatingImageView, View.ALPHA, object == null || object.fadeIn ? 0f : 1f));
                     }
                     if (animatingImageViews.length > 1) {
                         animators.add(ObjectAnimator.ofFloat(animatingImageView, View.ALPHA, 0f));
@@ -18711,7 +19031,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                     }
                 };
 
-                animatorSet.setDuration(350);
+                animatorSet.setDuration(continuingPredictiveBack ? Math.max(80, (int) (350 * (1f - closeProgress))) : 350);
                 animatorSet.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
                 animatorSet.addListener(new AnimatorListenerAdapter() {
                     @Override
@@ -18735,6 +19055,11 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                     containerView.invalidate();
                     transitionAnimationStartTime = System.currentTimeMillis();
                     containerView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+                    predictiveBackPlace = null;
+                    predictiveBackActive = false;
+                    predictiveBackViews = null;
+                    predictiveBackCommitting = false;
+                    containerView.removeCallbacks(predictiveBackTargetUpdater);
                     animatorSet.start();
                 };
                 if (allowStart[0]) {
@@ -18858,6 +19183,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     }
 
     public void destroyPhotoViewer() {
+        unregisterPhotoBackCallback();
+        resetPredictiveBack();
         if (parentActivity == null || windowView == null) {
             return;
         }
@@ -19157,6 +19484,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     Runnable longPressRunnable = this::onLongPress;
 
     private boolean onTouchEvent(MotionEvent ev) {
+        if (predictiveBackActive) {
+            return true;
+        }
         lastX = ev.getX();
         if (currentEditMode == EDIT_MODE_PAINT && animationStartTime != 0 && (ev.getActionMasked() == MotionEvent.ACTION_DOWN || ev.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN)) {
             if (ev.getPointerCount() >= 2) {
@@ -19813,7 +20143,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             drawFancyShadows(canvas);
             return;
         }
-        if (animationInProgress == 3 || !isVisible && animationInProgress != 2 && !pipAnimationInProgress) {
+        if (predictiveBackActive || animationInProgress == 3 || !isVisible && animationInProgress != 2 && !pipAnimationInProgress) {
 
             if (BLUR_RENDERNODE()) {
                 canvas = realCanvas;
