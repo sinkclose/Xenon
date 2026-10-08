@@ -10223,7 +10223,8 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
 
         if (context instanceof LaunchActivity) {
-            windowInsetsStateHolder.setupAnimatedInsetsProvider(((LaunchActivity) context).getRootAnimatedInsetsListener(), fragmentView);
+            windowInsetsStateHolder.setupAnimatedInsetsProvider(((LaunchActivity) context).getRootAnimatedInsetsListener(), fragmentView,
+                isFeedSearch() && hasMainTabs);
         }
 
         onBottomItemsVisibilityChanged();
