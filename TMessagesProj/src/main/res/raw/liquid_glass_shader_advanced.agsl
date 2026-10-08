@@ -35,7 +35,8 @@ float sdRoundedRect(float2 coord, float2 halfSize, float r) {
 float2 gradSdRoundedRect(float2 coord, float2 halfSize, float r) {
     float2 cornerCoord = abs(coord) - (halfSize - float2(r));
     if (cornerCoord.x >= 0.0 || cornerCoord.y >= 0.0) {
-        return sign(coord) * normalize(max(cornerCoord, 0.0));
+        float2 outside = max(cornerCoord, 0.0);
+        return sign(coord) * outside / max(length(outside), 0.0001);
     } else {
         float gradX = step(cornerCoord.y, cornerCoord.x);
         return sign(coord) * float2(gradX, 1.0 - gradX);
@@ -43,26 +44,36 @@ float2 gradSdRoundedRect(float2 coord, float2 halfSize, float r) {
 }
 
 float circleMap(float x) {
-    return 1.0 - sqrt(1.0 - x * x);
+    return 1.0 - sqrt(max(0.0, 1.0 - x * x));
+}
+
+float refractionDistance(float sd, float maxHeight) {
+    // Opposing edge normals meet on the medial axis. Make displacement
+    // vanish there even when the requested lens depth exceeds the glass size.
+    float height = min(refractionHeight, maxHeight);
+    if (height <= 0.0 || -sd >= height) return 0.0;
+    float edge = clamp(1.0 + min(sd, 0.0) / height, 0.0, 1.0);
+    return circleMap(edge) * refractionAmount;
 }
 
 half4 main(float2 coord) {
     float2 halfSize = size * 0.5;
     float2 centeredCoord = coord - center;
-    float r = radiusAt(coord, radius);
+    float r = radiusAt(centeredCoord, radius);
 
     float sd = sdRoundedRect(centeredCoord, halfSize, r);
 
     // Deep inside: no refraction
-    if (-sd >= refractionHeight) {
+    float d = refractionDistance(sd, min(halfSize.x, halfSize.y));
+    if (d == 0.0) {
         return img.eval(coord);
     }
 
     // Edge zone: apply lens refraction
-    sd = min(sd, 0.0);
-    float d = circleMap(1.0 - -sd / refractionHeight) * refractionAmount;
     float gradRadius = min(r * 1.5, min(halfSize.x, halfSize.y));
-    float2 grad = normalize(gradSdRoundedRect(centeredCoord, halfSize, gradRadius) + depthEffect * normalize(centeredCoord));
+    float2 radial = centeredCoord / max(length(centeredCoord), 0.0001);
+    float2 grad = gradSdRoundedRect(centeredCoord, halfSize, gradRadius) + depthEffect * radial;
+    grad /= max(length(grad), 0.0001);
 
     float2 refractedCoord = coord + d * grad;
 
