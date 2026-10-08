@@ -1096,8 +1096,8 @@ public class ChatActivity extends BaseFragment implements
     private boolean popupBlurApplied;
     private ValueAnimator popupBlurAnimator;
     private float popupBlurRadius;
-    private ViewTreeObserver popupBlurObserver;
-    private Runnable popupBlurFrameCommitCallback;
+    private ViewTreeObserver.OnDrawListener popupBlurDrawListener;
+    private Runnable popupBlurAfterDrawRunnable;
     private Runnable popupBlurStartRunnable;
     private View popupBlurWaitingView;
     private boolean popupBlurPending;
@@ -9611,7 +9611,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
         bottomOverlay.addView(bottomOverlayText, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.CENTER));
         mutedAccountSwitcher = new SenderSelectView(context);
         mutedAccountSwitcher.setVisibility(View.GONE);
-        bottomOverlay.addView(mutedAccountSwitcher, LayoutHelper.createFrame(32, 32, Gravity.LEFT | Gravity.CENTER_VERTICAL, 10, 0, 0, 0));
+        bottomOverlay.addView(mutedAccountSwitcher, LayoutHelper.createFrame(36, 36, Gravity.LEFT | Gravity.CENTER_VERTICAL, 4.66f, 0, 4.66f, 0));
         mutedAccountSwitcher.setOnClickListener(v -> chatActivityEnterView.openAccountSenderSelect());
         
         
@@ -9763,7 +9763,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
         restrictedAccountSwitcher = new SenderSelectView(context);
         restrictedAccountSwitcher.setVisibility(View.GONE);
         bottomChannelButtonsLayout.getContainer().addView(restrictedAccountSwitcher,
-                LayoutHelper.createFrame(32, 32, Gravity.LEFT | Gravity.CENTER_VERTICAL, 10, 0, 0, 0));
+                LayoutHelper.createFrame(36, 36, Gravity.LEFT | Gravity.CENTER_VERTICAL, 4.66f, 0, 4.66f, 0));
         restrictedAccountSwitcher.setOnClickListener(v -> chatActivityEnterView.openAccountSenderSelect());
         bottomOverlayChatText.setOnClickListener(view -> {
             if (getParentActivity() == null || pullingDownOffset != 0) {
@@ -20309,7 +20309,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 mutedAccountSwitcher.setAvatar(getUserConfig().getCurrentUser());
                 mutedAccountSwitcher.setContentDescription(getString(R.string.PlainTextRestrictedHint));
                 mutedAccountSwitcher.setVisibility(View.VISIBLE);
-                bottomOverlayText.setPadding(dp(52), 0, dp(24), 0);
+                bottomOverlayText.setPadding(dp(48), 0, dp(48), 0);
             }
             bottomOverlay.setVisibility(View.VISIBLE);
             if (mentionListAnimation != null) {
@@ -29906,6 +29906,13 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     && !shouldDisplaySwipeToLeftToReplyInForum()
                     && (forumTopic == null || !forumTopic.closed);
             restrictedAccountSwitcher.setVisibility(showSwitcher ? View.VISIBLE : View.GONE);
+            // Keep the label centered in the pill and clear of the sender avatar.
+            FrameLayout.LayoutParams textParams = (FrameLayout.LayoutParams) bottomOverlayChatText.getLayoutParams();
+            int textInset = showSwitcher ? dp(48) : 0;
+            if (textParams.leftMargin != textInset || textParams.rightMargin != textInset) {
+                textParams.leftMargin = textParams.rightMargin = textInset;
+                bottomOverlayChatText.setLayoutParams(textParams);
+            }
             if (showSwitcher) {
                 restrictedAccountSwitcher.setAvatar(getUserConfig().getCurrentUser());
                 restrictedAccountSwitcher.setContentDescription(getString(R.string.PlainTextRestrictedHint));
@@ -32524,7 +32531,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (Build.VERSION.SDK_INT < 31 || contentView == null) return;
         final ActionBarPopupWindow popupWindow = scrimPopupWindow;
         final View popupContent = popupWindow != null ? popupWindow.getContentView() : null;
-        if (popupContent == null || !popupWindow.isShowing() || !popupContent.isHardwareAccelerated()) return;
+        if (popupContent == null || !popupWindow.isShowing()) return;
         cancelPopupBlur();
         popupBlurApplied = true;
         popupBlurRadius = 0f;
@@ -32541,18 +32548,32 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 startPopupBlur(targetBlur);
             }
         };
-        popupBlurFrameCommitCallback = new Runnable() {
+        popupBlurAfterDrawRunnable = new Runnable() {
             @Override
             public void run() {
-                if (popupBlurFrameCommitCallback != this || !popupBlurPending) return;
-                popupBlurFrameCommitCallback = null;
-                // Start on a fresh frame after the popup's first frame was submitted.
-                // Time spent preparing that frame must not advance the blur animation.
+                if (popupBlurAfterDrawRunnable != this || !popupBlurPending) return;
+                popupBlurAfterDrawRunnable = null;
+                ViewTreeObserver observer = popupContent.getViewTreeObserver();
+                if (popupBlurDrawListener != null && observer.isAlive()) {
+                    observer.removeOnDrawListener(popupBlurDrawListener);
+                }
+                popupBlurDrawListener = null;
+                // The first draw has finished. Start blur on a fresh frame so
+                // popup preparation cannot consume the animation's initial time.
                 popupContent.postOnAnimation(popupBlurStartRunnable);
             }
         };
-        popupBlurObserver = popupContent.getViewTreeObserver();
-        popupBlurObserver.registerFrameCommitCallback(popupBlurFrameCommitCallback);
+        popupBlurDrawListener = new ViewTreeObserver.OnDrawListener() {
+            private boolean drawn;
+
+            @Override
+            public void onDraw() {
+                if (drawn || popupBlurDrawListener != this || !popupBlurPending) return;
+                drawn = true;
+                popupContent.post(popupBlurAfterDrawRunnable);
+            }
+        };
+        popupContent.getViewTreeObserver().addOnDrawListener(popupBlurDrawListener);
         popupContent.invalidate();
     }
 
@@ -32577,14 +32598,20 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     private void cancelPopupBlur() {
-        if (popupBlurFrameCommitCallback != null && popupBlurObserver != null && popupBlurObserver.isAlive()) {
-            popupBlurObserver.unregisterFrameCommitCallback(popupBlurFrameCommitCallback);
+        if (popupBlurWaitingView != null) {
+            ViewTreeObserver observer = popupBlurWaitingView.getViewTreeObserver();
+            if (popupBlurDrawListener != null && observer.isAlive()) {
+                observer.removeOnDrawListener(popupBlurDrawListener);
+            }
+            if (popupBlurAfterDrawRunnable != null) {
+                popupBlurWaitingView.removeCallbacks(popupBlurAfterDrawRunnable);
+            }
         }
         if (popupBlurStartRunnable != null && popupBlurWaitingView != null) {
             popupBlurWaitingView.removeCallbacks(popupBlurStartRunnable);
         }
-        popupBlurObserver = null;
-        popupBlurFrameCommitCallback = null;
+        popupBlurDrawListener = null;
+        popupBlurAfterDrawRunnable = null;
         popupBlurStartRunnable = null;
         popupBlurWaitingView = null;
         popupBlurPending = false;
