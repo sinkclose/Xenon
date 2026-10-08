@@ -784,7 +784,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 OnBackInvokedDispatcher.PRIORITY_DEFAULT,
                 (OnBackAnimationCallback) onBackAnimationCallback
             );
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && NekoConfig.predictiveBackAnimationStyle == NekoConfig.ANIMATION_STYLE_IOS && NekoConfig.predictiveBackIntensity > 0 && actionBarLayout != null) {
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && (NekoConfig.predictiveBackAnimationStyle == NekoConfig.ANIMATION_STYLE_IOS
+                || NekoConfig.predictiveBackAnimationStyle == NekoConfig.ANIMATION_STYLE_SLIDE
+                || NekoConfig.predictiveBackAnimationStyle == NekoConfig.ANIMATION_STYLE_AOSP_LEGACY
+                || NekoConfig.predictiveBackAnimationStyle == NekoConfig.ANIMATION_STYLE_AOSP_9) && NekoConfig.predictiveBackIntensity > 0 && actionBarLayout != null) {
             if (onBackAnimationCallback == null) {
                 onBackAnimationCallback = zxc.iconic.xenon.helpers.IosPredictiveBack.createCallback(
                     actionBarLayout,
@@ -796,8 +799,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                         if (!onBackPressed(true)) return;
                         onBackPressed();
                     },
-                    false,
-                    false
+                    NekoConfig.predictiveBackAnimationStyle
                 );
             }
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(

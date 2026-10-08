@@ -201,8 +201,17 @@ public class NekoConfig {
     public static int textAnimFadeDuration = 300;
     public static int textAnimBlurStrength = 20;
     public static int textAnimBlurDuration = 350;
-    public static int alternativeTransitionSpeed = 300;
-    public static String alternativeTransitionEase = "0.37,0.01,0.1,1";
+    public static final int DEFAULT_IOS_DURATION = 450;
+    public static final String DEFAULT_IOS_EASE = "0.3,0.5,0,1";
+    public static final int DEFAULT_FADE_DURATION = 350;
+    public static final String DEFAULT_FADE_EASE = "0.23,1,0.32,1";
+    public static final int DEFAULT_SLIDE_DURATION = 300;
+    public static final String DEFAULT_SLIDE_EASE = "0.25,0,0.25,1";
+    public static int slideDuration = DEFAULT_SLIDE_DURATION;
+    public static String slideEase = DEFAULT_SLIDE_EASE;
+    public static String fadeEase = DEFAULT_FADE_EASE;
+    public static int alternativeTransitionSpeed = DEFAULT_IOS_DURATION;
+    public static String alternativeTransitionEase = DEFAULT_IOS_EASE;
     public static boolean material3Switches = false;
     public static boolean m3SectionsStyle = false;
     public static boolean material3ChatHeaders = false;
@@ -229,11 +238,14 @@ public class NekoConfig {
     public static final int ANIMATION_STYLE_AOSP = 2;
     public static final int ANIMATION_STYLE_AOSP_ALT = 3;
     public static final int ANIMATION_STYLE_FADE = 4;
+    public static final int ANIMATION_STYLE_SLIDE = 5;
+    public static final int ANIMATION_STYLE_AOSP_LEGACY = 6;
+    public static final int ANIMATION_STYLE_AOSP_9 = 7;
     public static int openAnimationStyle = ANIMATION_STYLE_DEFAULT;
     public static int closeAnimationStyle = ANIMATION_STYLE_DEFAULT;
     public static int predictiveBackAnimationStyle = ANIMATION_STYLE_DEFAULT;
     public static int predictiveBackIntensity = 0;
-    public static int fadeDuration = 300;
+    public static int fadeDuration = DEFAULT_FADE_DURATION;
     public static boolean removeChatDelay = false;
     public static boolean showOnlineDotsInChat = false;
     public static boolean optimizedPushService = false;
@@ -481,8 +493,8 @@ public class NekoConfig {
             textAnimFadeDuration = preferences.getInt("textAnimFadeDuration", 300);
             textAnimBlurStrength = preferences.getInt("textAnimBlurStrength", 20);
             textAnimBlurDuration = preferences.getInt("textAnimBlurDuration", 350);
-            alternativeTransitionSpeed = preferences.getInt("alternativeTransitionSpeed", 300);
-            alternativeTransitionEase = preferences.getString("alternativeTransitionEase", "0.37,0.01,0.1,1");
+            alternativeTransitionSpeed = preferences.getInt("alternativeTransitionSpeed", DEFAULT_IOS_DURATION);
+            alternativeTransitionEase = preferences.getString("alternativeTransitionEase", DEFAULT_IOS_EASE);
             material3Switches = preferences.getBoolean("material3Switches", false);
             m3SectionsStyle = preferences.getBoolean("m3SectionsStyle", false);
             material3ChatHeaders = preferences.getBoolean("material3ChatHeaders", false);
@@ -505,7 +517,10 @@ public class NekoConfig {
             closeAnimationStyle = preferences.getInt("closeAnimationStyle", ANIMATION_STYLE_DEFAULT);
             predictiveBackAnimationStyle = preferences.getInt("predictiveBackAnimationStyle", ANIMATION_STYLE_DEFAULT);
             predictiveBackIntensity = preferences.getInt("predictiveBackIntensity", 0);
-            fadeDuration = preferences.getInt("fadeDuration", 300);
+            slideDuration = preferences.getInt("slideDuration", DEFAULT_SLIDE_DURATION);
+            slideEase = preferences.getString("slideEase", DEFAULT_SLIDE_EASE);
+            fadeEase = preferences.getString("fadeEase", DEFAULT_FADE_EASE);
+            fadeDuration = preferences.getInt("fadeDuration", DEFAULT_FADE_DURATION);
             predictiveBackAnimation = predictiveBackIntensity > 0;
             removeChatDelay = preferences.getBoolean("removeChatDelay", false);
             showOnlineDotsInChat = preferences.getBoolean("showOnlineDotsInChat", false);
@@ -779,6 +794,24 @@ public class NekoConfig {
         SharedPreferences.Editor editor = preferences.edit();
         editor.putString("alternativeTransitionEase", alternativeTransitionEase);
         editor.apply();
+    }
+
+    public static void setSlideDuration(int value) {
+        slideDuration = value;
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
+                .edit().putInt("slideDuration", value).apply();
+    }
+
+    public static void setSlideEase(String value) {
+        slideEase = value;
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
+                .edit().putString("slideEase", value).apply();
+    }
+
+    public static void setFadeEase(String value) {
+        fadeEase = value;
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
+                .edit().putString("fadeEase", value).apply();
     }
 
     public static void setFadeDuration(int value) {

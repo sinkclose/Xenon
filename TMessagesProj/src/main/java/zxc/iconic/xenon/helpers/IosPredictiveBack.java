@@ -3,9 +3,11 @@ package zxc.iconic.xenon.helpers;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
-import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
+import android.view.animation.LinearInterpolator;
 import android.os.Build;
 import android.graphics.Outline;
+import android.graphics.Rect;
 import android.view.RoundedCorner;
 import android.view.View;
 import android.view.ViewGroup;
@@ -26,7 +28,6 @@ import zxc.iconic.xenon.NekoConfig;
 public final class IosPredictiveBack {
 
     private static final float LAZY_START = 0.015f;
-    private static final long COMMIT_DURATION = 350L;
     private static final long CANCEL_DURATION = 200L;
     private static final int PARALLAX_DP = 96;
 
@@ -34,7 +35,12 @@ public final class IosPredictiveBack {
     }
 
     public static OnBackAnimationCallback createCallback(ActionBarLayout layout, Runnable plainBack, boolean aospStyle, boolean fadeStyle) {
-        Callback callback = new Callback(layout, plainBack, aospStyle, fadeStyle);
+        return createCallback(layout, plainBack, aospStyle ? NekoConfig.ANIMATION_STYLE_AOSP_ALT
+                : fadeStyle ? NekoConfig.ANIMATION_STYLE_FADE : NekoConfig.ANIMATION_STYLE_IOS);
+    }
+
+    public static OnBackAnimationCallback createCallback(ActionBarLayout layout, Runnable plainBack, int style) {
+        Callback callback = new Callback(layout, plainBack, style);
         layout.m3PredictiveCallbackCancelRunnable = () -> callback.cancelAndCleanup();
         return callback;
     }
@@ -47,8 +53,8 @@ public final class IosPredictiveBack {
 
         private final ActionBarLayout layout;
         private final Runnable plainBack;
-        private final boolean aospStyle;
-        private final boolean fadeStyle;
+        private final int style;
+        private float progress;
         private boolean attached = false;
         private boolean invoked = false;
         private boolean finishCancel = false;
@@ -56,12 +62,15 @@ public final class IosPredictiveBack {
         private ViewOutlineProvider savedOutlineProvider = null;
         private boolean savedClipToOutline = false;
         private float cornerRadius = 0f;
+        private ViewOutlineProvider savedBackOutlineProvider;
+        private boolean savedBackClipToOutline;
+        private Rect savedClipBounds, savedBackClipBounds;
+        private float savedTranslationY, savedBackTranslationY;
 
-        Callback(ActionBarLayout layout, Runnable plainBack, boolean aospStyle, boolean fadeStyle) {
+        Callback(ActionBarLayout layout, Runnable plainBack, int style) {
             this.layout = layout;
             this.plainBack = plainBack;
-            this.aospStyle = aospStyle;
-            this.fadeStyle = fadeStyle;
+            this.style = style;
         }
 
         @Override
@@ -96,9 +105,20 @@ public final class IosPredictiveBack {
                 }
                 attached = true;
                 layout.m3PredictiveActive = true;
+                if (style == NekoConfig.ANIMATION_STYLE_AOSP_ALT) layout.setAospPredictiveTransitionActive(true);
                 layout.invalidate();
-                if (!aospStyle && !fadeStyle) {
+                if (style == NekoConfig.ANIMATION_STYLE_IOS) {
                     attachRoundedCorners();
+                } else if (style == NekoConfig.ANIMATION_STYLE_AOSP_LEGACY) {
+                    savedOutlineProvider = layout.containerView.getOutlineProvider();
+                    savedClipToOutline = layout.containerView.getClipToOutline();
+                    savedBackOutlineProvider = layout.containerViewBack.getOutlineProvider();
+                    savedBackClipToOutline = layout.containerViewBack.getClipToOutline();
+                } else if (style == NekoConfig.ANIMATION_STYLE_AOSP_9) {
+                    savedClipBounds = layout.containerView.getClipBounds();
+                    savedBackClipBounds = layout.containerViewBack.getClipBounds();
+                    savedTranslationY = layout.containerView.getTranslationY();
+                    savedBackTranslationY = layout.containerViewBack.getTranslationY();
                 }
             }
             float p = clamp(rawP, 0f, 1f);
@@ -176,60 +196,36 @@ public final class IosPredictiveBack {
             if (w <= 0f) {
                 return;
             }
-            if (fadeStyle) {
-                cv.setAlpha(1f - p);
-                cvb.setAlpha(p);
-            } else if (aospStyle) {
-                cv.setTranslationX(w * 0.2f * p);
-                cvb.setTranslationX(-w * 0.2f * (1f - p));
-                float alphaP = clamp((p - 0.125f) / 0.25f, 0f, 1f);
-                cv.setAlpha(1f - alphaP);
-                cvb.setAlpha(alphaP);
-            } else {
+            progress = p;
+            if (style == NekoConfig.ANIMATION_STYLE_IOS || style == NekoConfig.ANIMATION_STYLE_SLIDE) {
                 cv.setTranslationX(w * p);
-                cvb.setTranslationX(-AndroidUtilities.dp(PARALLAX_DP) * (1f - p));
+                float distance = style == NekoConfig.ANIMATION_STYLE_SLIDE ? w : AndroidUtilities.dp(PARALLAX_DP);
+                cvb.setTranslationX(-distance * (1f - p));
+            } else {
+                NavigationTransition.apply(cvb, cv, style, false, p);
             }
+            layout.invalidate();
         }
 
-private void runFinishAnim(boolean cancel) {
+        private void runFinishAnim(boolean cancel) {
             finishCancel = cancel;
-            ViewGroup cv = layout.containerView;
-            ViewGroup cvb = layout.containerViewBack;
-            if (cv == null || cvb == null) {
+            if (runningAnim != null) {
+                runningAnim.removeAllListeners();
+                runningAnim.cancel();
+            }
+            if (layout.containerView == null || layout.containerViewBack == null) {
                 finalizeStock(cancel);
                 return;
             }
-            float w = cv.getWidth();
-            boolean useAlpha = aospStyle || fadeStyle;
-            long duration = cancel ? CANCEL_DURATION : COMMIT_DURATION;
-
+            boolean aosp = style == NekoConfig.ANIMATION_STYLE_AOSP_ALT || NavigationTransition.usesBlackSurface(style);
+            ValueAnimator frames = ValueAnimator.ofFloat(progress, cancel ? 0f : 1f);
+            frames.addUpdateListener(a -> applyFrame((float) a.getAnimatedValue()));
             AnimatorSet set = new AnimatorSet();
-            java.util.List<Animator> animators = new java.util.ArrayList<>();
-            if (!fadeStyle) {
-                float cvTarget = cancel ? 0f : (aospStyle ? w * 0.2f : w);
-                animators.add(ObjectAnimator.ofFloat(cv, View.TRANSLATION_X, cvTarget));
-                animators.add(ObjectAnimator.ofFloat(cvb, View.TRANSLATION_X, 0f));
-            }
-
-            if (useAlpha) {
-                float cvAlphaFrom = cv.getAlpha();
-                float cvAlphaTo = cancel ? 1f : 0f;
-                float cvbAlphaFrom = cvb.getAlpha();
-                float cvbAlphaTo = cancel ? 0f : 1f;
-                android.animation.ValueAnimator alphaAnim = android.animation.ValueAnimator.ofFloat(0f, 1f);
-                alphaAnim.addUpdateListener(a -> {
-                    float f = (float) a.getAnimatedValue();
-                    cv.setAlpha(cvAlphaFrom + (cvAlphaTo - cvAlphaFrom) * f);
-                    cvb.setAlpha(cvbAlphaFrom + (cvbAlphaTo - cvbAlphaFrom) * f);
-                });
-                alphaAnim.setDuration((long) (duration * 0.3));
-                alphaAnim.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
-                animators.add(alphaAnim);
-            }
-
-            set.playTogether(animators);
-            set.setDuration(duration);
-            set.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
+            set.playTogether(frames);
+            set.setDuration(cancel ? CANCEL_DURATION : Math.max(1L, (long) (NavigationTransition.duration(style) * (1f - progress))));
+            set.setInterpolator(cancel ? CubicBezierInterpolator.EmphasizedDecelerate
+                    : aosp || style == NekoConfig.ANIMATION_STYLE_FADE ? new LinearInterpolator()
+                    : NavigationTransition.interpolator(style));
             set.addListener(new AnimatorListenerAdapter() {
                 @Override
                 public void onAnimationEnd(Animator animation) {
@@ -244,6 +240,7 @@ private void runFinishAnim(boolean cancel) {
         private void finalizeStock(boolean cancel) {
             cleanupViews();
             layout.m3PredictiveActive = false;
+            if (style == NekoConfig.ANIMATION_STYLE_AOSP_ALT) layout.setAospPredictiveTransitionActive(false);
             layout.invalidate();
             if (layout.predictiveInput) {
                 layout.predictiveInput = false;
@@ -260,7 +257,15 @@ private void runFinishAnim(boolean cancel) {
             if (cv != null) {
                 cv.setTranslationX(0f);
                 cv.setAlpha(1f);
-                if (!aospStyle && !fadeStyle) {
+                cv.setScaleX(1f);
+                cv.setScaleY(1f);
+                if (style == NekoConfig.ANIMATION_STYLE_AOSP_LEGACY) {
+                    cv.setClipToOutline(savedClipToOutline);
+                    cv.setOutlineProvider(savedOutlineProvider);
+                } else if (style == NekoConfig.ANIMATION_STYLE_AOSP_9) {
+                    cv.setTranslationY(savedTranslationY);
+                    cv.setClipBounds(savedClipBounds);
+                } else if (style == NekoConfig.ANIMATION_STYLE_IOS) {
                     cv.setClipToOutline(savedClipToOutline);
                     cv.setOutlineProvider(savedOutlineProvider != null ? savedOutlineProvider : ViewOutlineProvider.BACKGROUND);
                 }
@@ -269,8 +274,19 @@ private void runFinishAnim(boolean cancel) {
             if (cvb != null) {
                 cvb.setTranslationX(0f);
                 cvb.setAlpha(1f);
+                cvb.setScaleX(1f);
+                cvb.setScaleY(1f);
+                if (style == NekoConfig.ANIMATION_STYLE_AOSP_LEGACY) {
+                    cvb.setClipToOutline(savedBackClipToOutline);
+                    cvb.setOutlineProvider(savedBackOutlineProvider);
+                } else if (style == NekoConfig.ANIMATION_STYLE_AOSP_9) {
+                    cvb.setTranslationY(savedBackTranslationY);
+                    cvb.setClipBounds(savedBackClipBounds);
+                }
             }
             savedOutlineProvider = null;
+            savedBackOutlineProvider = null;
+            savedClipBounds = savedBackClipBounds = null;
         }
 
         public void cancelAndCleanup() {

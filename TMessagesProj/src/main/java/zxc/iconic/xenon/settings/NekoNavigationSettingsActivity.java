@@ -18,6 +18,7 @@ import org.telegram.ui.Components.EditTextBoldCursor;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.URLSpanNoUnderline;
 import org.telegram.ui.Components.UItem;
+import org.telegram.ui.Components.ItemOptions;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.LaunchActivity;
 
@@ -42,6 +43,42 @@ public class NekoNavigationSettingsActivity extends BaseNekoSettingsActivity {
     private final int easeDescriptionRow = rowId++;
 
     private final int fadeSpeedRow = rowId++;
+    private final int fadeEaseRow = rowId++;
+    private final int slideSpeedRow = rowId++;
+    private final int slideEaseRow = rowId++;
+    private boolean advancedSettings;
+
+    @Override
+    public View createView(Context context) {
+        advancedSettings = hasCustomAnimationSettings();
+        View result = super.createView(context);
+        var more = actionBar.createMenu().addItem(900, R.drawable.ic_ab_other);
+        more.setOnClickListener(v -> ItemOptions.makeOptions(this, more)
+                .add(0, LocaleController.getString(advancedSettings ? R.string.HideAdvancedSettings : R.string.ShowAdvancedSettings), () -> {
+                    advancedSettings = !advancedSettings;
+                    if (!advancedSettings) resetAnimationSettings();
+                    listView.adapter.update(true);
+                }).show());
+        return result;
+    }
+
+    private boolean hasCustomAnimationSettings() {
+        return NekoConfig.alternativeTransitionSpeed != NekoConfig.DEFAULT_IOS_DURATION
+                || !NekoConfig.DEFAULT_IOS_EASE.equals(NekoConfig.alternativeTransitionEase)
+                || NekoConfig.fadeDuration != NekoConfig.DEFAULT_FADE_DURATION
+                || !NekoConfig.DEFAULT_FADE_EASE.equals(NekoConfig.fadeEase)
+                || NekoConfig.slideDuration != NekoConfig.DEFAULT_SLIDE_DURATION
+                || !NekoConfig.DEFAULT_SLIDE_EASE.equals(NekoConfig.slideEase);
+    }
+
+    private void resetAnimationSettings() {
+        NekoConfig.setAlternativeTransitionSpeed(NekoConfig.DEFAULT_IOS_DURATION);
+        NekoConfig.setAlternativeTransitionEase(NekoConfig.DEFAULT_IOS_EASE);
+        NekoConfig.setFadeDuration(NekoConfig.DEFAULT_FADE_DURATION);
+        NekoConfig.setFadeEase(NekoConfig.DEFAULT_FADE_EASE);
+        NekoConfig.setSlideDuration(NekoConfig.DEFAULT_SLIDE_DURATION);
+        NekoConfig.setSlideEase(NekoConfig.DEFAULT_SLIDE_EASE);
+    }
 
     @Override
     protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
@@ -76,6 +113,8 @@ public class NekoNavigationSettingsActivity extends BaseNekoSettingsActivity {
             default -> LocaleController.getString(R.string.Disable);
         }).slug("tabletMode"));
 
+        if (!advancedSettings) return;
+
         items.add(UItem.asHeader(LocaleController.getString(R.string.IOSAnimation)));
         SeekbarConfig speedConfig = new SeekbarConfig(
                 LocaleController.getString(R.string.TransitionSpeed),
@@ -96,6 +135,14 @@ public class NekoNavigationSettingsActivity extends BaseNekoSettingsActivity {
                 "100", "1000", 100, 1000, 5,
                 progress -> NekoConfig.setFadeDuration(Math.round(progress / 5f) * 5));
         items.add(SeekbarCellFactory.of(fadeSpeedRow, fadeConfig, NekoConfig.fadeDuration).slug("fadeDuration"));
+        items.add(TextSettingsCellFactory.of(fadeEaseRow, LocaleController.getString(R.string.Ease), NekoConfig.fadeEase).slug("fadeEase"));
+
+        items.add(UItem.asHeader(LocaleController.getString(R.string.AnimationStyleSlide)));
+        SeekbarConfig slideConfig = new SeekbarConfig(LocaleController.getString(R.string.TransitionSpeed),
+                "100", "1000", 100, 1000, 5,
+                progress -> NekoConfig.setSlideDuration(Math.round(progress / 5f) * 5));
+        items.add(SeekbarCellFactory.of(slideSpeedRow, slideConfig, NekoConfig.slideDuration).slug("slideDuration"));
+        items.add(TextSettingsCellFactory.of(slideEaseRow, LocaleController.getString(R.string.Ease), NekoConfig.slideEase).slug("slideEase"));
     }
 
     @Override
@@ -127,8 +174,8 @@ public class NekoNavigationSettingsActivity extends BaseNekoSettingsActivity {
             }, resourcesProvider);
         } else if (id == mainTabsRow) {
             presentFragment(new MainTabsSettingsActivity());
-        } else if (id == easeRow) {
-            showEaseDialog();
+        } else if (id == easeRow || id == fadeEaseRow || id == slideEaseRow) {
+            showEaseDialog(id);
         }
     }
 
@@ -148,6 +195,12 @@ public class NekoNavigationSettingsActivity extends BaseNekoSettingsActivity {
         }
         arrayList.add(LocaleController.getString(R.string.AnimationStyleFade));
         types.add(NekoConfig.ANIMATION_STYLE_FADE);
+        arrayList.add(LocaleController.getString(R.string.AnimationStyleSlide));
+        types.add(NekoConfig.ANIMATION_STYLE_SLIDE);
+        arrayList.add(LocaleController.getString(R.string.AnimationStyleAospLegacy));
+        types.add(NekoConfig.ANIMATION_STYLE_AOSP_LEGACY);
+        arrayList.add(LocaleController.getString(R.string.AnimationStyleAosp9));
+        types.add(NekoConfig.ANIMATION_STYLE_AOSP_9);
         PopupHelper.show(arrayList, LocaleController.getString(titleRes), types.indexOf(currentStyle), getParentActivity(), view, i -> {
             setter.accept(types.get(i));
             item.textValue = arrayList.get(i);
@@ -163,12 +216,18 @@ public class NekoNavigationSettingsActivity extends BaseNekoSettingsActivity {
             case NekoConfig.ANIMATION_STYLE_IOS -> LocaleController.getString(R.string.AnimationStyleIos);
             case NekoConfig.ANIMATION_STYLE_AOSP -> LocaleController.getString(R.string.AnimationStyleAosp);
             case NekoConfig.ANIMATION_STYLE_AOSP_ALT -> LocaleController.getString(R.string.AnimationStyleAospAlt);
+            case NekoConfig.ANIMATION_STYLE_AOSP_9 -> LocaleController.getString(R.string.AnimationStyleAosp9);
+            case NekoConfig.ANIMATION_STYLE_SLIDE -> LocaleController.getString(R.string.AnimationStyleSlide);
+            case NekoConfig.ANIMATION_STYLE_AOSP_LEGACY -> LocaleController.getString(R.string.AnimationStyleAospLegacy);
             case NekoConfig.ANIMATION_STYLE_FADE -> LocaleController.getString(R.string.AnimationStyleFade);
             default -> LocaleController.getString(R.string.Default);
         };
     }
 
-    private void showEaseDialog() {
+    private void showEaseDialog(int row) {
+        String currentEase = row == slideEaseRow ? NekoConfig.slideEase : row == fadeEaseRow ? NekoConfig.fadeEase : NekoConfig.alternativeTransitionEase;
+        String defaultEase = row == slideEaseRow ? NekoConfig.DEFAULT_SLIDE_EASE : row == fadeEaseRow ? NekoConfig.DEFAULT_FADE_EASE : NekoConfig.DEFAULT_IOS_EASE;
+        java.util.function.Consumer<String> setter = row == slideEaseRow ? NekoConfig::setSlideEase : row == fadeEaseRow ? NekoConfig::setFadeEase : NekoConfig::setAlternativeTransitionEase;
         Context context = getParentActivity();
         if (context == null) return;
 
@@ -183,7 +242,7 @@ public class NekoNavigationSettingsActivity extends BaseNekoSettingsActivity {
         editText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
         editText.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, resourcesProvider));
         editText.setInputType(InputType.TYPE_CLASS_TEXT);
-        editText.setText(NekoConfig.alternativeTransitionEase);
+        editText.setText(currentEase);
         editText.setSelection(editText.getText().length());
 
         container.addView(editText, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
@@ -192,21 +251,20 @@ public class NekoNavigationSettingsActivity extends BaseNekoSettingsActivity {
         builder.setPositiveButton(LocaleController.getString("OK", R.string.OK), (dialog, which) -> {
             String text = editText.getText().toString().trim();
             if (!text.isEmpty()) {
-                NekoConfig.setAlternativeTransitionEase(text);
+                setter.accept(text);
                 listView.adapter.update(true);
             }
         });
 
         builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
 
-        String defaultEase = "0.37,0.01,0.1,1";
         builder.setNeutralButton(LocaleController.getString("Reset", R.string.Reset), (dialog, which) -> {
-            NekoConfig.setAlternativeTransitionEase(defaultEase);
+            setter.accept(defaultEase);
             listView.adapter.update(true);
         });
 
         AlertDialog dialog = builder.show();
-        if (NekoConfig.alternativeTransitionEase.equals(defaultEase)) {
+        if (currentEase.equals(defaultEase)) {
             dialog.getButton(DialogInterface.BUTTON_NEUTRAL).setAlpha(0.5f);
         }
 
