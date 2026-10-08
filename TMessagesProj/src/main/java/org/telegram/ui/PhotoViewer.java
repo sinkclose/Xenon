@@ -2029,6 +2029,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     private float predictiveBackProgress;
     private boolean predictiveBackCommitting;
     private boolean predictiveBackActive;
+    private boolean predictiveBackFramePending;
     private float predictiveBackEndAlpha;
     private int predictiveBackGeneration;
     private int predictiveBackBackgroundAlpha;
@@ -18351,6 +18352,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                 @Override
                 public void onBackInvoked() {
                     if (predictiveBackActive && predictiveBackAnimator == null) {
+                        if (predictiveBackFramePending) {
+                            predictiveBackCommitting = true;
+                            return;
+                        }
                         updatePredictiveBackTarget(true);
                         predictiveBackCommitting = true;
                         // Keep the prepared frame and geometry until closePhoto takes over.
@@ -18408,15 +18413,20 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         predictiveBackSurfaceVisibility = videoSurfaceView == null ? View.INVISIBLE : videoSurfaceView.getVisibility();
         predictiveBackPlace = object;
         predictiveBackActive = true;
+        predictiveBackFramePending = videoPlayer != null && (usedSurfaceView ? firstFrameRendered : textureUploaded);
         // Draw in the viewer window, including when the provider has its own transition view.
         predictiveBackViews = new ClippingImageView[] { animatingImageView };
         prepareCloseTransition(object, predictiveBackViews, true);
+        if (predictiveBackFramePending) {
+            // Keep rendering the live player until its current frame is ready for the transition.
+            animatingImageView.setVisibility(View.INVISIBLE);
+        }
         if (object == null) {
             fillCloseFallbackTarget(predictiveBackTarget);
         }
         predictiveBackEndAlpha = object == null || object.fadeIn ? 0f : 1f;
         System.arraycopy(predictiveBackTarget, 0, animationValues[1], 0, predictiveBackTarget.length);
-        if (animatingImageView.getBitmap() == null) {
+        if (animatingImageView.getBitmap() == null && !predictiveBackFramePending) {
             resetPredictiveBack();
             return;
         }
@@ -18425,34 +18435,62 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         predictiveBackTargetTime = SystemClock.uptimeMillis();
         containerView.postOnAnimation(predictiveBackTargetUpdater);
         final int generation = ++predictiveBackGeneration;
-        if (videoPlayer != null && (usedSurfaceView ? firstFrameRendered : textureUploaded)) {
+        if (predictiveBackFramePending) {
             try {
                 if (usedSurfaceView && videoSurfaceView != null && videoSurfaceView.getWidth() > 0 && videoSurfaceView.getHeight() > 0) {
                     Bitmap frame = Bitmap.createBitmap(videoSurfaceView.getWidth(), videoSurfaceView.getHeight(), Bitmap.Config.ARGB_8888);
-                    PixelCopy.request(videoSurfaceView, frame, result -> {
-                        if (result == PixelCopy.SUCCESS && generation == predictiveBackGeneration && predictiveBackActive) {
-                            animatingImageView.setOrientation(0, 0);
-                            animatingImageView.setImageBitmap(new ImageReceiver.BitmapHolder(frame));
-                        } else {
-                            frame.recycle();
-                        }
-                        if (generation == predictiveBackGeneration && predictiveBackActive) {
-                            videoSurfaceView.setVisibility(View.INVISIBLE);
-                        }
-                    }, ApplicationLoader.applicationHandler);
-                } else if (videoTextureView != null) {
-                    Bitmap frame = videoTextureView.getBitmap();
-                    if (frame != null) {
-                        animatingImageView.setOrientation(0, 0);
-                        animatingImageView.setImageBitmap(new ImageReceiver.BitmapHolder(frame));
+                    try {
+                        PixelCopy.request(videoSurfaceView, frame, result -> {
+                            if (result == PixelCopy.SUCCESS) {
+                                finishPredictiveBackVideoFrame(frame, generation);
+                            } else {
+                                frame.recycle();
+                                finishPredictiveBackVideoFrame(null, generation);
+                            }
+                        }, ApplicationLoader.applicationHandler);
+                    } catch (Throwable e) {
+                        frame.recycle();
+                        throw e;
                     }
+                } else if (videoTextureView != null) {
+                    finishPredictiveBackVideoFrame(videoTextureView.getBitmap(), generation);
+                } else {
+                    finishPredictiveBackVideoFrame(null, generation);
                 }
             } catch (Throwable e) {
                 FileLog.e(e);
-                if (usedSurfaceView && videoSurfaceView != null) {
-                    videoSurfaceView.setVisibility(View.INVISIBLE);
-                }
+                finishPredictiveBackVideoFrame(null, generation);
             }
+        }
+    }
+
+    private void finishPredictiveBackVideoFrame(Bitmap frame, int generation) {
+        if (generation != predictiveBackGeneration || !predictiveBackActive) {
+            if (frame != null) {
+                frame.recycle();
+            }
+            return;
+        }
+        if (frame == null) {
+            boolean committing = predictiveBackCommitting;
+            resetPredictiveBack();
+            if (committing) {
+                handlePhotoBack();
+            }
+            return;
+        }
+        animatingImageView.setOrientation(0, 0);
+        animatingImageView.setImageBitmap(new ImageReceiver.BitmapHolder(frame));
+        predictiveBackFramePending = false;
+        animatingImageView.setVisibility(View.VISIBLE);
+        if (usedSurfaceView && videoSurfaceView != null) {
+            videoSurfaceView.setVisibility(View.INVISIBLE);
+        }
+        setPredictiveBackProgress(predictiveBackProgress);
+        if (predictiveBackCommitting) {
+            updatePredictiveBackTarget(true);
+            predictiveBackGeneration++;
+            closePhoto(true, false);
         }
     }
 
@@ -18539,6 +18577,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
 
     private void setPredictiveBackProgress(float progress) {
         predictiveBackProgress = Math.max(0f, Math.min(1f, progress));
+        if (predictiveBackFramePending) {
+            return;
+        }
         animatingImageView.setAnimationProgress(predictiveBackProgress);
         animatingImageView.setAlpha(1f - predictiveBackProgress + predictiveBackEndAlpha * predictiveBackProgress);
         clippingImageProgress = predictiveBackProgress;
@@ -18550,6 +18591,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     }
 
     private void resetPredictiveBack() {
+        predictiveBackFramePending = false;
         if (containerView != null) {
             containerView.removeCallbacks(predictiveBackTargetUpdater);
         }
@@ -20143,7 +20185,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             drawFancyShadows(canvas);
             return;
         }
-        if (predictiveBackActive || animationInProgress == 3 || !isVisible && animationInProgress != 2 && !pipAnimationInProgress) {
+        if (predictiveBackActive && !predictiveBackFramePending || animationInProgress == 3 || !isVisible && animationInProgress != 2 && !pipAnimationInProgress) {
 
             if (BLUR_RENDERNODE()) {
                 canvas = realCanvas;
