@@ -1,4 +1,4 @@
-"""Send one concise announcement using assets from the completed release."""
+"""Announce all commits since the previous release and the uploaded APKs."""
 
 import html
 import json
@@ -11,14 +11,25 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 
-def build_message(version, commit, assets):
+def release_commits(previous_commit):
+    revision = f"{previous_commit}..HEAD" if previous_commit else "HEAD"
+    return subprocess.check_output([
+        "git", "log", "--topo-order", "--abbrev=7", "--format=%h: %s", revision, "--",
+    ], text=True, encoding="utf-8").splitlines()
+
+
+def build_messages(version, commits, assets):
     apks = sorted(
         (asset for asset in assets if asset["name"].endswith(".apk")),
         key=lambda asset: asset["name"],
     )
     if not apks:
         raise ValueError("Release has no uploaded APKs")
-    lines = [f"<b>Xenon {html.escape(version)}</b>", html.escape(commit[:240]), ""]
+    lines = [f"<b>Xenon {html.escape(version)}</b>"]
+    for commit in commits:
+        # Escape after splitting so HTML entities cannot be broken across messages.
+        lines.extend(html.escape(commit[offset:offset + 500]) for offset in range(0, len(commit), 500))
+    lines.append("")
     for asset in apks:
         url = asset["browser_download_url"]
         if not url.startswith("https://"):
@@ -30,10 +41,20 @@ def build_message(version, commit, assets):
             f'<a href="{html.escape(url, quote=True)}">Скачать APK · {html.escape(abi)}</a>'
             f" ({size:.1f} МБ)"
         )
-    message = "\n".join(lines)
-    if len(message) > 4096:
-        raise ValueError("Telegram message exceeds 4096 characters")
-    return message
+    messages = []
+    message = ""
+    for line in lines:
+        if len(line.encode("utf-16-le")) // 2 > 4096:
+            raise ValueError("Telegram message line exceeds 4096 characters")
+        candidate = f"{message}\n{line}" if message else line
+        if len(candidate.encode("utf-16-le")) // 2 > 4096:
+            messages.append(message)
+            message = line
+        else:
+            message = candidate
+    if message:
+        messages.append(message)
+    return messages
 
 
 def send_message(token, chat_id, message):
@@ -79,10 +100,11 @@ def main():
         line.split("=", 1) for line in Path("gradle.properties").read_text().splitlines()
         if "=" in line and not line.lstrip().startswith("#")
     )
-    commit = subprocess.check_output(["git", "log", "-1", "--format=%s"], text=True).strip()
+    commits = release_commits(os.environ["PREVIOUS_RELEASE_COMMIT"])
     assets = json.loads(os.environ["RELEASE_ASSETS"])
-    message = build_message(properties["APP_VERSION_NAME"], commit, assets)
-    send_message(token, chat_id, message)
+    messages = build_messages(properties["APP_VERSION_NAME"], commits, assets)
+    for message in messages:
+        send_message(token, chat_id, message)
     print("Telegram announcement sent")
 
 
