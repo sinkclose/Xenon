@@ -154,9 +154,20 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
                 }
             });
         }
+        // This source captures sharp feed content, unlike the other tab delegates.
+        // Material navigation replays it unfiltered before applying its fixed blur.
+        tabsBackgroundSource.setPlainBlur(getTabsBlurRadius());
         tabsBackgroundSource.setSize(fragmentView.getWidth(), fragmentView.getHeight());
         tabsBackgroundSource.updateDisplayListIfNeeded();
         return tabsBackgroundSource;
+    }
+
+    private float getTabsBlurRadius() {
+        if (!org.telegram.messenger.SharedConfig.chatBlurEnabled()) return 0f;
+        float radius = org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS)
+                ? zxc.iconic.xenon.NekoConfig.getGlassBlurRadiusDp()
+                : Math.max(0, Math.min(100, zxc.iconic.xenon.NekoConfig.blurStrength)) * 4f / 3f;
+        return AndroidUtilities.dpf2(radius);
     }
 
     private void invalidateTabsBackground() {

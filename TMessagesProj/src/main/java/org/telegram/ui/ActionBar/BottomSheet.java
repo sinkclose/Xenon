@@ -33,6 +33,7 @@ import android.graphics.PorterDuffColorFilter;
 import android.graphics.Shader;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.Region;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
@@ -271,6 +272,9 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
     protected int playingImagesLayerNum;
     protected int openedLayerNum;
     private boolean skipDismissAnimation;
+    private float predictiveBackDismissProgress = -1f;
+    private boolean predictiveBackTransformActive;
+    private final RectF sheetDrawingBounds = new RectF();
     public boolean doNotOverlayNavigationBar;
 
     public void skipDismissAnimation() {
@@ -900,27 +904,47 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
                     && child.getVisibility() == View.VISIBLE && child.getAlpha() > 0f) {
                 // Extend the actual sheet drawable under the transparent system bar.
                 // Content keeps its existing inset so controls stay above the navigation gestures.
-                float bottom = child.getY() + child.getHeight();
+                getSheetDrawingBounds(sheetDrawingBounds);
+                float bottom = sheetDrawingBounds.bottom;
                 if (bottom < getHeight()) {
                     Drawable background = child.getBackground();
-                    Rect bounds = new Rect(background.getBounds());
-                    Drawable.Callback callback = background.getCallback();
-                    int save = canvas.save();
-                    canvas.clipRect(child.getX() + backgroundPaddingLeft, bottom,
-                            child.getX() + child.getWidth() - backgroundPaddingLeft, getHeight());
-                    canvas.translate(child.getX(), child.getY());
-                    int layer = canvas.saveLayerAlpha(0, 0, child.getWidth(), getHeight() - child.getY(),
-                            (int) (255 * child.getAlpha()));
-                    // Temporary bounds must not schedule another frame on every draw.
-                    background.setCallback(null);
-                    try {
-                        background.setBounds(0, 0, child.getWidth(), (int) Math.ceil(getHeight() - child.getY()));
-                        background.draw(canvas);
-                    } finally {
-                        background.setBounds(bounds);
-                        background.setCallback(callback);
+                    if (background == null) {
+                        backgroundPaint.setColor(getSheetBackgroundColor());
+                        backgroundPaint.setAlpha((int) (Color.alpha(getSheetBackgroundColor()) * child.getAlpha()));
+                        canvas.drawRect(sheetDrawingBounds.left, bottom, sheetDrawingBounds.right, getHeight(), backgroundPaint);
+                    } else {
+                        Rect bounds = new Rect(background.getBounds());
+                        Drawable.Callback callback = background.getCallback();
+                        int save = canvas.save();
+                        canvas.clipRect(sheetDrawingBounds.left, bottom, sheetDrawingBounds.right, getHeight());
+                        // Continue the same drawable using the sheet's current transform.
+                        canvas.translate(child.getLeft(), child.getTop());
+                        canvas.concat(child.getMatrix());
+                        final float extensionHeight = child.getHeight()
+                                + (getHeight() - bottom) / Math.max(0.001f, child.getScaleY());
+                        int layer = canvas.saveLayerAlpha(0, 0, child.getWidth(), extensionHeight,
+                                (int) (255 * child.getAlpha()));
+                        // Temporary bounds must not schedule another frame on every draw.
+                        background.setCallback(null);
+                        try {
+                            background.setBounds(0, 0, child.getWidth(), (int) Math.ceil(extensionHeight));
+                            background.draw(canvas);
+                        } finally {
+                            background.setBounds(bounds);
+                            background.setCallback(callback);
+                        }
+                        canvas.restoreToCount(layer);
+                        canvas.restoreToCount(save);
                     }
-                    canvas.restoreToCount(layer);
+                }
+            }
+            if (child == containerView && predictiveBackTransformActive) {
+                getSheetDrawingBounds(sheetDrawingBounds);
+                int save = canvas.save();
+                canvas.clipRect(sheetDrawingBounds);
+                try {
+                    return super.drawChild(canvas, child, drawingTime);
+                } finally {
                     canvas.restoreToCount(save);
                 }
             }
@@ -1270,6 +1294,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
         shadowDrawable = context.getResources().getDrawable(R.drawable.sheet_shadow_round).mutate();
         int backgroundKey = usesSystemMonetSurface() ? Theme.key_windowBackgroundWhite : Theme.key_dialogBackground;
         shadowDrawable.setColorFilter(new PorterDuffColorFilter(internalBackgroundColor = getThemedColor(backgroundKey), PorterDuff.Mode.MULTIPLY));
+        applySystemNavigationBarColor(internalBackgroundColor);
         if (usesSystemMonetSurface()) {
             navBarColorKey = -1;
             navBarColor = internalBackgroundColor;
@@ -1339,7 +1364,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
                 }
             });
         }
-        if (Build.VERSION.SDK_INT >= 30 || usesSystemMonetSurface()) {
+        if (Build.VERSION.SDK_INT >= 26 || usesSystemMonetSurface()) {
             container.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
         } else {
             container.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
@@ -1625,9 +1650,37 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
         return Theme.getActiveTheme().isMonet() && Theme.isCurrentThemeDark();
     }
 
+    protected int getSheetBackgroundColor() {
+        return internalBackgroundColor;
+    }
+
+    protected void applySystemNavigationBarColor(int surfaceColor) {
+        AndroidUtilities.setNavigationBarColor(this,
+                Build.VERSION.SDK_INT >= 26 ? Color.TRANSPARENT : surfaceColor, false);
+        if (Build.VERSION.SDK_INT >= 29 && getWindow() != null) {
+            getWindow().setNavigationBarContrastEnforced(false);
+        }
+    }
+
+    public void setPredictiveBackTransformActive(boolean active) {
+        predictiveBackTransformActive = active;
+        if (container != null) container.invalidate();
+    }
+
+    protected boolean isPredictiveBackTransformActive() {
+        return predictiveBackTransformActive;
+    }
+
+    private void getSheetDrawingBounds(RectF bounds) {
+        bounds.set(backgroundPaddingLeft, 0,
+                containerView.getWidth() - backgroundPaddingLeft, containerView.getHeight());
+        containerView.getMatrix().mapRect(bounds);
+        bounds.offset(containerView.getLeft(), containerView.getTop());
+    }
+
     private boolean hasContinuousNavigationBackground() {
-        return usesSystemMonetSurface() && !keyboardVisible && !shouldOverlayCameraViewOverNavBar()
-                && containerView != null && containerView.getBackground() != null;
+        return !keyboardVisible && !shouldOverlayCameraViewOverNavBar()
+                && containerView != null;
     }
 
     public void setBackgroundColor(int color) {
@@ -2274,7 +2327,8 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
             return;
         }
         dismissed = true;
-        if (blurOverlayView != null) {
+        final boolean predictiveDismiss = predictiveBackDismissProgress >= 0f;
+        if (blurOverlayView != null && !predictiveDismiss) {
             if (zxc.iconic.xenon.NekoConfig.blurSmoothly && !zxc.iconic.xenon.NekoConfig.disableBlurBs) {
                 float currentBlur = zxc.iconic.xenon.NekoConfig.blurOverlayRadius * 8f;
                 ValueAnimator reverseBlurAnim = ValueAnimator.ofFloat(currentBlur, 0f);
@@ -2350,21 +2404,28 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
                         animators.add(anim);
                         animators.add(ObjectAnimator.ofFloat(containerView, View.ALPHA, 0));
                     } else {
-                        final ObjectAnimator anim = ObjectAnimator.ofFloat(containerView, View.TRANSLATION_Y, getContainerViewHeight()
-                            + (forceKeyboardOnDismiss ? lastKeyboardHeight : keyboardHeight)
-                            + dp(10)
-                            + Math.max(0, Math.min(AndroidUtilities.navigationBarHeight, getBottomInset()))
-                        );
+                        final ObjectAnimator anim = ObjectAnimator.ofFloat(containerView, View.TRANSLATION_Y,
+                                getDismissTranslationY(predictiveDismiss));
                         anim.addUpdateListener(a -> onContainerViewTranslation());
                         animators.add(anim);
                     }
                 }
-                animators.add(ObjectAnimator.ofInt(backDrawable, AnimationProperties.COLOR_DRAWABLE_ALPHA, 0));
+                if (predictiveDismiss) {
+                    ValueAnimator backdrop = ValueAnimator.ofFloat(0f, 1f);
+                    backdrop.addUpdateListener(a -> setPredictiveBackProgress((float) a.getAnimatedValue()));
+                    animators.add(backdrop);
+                } else {
+                    animators.add(ObjectAnimator.ofInt(backDrawable, AnimationProperties.COLOR_DRAWABLE_ALPHA, 0));
+                }
                 animators.add(navigationBarAnimation);
                 appendOpenAnimator(false, animators);
                 currentSheetAnimation.playTogether(animators);
 
-                if (transitionFromRight) {
+                if (predictiveDismiss && !transitionFromRight) {
+                    duration = getPredictiveBackDismissDuration();
+                    currentSheetAnimation.setDuration(duration);
+                    currentSheetAnimation.setInterpolator(new androidx.interpolator.view.animation.FastOutSlowInInterpolator());
+                } else if (transitionFromRight) {
                     currentSheetAnimation.setDuration(200);
                     currentSheetAnimation.setInterpolator(CubicBezierInterpolator.DEFAULT);
                 } else {
@@ -2448,7 +2509,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
 
     @Override
     public int getNavigationBarColor(int color) {
-        if (usesSystemMonetSurface()) {
+        if (Build.VERSION.SDK_INT >= 26) {
             return Color.TRANSPARENT;
         }
         final float t;
@@ -2706,6 +2767,32 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
         this.skipDismissAnimation = skip;
     }
 
+    private float getDismissTranslationY(boolean predictiveDismiss) {
+        final float height = predictiveDismiss
+                ? containerView.getHeight() * containerView.getScaleY()
+                : getContainerViewHeight() + dp(10);
+        return height + (forceKeyboardOnDismiss ? lastKeyboardHeight : keyboardHeight)
+                + Math.max(0, Math.min(AndroidUtilities.navigationBarHeight, getBottomInset()));
+    }
+
+    private int getPredictiveBackDismissDuration() {
+        final int maxDuration = com.google.android.material.motion.MotionUtils.resolveThemeDuration(
+                getContext(), com.google.android.material.R.attr.motionDurationMedium2, 300);
+        final int minDuration = com.google.android.material.motion.MotionUtils.resolveThemeDuration(
+                getContext(), com.google.android.material.R.attr.motionDurationShort3, 150);
+        return Math.round(maxDuration + (minDuration - maxDuration) * predictiveBackDismissProgress);
+    }
+
+    /** Apply Material finish timing only if the Back handler actually dismisses this sheet. */
+    public void dispatchPredictiveBack(float progress) {
+        predictiveBackDismissProgress = Math.max(0f, Math.min(1f, progress));
+        try {
+            onBackPressed();
+        } finally {
+            predictiveBackDismissProgress = -1f;
+        }
+    }
+
     public void predictiveBackFinish() {
         if (dismissed) return;
         dismissed = true;
@@ -2744,6 +2831,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
         if (dispatcher != null) {
             dispatcher.unregisterOnBackInvokedCallback(predictiveBackCallback);
         }
+        zxc.iconic.xenon.helpers.BottomSheetPredictiveBack.releaseCallback(predictiveBackCallback);
         predictiveBackCallback = null;
     }
 
@@ -2801,7 +2889,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
 
         if (attachedFragment != null) {
             LaunchActivity.instance.checkSystemBarColors(true, true, true);
-            AndroidUtilities.setLightNavigationBar(getWindowView(), AndroidUtilities.computePerceivedBrightness(getNavigationBarColor(getThemedColor(Theme.key_windowBackgroundGray))) >= .721f);
+            AndroidUtilities.setLightNavigationBar(getWindowView(), AndroidUtilities.computePerceivedBrightness(getSheetBackgroundColor()) >= .721f);
 //            AndroidUtilities.setLightStatusBar(dialog != null ? dialog.windowView : windowView, attachedToActionBar && AndroidUtilities.computePerceivedBrightness(actionBar.getBackgroundColor()) > .721f);
             return;
         }
@@ -2812,7 +2900,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
 //            AndroidUtilities.setLightStatusBar(getWindow(), !useLightStatusBar);
 //            AndroidUtilities.setLightNavigationBar(getWindow(), !useLightNavBar);
 //        }
-        AndroidUtilities.setNavigationBarColor(this, usesSystemMonetSurface() ? Color.TRANSPARENT : overlayDrawNavBarColor);
+        applySystemNavigationBarColor(overlayDrawNavBarColor);
         AndroidUtilities.setLightNavigationBar(this, AndroidUtilities.computePerceivedBrightness(overlayDrawNavBarColor) > .721);
     }
 

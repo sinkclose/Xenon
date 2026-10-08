@@ -4,133 +4,190 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
-import android.animation.ValueAnimator;
 import android.os.Build;
 import android.view.View;
-import android.view.animation.DecelerateInterpolator;
+import android.view.ViewGroup;
 import android.window.BackEvent;
 import android.window.OnBackAnimationCallback;
 
+import androidx.activity.BackEventCompat;
 import androidx.annotation.RequiresApi;
+import androidx.interpolator.view.animation.FastOutSlowInInterpolator;
 
-import org.telegram.messenger.AndroidUtilities;
+import com.google.android.material.motion.MaterialBottomContainerBackHelper;
+import com.google.android.material.motion.MotionUtils;
+
 import org.telegram.ui.ActionBar.BottomSheet;
+
+import java.util.ArrayList;
 
 import zxc.iconic.xenon.NekoConfig;
 
 @RequiresApi(api = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
 public final class BottomSheetPredictiveBack {
-
-    private static final float LAZY_START = 0.02f;
-
     public static OnBackAnimationCallback createCallback(BottomSheet sheet) {
         return new Callback(sheet);
     }
 
+    public static void releaseCallback(OnBackAnimationCallback callback) {
+        if (callback instanceof Callback) ((Callback) callback).release();
+    }
+
+    private static final class ChildTransform {
+        final View view;
+        final float scaleY, pivotY;
+
+        ChildTransform(View view) {
+            this.view = view;
+            scaleY = view.getScaleY();
+            pivotY = view.getPivotY();
+        }
+    }
+
     private static final class Callback implements OnBackAnimationCallback {
         private final BottomSheet sheet;
-        private boolean attached = false;
-
-        private static float clamp(float v, float min, float max) {
-            return v < min ? min : Math.min(v, max);
-        }
-        private boolean isButton = false;
-        private AnimatorSet runningAnim = null;
-        private float maxTranslateY = 0f;
-        private float lastP = 0f;
-        private float currentEased = 0f;
+        private MaterialBottomContainerBackHelper helper;
+        private ViewGroup view;
+        private AnimatorSet runningAnim;
+        private final ArrayList<ChildTransform> children = new ArrayList<>();
+        private boolean started, progressed;
+        private float lastProgress;
+        private float scaleX, scaleY, pivotY;
 
         Callback(BottomSheet sheet) {
             this.sheet = sheet;
         }
 
         @Override
-        public void onBackStarted(BackEvent backEvent) {
+        public void onBackStarted(BackEvent event) {
+            if (sheet.isDismissed()) return;
             if (runningAnim != null) {
                 runningAnim.cancel();
                 runningAnim = null;
+                restoreTransforms();
             }
-            attached = false;
-            isButton = false;
-            lastP = 0f;
-            currentEased = 0f;
-            View cv = sheet.getSheetContainer();
-            if (cv == null) return;
-            maxTranslateY = cv.getHeight()
-                    + (sheet.getKeyboardHeight() > 0 ? sheet.getKeyboardHeight() : 0)
-                    + AndroidUtilities.dp(10)
-                    + Math.max(0, Math.min(AndroidUtilities.navigationBarHeight, sheet.getBottomInset()));
+            view = sheet.getSheetContainer();
+            if (view == null) return;
+            scaleX = view.getScaleX();
+            scaleY = view.getScaleY();
+            pivotY = view.getPivotY();
+            children.clear();
+            for (int i = 0; i < view.getChildCount(); i++) {
+                children.add(new ChildTransform(view.getChildAt(i)));
+            }
+            sheet.setPredictiveBackTransformActive(true);
+            helper = new MaterialBottomContainerBackHelper(view);
+            helper.startBackProgress(new BackEventCompat(event));
+            started = true;
+            progressed = false;
+            lastProgress = 0f;
         }
 
         @Override
-        public void onBackProgressed(BackEvent backEvent) {
-            if (!attached) {
-                if (backEvent.getProgress() <= LAZY_START) return;
-                attached = true;
-                if (backEvent.getProgress() >= 0.99f) {
-                    isButton = true;
-                }
+        public void onBackProgressed(BackEvent event) {
+            if (!started || sheet.isDismissed()) return;
+            lastProgress = Math.max(0f, Math.min(1f, event.getProgress()));
+            progressed |= lastProgress > 0f;
+            if (view.getWidth() <= 0 || view.getHeight() <= 0) return;
+            float intensity = Math.max(0f, NekoConfig.predictiveBackIntensity / 10f);
+            float progress = Math.max(0f, Math.min(1f, lastProgress * intensity));
+            // Google's helper anchors the bottom and compensates child aspect ratios.
+            helper.updateBackProgress(progress);
+            view.setScaleX(view.getScaleX() * scaleX);
+            view.setScaleY(view.getScaleY() * scaleY);
+            for (ChildTransform child : children) {
+                // Telegram's children can extend beyond the visible sheet viewport.
+                // Compensate around the same bottom edge, rather than the viewport's top.
+                child.view.setPivotY(view.getHeight() - child.view.getY());
+                child.view.setScaleY(child.view.getScaleY() * child.scaleY);
             }
-            if (isButton) return;
-            View cv = sheet.getSheetContainer();
-            if (cv == null) return;
-            float p = Math.min((backEvent.getProgress() - LAZY_START) / (1f - LAZY_START), 1f);
-            if (p <= lastP && p >= 0.99f) return;
-            lastP = p;
-            float intensity = Math.max(NekoConfig.predictiveBackIntensity / 10f, 0.001f);
-            float effectiveP = clamp(p * intensity, 0f, 1f);
-            float eased = 1f - (1f - effectiveP) * (1f - effectiveP);
-            currentEased = eased;
-            cv.setTranslationY(maxTranslateY * eased);
-            sheet.setPredictiveBackProgress(eased);
             sheet.getContainer().invalidate();
         }
 
         @Override
         public void onBackCancelled() {
-            isButton = false;
-            if (!attached) {
-                return;
-            }
-            runFinishAnim();
+            if (!started) return;
+            started = false;
+            helper.onHandleBackInvoked();
+            animateReset();
         }
 
         @Override
         public void onBackInvoked() {
-            if (!attached || isButton) {
+            if (sheet.isDismissed()) return;
+            if (runningAnim != null) {
+                runningAnim.cancel();
+                runningAnim = null;
+                restoreTransforms();
+            }
+            if (!started || !progressed) {
+                if (started) {
+                    helper.onHandleBackInvoked();
+                    restoreTransforms();
+                    started = false;
+                }
                 sheet.onBackPressed();
                 return;
             }
-            sheet.onBackPressed();
-            if (!sheet.isDismissed()) {
-                runFinishAnim();
-            }
+            started = false;
+            helper.onHandleBackInvoked();
+            // Keep subclass Back handling (nested pages, selection, dismissal veto).
+            sheet.dispatchPredictiveBack(lastProgress);
+            if (!sheet.isDismissed()) animateReset();
         }
 
-        private void runFinishAnim() {
-            View cv = sheet.getSheetContainer();
-            if (cv == null) {
-                return;
+        private void release() {
+            started = false;
+            if (runningAnim != null) {
+                runningAnim.cancel();
+                runningAnim = null;
             }
-            float startTranslation = cv.getTranslationY();
-            float startBlur = currentEased;
+            restoreTransforms();
+            helper = null;
+            view = null;
+            children.clear();
+        }
 
-            runningAnim = new AnimatorSet();
-            runningAnim.playTogether(
-                    ObjectAnimator.ofFloat(cv, View.TRANSLATION_Y, startTranslation, 0f)
-            );
-            ValueAnimator blurAnim = ValueAnimator.ofFloat(startBlur, 0f);
-            blurAnim.addUpdateListener(a -> sheet.setPredictiveBackProgress((float) a.getAnimatedValue()));
-            runningAnim.playTogether(blurAnim);
-            runningAnim.setDuration(200);
-            runningAnim.setInterpolator(new DecelerateInterpolator());
-            runningAnim.addListener(new AnimatorListenerAdapter() {
+        private void restoreTransforms() {
+            if (view == null) return;
+            view.setScaleX(scaleX);
+            view.setScaleY(scaleY);
+            view.setPivotY(pivotY);
+            for (ChildTransform child : children) {
+                child.view.setScaleY(child.scaleY);
+                child.view.setPivotY(child.pivotY);
+            }
+            sheet.setPredictiveBackProgress(0f);
+            sheet.setPredictiveBackTransformActive(false);
+        }
+
+        private void animateReset() {
+            if (view == null || sheet.isDismissed()) return;
+            AnimatorSet animation = new AnimatorSet();
+            ArrayList<Animator> animators = new ArrayList<>();
+            animators.add(ObjectAnimator.ofFloat(view, View.SCALE_X, scaleX));
+            animators.add(ObjectAnimator.ofFloat(view, View.SCALE_Y, scaleY));
+            for (ChildTransform child : children) {
+                animators.add(ObjectAnimator.ofFloat(child.view, View.SCALE_Y, child.scaleY));
+            }
+            animation.playTogether(animators);
+            animation.setDuration(MotionUtils.resolveThemeDuration(view.getContext(),
+                    com.google.android.material.R.attr.motionDurationShort2, 100));
+            animation.setInterpolator(new FastOutSlowInInterpolator());
+            animation.addListener(new AnimatorListenerAdapter() {
+                private boolean cancelled;
                 @Override
-                public void onAnimationEnd(Animator animation) {
-                    runningAnim = null;
+                public void onAnimationCancel(Animator animator) {
+                    cancelled = true;
+                }
+                @Override
+                public void onAnimationEnd(Animator animator) {
+                    if (!cancelled) restoreTransforms();
+                    if (runningAnim == animation) runningAnim = null;
                 }
             });
-            runningAnim.start();
+            runningAnim = animation;
+            animation.start();
         }
     }
 }

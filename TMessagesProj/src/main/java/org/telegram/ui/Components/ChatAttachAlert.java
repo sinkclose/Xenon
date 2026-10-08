@@ -1938,6 +1938,10 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
             protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
                 if (child instanceof AttachAlertLayout && child.getAlpha() > 0.0f) {
                     canvas.save();
+                    if (isPredictiveBackTransformActive() && getPredictiveBottomBarBounds(predictiveBottomBarBounds)) {
+                        canvas.clipRect(backgroundPaddingLeft, 0,
+                                getMeasuredWidth() - backgroundPaddingLeft, predictiveBottomBarBounds.bottom);
+                    }
                     canvas.translate(0, currentPanTranslationY);
                     int viewAlpha = (int) (255 * child.getAlpha());
                     AttachAlertLayout layout = (AttachAlertLayout) child;
@@ -2109,6 +2113,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                     drawChildBackground(canvas, currentAttachLayout);
                 }
                 super.dispatchDraw(canvas);
+                drawPredictiveBottomFill(canvas);
                 canvas.restore();
             }
 
@@ -2615,9 +2620,18 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                 ? zxc.iconic.xenon.helpers.BlurBehindHelper.create(this, sizeNotifierFrameLayout, Theme.key_dialogBackground, false, NonIslandHelper.ATTACH_TAB_SHADOW_DP, 0f)
                 : null;
 
+            private final Paint surfacePaint = new Paint();
+
             @Override
             protected void dispatchDraw(@NonNull Canvas canvas) {
-                if (blurHelper != null) blurHelper.draw(canvas);
+                if (blurHelper != null) {
+                    blurHelper.draw(canvas);
+                    // Non-island mode removes the wrapper drawable; keep its surface
+                    // identical to the sheet while retaining the top shadow.
+                    surfacePaint.setColor(getSheetBackgroundColor());
+                    canvas.drawRect(0, dp(NonIslandHelper.ATTACH_TAB_SHADOW_DP),
+                            getWidth(), getHeight(), surfacePaint);
+                }
                 super.dispatchDraw(canvas);
             }
         };
@@ -2758,7 +2772,9 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
 
         containerView.addView(bottomFadeView, LayoutHelper.createFrameMatchParent());
 
-        BlurredBackgroundDrawable tabsViewBackground = iBlur3FactoryLiquidGlass.create(buttonsRecyclerViewWrapper, BlurredBackgroundProviderImpl.mainTabs(resourcesProvider));
+        BlurredBackgroundDrawable tabsViewBackground = iBlur3FactoryLiquidGlass.create(buttonsRecyclerViewWrapper, new BlurredBackgroundProviderBuilder(resourcesProvider)
+                .setBackgroundColor((r, isDark) -> getSheetBackgroundColor())
+                .build());
         tabsViewBackground.setRadius(dp(56 / 2f));
         tabsViewBackground.setPadding(dp(7));
         buttonsRecyclerViewWrapper.setBackground(tabsViewBackground);
@@ -4391,6 +4407,32 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                 .show();
     }
 
+    private final RectF predictiveBottomBarBounds = new RectF();
+    private final Paint predictiveBottomFillPaint = new Paint();
+
+    private boolean getPredictiveBottomBarBounds(RectF bounds) {
+        View bar = frameLayout2 != null && frameLayout2.getVisibility() == View.VISIBLE && frameLayout2.getAlpha() > 0f
+                ? frameLayout2 : buttonsRecyclerViewWrapper;
+        if (bar == null || bar.getVisibility() != View.VISIBLE || bar.getAlpha() <= 0f) return false;
+        bounds.set(0, 0, bar.getWidth(), bar.getHeight());
+        bar.getMatrix().mapRect(bounds);
+        bounds.offset(bar.getLeft(), bar.getTop());
+        return true;
+    }
+
+    private void drawPredictiveBottomFill(Canvas canvas) {
+        if (!isPredictiveBackTransformActive() || !getPredictiveBottomBarBounds(predictiveBottomBarBounds)) return;
+        predictiveBottomFillPaint.setColor(getSheetBackgroundColor());
+        canvas.drawRect(backgroundPaddingLeft, predictiveBottomBarBounds.bottom,
+                containerView.getWidth() - backgroundPaddingLeft, containerView.getHeight(), predictiveBottomFillPaint);
+    }
+
+    @Override
+    protected int getSheetBackgroundColor() {
+        return currentAttachLayout != null && currentAttachLayout.hasCustomBackground()
+                ? currentAttachLayout.getCustomBackground() : getActionBarDrawableColor();
+    }
+
     @Override
     protected boolean shouldOverlayCameraViewOverNavBar() {
         return currentAttachLayout == photoLayout && photoLayout.cameraExpanded;
@@ -4409,7 +4451,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
         if (Build.VERSION.SDK_INT >= 30) {
             navBarColorKey = -1;
             navBarColor = ColorUtils.setAlphaComponent(getThemedColor(Theme.key_windowBackgroundGray), 0);
-            AndroidUtilities.setNavigationBarColor(this, navBarColor, false);
+            applySystemNavigationBarColor(navBarColor);
             AndroidUtilities.setLightNavigationBar(this, AndroidUtilities.computePerceivedBrightness(navBarColor) > 0.721);
         }
         if (hasOverridenWebviewBackgroundColor) {
@@ -5449,7 +5491,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
 
     private void setNavBarAlpha(float alpha) {
         navBarColor = ColorUtils.setAlphaComponent(getThemedColor(Theme.key_windowBackgroundGray), Math.min(255, Math.max(0, (int) (255 * alpha))));
-        AndroidUtilities.setNavigationBarColor(this, navBarColor, false);
+        applySystemNavigationBarColor(navBarColor);
         AndroidUtilities.setLightNavigationBar(this, AndroidUtilities.computePerceivedBrightness(navBarColor) > 0.721);
         getContainer().invalidate();
     }
@@ -5558,7 +5600,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
         if (Build.VERSION.SDK_INT >= 30) {
             navBarColorKey = -1;
             navBarColor = getThemedColor(Theme.key_dialogBackgroundGray);
-            AndroidUtilities.setNavigationBarColor(this, getThemedColor(Theme.key_dialogBackground), false);
+            applySystemNavigationBarColor(getThemedColor(Theme.key_dialogBackground));
             AndroidUtilities.setLightNavigationBar(this, AndroidUtilities.computePerceivedBrightness(navBarColor) > 0.721);
         } else {
             fixNavigationBar(getThemedColor(Theme.key_dialogBackground));
@@ -6950,11 +6992,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                 layouts[a].onDismiss();
             }
         }
-        AndroidUtilities.setNavigationBarColor(this, ColorUtils.setAlphaComponent(getThemedColor(Theme.key_windowBackgroundGray), 0), true, tcolor -> {
-            navBarColorKey = -1;
-            navBarColor = tcolor;
-            containerView.invalidate();
-        });
+        applySystemNavigationBarColor(getThemedColor(Theme.key_windowBackgroundGray));
         if (baseFragment != null) {
             AndroidUtilities.setLightStatusBar(this, baseFragment.isLightStatusBar());
         }
