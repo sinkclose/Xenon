@@ -5,6 +5,7 @@ import static org.telegram.messenger.AndroidUtilities.dpf2;
 import static org.telegram.messenger.AndroidUtilities.lerp;
 
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -12,6 +13,8 @@ import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.text.TextPaint;
 import android.text.TextUtils;
 import android.util.TypedValue;
@@ -25,6 +28,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.RawRes;
 import androidx.annotation.StringRes;
 import androidx.core.graphics.ColorUtils;
+import androidx.dynamicanimation.animation.FloatValueHolder;
+import androidx.dynamicanimation.animation.SpringAnimation;
+import androidx.dynamicanimation.animation.SpringForce;
 import androidx.core.math.MathUtils;
 
 import org.telegram.messenger.AndroidUtilities;
@@ -53,7 +59,6 @@ import me.vkryl.android.AnimatorUtils;
 import me.vkryl.android.animator.BoolAnimator;
 import me.vkryl.android.animator.FactorAnimator;
 import zxc.iconic.xenon.helpers.MainTabsUiHelper;
-import zxc.iconic.xenon.helpers.MainTabsUiHelper;
 
 public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, FactorAnimator.Target {
     private final TextView textView;
@@ -67,10 +72,8 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
     private static final int ANIMATOR_ID_IS_SELECTED = 0;
     private static final int ANIMATOR_ID_COUNTER_VISIBLE = 1;
     private static final int ANIMATOR_ID_COUNTER_ERROR = 2;
-    private static final int ANIMATOR_ID_SELECTED_INDICATOR_ALPHA = 3;
 
     private final BoolAnimator isSelectedAnimator = new BoolAnimator(ANIMATOR_ID_IS_SELECTED, this, AnimatorUtils.DECELERATE_INTERPOLATOR, 320);
-    private final BoolAnimator selectedIndicatorAlphaAnimator = new BoolAnimator(ANIMATOR_ID_SELECTED_INDICATOR_ALPHA, this, AnimatorUtils.DECELERATE_INTERPOLATOR, 0);
     private final BoolAnimator isHasCounterAnimator = new BoolAnimator(ANIMATOR_ID_COUNTER_VISIBLE, this, CubicBezierInterpolator.EASE_OUT_QUINT, 380);
     private final BoolAnimator isHasCounterErrorAnimator = new BoolAnimator(ANIMATOR_ID_COUNTER_ERROR, this, CubicBezierInterpolator.EASE_OUT_QUINT, 380);
     private int colorSelected;
@@ -78,6 +81,88 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
     private int colorDefault;
     private boolean usePremiumCounter;
     private boolean useMainTabSelectedIndicator;
+    private boolean horizontalNavigation;
+    private float navigationSelection;
+    private SpringAnimation navigationSelectionSpring;
+    private RippleDrawable navigationRipple;
+    private final RectF navigationIndicator = new RectF();
+
+    public void setMaterial3Horizontal(boolean horizontal) {
+        if (horizontalNavigation != horizontal) {
+            horizontalNavigation = horizontal;
+            requestLayout();
+        }
+    }
+
+    private void setNavigationSelected(boolean selected, boolean animated) {
+        float target = selected ? 1f : 0f;
+        if (navigationSelectionSpring == null) {
+            navigationSelectionSpring = new SpringAnimation(new FloatValueHolder(navigationSelection));
+            // ShortNavigationBar's NavigationItem uses Expressive DefaultSpatial.
+            navigationSelectionSpring.setSpring(new SpringForce(target).setDampingRatio(0.8f).setStiffness(380f));
+            navigationSelectionSpring.setMinimumVisibleChange(0.01f);
+            navigationSelectionSpring.addUpdateListener((animation, value, velocity) -> {
+                navigationSelection = value;
+                invalidate();
+            });
+        }
+        if (animated && isAttachedToWindow()) {
+            navigationSelectionSpring.animateToFinalPosition(target);
+        } else {
+            navigationSelectionSpring.cancel();
+            navigationSelection = target;
+            navigationSelectionSpring.setStartValue(target).setStartVelocity(0f);
+            invalidate();
+        }
+    }
+
+    private void ensureNavigationRipple() {
+        if (navigationRipple == null) {
+            GradientDrawable mask = new GradientDrawable();
+            mask.setColor(Color.WHITE);
+            mask.setCornerRadius(dp(20));
+            navigationRipple = new RippleDrawable(ColorStateList.valueOf(Color.TRANSPARENT), null, mask);
+            navigationRipple.setCallback(this);
+            navigationRipple.setState(getDrawableState());
+        }
+    }
+
+    @Override
+    protected void drawableStateChanged() {
+        super.drawableStateChanged();
+        if (navigationRipple != null) navigationRipple.setState(getDrawableState());
+    }
+
+    @Override
+    public void drawableHotspotChanged(float x, float y) {
+        super.drawableHotspotChanged(x, y);
+        if (navigationRipple != null) navigationRipple.setHotspot(x, y);
+    }
+
+    @Override
+    protected boolean verifyDrawable(@NonNull Drawable who) {
+        return who == navigationRipple || super.verifyDrawable(who);
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        if (navigationSelectionSpring != null) navigationSelectionSpring.cancel();
+        navigationSelection = isTabSelected() ? 1f : 0f;
+        if (navigationSelectionSpring != null) {
+            navigationSelectionSpring.setStartValue(navigationSelection).setStartVelocity(0f);
+        }
+        if (navigationRipple != null) {
+            navigationRipple.setState(new int[0]);
+            navigationRipple.jumpToCurrentState();
+        }
+        super.onDetachedFromWindow();
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        if (navigationRipple != null) navigationRipple.setState(getDrawableState());
+    }
 
     private TabAnimation tabAnimation;
     private TLRPC.TL_attachMenuBot tabAnimationBot;
@@ -158,17 +243,20 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
         final float viewWidth = hasVisualWidth ? visualWidth : getWidth();
-        final float selectedFactor = hasGestureSelectedOverride ? gestureSelectedOverride : isSelectedAnimator.getFloatValue();
+        final float selectedFactor = useMainTabSelectedIndicator ? navigationSelection
+                : hasGestureSelectedOverride ? gestureSelectedOverride : isSelectedAnimator.getFloatValue();
         if (selectedFactor > 0 && !skipDrawSelector) {
             final float alpha;
             if (useMainTabSelectedIndicator) {
-                alpha = selectedIndicatorAlphaAnimator.getFloatValue();
+                alpha = MathUtils.clamp(navigationSelection, 0f, 1f);
             } else {
                 alpha = AnimatorUtils.DECELERATE_INTERPOLATOR.getInterpolation(selectedFactor);
             }
             if (useMainTabSelectedIndicator) {
-                MainTabsUiHelper.applyTabSelectedIndicatorColor(paintCounterBackground, colorSelected, alpha);
-                MainTabsUiHelper.setTabSelectedIndicatorBounds(tmpRectF, viewWidth, getHeight());
+                MainTabsUiHelper.applyTabSelectedIndicatorColor(paintCounterBackground,
+                        MainTabsUiHelper.getNavigationColors(resourcesProvider).indicator, alpha);
+                MainTabsUiHelper.setNavigationIndicatorBounds(tmpRectF, viewWidth, getHeight(),
+                        horizontalNavigation, showTitle, textView.getMeasuredWidth());
             } else {
                 paintCounterBackground.setColor(Theme.multAlpha(colorSelected, 0.09f * alpha));
                 tmpRectF.set(0, 0, viewWidth, getHeight());
@@ -180,6 +268,15 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
             canvas.scale(selectedBackgroundScaleX, selectedBackgroundScaleY, tmpRectF.centerX(), tmpRectF.centerY());
             canvas.drawRoundRect(tmpRectF, r, r, paintCounterBackground);
             canvas.restore();
+        }
+
+        if (useMainTabSelectedIndicator) {
+            MainTabsUiHelper.setNavigationIndicatorBounds(navigationIndicator, viewWidth, getHeight(),
+                    horizontalNavigation, showTitle, textView.getMeasuredWidth());
+            ensureNavigationRipple();
+            navigationRipple.setBounds(Math.round(navigationIndicator.left), Math.round(navigationIndicator.top),
+                    Math.round(navigationIndicator.right), Math.round(navigationIndicator.bottom));
+            navigationRipple.draw(canvas);
         }
 
         final float hasCounter = (usePremiumCounter ? 1f : isHasCounterAnimator.getFloatValue()) * attachScale;
@@ -194,8 +291,10 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
             canvas.save();
 
             final float gap = dpf2(1.33f);
-            final float cx = viewWidth / 2f + dpf2(11);
-            final float cy = MainTabsUiHelper.getMainTabCounterCenterY(useMainTabSelectedIndicator);
+            final float cx = useMainTabSelectedIndicator ? imageView.getX() + imageView.getWidth() / 2f + dpf2(11)
+                    : viewWidth / 2f + dpf2(11);
+            final float cy = useMainTabSelectedIndicator ? imageView.getY() + dpf2(6)
+                    : MainTabsUiHelper.getMainTabCounterCenterY(false);
             final float height = dpf2(16);
             final float width = Math.max(height, counter.getCurrentWidth() + dp(8));
             final float rOuter = dpf2(9.333f);
@@ -250,13 +349,18 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
 
     public void setSelected(boolean selected, boolean animated) {
         if (useMainTabSelectedIndicator) {
-            MainTabsUiHelper.setMaterial3MainTabSelectedV2(isSelectedAnimator, selectedIndicatorAlphaAnimator, selected, animated);
+            super.setSelected(selected);
+            isSelectedAnimator.setValue(selected, false);
+            setNavigationSelected(selected, animated);
+            updateColors();
         } else {
             isSelectedAnimator.setValue(selected, animated);
         }
         checkPlayAnimation(animated);
 
-        if (useMainTabSelectedIndicator || !selected) {
+        if (useMainTabSelectedIndicator) {
+            textView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
+        } else if (!selected) {
             textView.setTypeface(AndroidUtilities.bold());
         } else {
             textView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_EXTRA_BOLD));
@@ -278,8 +382,16 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
     private boolean needUpdateBackupViewColor;
 
     private void updateColors() {
-        final int color = ColorUtils.blendARGB(colorDefault, colorSelected, isSelectedAnimator.getFloatValue());
-        final int colorText = ColorUtils.blendARGB(colorDefault, colorSelectedText, isSelectedAnimator.getFloatValue());
+        final MainTabsUiHelper.NavigationColors navigationColors = useMainTabSelectedIndicator
+                ? MainTabsUiHelper.getNavigationColors(resourcesProvider) : null;
+        final int color = navigationColors != null ? (isTabSelected() ? navigationColors.icon : navigationColors.inactive)
+                : ColorUtils.blendARGB(colorDefault, colorSelected, isSelectedAnimator.getFloatValue());
+        final int colorText = navigationColors != null ? (isTabSelected() ? navigationColors.label : navigationColors.inactive)
+                : ColorUtils.blendARGB(colorDefault, colorSelectedText, isSelectedAnimator.getFloatValue());
+        if (navigationColors != null) {
+            ensureNavigationRipple();
+            navigationRipple.setColor(ColorStateList.valueOf(ColorUtils.setAlphaComponent(color, 26)));
+        }
 
         final PorterDuffColorFilter filter = new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN);
         if (backupImageView != null && needUpdateBackupViewColor) {
@@ -439,6 +551,7 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
 
     public static GlassTabView createAvatar(Context context, Theme.ResourcesProvider resourcesProvider, int currentAccount, @StringRes int stringRes) {
         GlassTabView tab = new GlassTabView(context);
+        tab.resourcesProvider = resourcesProvider;
         tab.textView.setText(LocaleController.getString(stringRes));
         tab.imageView.setVisibility(GONE);
 
@@ -461,12 +574,48 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
     public void setMainTabStyle() {
         if (MainTabsUiHelper.isMaterial3NavigationBar()) {
             useMainTabSelectedIndicator = true;
-            imageView.setLayoutParams(LayoutHelper.createFrame(24, 24, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, MainTabsUiHelper.getMaterial3MainTabIconTopDp(), 0, 0));
-            if (backupImageView != null) {
-                backupImageView.setLayoutParams(LayoutHelper.createFrame(22, 22, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, MainTabsUiHelper.getMaterial3MainTabAvatarTopDp(), 0, 0));
-            }
             MainTabsUiHelper.applyMaterial3MainTabStyle(textView);
+            textView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
+            defaultTextPaint.set(textView.getPaint());
+            setNavigationSelected(isTabSelected(), false);
+            ensureNavigationRipple();
+            updateColors();
+            requestLayout();
         }
+    }
+
+    private void layoutNavigationContent(int width, int height) {
+        final boolean horizontal = horizontalNavigation && showTitle;
+        int labelWidth = horizontal ? Math.min((int) Math.ceil(measureTextWidth()), Math.max(0, width - dp(60))) : width;
+        int labelHeight = dp(horizontal ? 20 : 16);
+        int labelTop = horizontal ? (height - labelHeight) / 2 : dp(42);
+        int contentLeft = (width - dp(24 + 4) - labelWidth) / 2;
+        boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+        FrameLayout.LayoutParams label = (FrameLayout.LayoutParams) textView.getLayoutParams();
+        label.width = labelWidth;
+        label.height = labelHeight;
+        label.gravity = Gravity.LEFT | Gravity.TOP;
+        label.topMargin = labelTop;
+        label.leftMargin = horizontal ? (rtl ? contentLeft : contentLeft + dp(28)) : 0;
+        textView.setLayoutParams(label);
+        textView.setVisibility(showTitle ? VISIBLE : GONE);
+        textView.setAlpha(showTitle ? 1f : 0f);
+        layoutNavigationIcon(imageView, width, height, 24, horizontal, rtl, contentLeft, labelWidth);
+        layoutNavigationIcon(backupImageView, width, height, 22, horizontal, rtl, contentLeft, labelWidth);
+    }
+
+    private void layoutNavigationIcon(View icon, int width, int height, int sizeDp,
+            boolean horizontal, boolean rtl, int contentLeft, int labelWidth) {
+        if (icon == null) return;
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) icon.getLayoutParams();
+        lp.width = lp.height = dp(sizeDp);
+        lp.gravity = Gravity.LEFT | Gravity.TOP;
+        lp.leftMargin = horizontal ? (rtl ? contentLeft + labelWidth + dp(4) : contentLeft) + dp((24 - sizeDp) / 2)
+                : (width - lp.width) / 2;
+        lp.topMargin = horizontal || !showTitle ? (height - lp.height) / 2
+                : dp(10) + dp((24 - sizeDp) / 2);
+        icon.setTranslationY(0f);
+        icon.setLayoutParams(lp);
     }
 
     public void updateUserAvatar(int currentAccount) {
@@ -541,6 +690,9 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        if (useMainTabSelectedIndicator) {
+            layoutNavigationContent(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.getSize(heightMeasureSpec));
+        }
         if (selfMeasure) {
             final int width = (int) (measureAttachTabWidth()) + additionalWidth;
             super.onMeasure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY), heightMeasureSpec);
@@ -561,16 +713,20 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
         if (scaledTextPaint == null) {
             scaledTextPaint = new TextPaint(defaultTextPaint);
         }
-        scaledTextPaint.setTextSize(dp(textSizeDp));
+        if (useMainTabSelectedIndicator) scaledTextPaint.setLetterSpacing(textSizeDp >= 14f ? 0.00714286f : 0.04166667f);
+        scaledTextPaint.setTextSize(useMainTabSelectedIndicator
+                ? TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, textSizeDp, getResources().getDisplayMetrics()) : dp(textSizeDp));
         return scaledTextPaint.measureText(textView.getText().toString());
     }
 
     @Override
     public void setTextSizeDp(float textSizeDp) {
-        final float px = dp(textSizeDp);
+        if (useMainTabSelectedIndicator) textView.setLetterSpacing(textSizeDp >= 14f ? 0.00714286f : 0.04166667f);
+        final float px = useMainTabSelectedIndicator
+                ? TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, textSizeDp, getResources().getDisplayMetrics()) : dp(textSizeDp);
         if (textView.getTextSize() != px) {
-            textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, textSizeDp);
-            defaultTextPaint.setTextSize(px);
+            textView.setTextSize(useMainTabSelectedIndicator ? TypedValue.COMPLEX_UNIT_SP : TypedValue.COMPLEX_UNIT_DIP, textSizeDp);
+            defaultTextPaint.set(textView.getPaint());
         }
     }
 
@@ -717,6 +873,13 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
 
     public void setShowTitle(boolean show, boolean animated) {
         showTitle = show;
+        if (useMainTabSelectedIndicator) {
+            textView.animate().cancel();
+            textView.setTranslationY(0f);
+            requestLayout();
+            invalidate();
+            return;
+        }
         int gravity = show ? (Gravity.CENTER_HORIZONTAL | Gravity.TOP) : Gravity.CENTER;
 
         animateIconLayoutToState(imageView, gravity, show ? dp(4) : 0, animated, show);

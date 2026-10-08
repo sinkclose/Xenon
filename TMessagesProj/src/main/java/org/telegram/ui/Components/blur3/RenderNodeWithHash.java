@@ -60,6 +60,11 @@ public class RenderNodeWithHash {
         }
     }
 
+    /** Replay the source without applying this node's image filters. */
+    public void drawUnfiltered(Canvas canvas) {
+        renderer.renderNodeUpdateDisplayList(canvas);
+    }
+
     public void invalidate() {
         lastHash = 0;
     }

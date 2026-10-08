@@ -52,11 +52,11 @@ public class BlurredBackgroundProviderImpl {
 
     public static BlurredBackgroundProvider mainTabs(Theme.ResourcesProvider resourcesProvider) {
         if (MainTabsUiHelper.isMaterial3NavigationBar()) {
-            // No liquid glass on the Material3 nav bar — plain theme color, no B/W tint.
+            // Material navigation uses a semantic surface over plain blur, without refraction.
             return new BlurredBackgroundProviderBuilder(resourcesProvider)
                 .setBackgroundColor((r, isDark) -> {
-                    final float alpha = 0.76f;
-                    final int colorBg = Theme.getColor(Theme.key_windowBackgroundWhite, r);
+                    final float alpha = org.telegram.messenger.SharedConfig.chatBlurEnabled() ? 0.76f : 1f;
+                    final int colorBg = MainTabsUiHelper.getNavigationColors(r).surface;
                     return Theme.multAlpha(colorBg, alpha);
                 })
                 .setStrokeColorTop(0xFFFFFFFF, 0x28FFFFFF)

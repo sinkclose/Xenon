@@ -1,9 +1,14 @@
 package zxc.iconic.xenon.helpers;
 
 import android.graphics.RectF;
-import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
+
+import androidx.core.graphics.ColorUtils;
+
+import com.google.android.material.color.utilities.Hct;
+import com.google.android.material.color.utilities.MaterialDynamicColors;
+import com.google.android.material.color.utilities.SchemeTonalSpot;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.ui.ActionBar.Theme;
@@ -48,22 +53,11 @@ public class MainTabsUiHelper {
     }
 
     public static void applyTabSelectedIndicatorColor(android.graphics.Paint paint, int colorSelected, float interpolation) {
-        paint.setColor(org.telegram.ui.ActionBar.Theme.multAlpha(colorSelected, interpolation * 0.125f));
+        paint.setColor(Theme.multAlpha(colorSelected, Math.max(0f, Math.min(1f, interpolation))));
     }
 
     public static void setTabSelectedIndicatorBounds(RectF rectF, float width, float height) {
-        float minWidth = Math.min(AndroidUtilities.dp(56), Math.max(0, width - AndroidUtilities.dp(8)));
-        float maxHeight = Math.min(AndroidUtilities.dp(32), height);
-        float left = (width - minWidth) / 2f;
-        float top = AndroidUtilities.dp(6);
-        rectF.set(left, top, minWidth + left, maxHeight + top);
-    }
-
-    public static void setMaterial3MainTabSelectedV2(me.vkryl.android.animator.BoolAnimator isSelectedAnimator, me.vkryl.android.animator.BoolAnimator selectedIndicatorAlphaAnimator, boolean selected, boolean animated) {
-        isSelectedAnimator.setValue(selected, animated);
-        selectedIndicatorAlphaAnimator.setDuration(selected ? 100L : 200L);
-        selectedIndicatorAlphaAnimator.setInterpolator(selected ? org.telegram.ui.Components.CubicBezierInterpolator.Emphasized : org.telegram.ui.Components.CubicBezierInterpolator.EmphasizedAccelerate);
-        selectedIndicatorAlphaAnimator.setValue(selected, animated);
+        setNavigationIndicatorBounds(rectF, width, height, false, true, 0f);
     }
 
     public static float getMainTabCounterCenterY(boolean m3) {
@@ -84,12 +78,56 @@ public class MainTabsUiHelper {
     }
 
     public static float getSelectedBackgroundScaleX(boolean m3, float selectedFactor) {
-        return lerp(m3 ? 0.4f : 0.6f, 1.0f, selectedFactor);
+        return m3 ? Math.max(0f, selectedFactor) : lerp(0.6f, 1.0f, selectedFactor);
     }
 
     public static float getSelectedBackgroundScaleY(boolean m3, float selectedFactor) {
         if (m3) return 1.0f;
         return getSelectedBackgroundScaleX(false, selectedFactor);
+    }
+
+    // ShortNavigationBar / NavigationBarTokens from AndroidX Material 3.
+    public static boolean useHorizontalItems(int availableWidth) {
+        return availableWidth >= AndroidUtilities.dp(600);
+    }
+
+    public static void setNavigationIndicatorBounds(RectF rect, float width, float height,
+            boolean horizontal, boolean showTitle, float labelWidth) {
+        float indicatorWidth = horizontal && showTitle
+                ? AndroidUtilities.dp(24 + 4 + 32) + labelWidth : AndroidUtilities.dp(56);
+        indicatorWidth = Math.min(indicatorWidth, Math.max(0f, width));
+        float indicatorHeight = Math.min(AndroidUtilities.dp(horizontal ? 40 : 32), height);
+        float top = horizontal || !showTitle ? (height - indicatorHeight) / 2f : AndroidUtilities.dp(6);
+        rect.set((width - indicatorWidth) / 2f, top, (width + indicatorWidth) / 2f, top + indicatorHeight);
+    }
+
+    public static final class NavigationColors {
+        public final int surface, indicator, icon, label, inactive;
+
+        private NavigationColors(int seed, boolean dark) {
+            SchemeTonalSpot scheme = new SchemeTonalSpot(Hct.fromInt(seed), dark, 0.0);
+            MaterialDynamicColors roles = new MaterialDynamicColors();
+            surface = roles.surfaceContainer().getArgb(scheme);
+            indicator = roles.secondaryContainer().getArgb(scheme);
+            icon = roles.onSecondaryContainer().getArgb(scheme);
+            label = roles.secondary().getArgb(scheme);
+            inactive = roles.onSurfaceVariant().getArgb(scheme);
+        }
+    }
+
+    private static int lastSeed;
+    private static boolean lastDark;
+    private static NavigationColors cachedColors;
+
+    public static NavigationColors getNavigationColors(Theme.ResourcesProvider provider) {
+        int seed = Theme.getColor(Theme.key_glass_tabSelected, provider);
+        boolean dark = ColorUtils.calculateLuminance(Theme.getColor(Theme.key_windowBackgroundWhite, provider)) < 0.5;
+        if (cachedColors == null || lastSeed != seed || lastDark != dark) {
+            lastSeed = seed;
+            lastDark = dark;
+            cachedColors = new NavigationColors(seed, dark);
+        }
+        return cachedColors;
     }
 
     private static float lerp(float a, float b, float t) {

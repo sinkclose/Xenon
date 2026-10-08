@@ -30,6 +30,24 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
     private DownscaleScrollableNoiseSuppressor scrollableNoiseSuppressor;
     private int scrollableNoiseSuppressorIndex;
     public BlurredBackgroundSource underSource;
+    // Scope raw replay to this recording canvas; nested sources inherit it.
+    private static final ThreadLocal<Canvas> unblurredCanvas = new ThreadLocal<>();
+
+    public static boolean isUnblurredCanvas(Canvas canvas) {
+        return canvas == unblurredCanvas.get();
+    }
+
+    public void drawUnblurred(Canvas canvas, float left, float top, float right, float bottom) {
+        Canvas previous = unblurredCanvas.get();
+        unblurredCanvas.set(canvas);
+        try {
+            draw(canvas, left, top, right, bottom);
+        } finally {
+            if (previous == null) unblurredCanvas.remove();
+            else unblurredCanvas.set(previous);
+        }
+    }
+
     private boolean noClip;
     private float pixelationScale = 1f;
     private float lastBlurRadius = -1f;
@@ -266,7 +284,8 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
         if (underSource == null) {
             return;
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && wallpaperParentW > 0 && wallpaperParentH > 0) {
+        if (!isUnblurredCanvas(canvas) && zxc.iconic.xenon.NekoConfig.blurStrength > 0
+                && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && wallpaperParentW > 0 && wallpaperParentH > 0) {
             syncWallpaperEffect();
             recordWallpaperIfNeeded();
             if (wallpaperNode.hasDisplayList()) {
@@ -415,7 +434,7 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
         // Wallpaper layer: sharp source recorded once into a half-size node
         // and blurred on the GPU (see drawWallpaper). Steady-state draw()
         // performs zero recording — no render-thread race, no CPU stackBlur.
-        prepareToDraw();
+        if (!isUnblurredCanvas(canvas)) prepareToDraw();
         drawWallpaper(canvas, left, top, right, bottom);
         canvas.save();
         if (!noClip) {
@@ -423,6 +442,8 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && scrollableNoiseSuppressor != null) {
             scrollableNoiseSuppressor.drawInline(canvas, scrollableNoiseSuppressorIndex);
+        } else if (isUnblurredCanvas(canvas) && renderNodeWithHash != null) {
+            renderNodeWithHash.drawUnfiltered(canvas);
         } else {
             canvas.drawRenderNode(renderNode);
         }

@@ -49,6 +49,7 @@ public class MainTabsLayout extends AnimatedLinearLayout {
     private static final int[] PASS_PADDINGS_DP = {16, 8, 4};
 
     private int maxWidthPx;
+    private int navigationContentInset;
     private boolean swipeSelectionEnabled = true;
 
     public void setSwipeSelectionEnabled(boolean enabled) {
@@ -76,6 +77,10 @@ public class MainTabsLayout extends AnimatedLinearLayout {
         final int minTotalWidthForTabs = Math.min(dp(320), maxTotalWidthForTabs);
 
         final boolean m3 = zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar();
+        if (m3) {
+            measureMaterial3Tabs(width, height, tabHeight);
+            return;
+        }
         int chosenPass = PASS_TEXT_SIZES_DP.length - 1;
         float lastMeasuredTextSize = -1;
         for (int pass = 0; pass < PASS_TEXT_SIZES_DP.length; pass++) {
@@ -178,6 +183,51 @@ public class MainTabsLayout extends AnimatedLinearLayout {
         calculateTotalSizesAfterMeasure();
     }
 
+    private void measureMaterial3Tabs(int width, int height, int tabHeight) {
+        navigationContentInset = 0;
+        final int available = Math.max(0, width - getPaddingLeft() - getPaddingRight());
+        final boolean horizontal = MainTabsUiHelper.useHorizontalItems(available);
+        final float textSize = horizontal ? 14f : 12f;
+        measureTabTexts(textSize);
+        if (visibleChildCount == 0) {
+            setMeasuredDimension(width, height);
+            calculateTotalSizesAfterMeasure();
+            return;
+        }
+        int contentWidth = available;
+        if (horizontal && visibleChildCount < 6) {
+            // ShortNavigationBar Centered arrangement: grow for long labels.
+            float padding = (100 - 10 * (visibleChildCount + 3)) / 200f;
+            contentWidth = Math.min(available, Math.max(Math.round(available * (1 - 2 * padding)),
+                    (biggestTabTextWidth + dp(60)) * visibleChildCount));
+        }
+        navigationContentInset = (available - contentWidth) / 2;
+        int left = getPaddingLeft() + navigationContentInset;
+        int remaining = visibleChildCount;
+        int remainingWidth = contentWidth;
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            if (!isViewVisible(child)) {
+                tabsWidth[i] = 0;
+                continue;
+            }
+            int itemWidth = remainingWidth / remaining;
+            tabsWidth[i] = itemWidth;
+            tabsLeftPos[i] = left;
+            left += itemWidth;
+            remainingWidth -= itemWidth;
+            remaining--;
+            if (child instanceof GlassTabView) {
+                ((GlassTabView) child).setMaterial3Horizontal(horizontal);
+                ((GlassTabView) child).setTextSizeDp(textSize);
+            }
+            child.measure(MeasureSpec.makeMeasureSpec(itemWidth, MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(Math.max(0, tabHeight), MeasureSpec.EXACTLY));
+        }
+        setMeasuredDimension(width, height);
+        calculateTotalSizesAfterMeasure();
+    }
+
     public interface Tab {
         float measureTextWidth();
         default float measureTextWidth(float textSizeDp) { return measureTextWidth(); }
@@ -251,6 +301,9 @@ public class MainTabsLayout extends AnimatedLinearLayout {
         view.setAlpha(factor);
         view.setScaleX(s);
         view.setScaleY(s);
+        if (MainTabsUiHelper.isMaterial3NavigationBar()) {
+            view.setTranslationX(view.getTranslationX() + navigationContentInset);
+        }
     }
 
     @Override

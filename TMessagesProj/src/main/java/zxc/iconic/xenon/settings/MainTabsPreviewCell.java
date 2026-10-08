@@ -96,6 +96,9 @@ public class MainTabsPreviewCell extends FrameLayout {
         this.showTitle = showTitle;
         this.resourcesProvider = resourcesProvider;
         this.currentAccount = currentAccount;
+        if (zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar()) {
+            setBackgroundColor(zxc.iconic.xenon.helpers.MainTabsUiHelper.getNavigationColors(resourcesProvider).surface);
+        }
         adapter.notifyDataSetChanged();
     }
 
@@ -157,6 +160,10 @@ public class MainTabsPreviewCell extends FrameLayout {
             FrameLayout frameLayout = new FrameLayout(context);
             GlassTabView tabView = MainTabsManager.createTabView(context, resourcesProvider, currentAccount, type);
             tabView.setShowTitle(showTitle, false);
+            if (zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar()) {
+                tabView.setMainTabStyle();
+                tabView.setSelected(type == MainTabsManager.TabType.CHATS, false);
+            }
             frameLayout.addView(tabView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.CENTER));
 
             int width = computeItemWidth();
@@ -190,6 +197,11 @@ public class MainTabsPreviewCell extends FrameLayout {
 
             // CHATS и PROFILE нельзя отключить
             boolean canDisable = tab.type != MainTabsManager.TabType.CHATS && tab.type != MainTabsManager.TabType.PROFILE;
+            if (zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar()) {
+                boolean horizontal = zxc.iconic.xenon.helpers.MainTabsUiHelper.useHorizontalItems(MainTabsPreviewCell.this.getMeasuredWidth());
+                tabView.setMaterial3Horizontal(horizontal);
+                tabView.setTextSizeDp(horizontal ? 14f : 12f);
+            }
             tabView.setAlpha(tab.enabled ? 1.0f : 0.45f);
 
             tabView.setOnClickListener(v -> {

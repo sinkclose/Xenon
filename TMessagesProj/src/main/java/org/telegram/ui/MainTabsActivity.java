@@ -132,6 +132,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
                 public void renderNodeCalculateHash(IBlur3Hash hash) {
                     hash.add(getThemedColor(Theme.key_windowBackgroundWhite));
                     hash.add(SharedConfig.chatBlurEnabled());
+                    hash.add(useFixedMaterialTabsBlur());
 
                     for (int a = 0, N = fragmentsArr.size(); a < N; a++) {
                         final FragmentState state = fragmentsArr.valueAt(a);
@@ -184,7 +185,11 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
                             if (source != null) {
                                 canvas.save();
                                 canvas.translate(fragmentPosition.left, fragmentPosition.top);
-                                source.draw(canvas, 0, 0, width, height);
+                                if (useFixedMaterialTabsBlur()) {
+                                    source.drawUnblurred(canvas, 0, 0, width, height);
+                                } else {
+                                    source.draw(canvas, 0, 0, width, height);
+                                }
                                 canvas.restore();
                             }
                         }
@@ -337,7 +342,12 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         tabsViewBackground = iBlur3FactoryGlass.create(tabsView, BlurredBackgroundProviderImpl.mainTabs(resourceProvider));
         tabsViewBackground.setRadius(zxc.iconic.xenon.helpers.MainTabsUiHelper.getBackgroundRadius());
         tabsViewBackground.setPadding(zxc.iconic.xenon.helpers.MainTabsUiHelper.getBackgroundInset());
-        tabsView.setBackground(tabsViewBackground);
+        if (zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar()) {
+            tabsView.setBackground(tabsViewBackground);
+            tabsView.setElevation(dp(3));
+        } else {
+            tabsView.setBackground(tabsViewBackground);
+        }
 
         BlurredBackgroundDrawableViewFactory iBlur3FactoryFade = new BlurredBackgroundDrawableViewFactory(iBlur3SourceColor);
         iBlur3FactoryFade.setSourceRootView(viewPositionWatcher, contentView);
@@ -966,10 +976,10 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
         if (zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar()) {
             tabsViewWrapper.setPadding(0, 0, 0, 0);
-            tabsView.setPadding(0, 0, 0, navigationBarHeight);
+            tabsView.setPadding(systemInsets.left, 0, systemInsets.right, navigationBarHeight);
             ViewGroup.LayoutParams tabsLp = tabsView.getLayoutParams();
             if (tabsLp != null) {
-                tabsLp.height = dp(64) + navigationBarHeight;
+                tabsLp.height = dp(zxc.iconic.xenon.helpers.MainTabsUiHelper.getTabsViewHeightDp()) + navigationBarHeight;
                 tabsView.setLayoutParams(tabsLp);
             }
         } else {
@@ -1081,6 +1091,10 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     }
 
     private void checkUi_fadeView() {
+        if (fadeView != null && zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar()) {
+            fadeView.setVisibility(View.GONE);
+            return;
+        }
         if (viewPager == null || fadeView == null || isTabsHidden()) {
             return;
         }
@@ -1245,17 +1259,18 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     private final @Nullable BlurredBackgroundSourceRenderNode iBlur3SourceTabGlass;
 
     private final RectF fragmentPosition = new RectF();
+    private boolean useFixedMaterialTabsBlur() {
+        return zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar()
+                && LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) && SharedConfig.chatBlurEnabled();
+    }
+
     private void blur3_updateTabsBlur() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || iBlur3SourceTabGlass == null) {
             return;
         }
-        if (zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar()) {
-            // Material 3 uses a full-strength ordinary blur, independent of glass settings.
-            iBlur3SourceTabGlass.setPlainBlur(dp(24));
-        } else {
-            // Preserve the Glass Bottom Bar baseline and its glass slider updates.
-            iBlur3SourceTabGlass.setGlassBlur(dp(4));
-        }
+        // Delegates already supply the configured blur. Do not add a fixed
+        // 4dp pass on top of ordinary bottom bars (including at strength zero).
+        iBlur3SourceTabGlass.setPlainBlur(useFixedMaterialTabsBlur() ? dp(24) : 0f);
     }
 
     private void blur3_invalidateBlur() {

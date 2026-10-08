@@ -29,7 +29,7 @@ public class DownscaleScrollableNoiseSuppressor {
     public final boolean isLiquidGlassEnabled;
     public final boolean allowNoiseSuppress;
     private final boolean simpleMode;
-    private final int k;
+    private int k;
 
     public DownscaleScrollableNoiseSuppressor() {
         this(true, false);
@@ -38,13 +38,21 @@ public class DownscaleScrollableNoiseSuppressor {
     public DownscaleScrollableNoiseSuppressor(boolean simple, boolean allowNoiseSuppress) {
         isLiquidGlassEnabled = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
         simpleMode = simple;
-        k = isLiquidGlassEnabled || allowNoiseSuppress ? 1 : 8; // 1
+        k = captureScale(isLiquidGlassEnabled, allowNoiseSuppress, zxc.iconic.xenon.NekoConfig.blurStrength);
 
         this.allowNoiseSuppress = allowNoiseSuppress;
         resultRenderNodes = new RenderNode[isLiquidGlassEnabled || !simpleMode ? 2 : 1];
         for (int a = 0; a < resultRenderNodes.length; a++) {
             resultRenderNodes[a] = new RenderNode(null);
         }
+    }
+
+    public static int captureScale(boolean liquidGlass, boolean noiseSuppress, int strength) {
+        return strength <= 0 || liquidGlass || noiseSuppress ? 1 : 8;
+    }
+
+    public static int blurScale(float radius, int normalScale) {
+        return radius <= 0f ? 1 : normalScale;
     }
 
     public static final int DRAW_GLASS = -2;
@@ -56,6 +64,10 @@ public class DownscaleScrollableNoiseSuppressor {
             throw new IllegalStateException();
         }
 
+        if (org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode.isUnblurredCanvas(canvas)) {
+            drawInline(canvas, index);
+            return;
+        }
         if (!isLiquidGlassEnabled && simpleMode) {
             canvas.drawRenderNode(resultRenderNodes[0]);
             return;
@@ -71,6 +83,7 @@ public class DownscaleScrollableNoiseSuppressor {
     }
 
     public void drawInline(Canvas canvas, int index) {
+        final boolean unblurred = org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode.isUnblurredCanvas(canvas);
         final int a;
         if (!isLiquidGlassEnabled && simpleMode) {
             a = 0;
@@ -92,8 +105,12 @@ public class DownscaleScrollableNoiseSuppressor {
 
             canvas.save();
             canvas.translate(sourcePart.position.left, sourcePart.position.top);
-            final RenderNode rn = getRenderNode(a, b);
-            canvas.drawRenderNode(rn);
+            if (unblurred) {
+                canvas.scale(k, k);
+                canvas.drawRenderNode(sourcePart.renderNode);
+            } else {
+                canvas.drawRenderNode(getRenderNode(a, b));
+            }
             canvas.restore();
         }
     }
@@ -375,6 +392,7 @@ public class DownscaleScrollableNoiseSuppressor {
     private final Blur3HashImpl builder = new Blur3HashImpl();
 
     public boolean invalidateResultRenderNodes(IBlur3Capture capture, int width, int height) {
+        k = captureScale(isLiquidGlassEnabled, allowNoiseSuppress, zxc.iconic.xenon.NekoConfig.blurStrength);
         int updatedCount = 0;
         for (int a = 0; a < rectRenderNodesCount; a++) {
             final SourcePart sourcePart = rectRenderNodes.get(a);
@@ -383,6 +401,10 @@ public class DownscaleScrollableNoiseSuppressor {
 
             builder.start();
             capture.captureCalculateHash(builder, tmpRectF);
+            // Re-record static scenes when blur strength or capture resolution changes.
+            builder.add(k);
+            builder.add(zxc.iconic.xenon.NekoConfig.blurStrength);
+            builder.add(zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass);
             final long hash = builder.get();
 
             if (!builder.isUnsupported() && sourcePart.lastHash == hash && sourcePart.renderNode.hasDisplayList()) {
@@ -455,27 +477,31 @@ public class DownscaleScrollableNoiseSuppressor {
         }
 
         public void invalidate() {
-            // Sync glass blur with the Blur strength slider on every redraw.
+            // At zero, downsampling itself must also disappear. Otherwise the
+            // filtered resize still looks like a weak, permanent blur layer.
+            float glassRadius = dpf2(zxc.iconic.xenon.NekoConfig.getGlassBlurRadiusDp());
+            float blurRadius = dpf2(Math.max(0, Math.min(100, zxc.iconic.xenon.NekoConfig.blurStrength)) * 4f / 3f);
             if (renderNodesForGlass != null) {
+                int scale = blurScale(glassRadius, 2);
+                renderNodesForGlass.setScale(scale, scale);
                 if (zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass) {
-                    renderNodesForGlass.setPrimaryEffectBlur(dpf2(zxc.iconic.xenon.NekoConfig.getGlassBlurRadiusDp()));
+                    renderNodesForGlass.setPrimaryEffectBlur(glassRadius);
                 } else {
-                    renderNodesForGlass.setPrimaryEffectBlur(dpf2(zxc.iconic.xenon.NekoConfig.getGlassBlurRadiusDp()), RenderNodeEffects.getSaturationX1_25RenderEffect());
+                    renderNodesForGlass.setPrimaryEffectBlur(glassRadius, RenderNodeEffects.getSaturationX1_25RenderEffect());
                 }
                 renderNodesForGlass.invalidateRenderNodes(renderNode);
-                renderNodesForBlur.invalidateRenderNodes(renderNodesForGlass.renderNodeRestored[0]);
-            } else {
-                renderNodesForBlur.invalidateRenderNodes(renderNode);
             }
-            // Sync the normal (frosted) blur with the Blur strength slider on every redraw.
-            if (isLiquidGlassEnabled) {
-                renderNodesForBlur.setPrimaryEffectBlur(dpf2(zxc.iconic.xenon.NekoConfig.blurStrength * 4f / 3f));
-            } else if (simpleMode) {
-                renderNodesForBlur.setPrimaryEffectBlur(dpf2(zxc.iconic.xenon.NekoConfig.blurStrength * 4f / 3f), RenderNodeEffects.getSaturationX3RenderEffect());
+            int scale = blurScale(blurRadius, !isLiquidGlassEnabled && simpleMode && allowNoiseSuppress ? 16 : 8);
+            renderNodesForBlur.setScale(scale, scale);
+            if (!isLiquidGlassEnabled && simpleMode) {
+                renderNodesForBlur.setPrimaryEffectBlur(blurRadius, RenderNodeEffects.getSaturationX3RenderEffect());
             } else {
-                renderNodesForBlur.setPrimaryEffectBlur(dpf2(zxc.iconic.xenon.NekoConfig.blurStrength * 4f / 3f));
-                renderNodesForBlur.setSecondaryEffect(0, RenderNodeEffects.getSaturationX3RenderEffect());
+                renderNodesForBlur.setPrimaryEffectBlur(blurRadius);
+                if (!isLiquidGlassEnabled) renderNodesForBlur.setSecondaryEffect(0, RenderNodeEffects.getSaturationX3RenderEffect());
             }
+            // Frosted blur samples the original scene, not the already blurred
+            // glass result, so the two blur radii never accumulate.
+            renderNodesForBlur.invalidateRenderNodes(renderNode);
         }
     }
 
