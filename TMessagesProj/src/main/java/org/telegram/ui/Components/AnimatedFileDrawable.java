@@ -213,11 +213,15 @@ public final class AnimatedFileDrawable extends BitmapDrawable implements Animat
         }
     }
 
-    @UiThread
+    @AnyThread
     public void invalidateInternal() {
-        for (ImageReceiver imageReceiver : parents) {
-            imageReceiver.invalidate();
-        }
+        // recycle() also runs on interrupted ImageLoader workers. Iterate on the UI
+        // thread so ReferenceList's semaphore is never acquired by those workers.
+        AndroidUtilities.executeOnUIThread(() -> {
+            for (ImageReceiver imageReceiver : parents) {
+                imageReceiver.invalidate();
+            }
+        });
     }
 
     private final Runnable uiRunnable = this::uiRunnableImpl;
