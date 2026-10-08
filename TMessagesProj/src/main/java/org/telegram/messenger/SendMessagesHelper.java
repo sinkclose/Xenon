@@ -964,17 +964,11 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
         return localInstance;
     }
 
-    private static final ConcurrentHashMap<Long, Integer> sendAsAccountOverrides = new ConcurrentHashMap<>();
-    public static void setSendAsAccountOverride(long dialogId, int account) {
-        if (account < 0) {
-            sendAsAccountOverrides.remove(dialogId);
-        } else {
-            sendAsAccountOverrides.put(dialogId, account);
-        }
+    public static void setSendAsAccountOverride(int owner, long dialogId, int account) {
+        AccountSendAs.set(owner, dialogId, account);
     }
-    public static int getSendAsAccountOverride(long dialogId) {
-        Integer acc = sendAsAccountOverrides.get(dialogId);
-        return acc != null ? acc : -1;
+    public static int getSendAsAccountOverride(int owner, long dialogId) {
+        return AccountSendAs.get(owner, dialogId);
     }
 
     public SendMessagesHelper(int instance) {
@@ -1930,12 +1924,6 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
         if (document == null) {
             return;
         }
-        // Cross-account send-as override for stickers/GIFs
-        int overrideAcc = getSendAsAccountOverride(peer);
-        if (overrideAcc >= 0 && overrideAcc != currentAccount) {
-            getInstance(overrideAcc).sendSticker(document, query, peer, caption, videoEditedInfo, replyToMsg, replyToTopMsg, storyItem, quote, sendAnimationData, notify, scheduleDate, scheduleRepeatPeriod, updateStickersOrder, parentObject, sendMessageChatArguments, stars, monoForumPeerId, suggestionParams, invertMedia);
-            return;
-        }
         if (DialogObject.isEncryptedDialog(peer)) {
             int encryptedId = DialogObject.getEncryptedChatId(peer);
             TLRPC.EncryptedChat encryptedChat = getMessagesController().getEncryptedChat(encryptedId);
@@ -2086,6 +2074,31 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
     }
 
     public int sendMessage(
+        ArrayList<MessageObject> messages,
+        final long peer,
+        boolean forwardFromMyName,
+        boolean hideCaption,
+        boolean notify,
+        int scheduleDate,
+        int scheduleRepeatPeriod,
+        MessageObject replyToTopMsg,
+        int video_timestamp,
+        long payStars,
+        long monoForumPeerId,
+        MessageSuggestionParams suggestionParams
+    ) {
+        if (messages == null || messages.isEmpty()) return 0;
+        int senderAccount = AccountSendAs.forSending(currentAccount, peer);
+        if (senderAccount == AccountSendAs.UNAVAILABLE_ACCOUNT) return 0;
+        if (senderAccount >= 0 && senderAccount != currentAccount) {
+            int[] result = new int[1];
+            AccountSendAs.route(() -> result[0] = getInstance(senderAccount).sendForwardMessages(messages, peer, forwardFromMyName, hideCaption, notify, scheduleDate, scheduleRepeatPeriod, replyToTopMsg, video_timestamp, payStars, monoForumPeerId, suggestionParams));
+            return result[0];
+        }
+        return sendForwardMessages(messages, peer, forwardFromMyName, hideCaption, notify, scheduleDate, scheduleRepeatPeriod, replyToTopMsg, video_timestamp, payStars, monoForumPeerId, suggestionParams);
+    }
+
+    private int sendForwardMessages(
         ArrayList<MessageObject> messages,
         final long peer,
         boolean forwardFromMyName,
@@ -2446,7 +2459,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                     }
                     newMsg.post = true;
                 } else {
-                    long fromPeerId = ChatObject.getSendAsPeerId(chat, getMessagesController().getChatFull(-peer), true);
+                    long fromPeerId = AccountSendAs.isRouting() ? myId : ChatObject.getSendAsPeerId(chat, getMessagesController().getChatFull(-peer), true);
 
                     if (fromPeerId == myId) {
                         newMsg.from_id = new TLRPC.TL_peerUser();
@@ -4347,11 +4360,11 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
         }
 
         // --- Cross-account send-as override --------------------------------
-        int overrideAccount = getSendAsAccountOverride(peer);
+        int overrideAccount = retryMessageObject == null ? AccountSendAs.forSending(currentAccount, peer) : -1;
+        if (overrideAccount == AccountSendAs.UNAVAILABLE_ACCOUNT) return;
         boolean hasOverride = overrideAccount >= 0 && overrideAccount != currentAccount;
-        Log.d("XENON_OVERRIDE", "peer=" + peer + " override=" + overrideAccount + " currentAcc=" + currentAccount + " hasOverride=" + hasOverride + " msg=" + (message != null ? message : "null") + " doc=" + (sendMessageParams.document != null ? "yes" : "no"));
         if (hasOverride) {
-            getInstance(overrideAccount).sendMessage(sendMessageParams);
+            AccountSendAs.route(() -> getInstance(overrideAccount).sendMessage(sendMessageParams));
             return;
         }
 
@@ -4378,10 +4391,10 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                 if (!res.get("sender_id").isnil()) {
                     long targetUserId = res.get("sender_id").tolong();
                     long currentUserId = getUserConfig().getClientUserId();
-                    if (targetUserId > 0 && targetUserId != currentUserId) {
+                    if (targetUserId > 0 && targetUserId != currentUserId && !AccountSendAs.isRouting()) {
                         // Don't redirect via plugin if a native override is set for this peer
                         // (avoids infinite loop between native override and plugin hook)
-                        if (getSendAsAccountOverride(peer) < 0) {
+                        if (AccountSendAs.forSending(currentAccount, peer) < 0 && !hasOverride) {
                             for (int i = 0; i < UserConfig.MAX_ACCOUNT_COUNT; i++) {
                                 if (UserConfig.getInstance(i).isClientActivated() && UserConfig.getInstance(i).getClientUserId() == targetUserId) {
                                     SendMessagesHelper.getInstance(i).sendMessage(sendMessageParams);
@@ -4464,7 +4477,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
             if (isChannel && chat.has_link && chatFull != null) {
                 linkedToGroup = chatFull.linked_chat_id;
             }
-            fromPeer = getMessagesController().getPeer(ChatObject.getSendAsPeerId(chat, chatFull, true));
+            fromPeer = getMessagesController().getPeer(AccountSendAs.isRouting() ? myId : ChatObject.getSendAsPeerId(chat, chatFull, true));
         }
 
         if (BuildConfig.DEBUG_VERSION) {

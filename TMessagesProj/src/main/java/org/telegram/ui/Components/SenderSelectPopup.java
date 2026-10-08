@@ -42,6 +42,7 @@ import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.R;
 import org.telegram.messenger.UserConfig;
+import org.telegram.messenger.AccountSendAs;
 import org.telegram.messenger.UserObject;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.ActionBarPopupWindow;
@@ -104,6 +105,12 @@ public class SenderSelectPopup extends ActionBarPopupWindow {
         this.defPeer = defPeer;
         this.sendAsPeers = sendAsPeers;
         this.currentAccount = parentFragment == null ? UserConfig.selectedAccount : parentFragment.getCurrentAccount();
+        final java.util.Map<Long, Integer> accountPeers = new java.util.HashMap<>();
+        for (int i = 0; i < UserConfig.MAX_ACCOUNT_COUNT; i++) {
+            if (UserConfig.getInstance(i).isClientActivated()) {
+                accountPeers.put(UserConfig.getInstance(i).getClientUserId(), i);
+            }
+        }
 
         scrimPopupContainerLayout = new BackButtonFrameLayout(context);
         scrimPopupContainerLayout.setLayoutParams(LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT));
@@ -150,7 +157,7 @@ public class SenderSelectPopup extends ActionBarPopupWindow {
 
         FrameLayout recyclerFrameLayout = new FrameLayout(context);
 
-        List<TLRPC.TL_sendAsPeer> peers = sendAsPeers.peers;
+        List<TLRPC.TL_sendAsPeer> peers = new java.util.ArrayList<>(sendAsPeers.peers);
 
         recyclerView = new RecyclerListView(context);
         layoutManager = new LinearLayoutManager(context);
@@ -206,7 +213,13 @@ public class SenderSelectPopup extends ActionBarPopupWindow {
                     TLRPC.User user = messagesController.getUser(peerId);
                     if (user != null) {
                         senderView.title.setText(UserObject.getUserName(user));
-                        senderView.subtitle.setText(LocaleController.getString(R.string.VoipGroupPersonalAccount));
+                        boolean restricted = parentFragment != null && peer.user_id == UserConfig.getInstance(currentAccount).getClientUserId()
+                                && !AccountSendAs.canSend(currentAccount, parentFragment.getDialogId());
+                        if (restricted) {
+                            SpannableString label = new SpannableString("d " + LocaleController.getString(R.string.PlainTextRestrictedHint));
+                            label.setSpan(new ColoredImageSpan(R.drawable.msg_mini_lock3), 0, 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                            senderView.subtitle.setText(label);
+                        } else senderView.subtitle.setText(LocaleController.getString(R.string.VoipGroupPersonalAccount));
                         senderView.avatar.setAvatar(user);
                     }
                     senderView.avatar.setSelected(defPeer != null ? defPeer.user_id == peer.user_id : position == 0, false);
@@ -231,10 +244,15 @@ public class SenderSelectPopup extends ActionBarPopupWindow {
         });
         recyclerView.setOnItemClickListener((view, position) -> {
             TLRPC.TL_sendAsPeer peerObj = peers.get(position);
+            if (parentFragment != null && peerObj.peer.user_id != 0) {
+                Integer account = accountPeers.get(peerObj.peer.user_id);
+                if (account != null && (UserConfig.getInstance(account).getClientUserId() != peerObj.peer.user_id
+                        || !AccountSendAs.isListed(currentAccount, account, parentFragment.getDialogId()))) return;
+            }
             if (clicked) {
                 return;
             }
-            if (peerObj.premium_required && !UserConfig.getInstance(UserConfig.selectedAccount).isPremium()) {
+            if (peerObj.premium_required && !UserConfig.getInstance(currentAccount).isPremium()) {
                 try {
                     view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
                 } catch (Exception ignored) {}
@@ -382,7 +400,7 @@ public class SenderSelectPopup extends ActionBarPopupWindow {
         recyclerContainer.setPivotX(0);
         recyclerContainer.setPivotY(0);
 
-        List<TLRPC.TL_sendAsPeer> peers = sendAsPeers.peers;
+        List<TLRPC.TL_sendAsPeer> peers = new java.util.ArrayList<>(sendAsPeers.peers);
         if (defPeer != null) {
             int itemHeight = AndroidUtilities.dp(14 + AVATAR_SIZE_DP);
             int totalRecyclerHeight = peers.size() * itemHeight;

@@ -19,6 +19,7 @@ import androidx.annotation.NonNull;
 
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.chat.layouts.ChatActivityActionsButtonsLayout;
+import org.telegram.ui.Components.chat.layouts.ChatActivityChannelButtonsLayout;
 import org.telegram.ui.Components.LiquidTouchEffect;
 import org.telegram.ui.Components.LiquidPressAnimationSuppressor;
 import org.telegram.ui.Components.blur3.BlurredBackgroundWithFadeDrawable;
@@ -59,7 +60,17 @@ public class ChatInputViewsContainer extends FrameLayout {
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
         liquidPressAnimations.sync(inputIslandBubbleContainer, liquidTouchAllowed());
-        if (liquidTouch != null) liquidTouch.onTouchEvent(event, liquidTouchAllowed());
+        boolean sideHit = false;
+        for (int i = 0; i < inputIslandBubbleContainer.getChildCount(); i++) {
+            View child = inputIslandBubbleContainer.getChildAt(i);
+            if (child instanceof ChatActivityChannelButtonsLayout && child.getVisibility() == VISIBLE) {
+                sideHit |= ((ChatActivityChannelButtonsLayout) child).isLiquidSideButtonHit(
+                        event.getX() - inputIslandBubbleContainer.getX() - child.getX(),
+                        event.getY() - inputIslandBubbleContainer.getY() - child.getY());
+            }
+        }
+        if (liquidTouch != null) liquidTouch.onTouchEvent(event, liquidTouchAllowed(),
+                !sideHit && liquidTouch.contains(event.getX(), event.getY()));
         boolean handled = super.dispatchTouchEvent(event);
         if (!handled && liquidTouch != null) liquidTouch.reset();
         return handled;
@@ -341,7 +352,22 @@ public class ChatInputViewsContainer extends FrameLayout {
     @Override
     protected boolean drawChild(@NonNull Canvas canvas, View child, long drawingTime) {
         if (child == inputIslandBubbleContainer) liquidPressAnimations.sync(child, liquidTouchAllowed());
-        final int liquidSave = child == inputIslandBubbleContainer && liquidTouchAllowed() ? liquidTouch.begin(canvas) : -1;
+        boolean channelSurfaces = false;
+        if (child == inputIslandBubbleContainer) {
+            for (int i = 0; i < inputIslandBubbleContainer.getChildCount(); i++) {
+                View item = inputIslandBubbleContainer.getChildAt(i);
+                if (item instanceof ChatActivityChannelButtonsLayout && item.getVisibility() == VISIBLE) {
+                    channelSurfaces = true;
+                    ((ChatActivityChannelButtonsLayout) item).setLiquidCenterEffect(
+                            liquidTouchAllowed() ? liquidTouch : null,
+                            inputIslandBubbleContainer.getX() + item.getX(),
+                            inputIslandBubbleContainer.getY() + item.getY());
+                    if (liquidTouch != null) liquidTouch.setContentView(item);
+                }
+            }
+            if (!channelSurfaces && liquidTouch != null) liquidTouch.setContentView(null);
+        }
+        final int liquidSave = child == inputIslandBubbleContainer && !channelSurfaces && liquidTouchAllowed() ? liquidTouch.begin(canvas) : -1;
         final boolean needClip = child == inAppKeyboardBubbleContainer;
         if (needClip) {
             canvas.save();

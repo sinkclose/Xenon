@@ -10,6 +10,7 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
 
@@ -22,6 +23,8 @@ import org.telegram.messenger.utils.ViewOutlineProviderImpl;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.LayoutHelper;
+import org.telegram.ui.Components.LiquidTouchEffect;
+import org.telegram.ui.Components.LiquidPressAnimationSuppressor;
 import org.telegram.ui.Components.ScaleStateListAnimator;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
@@ -48,6 +51,74 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
     private final OnButtonFullyVisibleListener[] onButtonFullyVisible = new OnButtonFullyVisibleListener[BUTTONS_COUNT];
     private OnButtonsTotalWidthChanged onButtonsTotalWidthChanged;
     private final FrameLayout container;
+    private boolean liquidTouchEnabled;
+    private LiquidTouchEffect centerLiquid;
+    private float centerLiquidX, centerLiquidY;
+    private final LiquidPressAnimationSuppressor liquidPressAnimations = new LiquidPressAnimationSuppressor();
+
+    public void setLiquidTouchEnabled(boolean enabled) {
+        if (liquidTouchEnabled == enabled) return;
+        liquidTouchEnabled = enabled;
+        for (ButtonHolder holder : buttonHolders) {
+            if (holder == null) continue;
+            if (holder.liquid != null) holder.liquid.reset();
+            holder.liquid = enabled ? new LiquidTouchEffect(this) : null;
+        }
+        if (!enabled) liquidPressAnimations.restore();
+        setClipChildren(false);
+        setClipToPadding(false);
+        invalidate();
+    }
+
+    public void setLiquidCenterEffect(LiquidTouchEffect effect, float x, float y) {
+        centerLiquid = effect;
+        centerLiquidX = x;
+        centerLiquidY = y;
+    }
+
+    private boolean liquidTouchAllowed() {
+        return liquidTouchEnabled && !NonIslandHelper.chatElements();
+    }
+
+    public boolean isLiquidSideButtonHit(float x, float y) {
+        for (ButtonHolder holder : buttonHolders) {
+            if (holder == null) continue;
+            View button = holder.button;
+            if (button.getVisibility() == VISIBLE && x >= button.getX() && x < button.getX() + button.getWidth()
+                    && y >= button.getY() && y < button.getY() + button.getHeight()) return true;
+        }
+        return false;
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        boolean enabled = liquidTouchAllowed();
+        liquidPressAnimations.sync(this, enabled);
+        for (ButtonHolder holder : buttonHolders) {
+            if (holder == null || holder.liquid == null) continue;
+            View button = holder.button;
+            holder.liquid.setBounds(button.getX(), button.getY(),
+                    button.getX() + button.getWidth(), button.getY() + button.getHeight());
+            holder.liquid.onTouchEvent(event, enabled && button.getVisibility() == VISIBLE && button.isEnabled());
+        }
+        boolean handled = super.dispatchTouchEvent(event);
+        if (!handled && event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+            for (ButtonHolder holder : buttonHolders) {
+                if (holder != null && holder.liquid != null) holder.liquid.reset();
+            }
+        }
+        return handled;
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        for (ButtonHolder holder : buttonHolders) {
+            if (holder != null && holder.liquid != null) holder.liquid.reset();
+        }
+        centerLiquid = null;
+        liquidPressAnimations.restore();
+        super.onDetachedFromWindow();
+    }
 
     private final HashSet<View> wrapContentButtons = new HashSet<>();
 
@@ -149,6 +220,7 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
             addView(button, LayoutHelper.createFrame(56, 56, Gravity.CENTER_VERTICAL | Gravity.LEFT));
 
             buttonHolders[buttonId] = new ButtonHolder(button, visibilityAnimator);
+            if (liquidTouchEnabled) buttonHolders[buttonId].liquid = new LiquidTouchEffect(this);
             checkButtonsPositionsAndVisibility();
         }
 
@@ -417,6 +489,22 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
 
     @Override
     protected boolean drawChild(@NonNull Canvas canvas, View child, long drawingTime) {
+        liquidPressAnimations.sync(this, liquidTouchAllowed());
+        LiquidTouchEffect sideLiquid = null;
+        for (ButtonHolder holder : buttonHolders) {
+            if (holder != null && holder.button == child) {
+                sideLiquid = holder.liquid;
+                break;
+            }
+        }
+        int save = -1;
+        if (liquidTouchAllowed()) {
+            if (child == container && centerLiquid != null) {
+                save = centerLiquid.beginInChild(canvas, centerLiquidX, centerLiquidY);
+            } else if (sideLiquid != null) {
+                save = sideLiquid.begin(canvas);
+            }
+        }
         if (child == container && containerDrawable != null) {
             tmpRect.set(
                 totalWidthLeft + dp(1), 0,
@@ -428,13 +516,18 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
             containerDrawable.draw(canvas);
         }
 
-        return super.drawChild(canvas, child, drawingTime);
+        boolean result = super.drawChild(canvas, child, drawingTime);
+        if (sideLiquid != null && liquidTouchAllowed()) sideLiquid.drawHighlight(canvas, dp(22), dp(6));
+        if (save != -1) canvas.restoreToCount(save);
+        return result;
     }
 
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
         final int accentAlpha = (int) (255 * totalVisibilityFactor * animatorCenterAccentBackground.getFloatValue());
         if (accentAlpha > 0) {
+            int save = liquidTouchAllowed() && centerLiquid != null
+                    ? centerLiquid.beginInChild(canvas, centerLiquidX, centerLiquidY) : -1;
             tmpRect.set(
                 totalWidthLeft + dp(10),
                 dp(9),
@@ -444,6 +537,7 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
             backgroundAccentPaint.setColor(accentColor);
             backgroundAccentPaint.setAlpha(accentAlpha);
             canvas.drawRoundRect(tmpRect, dp(19), dp(19), backgroundAccentPaint);
+            if (save != -1) canvas.restoreToCount(save);
         }
 
         super.dispatchDraw(canvas);
@@ -459,6 +553,7 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
         public final ChatActivityBlurredRoundButton button;
         public final BoolAnimator visibilityAnimator;
         public boolean wasShown;
+        public LiquidTouchEffect liquid;
 
         private ButtonHolder(ChatActivityBlurredRoundButton button, BoolAnimator visibilityAnimator) {
             this.button = button;

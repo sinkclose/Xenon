@@ -185,6 +185,8 @@ import org.telegram.messenger.NotificationsController;
 import org.telegram.messenger.R;
 import org.telegram.messenger.SecretChatHelper;
 import org.telegram.messenger.SendMessagesHelper;
+import org.telegram.messenger.AccountSendAs;
+import org.telegram.ui.Components.SenderSelectView;
 import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.SvgHelper;
 import org.telegram.messenger.Timer;
@@ -502,6 +504,10 @@ public class ChatActivity extends BaseFragment implements
     private GridLayoutManagerFixed chatLayoutManager;
     private ChatActivityAdapter chatAdapter;
     private UnreadCounterTextView bottomOverlayChatText;
+    private SenderSelectView restrictedAccountSwitcher;
+    private SenderSelectView mutedAccountSwitcher;
+    private final AccountSendAs.Loader accountSendAsLoader = new AccountSendAs.Loader();
+    private final ArrayList<NotificationCenter.ObserversGroup> accountSendAsObservers = new ArrayList<>();
     private boolean bottomOverlayLinks;
     private LinkSpanDrawable.LinksTextView bottomOverlayLinksText;
     private TextView bottomOverlayText;
@@ -1089,7 +1095,10 @@ public class ChatActivity extends BaseFragment implements
     private ActionBarMenuSubItem menuDeleteItem;
     private boolean popupBlurApplied;
     private ValueAnimator popupBlurAnimator;
-    private ViewTreeObserver.OnDrawListener popupBlurDrawListener;
+    private float popupBlurRadius;
+    private ViewTreeObserver popupBlurObserver;
+    private Runnable popupBlurFrameCommitCallback;
+    private Runnable popupBlurStartRunnable;
     private View popupBlurWaitingView;
     private boolean popupBlurPending;
     private Runnable holdPopupRunnable;
@@ -3187,6 +3196,18 @@ public class ChatActivity extends BaseFragment implements
             MediaController.getInstance().startMediaObserver();
         }
 
+        for (int i = 0; i < UserConfig.MAX_ACCOUNT_COUNT; i++) {
+            if (i == currentAccount) continue;
+            accountSendAsObservers.add(NotificationCenter.getInstance(i).createObserversGroup((id, account, args) -> {
+                if (chatActivityEnterView == null || chatMode != MODE_DEFAULT) return;
+                if (id == NotificationCenter.chatInfoDidLoad && args.length > 0
+                        && args[0] instanceof TLRPC.ChatFull && ((TLRPC.ChatFull) args[0]).id != -dialog_id) return;
+                onAccountSendAsChanged();
+            }).add(NotificationCenter.chatInfoDidLoad)
+                    .add(NotificationCenter.updateInterfaces)
+                    .add(NotificationCenter.appDidLogout)
+                    .add(NotificationCenter.mainUserInfoChanged));
+        }
         observersGroup = getNotificationCenter().createObserversGroup(this);
 
         getNotificationCenter().addPostponeNotificationsCallback(postponeNotificationsWhileLoadingCallback);
@@ -3684,6 +3705,9 @@ public class ChatActivity extends BaseFragment implements
 
     @Override
     public void onFragmentDestroy() {
+        accountSendAsLoader.close();
+        for (NotificationCenter.ObserversGroup group : accountSendAsObservers) group.removeAllObservers();
+        accountSendAsObservers.clear();
         super.onFragmentDestroy();
 if (feedIntegration != null) {
             feedIntegration.destroy();
@@ -9585,6 +9609,10 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
         bottomOverlayText.setTextColor(getThemedColor(Theme.key_chat_secretChatStatusText));
         bottomOverlayText.setPadding(dp(24), 0, dp(24), 0);
         bottomOverlay.addView(bottomOverlayText, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.CENTER));
+        mutedAccountSwitcher = new SenderSelectView(context);
+        mutedAccountSwitcher.setVisibility(View.GONE);
+        bottomOverlay.addView(mutedAccountSwitcher, LayoutHelper.createFrame(32, 32, Gravity.LEFT | Gravity.CENTER_VERTICAL, 10, 0, 0, 0));
+        mutedAccountSwitcher.setOnClickListener(v -> chatActivityEnterView.openAccountSenderSelect());
         
         
         bottomChannelButtonsLayout = new ChatActivityChannelButtonsLayout(context, resourceProvider, blurredBackgroundColorProvider, glassBackgroundDrawableFactory) {
@@ -9595,6 +9623,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
             }
         };
         bottomChannelButtonsLayout.setVisibility(View.INVISIBLE);
+        bottomChannelButtonsLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
         bottomChannelButtonsLayout.setClipChildren(false);
         bottomChannelButtonsLayout.setAccentColor(getThemedColor(Theme.key_featuredStickers_addButton));
         bottomChannelButtonsLayout.setButtonOnClickListener(ChatActivityChannelButtonsLayout.BUTTON_SEARCH, v -> {
@@ -9731,6 +9760,11 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
             }
         };
         bottomChannelButtonsLayout.getContainer().addView(bottomOverlayChatText, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, 0));
+        restrictedAccountSwitcher = new SenderSelectView(context);
+        restrictedAccountSwitcher.setVisibility(View.GONE);
+        bottomChannelButtonsLayout.getContainer().addView(restrictedAccountSwitcher,
+                LayoutHelper.createFrame(32, 32, Gravity.LEFT | Gravity.CENTER_VERTICAL, 10, 0, 0, 0));
+        restrictedAccountSwitcher.setOnClickListener(v -> chatActivityEnterView.openAccountSenderSelect());
         bottomOverlayChatText.setOnClickListener(view -> {
             if (getParentActivity() == null || pullingDownOffset != 0) {
                 return;
@@ -20221,6 +20255,10 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (bottomOverlay == null) {
             return;
         }
+        int senderAccount = AccountSendAs.get(currentAccount, dialog_id);
+        TLRPC.Chat sendingChat = senderAccount >= 0 ? MessagesController.getInstance(senderAccount).getChat(-dialog_id) : currentChat;
+        if (mutedAccountSwitcher != null) mutedAccountSwitcher.setVisibility(View.GONE);
+        bottomOverlayText.setPadding(dp(24), 0, dp(24), 0);
         boolean hideKeyboard = false;
         bottomOverlayText.setBackground(null);
         bottomOverlayText.setOnClickListener(null);
@@ -20238,7 +20276,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             if (suggestEmojiPanel != null) {
                 suggestEmojiPanel.forceClose();
             }
-        } else if (currentChat != null && !ChatObject.canSendMessages(currentChat) && !ChatObject.canSendAnyMedia(currentChat) && !currentChat.gigagroup && (!ChatObject.isChannel(currentChat) || currentChat.megagroup)) {
+        } else if (sendingChat != null && !ChatObject.canSendMessages(sendingChat) && !ChatObject.canSendAnyMedia(sendingChat) && !currentChat.gigagroup && (!ChatObject.isChannel(currentChat) || currentChat.megagroup)) {
             if (currentChat.default_banned_rights != null && currentChat.default_banned_rights.send_messages) {
                 boolean unlockByBoosts = ChatObject.isPossibleRemoveChatRestrictionsByBoosts(currentChat);
                 if (unlockByBoosts) {
@@ -20264,6 +20302,14 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 bottomOverlayText.setText(LocaleController.getString(R.string.SendMessageRestrictedForever));
             } else {
                 bottomOverlayText.setText(LocaleController.formatString("SendMessageRestricted", R.string.SendMessageRestricted, LocaleController.formatDateForBan(currentChat.banned_rights.until_date)));
+            }
+            if (mutedAccountSwitcher != null && chatMode == MODE_DEFAULT && !inPreviewMode
+                    && AccountSendAs.hasAlternative(currentAccount, dialog_id)
+                    && !shouldDisplaySwipeToLeftToReplyInForum() && (forumTopic == null || !forumTopic.closed)) {
+                mutedAccountSwitcher.setAvatar(getUserConfig().getCurrentUser());
+                mutedAccountSwitcher.setContentDescription(getString(R.string.PlainTextRestrictedHint));
+                mutedAccountSwitcher.setVisibility(View.VISIBLE);
+                bottomOverlayText.setPadding(dp(52), 0, dp(24), 0);
             }
             bottomOverlay.setVisibility(View.VISIBLE);
             if (mentionListAnimation != null) {
@@ -26639,44 +26685,50 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     private void loadSendAsPeers(boolean animatedUpdate) {
-        if (sendAsPeersObj != null || chatActivityEnterView == null) {
-            return;
-        }
-        sendAsPeersObj = getMessagesController().getSendAsPeers(dialog_id);
-        if (sendAsPeersObj != null) {
-            injectAccountSendAsEntries();
-            chatActivityEnterView.updateSendAsButton(animatedUpdate);
-        } else {
-            sendAsPeersObj = new TLRPC.TL_channels_sendAsPeers();
-            sendAsPeersObj.peers = new ArrayList<>();
-            injectAccountSendAsEntries();
-            chatActivityEnterView.updateSendAsButton(animatedUpdate);
-        }
+        if (chatActivityEnterView == null) return;
+        refreshAccountSendAsPeers();
+        chatActivityEnterView.checkChannelRights();
+        chatActivityEnterView.updateSendAsButton(animatedUpdate);
     }
 
-    private void injectAccountSendAsEntries() {
-        if (sendAsPeersObj == null) return;
-        for (int i = 0; i < UserConfig.MAX_ACCOUNT_COUNT; i++) {
-            if (UserConfig.getInstance(i).isClientActivated()) {
-                TLRPC.User user = UserConfig.getInstance(i).getCurrentUser();
-                if (user != null) {
-                    getMessagesController().putUser(user, false);
-                    boolean alreadyAdded = false;
-                    for (TLRPC.TL_sendAsPeer p : sendAsPeersObj.peers) {
-                        if (p.peer.user_id == user.id) {
-                            alreadyAdded = true;
-                            break;
-                        }
-                    }
-                    if (!alreadyAdded) {
-                        TLRPC.TL_sendAsPeer peer = new TLRPC.TL_sendAsPeer();
-                        TLRPC.TL_peerUser peerUser = new TLRPC.TL_peerUser();
-                        peerUser.user_id = user.id;
-                        peer.peer = peerUser;
-                        peer.premium_required = false;
-                        sendAsPeersObj.peers.add(peer);
-                    }
-                }
+    public void onAccountSendAsChanged() {
+        if (chatActivityEnterView == null) return;
+        loadSendAsPeers(false);
+        updateBottomOverlay(false);
+        updateSecretStatus();
+    }
+
+    public void refreshAccountSendAsPeers() {
+        if (chatMode == MODE_DEFAULT) accountSendAsLoader.load(currentAccount, dialog_id, this::onAccountSendAsChanged);
+        // Copy the server list: injected accounts must not pollute its cached response.
+        TLRPC.TL_channels_sendAsPeers serverPeers = getMessagesController().getSendAsPeers(dialog_id);
+        sendAsPeersObj = new TLRPC.TL_channels_sendAsPeers();
+        if (serverPeers != null) sendAsPeersObj.peers.addAll(serverPeers.peers);
+        if (chatMode != MODE_DEFAULT || !AccountSendAs.isMember(currentAccount, dialog_id)) return;
+        // A personal server send-as peer belongs to this account. Older versions
+        // incorrectly stored other local users here, including users since logged out.
+        TLRPC.ChatFull full = getMessagesController().getChatFull(-dialog_id);
+        if (full != null && full.default_send_as != null && full.default_send_as.user_id != 0
+                && full.default_send_as.user_id != getUserConfig().getClientUserId()) {
+            full.default_send_as = new TLRPC.TL_peerUser();
+            full.default_send_as.user_id = getUserConfig().getClientUserId();
+        }
+        // Keep the active account as the default when no server default exists.
+        for (int offset = 0; offset <= UserConfig.MAX_ACCOUNT_COUNT; offset++) {
+            int account = offset == 0 ? currentAccount : offset - 1;
+            if (offset != 0 && account == currentAccount) continue;
+            if (!AccountSendAs.isListed(currentAccount, account, dialog_id)) continue;
+            TLRPC.User user = UserConfig.getInstance(account).getCurrentUser();
+            getMessagesController().putUser(user, false);
+            boolean found = false;
+            for (TLRPC.TL_sendAsPeer entry : sendAsPeersObj.peers) {
+                if (entry.peer.user_id == user.id) { found = true; break; }
+            }
+            if (!found) {
+                TLRPC.TL_sendAsPeer entry = new TLRPC.TL_sendAsPeer();
+                entry.peer = new TLRPC.TL_peerUser();
+                entry.peer.user_id = user.id;
+                sendAsPeersObj.peers.add(entry);
             }
         }
     }
@@ -29454,6 +29506,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (bottomOverlayChatText == null || chatMode == MODE_SCHEDULED || getContext() == null) {
             return;
         }
+        refreshAccountSendAsPeers();
+        int senderAccount = SendMessagesHelper.getSendAsAccountOverride(currentAccount, dialog_id);
+        TLRPC.Chat sendingChat = senderAccount >= 0 ? MessagesController.getInstance(senderAccount).getChat(-dialog_id) : currentChat;
+        chatActivityEnterView.checkChannelRights();
+        chatActivityEnterView.updateSendAsButton(false);
         bottomOverlayChatWaitsReply = false;
         bottomOverlayLinks = false;
 
@@ -29788,7 +29845,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 bottomChannelButtonsLayout.setVisibility(View.VISIBLE);
                 chatActivityEnterView.setVisibility(View.INVISIBLE);
             } else if (chatMode == MODE_PINNED ||
-                    currentChat != null && (!ChatObject.isMonoForum(currentChat) || !isSubscriberSuggestions) && ((ChatObject.isNotInChat(currentChat) && !UserObject.isBotForum(currentUser) || !ChatObject.canWriteToChat(currentChat)) && (currentChat.join_to_send || !isThreadChat() || ChatObject.isForum(currentChat)) || forumTopic != null && forumTopic.closed && !ChatObject.canManageTopic(currentAccount, currentChat, forumTopic) || shouldDisplaySwipeToLeftToReplyInForum()) ||
+                    currentChat != null && (!ChatObject.isMonoForum(currentChat) || !isSubscriberSuggestions) && ((ChatObject.isNotInChat(currentChat) && !UserObject.isBotForum(currentUser) || !ChatObject.canWriteToChat(sendingChat)) && (currentChat.join_to_send || !isThreadChat() || ChatObject.isForum(currentChat)) || forumTopic != null && forumTopic.closed && !ChatObject.canManageTopic(currentAccount, currentChat, forumTopic) || shouldDisplaySwipeToLeftToReplyInForum()) ||
                     currentUser != null && (UserObject.isDeleted(currentUser) || userBlocked || UserObject.isReplyUser(currentUser))) {
                 if (chatActivityEnterView.isEditingMessage()) {
                     chatActivityEnterView.setVisibility(View.VISIBLE);
@@ -29839,6 +29896,21 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
 
 
+
+        if (restrictedAccountSwitcher != null) {
+            boolean hasAlternative = AccountSendAs.hasAlternative(currentAccount, dialog_id);
+            boolean showSwitcher = chatMode == MODE_DEFAULT && !inPreviewMode && !isReport()
+                    && AccountSendAs.isMember(currentAccount, dialog_id) && hasAlternative
+                    && !AccountSendAs.canSend(currentAccount, dialog_id)
+                    && bottomChannelButtonsLayout.getVisibility() == View.VISIBLE && !bottomOverlayLinks
+                    && !shouldDisplaySwipeToLeftToReplyInForum()
+                    && (forumTopic == null || !forumTopic.closed);
+            restrictedAccountSwitcher.setVisibility(showSwitcher ? View.VISIBLE : View.GONE);
+            if (showSwitcher) {
+                restrictedAccountSwitcher.setAvatar(getUserConfig().getCurrentUser());
+                restrictedAccountSwitcher.setContentDescription(getString(R.string.PlainTextRestrictedHint));
+            }
+        }
 
         bottomOverlayChatText.setTextColorKey(accentTextButton ? Theme.key_featuredStickers_buttonText : Theme.key_glass_defaultText);
 
@@ -31562,6 +31634,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (sideControlsButtonsLayout != null) sideControlsButtonsLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
         if (topPanelLayout != null) topPanelLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
         if (actionsButtonsLayout != null) actionsButtonsLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
+        if (bottomChannelButtonsLayout != null) bottomChannelButtonsLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
         zxc.iconic.xenon.plugins.PluginManager.setCurrentDialogId(dialog_id);
         checkShowBlur(false);
         activityResumeTime = System.currentTimeMillis();
@@ -32449,25 +32522,38 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     private void applyPopupBlur(View cellView) {
         if (!NekoConfig.blurPopupInChat || getParentActivity() == null) return;
         if (Build.VERSION.SDK_INT < 31 || contentView == null) return;
-        popupBlurApplied = true;
-        float targetBlur = NekoConfig.disableBlurBs ? 0f : NekoConfig.blurOverlayRadius * 8f;
-        View popupContent = scrimPopupWindow != null ? scrimPopupWindow.getContentView() : null;
-        if (popupContent == null) {
-            startPopupBlur(targetBlur);
-            return;
-        }
+        final ActionBarPopupWindow popupWindow = scrimPopupWindow;
+        final View popupContent = popupWindow != null ? popupWindow.getContentView() : null;
+        if (popupContent == null || !popupWindow.isShowing() || !popupContent.isHardwareAccelerated()) return;
         cancelPopupBlur();
+        popupBlurApplied = true;
+        popupBlurRadius = 0f;
+        contentView.setRenderEffect(null);
+        final float targetBlur = NekoConfig.disableBlurBs ? 0f : NekoConfig.blurOverlayRadius * 8f;
         popupBlurWaitingView = popupContent;
         popupBlurPending = true;
-        popupBlurDrawListener = new ViewTreeObserver.OnDrawListener() {
+        popupBlurStartRunnable = new Runnable() {
             @Override
-            public void onDraw() {
-                if (!popupBlurPending || contentView == null) return;
-                popupBlurPending = false;
+            public void run() {
+                if (popupBlurStartRunnable != this || !popupBlurPending) return;
+                cancelPopupBlur();
+                if (scrimPopupWindow != popupWindow || !popupWindow.isShowing() || !popupContent.isAttachedToWindow()) return;
                 startPopupBlur(targetBlur);
             }
         };
-        popupContent.getViewTreeObserver().addOnDrawListener(popupBlurDrawListener);
+        popupBlurFrameCommitCallback = new Runnable() {
+            @Override
+            public void run() {
+                if (popupBlurFrameCommitCallback != this || !popupBlurPending) return;
+                popupBlurFrameCommitCallback = null;
+                // Start on a fresh frame after the popup's first frame was submitted.
+                // Time spent preparing that frame must not advance the blur animation.
+                popupContent.postOnAnimation(popupBlurStartRunnable);
+            }
+        };
+        popupBlurObserver = popupContent.getViewTreeObserver();
+        popupBlurObserver.registerFrameCommitCallback(popupBlurFrameCommitCallback);
+        popupContent.invalidate();
     }
 
     private void startPopupBlur(float targetBlur) {
@@ -32476,29 +32562,36 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             contentView.setRenderEffect(null);
             return;
         }
-        contentView.setRenderEffect(RenderEffect.createBlurEffect(0f, 0f, Shader.TileMode.CLAMP));
+        contentView.setRenderEffect(null);
         popupBlurAnimator = ValueAnimator.ofFloat(0f, targetBlur);
         popupBlurAnimator.setDuration(NekoConfig.blurAnimationDuration);
         popupBlurAnimator.setInterpolator(new CubicBezierInterpolator(0.3f, 0.8f, 0f, 1f));
         popupBlurAnimator.addUpdateListener(a -> {
             if (contentView != null) {
                 float val = (float) a.getAnimatedValue();
-                contentView.setRenderEffect(RenderEffect.createBlurEffect(val, val, Shader.TileMode.CLAMP));
+                popupBlurRadius = val;
+                contentView.setRenderEffect(val > 0f ? RenderEffect.createBlurEffect(val, val, Shader.TileMode.CLAMP) : null);
             }
         });
         popupBlurAnimator.start();
     }
 
     private void cancelPopupBlur() {
-        if (popupBlurDrawListener != null && popupBlurWaitingView != null) {
-            popupBlurWaitingView.getViewTreeObserver().removeOnDrawListener(popupBlurDrawListener);
+        if (popupBlurFrameCommitCallback != null && popupBlurObserver != null && popupBlurObserver.isAlive()) {
+            popupBlurObserver.unregisterFrameCommitCallback(popupBlurFrameCommitCallback);
         }
-        popupBlurDrawListener = null;
+        if (popupBlurStartRunnable != null && popupBlurWaitingView != null) {
+            popupBlurWaitingView.removeCallbacks(popupBlurStartRunnable);
+        }
+        popupBlurObserver = null;
+        popupBlurFrameCommitCallback = null;
+        popupBlurStartRunnable = null;
         popupBlurWaitingView = null;
         popupBlurPending = false;
         if (popupBlurAnimator != null) {
-            popupBlurAnimator.cancel();
+            ValueAnimator animator = popupBlurAnimator;
             popupBlurAnimator = null;
+            animator.cancel();
         }
     }
 
@@ -32526,26 +32619,27 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     private void removePopupBlur(boolean animated) {
         if (Build.VERSION.SDK_INT < 31 || !popupBlurApplied) return;
         popupBlurApplied = false;
-        float currentBlur = NekoConfig.blurOverlayRadius * 8f;
-        if (popupBlurAnimator != null && popupBlurAnimator.isRunning()) {
-            currentBlur = (float) popupBlurAnimator.getAnimatedValue();
-        }
-        boolean wasBlurring = popupBlurAnimator != null;
+        float currentBlur = popupBlurRadius;
         cancelPopupBlur();
         if (contentView == null) return;
-        if (animated && wasBlurring && NekoConfig.blurSmoothly && !NekoConfig.disableBlurBs && currentBlur > 0f) {
+        if (animated && NekoConfig.blurSmoothly && !NekoConfig.disableBlurBs && currentBlur > 0f) {
             ValueAnimator blurAnim = ValueAnimator.ofFloat(currentBlur, 0f);
+            popupBlurAnimator = blurAnim;
             blurAnim.setDuration(250);
             blurAnim.setInterpolator(CubicBezierInterpolator.EASE_OUT);
             blurAnim.addUpdateListener(a -> {
                 if (contentView != null) {
                     float val = (float) a.getAnimatedValue();
-                    contentView.setRenderEffect(RenderEffect.createBlurEffect(val, val, Shader.TileMode.CLAMP));
+                    popupBlurRadius = val;
+                    contentView.setRenderEffect(val > 0f ? RenderEffect.createBlurEffect(val, val, Shader.TileMode.CLAMP) : null);
                 }
             });
             blurAnim.addListener(new AnimatorListenerAdapter() {
                 @Override
                 public void onAnimationEnd(Animator animation) {
+                    if (popupBlurAnimator != animation) return;
+                    popupBlurAnimator = null;
+                    popupBlurRadius = 0f;
                     if (contentView != null) {
                         contentView.setRenderEffect(null);
                     }
@@ -32553,6 +32647,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             });
             blurAnim.start();
         } else {
+            popupBlurRadius = 0f;
             contentView.setRenderEffect(null);
         }
     }

@@ -145,6 +145,7 @@ import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.NotificationsController;
 import org.telegram.messenger.R;
 import org.telegram.messenger.SendMessagesHelper;
+import org.telegram.messenger.AccountSendAs;
 import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.SharedPrefsHelper;
 import org.telegram.messenger.UserConfig;
@@ -4201,6 +4202,12 @@ public class ChatActivityEnterView extends FrameLayout implements
         checkSendButton(true);
     }
 
+    public void openAccountSenderSelect() {
+        updateSendAsButton(false);
+        createSenderSelectView();
+        senderSelectView.callOnClick();
+    }
+
     private void createSenderSelectView() {
         if (senderSelectView != null || getContext() == null) {
             return;
@@ -4232,6 +4239,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                     return;
                 }
             }
+            if (parentFragment != null) parentFragment.refreshAccountSendAsPeers();
             if (delegate.getSendAsPeers() != null) {
                 try {
                     v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
@@ -4259,7 +4267,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                     defPeer = delegate.getSendAsPeers().peers.get(0).peer;
                 }
                 // If there's a send-as account override, use that user as the default peer
-                int createOverrideAcc = SendMessagesHelper.getSendAsAccountOverride(dialog_id);
+                int createOverrideAcc = SendMessagesHelper.getSendAsAccountOverride(currentAccount, dialog_id);
                 if (createOverrideAcc >= 0) {
                     TLRPC.User overrideUser = UserConfig.getInstance(createOverrideAcc).getCurrentUser();
                     if (overrideUser != null) {
@@ -4279,10 +4287,6 @@ public class ChatActivityEnterView extends FrameLayout implements
 
                 senderSelectPopupWindow = new SenderSelectPopup(getContext(), parentFragment, controller, isChannel, defPeer, delegate.getSendAsPeers(), (recyclerView, senderView, peer) -> {
                     if (senderSelectPopupWindow == null) return;
-                    if (chatFull != null) {
-                        chatFull.default_send_as = peer;
-                    }
-
                     int overrideAcc = -1;
                     if (peer.user_id != 0) {
                         for (int i = 0; i < UserConfig.MAX_ACCOUNT_COUNT; i++) {
@@ -4293,14 +4297,18 @@ public class ChatActivityEnterView extends FrameLayout implements
                             }
                         }
                     }
-                    SendMessagesHelper.setSendAsAccountOverride(dialog_id, overrideAcc);
-                    updateSendAsButton();
-
+                    if (overrideAcc >= 0 && !AccountSendAs.canSend(overrideAcc, dialog_id)) return;
+                    SendMessagesHelper.setSendAsAccountOverride(currentAccount, dialog_id, overrideAcc);
                     if (overrideAcc < 0) {
+                        if (chatFull != null) chatFull.default_send_as = peer;
                         if (delegate == null || !delegate.setDefaultSendAs(dialog_id, DialogObject.getPeerDialogId(peer))) {
                             controller.setDefaultSendAs(dialog_id, DialogObject.getPeerDialogId(peer));
                         }
                     }
+
+                    checkChannelRights();
+                    updateSendAsButton();
+                    if (parentFragment != null) parentFragment.onAccountSendAsChanged();
 
                     int[] loc = new int[2];
                     boolean wasSelected = senderView.avatar.isSelected();
@@ -6633,6 +6641,8 @@ public class ChatActivityEnterView extends FrameLayout implements
     }
 
     public void updateRecordButton(TLRPC.Chat chat, TLRPC.UserFull userFull) {
+        int senderAccount = SendMessagesHelper.getSendAsAccountOverride(currentAccount, dialog_id);
+        if (senderAccount >= 0) chat = MessagesController.getInstance(senderAccount).getChat(-dialog_id);
         emojiButtonRestricted = false;
         stickersEnabled = true;
         sendPlainEnabled = true;
@@ -6888,7 +6898,6 @@ public class ChatActivityEnterView extends FrameLayout implements
             SpannableStringBuilder spannableStringBuilder = new SpannableStringBuilder(" d " + getString("PlainTextRestrictedHint", R.string.PlainTextRestrictedHint));
             spannableStringBuilder.setSpan(new ColoredImageSpan(R.drawable.msg_mini_lock3), 1, 2, 0);
             messageEditText.setHintText(spannableStringBuilder, animated);
-            messageEditText.setText(null);
             messageEditText.setEnabled(false);
             messageEditText.setInputType(EditorInfo.IME_ACTION_NONE);
             return;
@@ -11269,12 +11278,12 @@ public class ChatActivityEnterView extends FrameLayout implements
             && (delegate.getSendAsPeers() == null || delegate.getSendAsPeers().peers.size() > 1)
             && !isEditingMessage() && !isRecordingAudioVideo()
             && (recordedAudioPanel == null || recordedAudioPanel.getVisibility() != View.VISIBLE)
-            && (isLiveComment || (!ChatObject.isChannelAndNotMegaGroup(chat) || ChatObject.canSendAsPeers(chat)) && !ChatObject.isMonoForum(chat))
+            && (isLiveComment || (!ChatObject.isChannelAndNotMegaGroup(chat) || ChatObject.canSendAsPeers(chat) || AccountSendAs.hasAlternative(currentAccount, dialog_id)) && !ChatObject.isMonoForum(chat))
             && (parentFragment == null || parentFragment.getChatMode() != ChatActivity.MODE_WELCOME_MESSAGES);
         if (isVisible) {
             createSenderSelectView();
         }
-        int overrideAcc = SendMessagesHelper.getSendAsAccountOverride(dialog_id);
+        int overrideAcc = SendMessagesHelper.getSendAsAccountOverride(currentAccount, dialog_id);
         if (overrideAcc >= 0) {
             TLRPC.User user = UserConfig.getInstance(overrideAcc).getCurrentUser();
             if (user != null && senderSelectView != null) {
