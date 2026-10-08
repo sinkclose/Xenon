@@ -38,8 +38,8 @@ public class NekoAvatarShapeSettingsActivity extends BaseNekoSettingsActivity {
     protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
         if (previewView == null) {
             previewView = new AvatarShapePreviewView(getParentActivity());
-            previewView.setShape(NekoConfig.avatarShape);
         }
+        previewView.setShape(NekoConfig.avatarShape);
         items.add(UItem.asCustom(previewView, 120));
         items.add(UItem.asShadow(null));
         items.add(UItem.asCheck(applyInChatListRow, LocaleController.getString(R.string.ApplyInChatList)).setChecked(NekoConfig.avatarShapeInChatList).slug("applyInChatList"));
@@ -49,7 +49,12 @@ public class NekoAvatarShapeSettingsActivity extends BaseNekoSettingsActivity {
             SeekbarConfig speedConfig = new SeekbarConfig(
                     LocaleController.getString(R.string.RotationSpeed),
                     "1", "360", 1, 360, 1,
-                    progress -> NekoConfig.setAvatarShapeRotationSpeed(Math.round(progress)));
+                    progress -> {
+                        NekoConfig.setAvatarShapeRotationSpeed(Math.round(progress));
+                        if (previewView != null) {
+                            previewView.setShape(NekoConfig.avatarShape);
+                        }
+                    });
             items.add(SeekbarCellFactory.of(rotateSpeedRow, speedConfig, NekoConfig.avatarShapeRotationSpeed).slug("rotateSpeed"));
         }
         items.add(UItem.asCheck(squareBaseRow, LocaleController.getString(R.string.SquareBase)).setChecked(NekoConfig.avatarShapeSquareBase).slug("squareBase"));
@@ -95,14 +100,12 @@ public class NekoAvatarShapeSettingsActivity extends BaseNekoSettingsActivity {
                 ((TextCheckCell) view).setChecked(NekoConfig.rotateAvatarShape);
             }
             listView.adapter.update(true);
-            listView.post(() -> { if (previewView != null) previewView.invalidate(); });
         } else if (id == squareBaseRow) {
             NekoConfig.toggleAvatarShapeSquareBase();
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.avatarShapeSquareBase);
             }
             listView.adapter.update(true);
-            listView.post(() -> { if (previewView != null) previewView.setShape(NekoConfig.avatarShape); });
         }
     }
 
@@ -135,22 +138,15 @@ public class NekoAvatarShapeSettingsActivity extends BaseNekoSettingsActivity {
         public void setShape(int index) {
             this.shapeIndex = index;
             applyRoundRadius();
-            invalidate();
+            avatarView.invalidate();
         }
 
         @Override
         protected void onAttachedToWindow() {
             super.onAttachedToWindow();
+            avatarView.getImageReceiver().setVisible(true, true);
             applyRoundRadius();
-            if (NekoConfig.rotateAvatarShape) {
-                invalidate();
-            }
-        }
-
-        @Override
-        protected void onDetachedFromWindow() {
-            super.onDetachedFromWindow();
-            avatarView.getImageReceiver().setVisible(false, false);
+            avatarView.invalidate();
         }
 
         private void applyRoundRadius() {
