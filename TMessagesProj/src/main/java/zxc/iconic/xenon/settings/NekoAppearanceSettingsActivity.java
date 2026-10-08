@@ -200,11 +200,11 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         items.add(UItem.asRoundCheckbox(materialSlidersRow, LocaleController.getString(R.string.MaterialSliders)).setChecked(NekoConfig.materialSliders).slug("materialSliders"));
         items.add(UItem.asRoundCheckbox(material3BottomNavigationBarRow, LocaleController.getString(R.string.BottomNavigationBar)).setChecked(NekoConfig.material3BottomNavigationBar).slug("material3BottomNavigationBar"));
         items.add(UItem.asRoundCheckbox(md3FoldersRow, LocaleController.getString(R.string.Md3Folders)).setChecked(NekoConfig.md3Folders).slug("md3Folders"));
-        items.add(UItem.asRoundCheckbox(loadingIndicatorsRow, LocaleController.getString(R.string.LoadingIndicators)).setChecked(NekoConfig.wavyEnabled).slug("loadingIndicators"));
+        items.add(InfoCheckboxCellFactory.of(loadingIndicatorsRow, LocaleController.getString(R.string.LoadingIndicators), NekoConfig.wavyEnabled, this::showLoadingIndicatorsInfo).slug("loadingIndicators"));
         if (NekoConfig.wavyEnabled) {
             items.add(UItem.asRoundCheckbox(wavyProgressRow, LocaleController.getString(R.string.WavyProgressIndicator)).setChecked(NekoConfig.wavyProgressEnabled).slug("wavyProgress"));
         }
-        items.add(UItem.asRoundCheckbox(material3DialogsRow, LocaleController.getString(R.string.Material3Dialogs)).setChecked(NekoConfig.material3Dialogs).slug("material3Dialogs"));
+        items.add(InfoCheckboxCellFactory.of(material3DialogsRow, LocaleController.getString(R.string.Material3Dialogs), NekoConfig.material3Dialogs, this::showDialogsInfo).slug("material3Dialogs"));
         }
         items.add(TextSettingsCellFactory.of(avatarShapeRow, LocaleController.getString(R.string.Avatars), "›").slug("avatarShape"));
         items.add(UItem.asShadow(null));

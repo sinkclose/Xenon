@@ -38,6 +38,7 @@ import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.INavigationLayout;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.TextCheckCell;
+import org.telegram.ui.Cells.CheckBoxCell;
 import org.telegram.ui.Cells.TextCheckbox2Cell;
 import org.telegram.ui.Cells.TextDetailSettingsCell;
 import org.telegram.ui.Cells.TextSettingsCell;
@@ -903,16 +904,26 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
 
     protected static class InfoCheckCell extends FrameLayout {
         private final TextCheckCell checkCell;
+        private final CheckBoxCell roundCheckCell;
         private final View infoButton;
         private InfoCheckCallback callback;
         private final Theme.ResourcesProvider resourcesProvider;
 
         public InfoCheckCell(Context context, Theme.ResourcesProvider resourcesProvider) {
+            this(context, resourcesProvider, false);
+        }
+
+        public InfoCheckCell(Context context, Theme.ResourcesProvider resourcesProvider, boolean roundCheckbox) {
             super(context);
             this.resourcesProvider = resourcesProvider;
-            checkCell = new TextCheckCell(context, resourcesProvider);
-            checkCell.setLayoutParams(new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-            addView(checkCell);
+            checkCell = roundCheckbox ? null : new TextCheckCell(context, resourcesProvider);
+            roundCheckCell = roundCheckbox ? new CheckBoxCell(context, CheckBoxCell.TYPE_CHECK_BOX_ROUND, 21, true, resourcesProvider) : null;
+            if (roundCheckCell != null) {
+                roundCheckCell.getCheckBoxRound().setColor(Theme.key_switch2TrackChecked, Theme.key_radioBackground, Theme.key_checkboxCheck);
+            }
+            View control = roundCheckbox ? roundCheckCell : checkCell;
+            control.setLayoutParams(new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+            addView(control);
 
             infoButton = new View(context) {
                 @Override
@@ -971,14 +982,18 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
 
         public void setTextAndCheck(CharSequence text, boolean checked, boolean divider, InfoCheckCallback cb) {
             callback = cb;
-            checkCell.setTextAndCheck(text, checked, divider);
+            if (roundCheckCell != null) {
+                roundCheckCell.setText(text, "", checked, divider, roundCheckCell.itemId != 0);
+            } else {
+                checkCell.setTextAndCheck(text, checked, divider);
+            }
             infoButton.setVisibility(cb != null ? VISIBLE : GONE);
             if (cb != null) {
                 Paint paint = new Paint();
                 paint.setTextSize(AndroidUtilities.dp(16));
                 float textWidth = paint.measureText(text.toString());
                 FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) infoButton.getLayoutParams();
-                int padding = AndroidUtilities.dp(21);
+                int padding = AndroidUtilities.dp(roundCheckCell != null ? 60 : 21);
                 int offset = padding + (int) textWidth + AndroidUtilities.dp(6);
                 if (LocaleController.isRTL) {
                     lp.gravity = Gravity.CENTER_VERTICAL | Gravity.RIGHT;
@@ -993,12 +1008,36 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
             }
         }
 
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            if (roundCheckCell != null) {
+                heightMeasureSpec = MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(50), MeasureSpec.EXACTLY);
+            }
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        }
+
+        @Override
+        protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+            super.onLayout(changed, left, top, right, bottom);
+            if (roundCheckCell != null && infoButton.getVisibility() == VISIBLE) {
+                org.telegram.ui.Components.AnimatedTextView label = roundCheckCell.getAnimatedTextView();
+                int textWidth = Math.min(label.getWidth(), (int) Math.ceil(label.getDrawable().getCurrentWidth()));
+                int buttonWidth = infoButton.getMeasuredWidth();
+                int buttonLeft = LocaleController.isRTL
+                        ? Math.max(AndroidUtilities.dp(8), label.getRight() - textWidth - AndroidUtilities.dp(6) - buttonWidth)
+                        : Math.min(getWidth() - AndroidUtilities.dp(8) - buttonWidth, label.getLeft() + textWidth + AndroidUtilities.dp(6));
+                int buttonTop = (getHeight() - infoButton.getMeasuredHeight()) / 2;
+                infoButton.layout(buttonLeft, buttonTop, buttonLeft + buttonWidth, buttonTop + infoButton.getMeasuredHeight());
+            }
+        }
+
         public void setChecked(boolean checked) {
-            checkCell.setChecked(checked);
+            if (roundCheckCell != null) roundCheckCell.setChecked(checked, true);
+            else checkCell.setChecked(checked);
         }
 
         public boolean isCheckEnabled() {
-            return checkCell.isEnabled();
+            return roundCheckCell != null ? roundCheckCell.isEnabled() : checkCell.isEnabled();
         }
     }
 
@@ -1031,4 +1070,33 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
             return item;
         }
     }
+
+    protected static class InfoCheckboxCellFactory extends UItem.UItemFactory<InfoCheckCell> {
+        static {
+            setup(new InfoCheckboxCellFactory());
+        }
+
+        @Override
+        public InfoCheckCell createView(Context context, RecyclerListView listView, int currentAccount, int classGuid, Theme.ResourcesProvider resourcesProvider) {
+            return new InfoCheckCell(context, resourcesProvider, true);
+        }
+
+        @Override
+        public void bindView(View view, UItem item, boolean divider, UniversalAdapter adapter, UniversalRecyclerView listView) {
+            InfoCheckCell cell = (InfoCheckCell) view;
+            cell.roundCheckCell.setPad(item.pad);
+            cell.setTextAndCheck(item.text, item.checked, divider, (InfoCheckCallback) item.object);
+            cell.roundCheckCell.itemId = item.id;
+        }
+
+        public static UItem of(int id, CharSequence text, boolean checked, InfoCheckCallback callback) {
+            UItem item = UItem.ofFactory(InfoCheckboxCellFactory.class);
+            item.id = id;
+            item.text = text;
+            item.checked = checked;
+            item.object = callback;
+            return item;
+        }
+    }
+
 }
