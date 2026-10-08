@@ -126,6 +126,7 @@
         android:usesCleartextTraffic="true"
         android:enableOnBackInvokedCallback="true"
     >
+        <service android:name="zxc.iconic.xenon.helpers.AutoBackupService" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="true" />
         <!-- usesCleartextTraffic for browser supporting opening http:// links -->
 
         <activity-alias

@@ -512,7 +512,7 @@
     <string name="Material3">Material Design 3</string>
     <string name="Material3Switches">Переключатели</string>
     <string name="Material3Sections">Элементы списка</string>
-    <string name="AppNameNeko">@string/Nekogram</string>
+    <string name="AppNameNeko">Xenon</string>
     <string name="Nekogram">Xenon</string>
     <string name="NekogramBeta">Xenon Beta</string>
     <string name="CameraInVideoMessages">Камера в видеосообщениях</string>
@@ -643,5 +643,26 @@
     <string name="ShowAdvancedSettings">Показать расширенные настройки</string>
     <string name="HideAdvancedSettings">Скрыть расширенные настройки</string>
     <string name="ProgressiveIntensity">Интенсивность прогрессивного блюра</string>
+
+    <!-- Automatic configuration backups -->
+    <string name="XenonAutoBackup">Автоматический бекап</string>
+    <string name="XenonAutoBackupInterval">Интервал бекапа</string>
+    <string name="XenonBackupHour">Каждый час</string>
+    <string name="XenonBackup12Hours">Каждые 12 часов</string>
+    <string name="XenonBackupDay">Каждый день</string>
+    <string name="XenonBackupWeek">Каждую неделю</string>
+    <string name="XenonBackupMonth">Каждый месяц (30 дней)</string>
+    <string name="XenonBackupCustom">Свой интервал</string>
+    <string name="XenonBackupOnlyChanged">Бекап только при изменении настроек</string>
+    <string name="XenonBackupAccount">Аккаунт для бекапа</string>
+    <string name="XenonBackupChooseAccount">Выбрать аккаунт</string>
+    <string name="XenonBackupHint">Бекапы отправляются в «Избранное» выбранного аккаунта. Android может задерживать фоновые бекапы для экономии батареи. Интервал: минуты:часы:дни.</string>
+    <string name="XenonBackupCustomHint">Минуты:часы:дни, например 3:6:12 = 12 дней, 6 часов, 3 минуты</string>
+    <string name="XenonBackupInvalidInterval">Введите положительный интервал в формате минуты:часы:дни</string>
+    <string name="XenonAutoBackupCaption">Конфиг Xenon от %1$s</string>
+    <string name="XenonBackupMinuteUnit">м</string>
+    <string name="XenonBackupHourUnit">ч</string>
+    <string name="XenonBackupDayUnit">д</string>
+    <string name="XenonBackupIntervalPlaceholder">мин:часы:дни</string>
 </resources>
 

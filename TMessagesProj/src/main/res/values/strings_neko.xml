@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="AppNameNeko" translatable="false">@string/Nekogram</string>
+    <string name="AppNameNeko" translatable="false">Xenon</string>
     <string name="Nekogram" translatable="false">Xenon</string>
     <string name="NekogramBeta" translatable="false">Xenon Beta</string>
     <string name="NekoSettings">Xenon Settings</string>
@@ -650,6 +650,27 @@
     <string name="FeedDeselectAll">Deselect all</string>
     <string name="FeedDisabledChannels">Disabled channels</string>
     <string name="FeedFoldersReorderHint">Hold and drag folders to change their order.</string>
+
+    <!-- Automatic configuration backups -->
+    <string name="XenonAutoBackup">Automatic backup</string>
+    <string name="XenonAutoBackupInterval">Backup interval</string>
+    <string name="XenonBackupHour">Every hour</string>
+    <string name="XenonBackup12Hours">Every 12 hours</string>
+    <string name="XenonBackupDay">Every day</string>
+    <string name="XenonBackupWeek">Every week</string>
+    <string name="XenonBackupMonth">Every month (30 days)</string>
+    <string name="XenonBackupCustom">Custom interval</string>
+    <string name="XenonBackupOnlyChanged">Back up only when settings change</string>
+    <string name="XenonBackupAccount">Backup account</string>
+    <string name="XenonBackupChooseAccount">Choose an account</string>
+    <string name="XenonBackupHint">Backups are sent to Saved Messages of the selected account. Android may delay background backups to save battery. Interval: minutes:hours:days.</string>
+    <string name="XenonBackupCustomHint">Minutes:hours:days, e.g. 3:6:12 = 12 days, 6 hours, 3 minutes</string>
+    <string name="XenonBackupInvalidInterval">Enter a positive interval as minutes:hours:days</string>
+    <string name="XenonAutoBackupCaption">Xenon config from %1$s</string>
+    <string name="XenonBackupMinuteUnit">m</string>
+    <string name="XenonBackupHourUnit">h</string>
+    <string name="XenonBackupDayUnit">d</string>
+    <string name="XenonBackupIntervalPlaceholder">min:hours:days</string>
 </resources>
 
 

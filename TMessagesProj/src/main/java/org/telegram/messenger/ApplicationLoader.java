@@ -287,6 +287,7 @@ public class ApplicationLoader extends Application {
             DownloadController.getInstance(a);
         }
         BillingController.getInstance().startConnection();
+        zxc.iconic.xenon.helpers.AutoBackupService.initialize();
     }
 
     public ApplicationLoader() {

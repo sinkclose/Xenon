@@ -84,8 +84,127 @@ public class CloudSettingsHelper {
             parentFragment.startActivityForResult(intent, 2001);
         });
 
-        builder.setView(linearLayout);
+        android.widget.ScrollView scroll = new android.widget.ScrollView(context);
+        addAutoBackupControls(parentFragment, linearLayout, context, resourcesProvider);
+        scroll.addView(linearLayout);
+        builder.setView(scroll);
         parentFragment.showDialog(builder.create());
+    }
+
+    private void addAutoBackupControls(BaseFragment fragment, LinearLayout layout, Context context, Theme.ResourcesProvider provider) {
+        org.telegram.ui.Cells.TextCheckCell enabled = new org.telegram.ui.Cells.TextCheckCell(context);
+        enabled.setTextAndCheck(LocaleController.getString(R.string.XenonAutoBackup), AutoBackupService.enabled(), false);
+        layout.addView(enabled, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 56));
+        LinearLayout options = new LinearLayout(context);
+        options.setOrientation(LinearLayout.VERTICAL);
+        layout.addView(options, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        options.setVisibility(AutoBackupService.enabled() ? android.view.View.VISIBLE : android.view.View.GONE);
+        enabled.setOnClickListener(v -> {
+            AutoBackupService.setEnabled(!AutoBackupService.enabled());
+            enabled.setChecked(AutoBackupService.enabled());
+            options.setVisibility(AutoBackupService.enabled() ? android.view.View.VISIBLE : android.view.View.GONE);
+        });
+        org.telegram.ui.Cells.TextSettingsCell interval = new org.telegram.ui.Cells.TextSettingsCell(context);
+        Runnable refresh = () -> interval.setTextAndValue(LocaleController.getString(R.string.XenonAutoBackupInterval), formatBackupInterval(AutoBackupService.interval()), false);
+        refresh.run();
+        options.addView(interval, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 56));
+        interval.setOnClickListener(v -> {
+            int[] labels = {R.string.XenonBackupHour, R.string.XenonBackup12Hours, R.string.XenonBackupDay, R.string.XenonBackupWeek, R.string.XenonBackupMonth, R.string.XenonBackupCustom};
+            CharSequence[] items = new CharSequence[labels.length];
+            for (int i = 0; i < labels.length; i++) items[i] = LocaleController.getString(labels[i]);
+            long[] durations = {3_600_000L, 43_200_000L, 86_400_000L, 604_800_000L, 2_592_000_000L};
+            fragment.showDialog(new AlertDialog.Builder(context, provider).setTitle(LocaleController.getString(R.string.XenonAutoBackupInterval))
+                    .setItems(items, (dialog, which) -> {
+                        if (which < durations.length) { AutoBackupService.setInterval(durations[which]); refresh.run(); }
+                        else showCustomInterval(fragment, context, provider, refresh);
+                    }).create());
+        });
+        org.telegram.ui.Cells.TextCheckCell changed = new org.telegram.ui.Cells.TextCheckCell(context);
+        changed.setTextAndCheck(LocaleController.getString(R.string.XenonBackupOnlyChanged), AutoBackupService.prefs().getBoolean("onlyChanged", true), false);
+        options.addView(changed, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 56));
+        changed.setOnClickListener(v -> {
+            boolean value = !AutoBackupService.prefs().getBoolean("onlyChanged", true);
+            AutoBackupService.prefs().edit().putBoolean("onlyChanged", value).apply();
+            changed.setChecked(value);
+        });
+        java.util.ArrayList<Integer> accounts = new java.util.ArrayList<>();
+        java.util.ArrayList<CharSequence> names = new java.util.ArrayList<>();
+        for (int i = 0; i < org.telegram.messenger.UserConfig.MAX_ACCOUNT_COUNT; i++) {
+            org.telegram.tgnet.TLRPC.User user = org.telegram.messenger.UserConfig.getInstance(i).getCurrentUser();
+            if (user != null && org.telegram.messenger.UserConfig.getInstance(i).isClientActivated()) {
+                accounts.add(i);
+                names.add(org.telegram.messenger.UserObject.getUserName(user) + " (" + org.telegram.PhoneFormat.PhoneFormat.getInstance().format("+" + user.phone) + ")");
+            }
+        }
+        if (accounts.size() > 1) {
+            org.telegram.ui.Cells.TextSettingsCell account = new org.telegram.ui.Cells.TextSettingsCell(context);
+            Runnable update = () -> {
+                int selected = accounts.indexOf(AutoBackupService.account());
+                account.setTextAndValue(LocaleController.getString(R.string.XenonBackupAccount), selected >= 0 ? names.get(selected).toString() : LocaleController.getString(R.string.XenonBackupChooseAccount), false);
+            };
+            update.run();
+            options.addView(account, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 56));
+            account.setOnClickListener(v -> fragment.showDialog(new AlertDialog.Builder(context, provider)
+                    .setTitle(LocaleController.getString(R.string.XenonBackupAccount)).setItems(names.toArray(new CharSequence[0]), (dialog, which) -> {
+                        AutoBackupService.selectAccount(accounts.get(which)); update.run();
+                        if (AutoBackupService.enabled()) AutoBackupService.runBackup(true);
+                    }).create()));
+        }
+        android.widget.TextView hint = new android.widget.TextView(context);
+        hint.setText(LocaleController.getString(R.string.XenonBackupHint));
+        hint.setTextColor(Theme.getColor(Theme.key_dialogTextGray, provider));
+        hint.setTextSize(14);
+        options.addView(hint, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 16, 8, 16, 16));
+    }
+
+    private String formatBackupInterval(long millis) {
+        long totalMinutes = millis / 60_000;
+        long minutes = totalMinutes % 60, hours = totalMinutes / 60 % 24, days = totalMinutes / 1440;
+        if (days == 0 && hours == 0) return LocaleController.formatPluralString("Minutes", (int) minutes);
+        if (days == 0 && minutes == 0) return LocaleController.formatPluralString("Hours", (int) hours);
+        if (minutes == 0 && hours == 0 && days <= Integer.MAX_VALUE) return LocaleController.formatPluralString("Days", (int) days);
+        return AutoBackupPolicy.formatDisplayInterval(millis, LocaleController.getString(R.string.XenonBackupMinuteUnit),
+                LocaleController.getString(R.string.XenonBackupHourUnit), LocaleController.getString(R.string.XenonBackupDayUnit));
+    }
+
+    private void showCustomInterval(BaseFragment fragment, Context context, Theme.ResourcesProvider provider, Runnable refresh) {
+        LinearLayout content = new LinearLayout(context);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(AndroidUtilities.dp(24), 0, AndroidUtilities.dp(24), AndroidUtilities.dp(16));
+        android.widget.TextView description = new android.widget.TextView(context);
+        description.setText(LocaleController.getString(R.string.XenonBackupCustomHint));
+        description.setTextSize(14);
+        description.setTextColor(Theme.getColor(Theme.key_dialogTextGray, provider));
+        content.addView(description, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 16));
+        org.telegram.ui.Components.EditTextBoldCursor input = new org.telegram.ui.Components.EditTextBoldCursor(context);
+        input.setText(AutoBackupPolicy.formatInterval(AutoBackupService.interval()));
+        input.setSingleLine(true);
+        input.setTextSize(18);
+        input.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, provider));
+        input.setHintTextColor(Theme.getColor(Theme.key_dialogTextHint, provider));
+        input.setCursorColor(Theme.getColor(Theme.key_dialogInputFieldActivated, provider));
+        input.setHint(LocaleController.getString(R.string.XenonBackupIntervalPlaceholder));
+        input.setBackground(Theme.createEditTextDrawable(context, Theme.getColor(Theme.key_dialogInputField, provider),
+                Theme.getColor(Theme.key_dialogInputFieldActivated, provider)));
+        content.addView(input, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48, 0, 0, 0, 16));
+        ButtonWithCounterView save = new ButtonWithCounterView(context, true, provider).setRound();
+        save.setText(LocaleController.getString(R.string.Save), false);
+        content.addView(save, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+        ButtonWithCounterView cancel = new ButtonWithCounterView(context, false, provider).setRound();
+        cancel.setText(LocaleController.getString(R.string.Cancel), false);
+        content.addView(cancel, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48, 0, 8, 0, 0));
+        org.telegram.ui.ActionBar.BottomSheet sheet = new org.telegram.ui.ActionBar.BottomSheet.Builder(context, true, provider)
+                .setTitle(LocaleController.getString(R.string.XenonBackupCustom)).setCustomView(content).create();
+        save.setOnClickListener(v -> {
+            try {
+                AutoBackupService.setInterval(AutoBackupPolicy.parseInterval(input.getText().toString()));
+                refresh.run();
+                AndroidUtilities.hideKeyboard(input);
+                sheet.dismiss();
+            } catch (IllegalArgumentException e) { input.setError(LocaleController.getString(R.string.XenonBackupInvalidInterval)); }
+        });
+        cancel.setOnClickListener(v -> { AndroidUtilities.hideKeyboard(input); sheet.dismiss(); });
+        fragment.showDialog(sheet);
     }
 
     public void doAutoSync() {
