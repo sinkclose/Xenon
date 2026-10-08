@@ -78,6 +78,11 @@ public class UpdateLayoutWrapper extends ViewGroup {
 
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
+        // A hidden banner measures to zero, but its bottom inset is retained.
+        // With unclipped parents that inset would paint outside this view.
+        if (!isUpdateLayoutVisible() || getMeasuredHeight() <= 0) {
+            return;
+        }
         final int navigationHeight = getPaddingBottom();
         final float alpha = AndroidUtilities.getNavigationBarThirdButtonsFactor(0.1f, 0.75f, navigationHeight);
 

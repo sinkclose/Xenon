@@ -18,6 +18,8 @@ public class LiquidGlassEffect {
 
     private final RenderNode node;
     private RuntimeShader shader;
+    private final boolean fixedRefraction;
+    private final boolean advanced;
 
     // Highlight (edge glare)
     private RuntimeShader highlightShader;
@@ -27,8 +29,13 @@ public class LiquidGlassEffect {
     private float[] highlightCornerRadii;
 
     public LiquidGlassEffect(RenderNode node) {
+        this(node, false);
+    }
+
+    public LiquidGlassEffect(RenderNode node, boolean fixedRefraction) {
         this.node = node;
-        boolean advanced = zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass;
+        this.fixedRefraction = fixedRefraction;
+        advanced = fixedRefraction || zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass;
         // Refraction (the liquid-glass distortion) only runs when liquid glass is on.
         // The highlight (glare) is always created so it can be drawn over the frosted blur too.
         if (org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS)) {
@@ -39,6 +46,7 @@ public class LiquidGlassEffect {
             node.setRenderEffect(RenderEffect.createRuntimeShaderEffect(shader, "img"));
         } else {
             shader = null;
+            node.setRenderEffect(null);
         }
 
         String highlightCode = AndroidUtilities.readRes(R.raw.liquid_glass_highlight);
@@ -64,6 +72,7 @@ public class LiquidGlassEffect {
     private float radiusLeftTop, radiusRightTop, radiusRightBottom, radiusLeftBottom;
     private float thickness, intensity, index;
     private float glareAngle;
+    private float cachedFresnel, cachedDispersion, cachedGlare;
     private int foregroundColor;
 
     public void update(
@@ -87,6 +96,9 @@ public class LiquidGlassEffect {
                 this.radiusRightBottom != rRB || this.radiusLeftBottom != rLB ||
                 this.thickness != thickness || this.intensity != intensity || this.index != index ||
                 this.glareAngle != angleDeg ||
+                this.cachedFresnel != zxc.iconic.xenon.NekoConfig.advancedGlassFresnel ||
+                this.cachedDispersion != zxc.iconic.xenon.NekoConfig.advancedGlassDispersion ||
+                this.cachedGlare != zxc.iconic.xenon.NekoConfig.advancedGlassGlare ||
                 this.foregroundColor != foregroundColor) {
 
             this.resolutionX = resX; this.resolutionY = resY;
@@ -96,6 +108,9 @@ public class LiquidGlassEffect {
             this.radiusRightBottom = rRB; this.radiusLeftBottom = rLB;
             this.thickness = thickness; this.intensity = intensity; this.index = index;
             this.glareAngle = angleDeg;
+            this.cachedFresnel = zxc.iconic.xenon.NekoConfig.advancedGlassFresnel;
+            this.cachedDispersion = zxc.iconic.xenon.NekoConfig.advancedGlassDispersion;
+            this.cachedGlare = zxc.iconic.xenon.NekoConfig.advancedGlassGlare;
             this.foregroundColor = foregroundColor;
 
             final float a = Color.alpha(foregroundColor) / 255f;
@@ -104,8 +119,10 @@ public class LiquidGlassEffect {
             final float b = Color.blue(foregroundColor) / 255f * a;
 
             if (shader != null) {
-                if (zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass) {
-                    final float fresnel = Math.max(0.25f, zxc.iconic.xenon.NekoConfig.advancedGlassFresnel);
+                if (advanced) {
+                    // The navigation capsule uses the settings slider's 50 value.
+                    final float fresnel = fixedRefraction ? 0.5f
+                            : Math.max(0.25f, zxc.iconic.xenon.NekoConfig.advancedGlassFresnel);
                     final float refractionHeight = AndroidUtilities.dp(16f) * fresnel;
                     final float refractionAmount = -AndroidUtilities.dp(32f) * fresnel;
                     final float dispersion = Math.max(0.0f, Math.min(1.0f, zxc.iconic.xenon.NekoConfig.advancedGlassDispersion));

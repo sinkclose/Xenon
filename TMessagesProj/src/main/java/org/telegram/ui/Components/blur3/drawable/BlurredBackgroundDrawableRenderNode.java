@@ -53,16 +53,26 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
     }
 
     private LiquidGlassEffect liquidGlassEffect;
+    private boolean fixedRefraction;
+    private boolean liquidGlassEnabled;
 
     @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
     public void setLiquidGlassEffectAllowed() {
-        liquidGlassEffect = new LiquidGlassEffect(renderNodeFill);
+        setLiquidGlassEffectAllowed(false);
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
+    public void setLiquidGlassEffectAllowed(boolean fixedRefraction) {
+        this.fixedRefraction = fixedRefraction;
+        liquidGlassEnabled = org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS);
+        liquidGlassEffect = new LiquidGlassEffect(renderNodeFill, fixedRefraction);
+        renderNodeInvalidated = true;
     }
 
     @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
     public void recreateLiquidGlassEffect() {
         if (liquidGlassEffect != null) {
-            liquidGlassEffect = new LiquidGlassEffect(renderNodeFill);
+            liquidGlassEffect = new LiquidGlassEffect(renderNodeFill, fixedRefraction);
             renderNodeInvalidated = true;
         }
     }
@@ -203,7 +213,7 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
         // Sync renderNode alpha every time the display list is rebuilt.
         // This covers the case where advancedGlassAlpha or useAdvancedLiquidGlass
         // changed without a subsequent setAlpha() call (parent alpha stayed at 255).
-        final float _glassAlphaFactor = zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass
+        final float _glassAlphaFactor = !fixedRefraction && zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass
                 ? Math.max(0f, Math.min(1f, zxc.iconic.xenon.NekoConfig.advancedGlassAlpha / 100f))
                 : 1f;
         renderNode.setAlpha(getAlpha() / 255f * _glassAlphaFactor);
@@ -231,6 +241,13 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
             return;
         }
 
+        if (fixedRefraction && Build.VERSION.SDK_INT >= 33) {
+            boolean enabled = org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS);
+            if (liquidGlassEnabled != enabled) {
+                liquidGlassEnabled = enabled;
+                recreateLiquidGlassEffect();
+            }
+        }
         source.prepareToDraw();
         if (!renderNode.hasDisplayList()) {
             source.dispatchOnDrawablesRelativePositionChange();
@@ -266,7 +283,7 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
         super.setAlpha(alpha);
         // In advanced glass mode, advancedGlassAlpha scales the drawable alpha
         // so the entire glass surface (refraction + tint) can be made translucent.
-        final float glassAlphaFactor = zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass
+        final float glassAlphaFactor = !fixedRefraction && zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass
                 ? Math.max(0f, Math.min(1f, zxc.iconic.xenon.NekoConfig.advancedGlassAlpha / 100f))
                 : 1f;
         renderNode.setAlpha(alpha / 255f * glassAlphaFactor);

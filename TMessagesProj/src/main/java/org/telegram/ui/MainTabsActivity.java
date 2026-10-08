@@ -240,6 +240,20 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         };
     }
 
+    @Override
+    public int getNavigationBarColor() {
+        if (zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar()) {
+            return super.getNavigationBarColor();
+        }
+        int color = getThemedColor(Theme.key_windowBackgroundGray);
+        if (sheetsStack != null) {
+            for (AttachedSheet sheet : sheetsStack) {
+                if (sheet.attachedToParent()) color = sheet.getNavigationBarColor(color);
+            }
+        }
+        return color;
+    }
+
     private int getEstBackgroundColor() {
         return ColorUtils.blendARGB(
                 getThemedColor(Theme.key_windowBackgroundGray),
@@ -331,7 +345,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
         selectTab(viewPager.getCurrentPosition(), false);
 
-        iBlur3SourceColor.setColor(getThemedColor(Theme.key_windowBackgroundGray));
+        iBlur3SourceColor.setColor(getEstBackgroundColor());
 
         final ViewPositionWatcher viewPositionWatcher = new ViewPositionWatcher(contentView);
 
@@ -340,6 +354,13 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         iBlur3FactoryGlass.setLiquidGlassEffectAllowed(!zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar());
 
         tabsViewBackground = iBlur3FactoryGlass.create(tabsView, BlurredBackgroundProviderImpl.mainTabs(resourceProvider));
+        if (!zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar()) {
+            BlurredBackgroundDrawable lens = iBlur3FactoryGlass.create(tabsView, null);
+            lens.setPadding(0);
+            lens.setThickness(dp(14));
+            lens.setIntensity(1f);
+            tabsView.setLiquidLens(lens);
+        }
         tabsViewBackground.setRadius(zxc.iconic.xenon.helpers.MainTabsUiHelper.getBackgroundRadius());
         tabsViewBackground.setPadding(zxc.iconic.xenon.helpers.MainTabsUiHelper.getBackgroundInset());
         if (zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar()) {
@@ -365,6 +386,11 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         tabsViewWrapper.setOnClickListener(v -> {});
         tabsViewWrapper.addView(tabsView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.helpers.MainTabsUiHelper.getTabsViewHeightDp(), Gravity.BOTTOM | (zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar() ? 0 : Gravity.CENTER_HORIZONTAL)));
         tabsViewWrapper.setClipToPadding(false);
+        if (!zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar()) {
+            tabsViewWrapper.setClipChildren(false);
+            contentView.setClipChildren(false);
+            contentView.setClipToPadding(false);
+        }
         tabsViewWrapper.setVisibility(NekoConfig.showMainTabs ? View.VISIBLE : View.GONE);
         contentView.addView(tabsViewWrapper, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM));
 
@@ -734,6 +760,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
             setGestureSelectedOverride(0, false);
         }
         blur3_invalidateBlur();
+        checkSystemBarColors();
     }
 
     @Override
@@ -877,6 +904,10 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     private List<MainTabsManager.Tab> currentTabsConfig = new ArrayList<>();
 
     public void selectTab(int position, boolean animated) {
+        if (tabsView != null && position >= 0 && position < tabs.length) {
+            tabsView.setTabSelected(tabs[position], animated);
+            return;
+        }
         for (int a = 0; a < tabs.length; a++) {
             GlassTabView tab = tabs[a];
             tab.setSelected(a == position, animated);
@@ -1287,7 +1318,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     }
 
     private void blur3_updateFadeColors() {
-        iBlur3SourceColor.setColor(getThemedColor(Theme.key_windowBackgroundGray));
+        iBlur3SourceColor.setColor(getEstBackgroundColor());
         if (fadeView != null) {
             fadeView.invalidate();
         }

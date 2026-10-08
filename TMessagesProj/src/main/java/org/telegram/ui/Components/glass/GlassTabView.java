@@ -81,6 +81,7 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
     private int colorDefault;
     private boolean usePremiumCounter;
     private boolean useMainTabSelectedIndicator;
+    private boolean liquidMainTabStyle;
     private boolean horizontalNavigation;
     private float navigationSelection;
     private SpringAnimation navigationSelectionSpring;
@@ -258,12 +259,15 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
                 MainTabsUiHelper.setNavigationIndicatorBounds(tmpRectF, viewWidth, getHeight(),
                         horizontalNavigation, showTitle, textView.getMeasuredWidth());
             } else {
-                paintCounterBackground.setColor(Theme.multAlpha(colorSelected, 0.09f * alpha));
+                int selectorColor = liquidMainTabStyle
+                        ? (Theme.isCurrentThemeDark() ? Color.WHITE : Color.BLACK) : colorSelected;
+                paintCounterBackground.setColor(Theme.multAlpha(selectorColor,
+                        (liquidMainTabStyle ? 0.1f : 0.09f) * alpha));
                 tmpRectF.set(0, 0, viewWidth, getHeight());
             }
             final float r = Math.min(tmpRectF.width(), tmpRectF.height()) / 2f;
-            final float selectedBackgroundScaleX = MainTabsUiHelper.getSelectedBackgroundScaleX(useMainTabSelectedIndicator, selectedFactor) * MathUtils.clamp(attachScale, 0, 1);
-            final float selectedBackgroundScaleY = MainTabsUiHelper.getSelectedBackgroundScaleY(useMainTabSelectedIndicator, selectedFactor) * MathUtils.clamp(attachScale, 0, 1);
+            final float selectedBackgroundScaleX = (useMainTabSelectedIndicator ? MainTabsUiHelper.getSelectedBackgroundScaleX(true, selectedFactor) : 1f) * MathUtils.clamp(attachScale, 0, 1);
+            final float selectedBackgroundScaleY = (useMainTabSelectedIndicator ? MainTabsUiHelper.getSelectedBackgroundScaleY(true, selectedFactor) : 1f) * MathUtils.clamp(attachScale, 0, 1);
             canvas.save();
             canvas.scale(selectedBackgroundScaleX, selectedBackgroundScaleY, tmpRectF.centerX(), tmpRectF.centerY());
             canvas.drawRoundRect(tmpRectF, r, r, paintCounterBackground);
@@ -354,7 +358,7 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
             setNavigationSelected(selected, animated);
             updateColors();
         } else {
-            isSelectedAnimator.setValue(selected, animated);
+            isSelectedAnimator.setValue(selected, animated && !liquidMainTabStyle);
         }
         checkPlayAnimation(animated);
 
@@ -572,6 +576,8 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
     }
 
     public void setMainTabStyle() {
+        liquidMainTabStyle = !MainTabsUiHelper.isMaterial3NavigationBar();
+        if (liquidMainTabStyle) setStateListAnimator(null);
         if (MainTabsUiHelper.isMaterial3NavigationBar()) {
             useMainTabSelectedIndicator = true;
             MainTabsUiHelper.applyMaterial3MainTabStyle(textView);

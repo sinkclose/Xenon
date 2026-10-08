@@ -71,7 +71,7 @@ public class MainTabsSettingsActivity extends BaseNekoSettingsActivity {
         tabsView.setEditMode(true);
         tabsView.setTabs(tabs, getContext(), getResourceProvider(), currentAccount, NekoConfig.showMainTabsTitle);
         tabsView.setOnChangedListener(this::onTabsChanged);
-        previewContainer.addView(tabsView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, NekoConfig.material3BottomNavigationBar ? 64 : 48, Gravity.CENTER, 12, 0, 12, 0));
+        previewContainer.addView(tabsView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, NekoConfig.material3BottomNavigationBar ? 64 : 56, Gravity.CENTER, 12, 0, 12, 0));
 
         previewContainer.setAlpha(NekoConfig.showMainTabs ? 1f : 0.45f);
     }
