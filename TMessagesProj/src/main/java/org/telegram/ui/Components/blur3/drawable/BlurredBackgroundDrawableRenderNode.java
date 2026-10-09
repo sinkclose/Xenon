@@ -120,19 +120,17 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
 
     @Override
     public void updateDisplayList() {
-        final float offsetX = sourceOffsetX;
-        final float offsetY = sourceOffsetY;
-
         Canvas c;
 
-        final float sL = boundProps.boundsWithPadding.left + offsetX;
-        final float sT = boundProps.boundsWithPadding.top + offsetY;
-        final float sR = boundProps.boundsWithPadding.right + offsetX;
-        final float sB = boundProps.boundsWithPadding.bottom + offsetY;
+        final float sL = sourceScaleX * boundProps.boundsWithPadding.left + sourceOffsetX + sourceTranslationX;
+        final float sT = sourceScaleY * boundProps.boundsWithPadding.top + sourceOffsetY + sourceTranslationY;
+        final float sR = sourceScaleX * boundProps.boundsWithPadding.right + sourceOffsetX + sourceTranslationX;
+        final float sB = sourceScaleY * boundProps.boundsWithPadding.bottom + sourceOffsetY + sourceTranslationY;
 
         c = renderNodeFill.beginRecording();
         c.save();
-        c.translate(-sL, -sT);
+        c.translate(-boundProps.boundsWithPadding.left, -boundProps.boundsWithPadding.top);
+        transformSourceCanvas(c);
         if (liquidGlassEffect != null && Build.VERSION.SDK_INT >= 33) {
             final int thickness = Math.max(Math.min(
                 boundProps.liquidThickness <= 0 ? dp(11) : boundProps.liquidThickness,
@@ -280,13 +278,17 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
     public void setAlpha(int alpha) {
         final int oldAlpha = getAlpha();
 
-        super.setAlpha(alpha);
         // In advanced glass mode, advancedGlassAlpha scales the drawable alpha
         // so the entire glass surface (refraction + tint) can be made translucent.
         final float glassAlphaFactor = !fixedRefraction && zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass
                 ? Math.max(0f, Math.min(1f, zxc.iconic.xenon.NekoConfig.advancedGlassAlpha / 100f))
                 : 1f;
-        renderNode.setAlpha(alpha / 255f * glassAlphaFactor);
+        final float renderAlpha = alpha / 255f * glassAlphaFactor;
+        if (oldAlpha == alpha && renderNode.getAlpha() == renderAlpha) {
+            return;
+        }
+        super.setAlpha(alpha);
+        renderNode.setAlpha(renderAlpha);
         renderNodeInvalidated = true;
 
         if (oldAlpha == 0 && alpha > 0) {

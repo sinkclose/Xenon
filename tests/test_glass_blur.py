@@ -83,6 +83,7 @@ public class GlassBlurHarness {
         Object underSource;
         int wallpaperParentW, wallpaperParentH;
         void syncWallpaperEffect() {}
+        void recordWallpaperIfNeeded() {}
         SOURCE_METHODS
     }
     static final float BLUR_SIGMA_SCALE = 0.57735f;

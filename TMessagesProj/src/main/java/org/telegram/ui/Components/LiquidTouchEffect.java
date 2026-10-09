@@ -18,6 +18,7 @@ import androidx.dynamicanimation.animation.SpringAnimation;
 import androidx.dynamicanimation.animation.SpringForce;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
 
 /** Canvas-only port of AndroidLiquidGlass LiquidButton's interactive layer.
  * Observes gestures without consuming them or changing layout / View animation properties.
@@ -42,6 +43,7 @@ public final class LiquidTouchEffect {
     private final RectF glowBounds = new RectF();
     private RadialGradient glowShader;
     private float glowX, glowY, glowRadius;
+    private float scaleX = 1f, scaleY = 1f, translationX, translationY;
 
     public LiquidTouchEffect(View host) {
         this.host = host;
@@ -185,21 +187,39 @@ public final class LiquidTouchEffect {
         returnY.setStartValue(offsetY).animateToFinalPosition(0f);
     }
 
-    /** Returns a save count to restore, or -1 when the layer is at rest. */
-    public int begin(Canvas canvas) {
-        if (bounds.isEmpty() || (progress == 0f && offsetX == 0f && offsetY == 0f)) return -1;
+    private void updateTransform() {
+        scaleX = scaleY = 1f;
+        translationX = translationY = 0f;
+        if (bounds.isEmpty() || (progress == 0f && offsetX == 0f && offsetY == 0f)) return;
         float width = bounds.width(), height = bounds.height();
         float min = Math.min(width, height), max = Math.max(width, height);
         float dragScale = Math.min(0.12f, AndroidUtilities.dpf2(4f) / height);
         float scale = 1f + dragScale * progress;
         dragScale *= dragStrength;
         double angle = Math.atan2(offsetY, offsetX);
-        float scaleX = scale + dragScale * (float) Math.abs(Math.cos(angle) * offsetX / max) * Math.min(width / height, 1f);
-        float scaleY = scale + dragScale * (float) Math.abs(Math.sin(angle) * offsetY / max) * Math.min(height / width, 1f);
+        scaleX = scale + dragScale * (float) Math.abs(Math.cos(angle) * offsetX / max) * Math.min(width / height, 1f);
+        scaleY = scale + dragScale * (float) Math.abs(Math.sin(angle) * offsetY / max) * Math.min(height / width, 1f);
+        translationX = min * (float) Math.tanh(0.05f * dragStrength * offsetX / min) + (1f - scaleX) * bounds.centerX();
+        translationY = min * (float) Math.tanh(0.05f * dragStrength * offsetY / min) + (1f - scaleY) * bounds.centerY();
+    }
+
+    /** origin is the drawable's origin in the effect's coordinates (negative for a parent drawable). */
+    public static boolean updateBackground(BlurredBackgroundDrawable drawable, LiquidTouchEffect effect, float originX, float originY) {
+        if (drawable == null) return false;
+        if (effect == null) return drawable.setSourceTransform(1f, 1f, 0f, 0f);
+        effect.updateTransform();
+        return drawable.setSourceTransform(effect.scaleX, effect.scaleY,
+                effect.translationX + (effect.scaleX - 1f) * originX,
+                effect.translationY + (effect.scaleY - 1f) * originY);
+    }
+
+    /** Returns a save count to restore, or -1 when the layer is at rest. */
+    public int begin(Canvas canvas) {
+        updateTransform();
+        if (scaleX == 1f && scaleY == 1f && translationX == 0f && translationY == 0f) return -1;
         int save = canvas.save();
-        canvas.translate(min * (float) Math.tanh(0.05f * dragStrength * offsetX / min),
-                min * (float) Math.tanh(0.05f * dragStrength * offsetY / min));
-        canvas.scale(scaleX, scaleY, bounds.centerX(), bounds.centerY());
+        canvas.translate(translationX, translationY);
+        canvas.scale(scaleX, scaleY);
         return save;
     }
 

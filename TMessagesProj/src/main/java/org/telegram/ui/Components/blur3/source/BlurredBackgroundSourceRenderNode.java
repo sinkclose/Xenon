@@ -228,6 +228,7 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
     /** Re-record the wallpaper node on next draw (bitmap finished loading). */
     public void invalidateWallpaper() {
         wallpaperDirty = true;
+        invalidateDisplayListForDrawables();
     }
 
     @RequiresApi(api = Build.VERSION_CODES.S)
@@ -360,6 +361,9 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
             if (glassBlurEnabled) syncGlassBlur();
             if (underSource != null && wallpaperParentW > 0 && wallpaperParentH > 0) {
                 syncWallpaperEffect();
+                // A cached glass drawable may never call source.draw() again.
+                // Flush wallpaper updates before drawing its existing display list.
+                recordWallpaperIfNeeded();
             }
         }
     }

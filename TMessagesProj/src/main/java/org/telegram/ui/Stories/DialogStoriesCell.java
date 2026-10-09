@@ -976,7 +976,10 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
             float titleX = centeredTitlePosition.set(zxc.iconic.xenon.NekoConfig.centerTitle
                     ? Math.max(lastViewRight + dp(8), center - titleView.getDrawable().getCurrentWidth() * titleView.getScaleX() / 2f)
                     : lastViewRight, switchingTitle || titleView.getAlpha() == 0f);
-            titleView.setTranslationX(titleX);
+            // The story stack keeps moving while the title position animates.
+            // Enforce the current boundary after interpolation on every frame.
+            titleView.setTranslationX(Math.max(titleX,
+                    lastViewRight + (zxc.iconic.xenon.NekoConfig.centerTitle ? dp(8) : 0f)));
             titleView.getDrawable().setRightPadding(titleView.getTranslationX() - dp(12) + actionBar.menu.getVisibleItemsMeasuredWidthWithAlpha() * progress);
 
             offset = (telegramLogoView.getMeasuredHeight() - telegramLogoView.getTextHeight()) / 2f;
@@ -985,9 +988,10 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
             // Animate screen coordinates, not an offset from the changing story stack.
             // The hidden logo must already be centered when its vertical transition begins.
             float logoX = centeredLogoPosition.set(zxc.iconic.xenon.NekoConfig.centerTitle
-                    ? center - logoWidth / 2f : lastViewRight + dp(1),
+                    ? Math.max(lastViewRight + dp(8), center - logoWidth / 2f) : lastViewRight + dp(1),
                     switchingTitle || telegramLogoView.getAlpha() == 0f);
-            telegramLogoView.setTranslationX(logoX);
+            telegramLogoView.setTranslationX(Math.max(logoX,
+                    lastViewRight + dp(zxc.iconic.xenon.NekoConfig.centerTitle ? 8 : 1)));
             telegramLogoView.setTranslationY(bottomY + dp(14) - offset + AndroidUtilities.dp(FAKE_TOP_PADDING) + translationOffset /*titleView.getTranslationY() + dpf2(37.33f)*/);
 
             emojiStatusView.setTranslationX(telegramLogoView.getTranslationX() - dp(1) - dpf2(3.33f) + logoWidth);

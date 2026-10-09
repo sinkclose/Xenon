@@ -29,6 +29,7 @@ import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.LiquidTouchEffect;
 import org.telegram.ui.Components.LiquidTouchDispatcher;
 import org.telegram.ui.Components.LiquidPressAnimationSuppressor;
+import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
 import org.telegram.ui.Components.RLottieDrawable;
 
 import java.util.ArrayList;
@@ -70,6 +71,10 @@ public class ActionBarMenu extends LinearLayout implements LiquidTouchDispatcher
 
     public int beginLiquidBackground(Canvas canvas) {
         return liquidTouchAllowed() ? liquidTouch.beginInParent(canvas, getX(), getY()) : -1;
+    }
+
+    public void updateLiquidBackground(BlurredBackgroundDrawable drawable) {
+        LiquidTouchEffect.updateBackground(drawable, liquidTouchAllowed() ? liquidTouch : null, -getX(), -getY());
     }
 
     public void drawLiquidHighlight(Canvas canvas) {

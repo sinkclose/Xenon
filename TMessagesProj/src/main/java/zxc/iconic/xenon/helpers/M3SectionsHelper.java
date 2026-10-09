@@ -20,6 +20,8 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.Utilities;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.HeaderCell;
+import org.telegram.ui.Cells.ShadowSectionCell;
+import org.telegram.ui.Cells.TextInfoPrivacyCell;
 import org.telegram.ui.Cells.TextCheckCell;
 import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.SectionsScrollView;
@@ -134,6 +136,9 @@ public class M3SectionsHelper {
 
     public static void clipChild(Canvas canvas, View child, RecyclerListView listView) {
         if (child == null) return;
+        if ((child instanceof HeaderCell || child instanceof ShadowSectionCell || child instanceof TextInfoPrivacyCell) && child.getBackground() != null) {
+            child.setBackground(null);
+        }
         RecyclerListView.ListSectionsDecoration deco = listView.sectionsItemDecoration;
         if (deco == null) return;
         Utilities.CallbackReturn<View, Boolean> isSection = deco.isSectionItem;

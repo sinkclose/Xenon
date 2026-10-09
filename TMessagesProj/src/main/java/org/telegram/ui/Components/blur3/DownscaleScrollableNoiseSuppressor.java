@@ -425,7 +425,10 @@ public class DownscaleScrollableNoiseSuppressor {
         }
 
         if (updatedCount > 0) {
-            return invalidateResultRenderNodes(width, height);
+            invalidateResultRenderNodes(width, height);
+            // The composition can stay cached while its child nodes get new
+            // content. Callers still need to redraw glass views after a capture.
+            return true;
         }
         return false;
     }

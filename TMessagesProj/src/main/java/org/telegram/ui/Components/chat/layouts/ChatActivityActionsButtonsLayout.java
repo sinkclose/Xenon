@@ -152,6 +152,16 @@ public class ChatActivityActionsButtonsLayout extends LinearLayout implements Li
         liquidPressAnimations.sync(this, liquidTouchAllowed());
         updateLiquidBounds();
         LiquidTouchEffect effect = child == leftLayout ? leftLiquid : child == forwardButton.optionsView ? forwardLiquid : null;
+        LiquidTouchEffect backgroundEffect = liquidTouchAllowed() ? effect : null;
+        if (child == leftLayout) {
+            replyButton.button.updateLiquidBackground(backgroundEffect,
+                    child.getX() + replyButton.button.getX(), child.getY() + replyButton.button.getY());
+            selectButton.button.updateLiquidBackground(backgroundEffect,
+                    child.getX() + selectButton.button.getX(), child.getY() + selectButton.button.getY());
+        } else if (child == forwardButton.optionsView) {
+            forwardButton.button.updateLiquidBackground(backgroundEffect,
+                    child.getX() + forwardButton.button.getX(), child.getY() + forwardButton.button.getY());
+        }
         int save = liquidTouchAllowed() && effect != null ? effect.begin(canvas) : -1;
         boolean result = super.drawChild(canvas, child, drawingTime);
         if (liquidTouchAllowed() && effect != null) effect.drawHighlight(canvas, dp(22), dp(6));

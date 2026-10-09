@@ -541,6 +541,10 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
             }
         }
         int save = -1;
+        if (child instanceof ChatActivityBlurredRoundButton) {
+            ((ChatActivityBlurredRoundButton) child).updateLiquidBackground(
+                    liquidTouchAllowed() ? sideLiquid : null, child.getX(), child.getY());
+        }
         if (liquidTouchAllowed()) {
             if (child == container && centerLiquid != null) {
                 save = centerLiquid.beginInChild(canvas, centerLiquidX, centerLiquidY);
@@ -556,6 +560,7 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
 
             tmpRect.round(AndroidUtilities.rectTmp2);
             containerDrawable.setBounds(AndroidUtilities.rectTmp2);
+            LiquidTouchEffect.updateBackground(containerDrawable, liquidTouchAllowed() ? centerLiquid : null, centerLiquidX, centerLiquidY);
             containerDrawable.draw(canvas);
         }
 

@@ -143,6 +143,7 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout implements 
         if (getMetadata().getTotalVisibility() == 0) return;
         checkBoundsAndClipping();
         liquidPressAnimations.sync(this, liquidTouchAllowed());
+        LiquidTouchEffect.updateBackground(backgroundDrawable, liquidTouchAllowed() ? liquidTouch : null, 0f, 0f);
         final int liquidSave = liquidTouchAllowed() ? liquidTouch.begin(canvas) : -1;
 
         if (backgroundDrawable != null) {

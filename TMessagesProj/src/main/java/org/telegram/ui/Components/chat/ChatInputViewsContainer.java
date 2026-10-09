@@ -430,6 +430,7 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
                 drawable.setBounds(Math.round(bounds.left), Math.round(bounds.top), Math.round(bounds.right), Math.round(bounds.bottom));
                 LiquidTouchEffect effect = iosLiquidEffects == null ? null : iosLiquidEffects[i];
                 if (effect != null) effect.setBounds(bounds.left + dp(7), bounds.top + dp(7), bounds.right - dp(7), bounds.bottom - dp(7));
+                LiquidTouchEffect.updateBackground(drawable, liquidTouchAllowed() ? effect : null, 0f, 0f);
                 int save = effect != null && liquidTouchAllowed() ? effect.begin(canvas) : -1;
                 float surfaceAlpha = i == 1 ? 1f : visibility * (i == 2 ? 1f - iosComposer.getIosInputProgress() : 1f);
                 int layer = surfaceAlpha < 1f ? canvas.saveLayerAlpha(bounds.left - dp(8), bounds.top - dp(8), bounds.right + dp(8), bounds.bottom + dp(8), Math.round(255 * surfaceAlpha)) : -1;
@@ -442,6 +443,7 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
             blurredBackgroundDrawable.setBounds(tmpRect);
             if (liquidTouch != null) liquidTouch.setBounds(tmpRect.left, tmpRect.top, tmpRect.right, tmpRect.bottom);
             if (drawInputBackground) {
+                LiquidTouchEffect.updateBackground(blurredBackgroundDrawable, liquidTouchAllowed() ? liquidTouch : null, 0f, 0f);
                 int save = liquidTouchAllowed() ? liquidTouch.begin(canvas) : -1;
                 blurredBackgroundDrawable.draw(canvas);
                 if (liquidTouchAllowed()) liquidTouch.drawHighlight(canvas, dp(INPUT_BUBBLE_RADIUS), dp(7));
