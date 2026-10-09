@@ -30,6 +30,9 @@ public final class LiquidTouchEffect {
     private float progress, offsetX, offsetY;
     private float downX, downY;
     private int pointerId = -1;
+    private long pressStartedAt, minimumPressDuration;
+    private boolean releasePending;
+    private final Runnable releasePress = this::finishRelease;
     private final SpringAnimation press;
     private final SpringAnimation returnX;
     private final SpringAnimation returnY;
@@ -120,8 +123,10 @@ public final class LiquidTouchEffect {
                 offsetY = Math.max(-limit, Math.min(limit, event.getY(index) - downY));
                 invalidateHost();
                 break;
-            case MotionEvent.ACTION_POINTER_DOWN:
             case MotionEvent.ACTION_UP:
+                release(true);
+                break;
+            case MotionEvent.ACTION_POINTER_DOWN:
             case MotionEvent.ACTION_CANCEL:
                 release();
                 break;
@@ -133,6 +138,10 @@ public final class LiquidTouchEffect {
 
     @SuppressLint("RestrictedApi")
     private void startPress() {
+        AndroidUtilities.cancelRunOnUIThread(releasePress);
+        releasePending = false;
+        minimumPressDuration = 0;
+        pressStartedAt = SystemClock.uptimeMillis();
         press.cancel();
         press.setStartValue(progress).setStartVelocity(0f);
         press.animateToFinalPosition(1f);
@@ -143,10 +152,35 @@ public final class LiquidTouchEffect {
         press.doAnimationFrame(SystemClock.uptimeMillis());
     }
 
-    private void release() {
-        if (pointerId == -1) return;
-        pointerId = -1;
+    /** Keep a quick send-button tap visible, without skipping the spring's initial frames. */
+    public void setMinimumPressDuration(long millis) {
+        if (pointerId != -1) minimumPressDuration = Math.max(0, millis);
+    }
+
+    private void finishRelease() {
+        AndroidUtilities.cancelRunOnUIThread(releasePress);
+        releasePending = false;
+        minimumPressDuration = 0;
         press.animateToFinalPosition(0f);
+    }
+
+    private void release() {
+        release(false);
+    }
+
+    private void release(boolean completeTap) {
+        if (pointerId == -1) {
+            if (!completeTap && releasePending) finishRelease();
+            return;
+        }
+        pointerId = -1;
+        long remaining = completeTap ? minimumPressDuration - (SystemClock.uptimeMillis() - pressStartedAt) : 0;
+        if (remaining > 0) {
+            releasePending = true;
+            AndroidUtilities.runOnUIThread(releasePress, remaining);
+        } else {
+            finishRelease();
+        }
         returnX.setStartValue(offsetX).animateToFinalPosition(0f);
         returnY.setStartValue(offsetY).animateToFinalPosition(0f);
     }
@@ -223,6 +257,9 @@ public final class LiquidTouchEffect {
     }
 
     public void reset() {
+        AndroidUtilities.cancelRunOnUIThread(releasePress);
+        releasePending = false;
+        minimumPressDuration = 0;
         press.cancel();
         returnX.cancel();
         returnY.cancel();

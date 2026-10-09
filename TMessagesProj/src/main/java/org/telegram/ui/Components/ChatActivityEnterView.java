@@ -688,6 +688,25 @@ public class ChatActivityEnterView extends FrameLayout implements
                 y + sendButtonContainer.getY() + dp(DEFAULT_HEIGHT + 7));
     }
 
+    private void onSendButtonLiquidDown(MotionEvent event) {
+        MotionEvent local = MotionEvent.obtain(event);
+        try {
+            View child = sendButton;
+            while (child.getParent() instanceof View) {
+                View parent = (View) child.getParent();
+                local.transform(child.getMatrix());
+                local.offsetLocation(child.getLeft() - parent.getScrollX(), child.getTop() - parent.getScrollY());
+                if (parent instanceof org.telegram.ui.Components.chat.ChatInputViewsContainer) {
+                    ((org.telegram.ui.Components.chat.ChatInputViewsContainer) parent).onSendButtonLiquidDown(local);
+                    break;
+                }
+                child = parent;
+            }
+        } finally {
+            local.recycle();
+        }
+    }
+
     public void setIosInputEffects(LiquidTouchEffect[] effects, float originX, float originY) {
         boolean changed = iosInputEffects != effects
                 || iosInputOriginX != originX + textFieldContainer.getX()
@@ -3931,6 +3950,15 @@ public class ChatActivityEnterView extends FrameLayout implements
         });
 
         sendButton = new SendButton(context, isInScheduleMode() ? R.drawable.input_schedule : R.drawable.send_plane_24, resourcesProvider, true) {
+            @Override
+            public boolean onTouchEvent(MotionEvent event) {
+                boolean handled = super.onTouchEvent(event);
+                if (handled && event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                    ChatActivityEnterView.this.onSendButtonLiquidDown(event);
+                }
+                return handled;
+            }
+
             @Override
             public boolean isInScheduleMode() {
                 return ChatActivityEnterView.this.isInScheduleMode();
@@ -15115,11 +15143,7 @@ public class ChatActivityEnterView extends FrameLayout implements
             measureIosInputLayout();
             updateIosCollapsedWidth(MeasureSpec.getSize(widthMeasureSpec) - getPaddingLeft() - getPaddingRight());
         }
-        if (topView != null) {
-            FrameLayout.LayoutParams top = (FrameLayout.LayoutParams) topView.getLayoutParams();
-            top.leftMargin = isIosLikeInputField() ? dp(50) : 0;
-            top.rightMargin = isIosLikeInputField() ? Math.round(dp(IOS_INPUT_SIDE_SPACE) * (1f - iosInputProgress)) : 0;
-        }
+        measureIosInputTopView();
         updateBotCommandsMenuContainerTopPadding();
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
 
@@ -15241,6 +15265,21 @@ public class ChatActivityEnterView extends FrameLayout implements
             return topView.getLayoutParams().height;
         }
         return 0;
+    }
+
+    private void measureIosInputTopView() {
+        if (topView == null) return;
+        FrameLayout.LayoutParams top = (FrameLayout.LayoutParams) topView.getLayoutParams();
+        if (isIosLikeInputField()) {
+            // The reply/forward panel is a sibling of the shrinking field container.
+            // Follow its animated insets so both icons stay inside the same surface.
+            FrameLayout.LayoutParams container = (FrameLayout.LayoutParams) textFieldContainer.getLayoutParams();
+            FrameLayout.LayoutParams field = (FrameLayout.LayoutParams) messageEditTextContainer.getLayoutParams();
+            top.leftMargin = container.leftMargin + field.leftMargin;
+            top.rightMargin = container.rightMargin + field.rightMargin;
+        } else {
+            top.leftMargin = top.rightMargin = 0;
+        }
     }
 
     public void runEmojiPanelAnimation() {

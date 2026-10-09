@@ -143,6 +143,15 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
         return handled;
     }
 
+    public void onSendButtonLiquidDown(MotionEvent event) {
+        if (!liquidTouchAllowed() || iosComposerVisibility <= 0f) return;
+        LiquidTouchEffect effect = iosComposer != null && iosLiquidEffects != null
+                ? iosLiquidEffects[1] : liquidTouch;
+        // The button accepted this DOWN; bypass the previous draw's hit bounds.
+        effect.onTouchEvent(event, true, true);
+        effect.setMinimumPressDuration(100);
+    }
+
     @Override
     protected void onDetachedFromWindow() {
         if (liquidTouch != null) liquidTouch.reset();
