@@ -15,9 +15,11 @@ import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.animation.PathInterpolator;
+import android.view.animation.LinearInterpolator;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.OverScroller;
 
 /** A message and its menu in one viewport, rendered in the popup window above the chat blur. */
 public class MessagePopupPreviewLayout extends FrameLayout {
@@ -47,6 +49,8 @@ public class MessagePopupPreviewLayout extends FrameLayout {
     private Picture transitionMessage;
     private Runnable afterClose;
     private boolean transitionClosing;
+    private ValueAnimator overscrollAnimator;
+    private float overscrollOffset;
 
     public MessagePopupPreviewLayout(Context context, View menu, Source source,
                                      float preferredX, float preferredY, Runnable dismiss) {
@@ -58,22 +62,92 @@ public class MessagePopupPreviewLayout extends FrameLayout {
         this.dismiss = dismiss;
         setClipChildren(false);
         scroll = new ScrollView(context) {
+            private final OverScroller flingScroller = new OverScroller(context);
+            private int lastFlingY;
+
+            @Override
+            public void fling(int velocityY) {
+                if (!overflow || progress != 1f || closing) return;
+                if (overscrollOffset != 0f) {
+                    releaseOverscroll();
+                    return;
+                }
+                lastFlingY = getScrollY();
+                // Let inertia continue past the edge so its remaining velocity can
+                // become a bounce, instead of being discarded by ScrollView's bounds.
+                flingScroller.fling(0, lastFlingY, 0, velocityY, 0, 0,
+                        Integer.MIN_VALUE / 2, Integer.MAX_VALUE / 2);
+                postInvalidateOnAnimation();
+            }
+
+            @Override
+            public void computeScroll() {
+                super.computeScroll();
+                if (closing) {
+                    flingScroller.abortAnimation();
+                    return;
+                }
+                if (!flingScroller.computeScrollOffset()) return;
+                int currentY = flingScroller.getCurrY();
+                int delta = currentY - lastFlingY;
+                lastFlingY = currentY;
+                int range = MessagePopupPreviewGeometry.openingScroll(column.getHeight(),
+                        getHeight() - getPaddingTop() - getPaddingBottom());
+                int nextY = getScrollY() + delta;
+                int clampedY = Math.max(0, Math.min(nextY, range));
+                scrollTo(0, clampedY);
+                if (nextY != clampedY) {
+                    float velocity = Math.copySign(flingScroller.getCurrVelocity(), delta);
+                    flingScroller.abortAnimation();
+                    animateFlingOverscroll(velocity);
+                } else {
+                    postInvalidateOnAnimation();
+                }
+            }
+
+            @Override
+            protected void onDetachedFromWindow() {
+                flingScroller.abortAnimation();
+                super.onDetachedFromWindow();
+            }
+            @Override
+            public void requestChildFocus(View child, View focused) {
+                int scrollY = getScrollY();
+                super.requestChildFocus(child, focused);
+                // Menu focus must not move the message. ScrollView also remembers the
+                // focused child for its next layout; onLayout restores this offset too.
+                scrollTo(0, scrollY);
+            }
+
+            @Override
+            protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+                int scrollY = getScrollY();
+                super.onSizeChanged(w, h, oldw, oldh);
+                scrollTo(0, scrollY);
+            }
+
             @Override
             protected void onLayout(boolean changed, int l, int t, int r, int b) {
                 int scrollY = getScrollY();
                 super.onLayout(changed, l, t, r, b);
-                // Focus/layout must not scroll the message's header offscreen on opening.
+                // Preserve the reading position. The opening offset is applied after layout.
                 scrollTo(0, drawingMessage ? scrollY : 0);
             }
 
             @Override
             public boolean requestChildRectangleOnScreen(View child, Rect rectangle, boolean immediate) {
-                return drawingMessage && progress == 1f && !closing
-                        && super.requestChildRectangleOnScreen(child, rectangle, immediate);
+                // Keep scrolling explicit, including after the opening animation.
+                // Focusing a menu action must not replace the user's reading position.
+                return false;
             }
 
             @Override
             public boolean onInterceptTouchEvent(MotionEvent event) {
+                if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                    boolean wasFlinging = !flingScroller.isFinished();
+                    flingScroller.abortAnimation();
+                    if (wasFlinging) return true;
+                }
                 return overflow && super.onInterceptTouchEvent(event);
             }
 
@@ -81,8 +155,37 @@ public class MessagePopupPreviewLayout extends FrameLayout {
             public boolean onTouchEvent(MotionEvent event) {
                 return overflow && super.onTouchEvent(event);
             }
+
+            @Override
+            protected boolean overScrollBy(int deltaX, int deltaY, int scrollX, int scrollY,
+                                           int scrollRangeX, int scrollRangeY,
+                                           int maxOverScrollX, int maxOverScrollY, boolean isTouchEvent) {
+                if (overflow && progress == 1f && !closing) {
+                    if (isTouchEvent && overscrollOffset != 0f) {
+                        cancelOverscrollAnimation();
+                        float next = MessagePopupPreviewGeometry.overscroll(overscrollOffset, -deltaY, dp(96));
+                        if (next * overscrollOffset > 0f) {
+                            setOverscrollOffset(next);
+                            return false;
+                        }
+                        setOverscrollOffset(0f);
+                    }
+                    int clampedY = Math.max(0, Math.min(scrollY + deltaY, scrollRangeY));
+                    int excess = scrollY + deltaY - clampedY;
+                    if (excess != 0 && (isTouchEvent || overscrollAnimator == null)) {
+                        if (isTouchEvent) cancelOverscrollAnimation();
+                        setOverscrollOffset(MessagePopupPreviewGeometry.overscroll(overscrollOffset, -excess, dp(96)));
+                        if (!isTouchEvent) releaseOverscroll();
+                    }
+                }
+                // Keep the actual scroll position clamped; translate message and menu together.
+                return super.overScrollBy(deltaX, deltaY, scrollX, scrollY, scrollRangeX, scrollRangeY, 0, 0, isTouchEvent);
+            }
         };
         scroll.setVerticalScrollBarEnabled(false);
+        // Focus-driven smoothScrollBy would keep moving on later computeScroll frames,
+        // after the offset has been restored above. Touch flings remain available.
+        scroll.setSmoothScrollingEnabled(false);
         scroll.setOverScrollMode(OVER_SCROLL_NEVER);
         scroll.setClipToPadding(false);
         column = new LinearLayout(context);
@@ -156,6 +259,7 @@ public class MessagePopupPreviewLayout extends FrameLayout {
     public void close(Runnable afterReturn) {
         if (closing) return;
         closing = true;
+        releaseOverscroll();
         afterClose = afterReturn;
         scroll.setEnabled(false);
         animateTo(0f, afterReturn);
@@ -165,6 +269,7 @@ public class MessagePopupPreviewLayout extends FrameLayout {
     public void closeForTransition(Runnable afterReturn) {
         if (transitionClosing) return;
         transitionClosing = true;
+        cancelOverscrollAnimation();
         if (!closing) afterClose = afterReturn;
         closing = true;
         opening = false;
@@ -219,11 +324,66 @@ public class MessagePopupPreviewLayout extends FrameLayout {
         animator.start();
     }
 
+    private void scrollToOpeningPosition() {
+        scroll.scrollTo(0, MessagePopupPreviewGeometry.openingScroll(column.getHeight(), scroll.getHeight()));
+    }
+
+    private void setOverscrollOffset(float offset) {
+        overscrollOffset = offset;
+        column.setTranslationY(offset);
+        invalidate();
+    }
+
+    private void cancelOverscrollAnimation() {
+        if (overscrollAnimator == null) return;
+        overscrollAnimator.removeAllListeners();
+        overscrollAnimator.cancel();
+        overscrollAnimator = null;
+    }
+
+    private void releaseOverscroll() {
+        if (overscrollOffset == 0f || transitionClosing) return;
+        cancelOverscrollAnimation();
+        overscrollAnimator = ValueAnimator.ofFloat(overscrollOffset, 0f);
+        overscrollAnimator.setDuration(700);
+        overscrollAnimator.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
+        overscrollAnimator.addUpdateListener(animation -> setOverscrollOffset((float) animation.getAnimatedValue()));
+        overscrollAnimator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                overscrollAnimator = null;
+                setOverscrollOffset(0f);
+            }
+        });
+        overscrollAnimator.start();
+    }
+
+    private void animateFlingOverscroll(float velocity) {
+        if (closing || transitionClosing) return;
+        cancelOverscrollAnimation();
+        float start = overscrollOffset;
+        overscrollAnimator = ValueAnimator.ofFloat(0f, 1f);
+        overscrollAnimator.setDuration(700);
+        overscrollAnimator.setInterpolator(new LinearInterpolator());
+        overscrollAnimator.addUpdateListener(animation -> {
+            float time = (float) animation.getAnimatedValue();
+            setOverscrollOffset(MessagePopupPreviewGeometry.flingSpring(time, start, velocity, dp(96)));
+        });
+        overscrollAnimator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                overscrollAnimator = null;
+                setOverscrollOffset(0f);
+            }
+        });
+        overscrollAnimator.start();
+    }
+
     @Override
     protected void dispatchDraw(Canvas canvas) {
         if (opening && !closing) {
             opening = false;
-            scroll.scrollTo(0, 0);
+            scrollToOpeningPosition();
             drawingMessage = true;
             if (onReady != null) {
                 onReady.run();
@@ -236,9 +396,6 @@ public class MessagePopupPreviewLayout extends FrameLayout {
         if (transitionClosing) {
             if (transitionMessage != null) {
                 int saved = canvas.save();
-                if (overflow && progress == 1f) {
-                    canvas.clipRect(0, viewport.top - location[1], getWidth(), viewport.bottom - location[1]);
-                }
                 canvas.translate(drawnBounds.left, drawnBounds.top);
                 canvas.drawPicture(transitionMessage);
                 canvas.restoreToCount(saved);
@@ -264,11 +421,8 @@ public class MessagePopupPreviewLayout extends FrameLayout {
         float y = MessagePopupPreviewGeometry.position(sourceY, targetY, progress) - location[1];
         drawnBounds.set(x, y, x + sourceBounds.width(), y + sourceBounds.height());
         int saved = canvas.save();
-        // During the flight use the whole window, not the inset scrolling viewport.
-        // Only overflowing content needs clipping once it has reached the scroller.
-        if (overflow && progress == 1f && !closing) {
-            canvas.clipRect(0, viewport.top - location[1], getWidth(), viewport.bottom - location[1]);
-        }
+        // The inset viewport positions the scroller and menu; it must not cut the
+        // message at the status/action bar or bottom controls. Draw into the full window.
         canvas.translate(x - sourceBounds.left, y - sourceBounds.top);
         source.draw(canvas);
         canvas.restoreToCount(saved);
@@ -286,9 +440,9 @@ public class MessagePopupPreviewLayout extends FrameLayout {
     public boolean dispatchTouchEvent(MotionEvent event) {
         if (closing) return true;
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+            cancelOverscrollAnimation();
             source.getViewport(viewport);
-            boolean onMessage = viewport.contains(event.getRawX(), event.getRawY())
-                    && drawnBounds.contains(event.getX(), event.getY())
+            boolean onMessage = drawnBounds.contains(event.getX(), event.getY())
                     && source.contains(event.getX() - drawnBounds.left + sourceBounds.left,
                             event.getY() - drawnBounds.top + sourceBounds.top);
             outsideDown = !onMessage && !containsMenu(event.getRawX(), event.getRawY());
@@ -303,12 +457,14 @@ public class MessagePopupPreviewLayout extends FrameLayout {
             int slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
             if (Math.hypot(event.getX() - downX, event.getY() - downY) > slop) dragged = true;
         } else if (event.getActionMasked() == MotionEvent.ACTION_UP) {
+            releaseOverscroll();
             if (outsideDown && !dragged) {
                 outsideDown = false;
                 dismiss.run();
                 return true;
             }
         } else if (event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+            releaseOverscroll();
             outsideDown = false;
         }
         // Keep the gesture even in the gaps, so a swipe can scroll and a tap can dismiss.
@@ -337,6 +493,8 @@ public class MessagePopupPreviewLayout extends FrameLayout {
     }
 
     public void dispose() {
+        cancelOverscrollAnimation();
+        setOverscrollOffset(0f);
         opening = false;
         drawingMessage = false;
         onReady = null;

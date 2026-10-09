@@ -143,14 +143,7 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
             tabsBackgroundSource.setupRenderer(new RenderNodeWithHash.Renderer() {
                 @Override
                 public void renderNodeUpdateDisplayList(Canvas canvas) {
-                    canvas.drawColor(getThemedColor(Theme.key_windowBackgroundWhite));
-                    ChatActivity chat = chatContainer.chatActivity;
-                    if (ViewPositionWatcher.computeRectInParent(chat.contentView, fragmentView, chatPositionForTabs)) {
-                        canvas.save();
-                        canvas.translate(chatPositionForTabs.left, chatPositionForTabs.top);
-                        chat.drawFeedForTabs(canvas);
-                        canvas.restore();
-                    }
+                    drawTabsBackground(canvas);
                 }
             });
         }
@@ -168,6 +161,20 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
                 ? zxc.iconic.xenon.NekoConfig.getGlassBlurRadiusDp()
                 : Math.max(0, Math.min(100, zxc.iconic.xenon.NekoConfig.blurStrength)) * 4f / 3f;
         return AndroidUtilities.dpf2(radius);
+    }
+
+    private void drawTabsBackground(Canvas canvas) {
+        // Match DialogsActivity's source: without blur the tabs sit over a solid
+        // themed surface, rather than a sharp capture of the feed behind them.
+        canvas.drawColor(getThemedColor(Theme.key_windowBackgroundGray));
+        if (!org.telegram.messenger.SharedConfig.chatBlurEnabled()) return;
+        ChatActivity chat = chatContainer.chatActivity;
+        if (ViewPositionWatcher.computeRectInParent(chat.contentView, fragmentView, chatPositionForTabs)) {
+            canvas.save();
+            canvas.translate(chatPositionForTabs.left, chatPositionForTabs.top);
+            chat.drawFeedForTabs(canvas);
+            canvas.restore();
+        }
     }
 
     private void invalidateTabsBackground() {
@@ -574,6 +581,9 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
 
     @Override // org.telegram.ui.ActionBar.BaseFragment
     public void onTransitionAnimationStart(boolean z, boolean z2) {
+        if (!z && chatContainer != null) {
+            chatContainer.chatActivity.closeMessagePopupForTransition();
+        }
         if (this.hasMainTabs) {
             this.viewportFullyVisible = false;
             updateFeedViewportActive(false);
@@ -602,6 +612,12 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
             this.uiResumedHeld = false;
             FeedController.getInstance(this.currentAccount).setUiResumed(false);
         }
+    }
+
+    @Override
+    public void onBeginSlide() {
+        super.onBeginSlide();
+        if (chatContainer != null) chatContainer.chatActivity.closeMessagePopupForTransition();
     }
 
     private void updateFeedViewportActive(boolean z) {

@@ -5858,6 +5858,20 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         }
     }
 
+    private void setMessageAlphaBounds(RectF bounds, int left, int top, int right, int bottom) {
+        // Alpha layers normally discard the part outside the chat list. The popup
+        // draws this cell at a different position and scrolls it independently.
+        if (!drawingMessagePopup) {
+            if (getY() < 0) {
+                top = (int) -getY();
+            }
+            if (getY() + getMeasuredHeight() > parentHeight) {
+                bottom = (int) (parentHeight - getY());
+            }
+        }
+        bounds.set(left, top, right, bottom);
+    }
+
     public void setVisiblePart(
         int position,
         int height,
@@ -16979,13 +16993,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                         if (caption) {
                             rect.set(getCurrentBackgroundLeft() - dp(10), top, currentBackgroundDrawable.getBounds().right + dp(10), bottom);
                         } else {
-                            if (getY() < 0) {
-                                top = (int) -getY();
-                            }
-                            if (getY() + getMeasuredHeight() > parentHeight) {
-                                bottom = (int) (parentHeight - getY());
-                            }
-                            rect.set(getCurrentBackgroundLeft(), top, currentBackgroundDrawable.getBounds().right, bottom);
+                            setMessageAlphaBounds(rect, getCurrentBackgroundLeft(), top,
+                                    currentBackgroundDrawable.getBounds().right, bottom);
                         }
                     } else {
                         rect.set(0, 0, getMeasuredWidth(), getMeasuredHeight());
@@ -20350,13 +20359,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     right += dp(8 + 32);
                 }
             }
-            if (getY() < 0) {
-                top = (int) -getY();
-            }
-            if (getY() + getMeasuredHeight() > parentHeight) {
-                bottom = (int) (parentHeight - getY());
-            }
-            rect.set(left, top, right, bottom);
+            setMessageAlphaBounds(rect, left, top, right, bottom);
             canvas.saveLayerAlpha(rect, (int) (255 * alphaInternal), Canvas.ALL_SAVE_FLAG);
         }
         boolean clipContent = false;

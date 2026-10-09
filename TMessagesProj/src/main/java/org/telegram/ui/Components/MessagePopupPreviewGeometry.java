@@ -13,6 +13,29 @@ public final class MessagePopupPreviewGeometry {
         return messageHeight + gap + menuHeight > available;
     }
 
+    public static int openingScroll(int contentHeight, int viewportHeight) {
+        return Math.max(0, contentHeight - viewportHeight);
+    }
+
+    public static float overscroll(float offset, float distance, float limit) {
+        if (limit <= 0) return 0;
+        float resistance = .35f * Math.max(.08f, 1f - Math.abs(offset) / limit);
+        return Math.max(-limit, Math.min(limit, offset + distance * resistance));
+    }
+
+    public static float flingSpring(float progress, float start, float velocity, float limit) {
+        if (progress <= 0f) return start;
+        if (progress >= 1f) return 0f;
+        // One critically damped spring, driven by the incoming velocity. Its speed
+        // naturally reaches zero at the peak and changes direction without a seam.
+        float stiffness = 12f;
+        float maxVelocity = Math.max(0f, limit) * stiffness * (float) Math.E;
+        float impulse = -Math.max(-maxVelocity, Math.min(velocity, maxVelocity));
+        float seconds = progress * .7f;
+        return (start + (impulse + stiffness * start) * seconds)
+                * (float) Math.exp(-stiffness * seconds);
+    }
+
     public static float destinationTop(float viewportTop, float placeholderTop, int scrollY) {
         // A newly opened preview must show its header; only scrolling may move it above the viewport.
         return scrollY == 0 ? Math.max(viewportTop, placeholderTop) : placeholderTop;
