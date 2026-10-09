@@ -5,10 +5,9 @@ import static org.telegram.messenger.AndroidUtilities.dpf2;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
-import android.graphics.Bitmap;
 import android.graphics.Canvas;
-import android.graphics.Matrix;
 import android.graphics.Paint;
+import android.graphics.RenderNode;
 import android.graphics.Shader;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.ColorDrawable;
@@ -22,9 +21,8 @@ import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.NotificationCenter;
 import org.telegram.ui.ActionBar.Theme;
-import org.telegram.ui.Components.BackgroundGradientDrawable;
-import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.MotionBackgroundDrawable;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawableRenderNode;
@@ -36,25 +34,26 @@ import zxc.iconic.xenon.NekoConfig;
 /**
  * Live preview of a glass surface on top of the current chat wallpaper.
  * The wallpaper is drawn full-bleed (center-cropped) and recorded into the
- * backing {@link BlurredBackgroundSourceRenderNode}. In advanced glass mode the
- * source stays raw, matching the runtime chat path where Telegram's stock
- * frosted pre-blur is disabled before our AGSL shader samples the scene.
+ * backing {@link BlurredBackgroundSourceRenderNode}. The source uses the same
+ * blur settings as the runtime chat path.
  * Sliders call {@link #invalidateGlass()} and force a redraw.
  */
 @SuppressLint("ViewConstructor")
-public class GlassPreviewCell extends View {
+public class GlassPreviewCell extends View implements NotificationCenter.NotificationCenterDelegate {
 
     private final Theme.ResourcesProvider resourcesProvider;
 
-    // Source pipeline: wallpaperBitmap -> renderNodeSource (with blur) -> glassDrawable
-    @Nullable private Bitmap wallpaperBitmap;
+    // Keep wallpaper rendering on the hardware canvas: some wallpaper shaders
+    // cannot be captured reliably into a software bitmap.
+    private final RenderNode wallpaperNode = new RenderNode("GlassPreviewWallpaper");
     @Nullable private final BlurredBackgroundSourceRenderNode renderNodeSource;
     @Nullable private BlurredBackgroundDrawable glassDrawable;
 
     private final android.graphics.RectF bubbleRect = new android.graphics.RectF();
     private final float cornerRadius;
     private boolean lastAdvanced;
-    private BackgroundGradientDrawable.Disposable backgroundGradientDisposable;
+    @Nullable private Drawable capturedWallpaper;
+    private boolean wallpaperDirty = true;
 
     @RequiresApi(api = 33)
     public GlassPreviewCell(Context context, Theme.ResourcesProvider resourcesProvider) {
@@ -72,7 +71,9 @@ public class GlassPreviewCell extends View {
 
     private void rebuildGlass() {
         if (renderNodeSource == null) return;
+        if (glassDrawable != null) glassDrawable.setCallback(null);
         glassDrawable = renderNodeSource.createDrawable();
+        glassDrawable.setCallback(this);
         if (glassDrawable instanceof BlurredBackgroundDrawableRenderNode) {
             ((BlurredBackgroundDrawableRenderNode) glassDrawable).setLiquidGlassEffectAllowed();
         }
@@ -108,7 +109,7 @@ public class GlassPreviewCell extends View {
 
     /**
      * Match the source preparation used by the real chat pipeline.
-     * Advanced glass samples the raw scene; standard liquid glass keeps the
+     * Advanced glass uses the blur slider; standard liquid glass keeps the
      * legacy frosted backing blur.
      */
     private void refreshRenderNodeBlur() {
@@ -129,7 +130,6 @@ public class GlassPreviewCell extends View {
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
         final float hm = dp(21);
-        final float vm = dp(28);
         final float bh = dp(56);
         final float cy = getMeasuredHeight() / 2f;
         bubbleRect.set(hm, cy - bh / 2f, getMeasuredWidth() - hm, cy + bh / 2f);
@@ -147,49 +147,34 @@ public class GlassPreviewCell extends View {
     // ---------------------------------------------------------------------------
 
     /**
-     * Rasterises the current wallpaper into a bitmap, then records that bitmap
-     * into the backing RenderNode. Advanced glass intentionally keeps this
-     * backing source unblurred so the shader samples the real scene instead of
-     * Telegram's matte frosted texture.
+     * Records the wallpaper on a hardware canvas and shares that recording
+     * with the visible background and the blurred glass source.
      */
     private void captureWallpaper() {
         if (getMeasuredWidth() <= 0 || getMeasuredHeight() <= 0 || renderNodeSource == null) return;
 
-        final Drawable wallpaper = Theme.getCachedWallpaperNonBlocking();
-        if (wallpaper == null) {
-            wallpaperBitmap = null;
-            return;
+        final Drawable currentWallpaper = Theme.getCachedWallpaperNonBlocking();
+        // Keep the last image while a new wallpaper is loading. On first load,
+        // record a theme-colored fallback so the glass source is never empty.
+        final Drawable wallpaper = currentWallpaper != null ? currentWallpaper : capturedWallpaper;
+        final Drawable drawable = wallpaper != null ? wallpaper
+                : new ColorDrawable(Theme.getColor(Theme.key_windowBackgroundGray, resourcesProvider));
+        final Canvas wallpaperCanvas = wallpaperNode.beginRecording(getMeasuredWidth(), getMeasuredHeight());
+        try {
+            drawWallpaperDrawable(wallpaperCanvas, drawable, getMeasuredWidth(), getMeasuredHeight());
+            drawPreviewStripes(wallpaperCanvas);
+        } finally {
+            wallpaperNode.endRecording();
         }
-        wallpaper.setAlpha(255);
-        wallpaperBitmap = centerCropDrawable(wallpaper, getMeasuredWidth(), getMeasuredHeight());
+        wallpaperNode.setPosition(0, 0, getMeasuredWidth(), getMeasuredHeight());
+        capturedWallpaper = wallpaper;
+        wallpaperDirty = false;
 
-        // Paint colorful stripes behind the glass area
-        Paint stripePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        stripePaint.setStrokeWidth(dp(12));
-        stripePaint.setAlpha(70);
-        if (!bubbleRect.isEmpty()) {
-            Canvas stripeCanvas = new Canvas(wallpaperBitmap);
-            stripeCanvas.clipRect(bubbleRect);
-            int[] colors = {
-                    0xFF757575, 0xFF9E9E9E, 0xFFBDBDBD,
-                    0xFF9E9E9E, 0xFF757575, 0xFFFFFFFF
-            };
-            float[] angles = { -30, -15, 0, 15, 30, 45 };
-            float cx = getMeasuredWidth() / 2f, cy = getMeasuredHeight() / 2f;
-            float len = (float) Math.sqrt(getMeasuredWidth() * getMeasuredWidth() + getMeasuredHeight() * getMeasuredHeight());
-            for (int i = 0; i < colors.length; i++) {
-                stripePaint.setColor(colors[i]);
-                stripeCanvas.save();
-                stripeCanvas.rotate(angles[i], cx, cy);
-                stripeCanvas.drawLine(cx - len / 2f, cy, cx + len / 2f, cy, stripePaint);
-                stripeCanvas.restore();
-            }
-        }
-
-        // Record the wallpaper bitmap into the RenderNode source.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            final Canvas c = renderNodeSource.beginRecording(getMeasuredWidth(), getMeasuredHeight());
-            c.drawBitmap(wallpaperBitmap, 0f, 0f, null);
+        // Use exactly the same recording for the visible wallpaper and the glass.
+        final Canvas c = renderNodeSource.beginRecording(getMeasuredWidth(), getMeasuredHeight());
+        try {
+            c.drawRenderNode(wallpaperNode);
+        } finally {
             renderNodeSource.endRecording();
         }
         refreshRenderNodeBlur();
@@ -207,47 +192,50 @@ public class GlassPreviewCell extends View {
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
         super.onDraw(canvas);
+        final Drawable wallpaper = Theme.getCachedWallpaperNonBlocking();
+        if (wallpaperDirty || !wallpaperNode.hasDisplayList()
+                || (wallpaper != null && wallpaper != capturedWallpaper)) {
+            captureWallpaper();
+        }
         drawWallpaper(canvas);
         drawBubble(canvas);
+        if (Theme.wallpaperLoadTask != null) postInvalidateOnAnimation();
     }
 
     private void drawWallpaper(@NonNull Canvas canvas) {
-        final Drawable d = Theme.getCachedWallpaperNonBlocking();
-        if (d == null) {
-            canvas.drawColor(Theme.getColor(Theme.key_windowBackgroundGray, resourcesProvider));
-            return;
-        }
-        d.setAlpha(255);
-        final int w = getMeasuredWidth(), h = getMeasuredHeight();
-        if (d instanceof BackgroundGradientDrawable bgd) {
-            backgroundGradientDisposable = bgd.drawExactBoundsSize(canvas, this);
-        } else if (d instanceof ColorDrawable || d instanceof GradientDrawable
-                || d instanceof MotionBackgroundDrawable) {
-            d.setBounds(0, 0, w, h);
-            d.draw(canvas);
-        } else if (d instanceof BitmapDrawable bmd) {
-            if (bmd.getTileModeX() == Shader.TileMode.REPEAT) {
-                canvas.save();
-                float scale = 2.0f / AndroidUtilities.density;
-                canvas.scale(scale, scale);
-                d.setBounds(0, 0, (int) Math.ceil(w / scale), (int) Math.ceil(h / scale));
-                d.draw(canvas);
-                canvas.restore();
-            } else {
-                float sx = (float) w / d.getIntrinsicWidth();
-                float sy = (float) h / d.getIntrinsicHeight();
-                float sc = Math.max(sx, sy);
-                int dw = (int) Math.ceil(d.getIntrinsicWidth() * sc);
-                int dh = (int) Math.ceil(d.getIntrinsicHeight() * sc);
-                canvas.save();
-                canvas.clipRect(0, 0, w, h);
-                d.setBounds((w - dw) / 2, (h - dh) / 2, (w + dw) / 2, (h + dh) / 2);
-                d.draw(canvas);
-                canvas.restore();
-            }
+        if (canvas.isHardwareAccelerated() && wallpaperNode.hasDisplayList()) {
+            canvas.drawRenderNode(wallpaperNode);
         } else {
-            d.setBounds(0, 0, w, h);
-            d.draw(canvas);
+            final Drawable drawable = capturedWallpaper != null ? capturedWallpaper
+                    : new ColorDrawable(Theme.getColor(Theme.key_windowBackgroundGray, resourcesProvider));
+            drawWallpaperDrawable(canvas, drawable, getMeasuredWidth(), getMeasuredHeight());
+            drawPreviewStripes(canvas);
+        }
+    }
+
+    private void drawPreviewStripes(@NonNull Canvas canvas) {
+        if (bubbleRect.isEmpty()) return;
+        final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        paint.setStrokeWidth(dp(12));
+        final int[] colors = {
+                0xFF757575, 0xFF9E9E9E, 0xFFBDBDBD,
+                0xFF9E9E9E, 0xFF757575, 0xFFFFFFFF
+        };
+        final float[] angles = { -30, -15, 0, 15, 30, 45 };
+        final float cx = getMeasuredWidth() / 2f, cy = getMeasuredHeight() / 2f;
+        final float len = (float) Math.hypot(getMeasuredWidth(), getMeasuredHeight());
+        final int save = canvas.save();
+        try {
+            canvas.clipRect(bubbleRect);
+            for (int i = 0; i < colors.length; i++) {
+                paint.setColor(colors[i]);
+                final int stripeSave = canvas.save();
+                canvas.rotate(angles[i], cx, cy);
+                canvas.drawLine(cx - len / 2f, cy, cx + len / 2f, cy, paint);
+                canvas.restoreToCount(stripeSave);
+            }
+        } finally {
+            canvas.restoreToCount(save);
         }
     }
 
@@ -266,47 +254,42 @@ public class GlassPreviewCell extends View {
     }
 
     // ---------------------------------------------------------------------------
-    // Bitmap helpers
+    // Wallpaper drawing
     // ---------------------------------------------------------------------------
 
-    private static @NonNull Bitmap centerCropDrawable(@NonNull Drawable d, int w, int h) {
-        if (d instanceof BitmapDrawable bmd && bmd.getBitmap() != null && !bmd.getBitmap().isRecycled()) {
-            return centerCropBitmap(bmd.getBitmap(), w, h);
-        }
-        final Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-        final Canvas c = new Canvas(out);
-        if (d instanceof ColorDrawable || d instanceof GradientDrawable || d instanceof MotionBackgroundDrawable
-                || d instanceof BackgroundGradientDrawable) {
-            d.setBounds(0, 0, w, h);
-            d.draw(c);
-        } else {
-            final int dw = d.getIntrinsicWidth(), dh = d.getIntrinsicHeight();
-            if (dw > 0 && dh > 0) {
-                final float sc = Math.max((float) w / dw, (float) h / dh);
-                final int sw = Math.round(dw * sc), sh = Math.round(dh * sc);
-                d.setBounds((w - sw) / 2, (h - sh) / 2, (w + sw) / 2, (h + sh) / 2);
-            } else {
+    private static void drawWallpaperDrawable(@NonNull Canvas c, @NonNull Drawable d, int w, int h) {
+        // Theme owns this drawable and other views share it. Restore its state
+        // after capture rather than leaving preview bounds/alpha on the wallpaper.
+        final android.graphics.Rect bounds = new android.graphics.Rect(d.getBounds());
+        final int alpha = d.getAlpha();
+        final int save = c.save();
+        try {
+            c.clipRect(0, 0, w, h);
+            // An opaque fallback also covers wallpapers that are not ready yet.
+            c.drawColor(Theme.getColor(Theme.key_windowBackgroundGray));
+            d.setAlpha(255);
+            if (d instanceof BitmapDrawable bmd && bmd.getTileModeX() == Shader.TileMode.REPEAT) {
+                final float scale = 2f / AndroidUtilities.density;
+                c.scale(scale, scale);
+                d.setBounds(0, 0, (int) Math.ceil(w / scale), (int) Math.ceil(h / scale));
+            } else if (d instanceof ColorDrawable || d instanceof GradientDrawable || d instanceof MotionBackgroundDrawable) {
                 d.setBounds(0, 0, w, h);
+            } else {
+                final int dw = d.getIntrinsicWidth(), dh = d.getIntrinsicHeight();
+                if (dw > 0 && dh > 0) {
+                    final float sc = Math.max((float) w / dw, (float) h / dh);
+                    final int sw = Math.round(dw * sc), sh = Math.round(dh * sc);
+                    d.setBounds((w - sw) / 2, (h - sh) / 2, (w + sw) / 2, (h + sh) / 2);
+                } else {
+                    d.setBounds(0, 0, w, h);
+                }
             }
             d.draw(c);
+        } finally {
+            d.setBounds(bounds);
+            d.setAlpha(alpha);
+            c.restoreToCount(save);
         }
-        return out;
-    }
-
-    private static @NonNull Bitmap centerCropBitmap(@NonNull Bitmap src, int w, int h) {
-        final float sc = Math.max((float) w / src.getWidth(), (float) h / src.getHeight());
-        final int sw = Math.round(src.getWidth() * sc), sh = Math.round(src.getHeight() * sc);
-        final Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-        final Canvas c = new Canvas(out);
-        // Draw the full source bitmap scaled to cover (w x h) with centre alignment.
-        // Previously a Matrix was created but never passed to drawBitmap, so the
-        // bitmap was drawn at 1:1 pixels (showing only a corner, not a center crop).
-        final android.graphics.RectF dst = new android.graphics.RectF(
-                (w - sw) / 2f, (h - sh) / 2f, (w + sw) / 2f, (h + sh) / 2f);
-        final android.graphics.Paint p = new android.graphics.Paint(
-                android.graphics.Paint.FILTER_BITMAP_FLAG | android.graphics.Paint.ANTI_ALIAS_FLAG);
-        c.drawBitmap(src, null, dst, p);
-        return out;
     }
 
     // ---------------------------------------------------------------------------
@@ -314,12 +297,30 @@ public class GlassPreviewCell extends View {
     // ---------------------------------------------------------------------------
 
     @Override
-    protected void onDetachedFromWindow() {
-        super.onDetachedFromWindow();
-        if (backgroundGradientDisposable != null) {
-            backgroundGradientDisposable.dispose();
-            backgroundGradientDisposable = null;
+    protected boolean verifyDrawable(@NonNull Drawable who) {
+        return who == glassDrawable || super.verifyDrawable(who);
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.didSetNewWallpapper);
+        wallpaperDirty = true;
+        invalidateGlass();
+    }
+
+    @Override
+    public void didReceivedNotification(int id, int account, Object... args) {
+        if (id == NotificationCenter.didSetNewWallpapper) {
+            wallpaperDirty = true;
+            invalidate();
         }
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.didSetNewWallpapper);
+        super.onDetachedFromWindow();
     }
 
     public static int heightDp()  { return 140; }

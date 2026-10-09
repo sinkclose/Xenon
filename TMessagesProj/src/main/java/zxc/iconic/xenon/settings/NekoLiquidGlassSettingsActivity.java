@@ -180,12 +180,17 @@ public class NekoLiquidGlassSettingsActivity extends BaseNekoSettingsActivity {
                 LocaleController.getString(R.string.UseAdvancedLiquidGlass),
                 LocaleController.getString(R.string.UseAdvancedLiquidGlassDesc))
                 .slug("useAdvancedLiquidGlass").setChecked(NekoConfig.useAdvancedLiquidGlass));
+        items.add(UItem.asCheck(advancedGlassTintBlackWhiteRow,
+                        LocaleController.getString(R.string.AdvancedGlassTintBlackWhite),
+                        LocaleController.getString(R.string.AdvancedGlassTintBlackWhiteDesc))
+                .slug("advancedGlassTintBlackWhite")
+                .setChecked(NekoConfig.advancedGlassTintBlackWhite));
         items.add(UItem.asShadow(null));
 
         // --- Live preview ---
         ensurePreviewCreated();
         if (previewContainer != null) {
-            UItem pi = UItem.asCustom(previewContainer);
+            UItem pi = UItem.asCustom(previewContainer, GlassPreviewCell.heightDp() + 16);
             pi.id = previewRow;
             items.add(pi);
             items.add(UItem.asShadow(null));
@@ -216,11 +221,6 @@ public class NekoLiquidGlassSettingsActivity extends BaseNekoSettingsActivity {
                                 }
                             }),
                     Math.round(NekoConfig.advancedGlassDispersion * 100)).slug("advancedGlassDispersion"));
-            items.add(UItem.asCheck(advancedGlassTintBlackWhiteRow,
-                            LocaleController.getString(R.string.AdvancedGlassTintBlackWhite),
-                            LocaleController.getString(R.string.AdvancedGlassTintBlackWhiteDesc))
-                    .slug("advancedGlassTintBlackWhite")
-                    .setChecked(NekoConfig.advancedGlassTintBlackWhite));
         } else {
             items.add(SeekbarCellFactory.of(liquidGlassIntensityRow,
                     new SeekbarConfig(LocaleController.getString(R.string.LiquidGlassIntensity),
@@ -260,6 +260,12 @@ public class NekoLiquidGlassSettingsActivity extends BaseNekoSettingsActivity {
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        invalidatePreview();
+    }
+
+    @Override
     protected void onItemClick(UItem item, View view, int position, float x, float y) {
         if (!item.enabled) return;
         final int id = item.id;
@@ -279,6 +285,7 @@ public class NekoLiquidGlassSettingsActivity extends BaseNekoSettingsActivity {
                 ((TextCheckCell) view).setChecked(NekoConfig.forceBlurLiquidGlass);
             }
             listView.adapter.update(true);
+            listView.post(this::invalidatePreview);
         } else if (id == disableScrimBlurRow) {
             NekoConfig.toggleDisableScrimBlur();
             if (view instanceof TextCheckCell) {

@@ -80,6 +80,13 @@ public class LiquidGlassEffect {
             float rLT, float rRT, float rRB, float rLB,
             float thickness, float intensity, float index, int foregroundColor
     ) {
+        if (!advanced && org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl.isBlackWhiteTintEnabled()) {
+            // B/W has no accent RGB to blend. Control the premultiplied tint's
+            // opacity instead, before comparing the cached uniform values.
+            final float strength = Math.max(0f, Math.min(1f,
+                    zxc.iconic.xenon.NekoConfig.advancedGlassTintPercent / 100f));
+            foregroundColor = org.telegram.ui.ActionBar.Theme.multAlpha(foregroundColor, strength);
+        }
         float resX = node.getWidth();
         float resY = node.getHeight();
         float cX = (left + right) / 2f;
