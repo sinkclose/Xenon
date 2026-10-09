@@ -27,6 +27,7 @@ import org.telegram.messenger.Utilities;
 import org.telegram.ui.Adapters.FiltersView;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.LiquidTouchEffect;
+import org.telegram.ui.Components.LiquidTouchDispatcher;
 import org.telegram.ui.Components.LiquidPressAnimationSuppressor;
 import org.telegram.ui.Components.RLottieDrawable;
 
@@ -35,7 +36,7 @@ import java.util.Map;
 
 import me.vkryl.android.animator.FactorAnimator;
 
-public class ActionBarMenu extends LinearLayout {
+public class ActionBarMenu extends LinearLayout implements LiquidTouchDispatcher.Target {
 
     public boolean drawBlur = true;
     protected ActionBar parentActionBar;
@@ -744,14 +745,19 @@ public class ActionBarMenu extends LinearLayout {
     }
 
     @Override
-    public boolean dispatchTouchEvent(MotionEvent ev) {
+    public void observeLiquidTouch(MotionEvent ev) {
         boolean enabled = liquidTouchAllowed();
         liquidPressAnimations.sync(this, enabled);
         if (liquidTouch != null) {
             liquidTouch.onTouchEvent(ev, enabled);
         }
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (!LiquidTouchDispatcher.isDispatchingControls()) observeLiquidTouch(ev);
         boolean handled = super.dispatchTouchEvent(ev);
-        if (!handled && ev.getActionMasked() == MotionEvent.ACTION_DOWN && liquidTouch != null) liquidTouch.reset();
+        if (!LiquidTouchDispatcher.isDispatchingControls() && !handled && ev.getActionMasked() == MotionEvent.ACTION_DOWN && liquidTouch != null) liquidTouch.reset();
         return handled;
     }
 

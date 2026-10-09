@@ -133,7 +133,8 @@
     <string name="MainTabsPreviewHint">Tap a tab to enable or disable it. Long-press and drag to reorder.</string>
     <string name="MainTabsShowTitle">Show tab titles</string>
     <string name="OpenBottomTabsSettings">Open bottom tabs settings</string>
-    <string name="HoldToOpenPopup">Hold to open popup (does not work yet, but will be fixed someday)</string>
+    <string name="HoldToOpenPopup">Hold to open popup</string>
+    <string name="ShowMessageAbovePopup">Show message above popup</string>
     <string name="PopupHoldTime">Time to hold</string>
     <string name="MaterialDesign3">Material Design 3</string>
     <string name="LoadingIndicators">Loading indicators</string>
@@ -685,6 +686,7 @@
     <string name="CustomizeMentionMenu">Customize mention menu</string>
     <string name="MarkdownParserXenon">Xenon</string>
     <string name="MarkdownParserTelegram">Telegram</string>
+    <string name="GifsUnavailableForAnotherAccount">Sending GIFs from another account is currently unavailable.</string>
 </resources>
 
 

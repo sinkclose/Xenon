@@ -322,6 +322,7 @@ public class NekoConfig {
     public static boolean wavyEnabled = true;
     public static boolean wavyProgressEnabled = true;
     public static boolean holdToOpenPopup = false;
+    public static boolean showMessageAbovePopup = false;
     public static float popupHoldTime = 0.5f;
     public static boolean swipeOtherBubbles = false;
     public static boolean swipeBubbleShowNames = false;
@@ -553,6 +554,7 @@ public class NekoConfig {
             wavyEnabled = preferences.getBoolean("wavyEnabled", true);
             wavyProgressEnabled = preferences.getBoolean("wavyProgressEnabled", true);
             holdToOpenPopup = preferences.getBoolean("holdToOpenPopup", false);
+            showMessageAbovePopup = preferences.getBoolean("showMessageAbovePopup", false);
             popupHoldTime = preferences.getFloat("popupHoldTime", 0.5f);
             swipeOtherBubbles = preferences.getBoolean("swipeOtherBubbles", false);
             swipeBubbleShowNames = preferences.getBoolean("swipeBubbleShowNames", false);
@@ -2214,6 +2216,12 @@ public class NekoConfig {
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("holdToOpenPopup", holdToOpenPopup);
         editor.apply();
+    }
+
+    public static void toggleShowMessageAbovePopup() {
+        showMessageAbovePopup = !showMessageAbovePopup;
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
+                .edit().putBoolean("showMessageAbovePopup", showMessageAbovePopup).apply();
     }
 
     public static void toggleSwipeOtherBubbles() {

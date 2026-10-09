@@ -565,7 +565,8 @@
     <string name="DisableGlassGlare">Отключить блики стекла</string>
     <string name="CopyError">Копировать ошибку</string>
     <string name="ErrorCopied">Ошибка скопирована</string>
-    <string name="HoldToOpenPopup">Открытие попапа удержанием (пока не работает, но будет исправлено когда-нибудь)</string>
+    <string name="HoldToOpenPopup">Открытие попапа удержанием</string>
+    <string name="ShowMessageAbovePopup">Показывать сообщение над попапом</string>
     <string name="PopupHoldTime">Время удержания</string>
     <string name="MaterialDesign3">Material Design 3</string>
     <string name="LoadingIndicators">Индикаторы загрузки</string>
@@ -678,5 +679,6 @@
     <string name="CustomizeMentionMenu">Настройка меню упоминаний</string>
     <string name="MarkdownParserXenon">Xenon</string>
     <string name="MarkdownParserTelegram">Telegram</string>
+    <string name="GifsUnavailableForAnotherAccount">Сейчас отправлять GIF через другой аккаунт нельзя.</string>
 </resources>
 

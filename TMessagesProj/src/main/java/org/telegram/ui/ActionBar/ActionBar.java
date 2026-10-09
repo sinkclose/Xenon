@@ -66,6 +66,7 @@ import org.telegram.ui.Components.EllipsizeSpanAnimator;
 import org.telegram.ui.Components.FireworksEffect;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.LiquidTouchEffect;
+import org.telegram.ui.Components.LiquidTouchDispatcher;
 import org.telegram.ui.Components.LiquidPressAnimationSuppressor;
 import org.telegram.ui.Components.SectionsScrollView;
 import org.telegram.ui.Components.SizeNotifierFrameLayout;
@@ -81,7 +82,7 @@ import me.vkryl.android.animator.BoolAnimator;
 import me.vkryl.android.animator.FactorAnimator;
 import me.vkryl.android.animator.ReplaceAnimator;
 
-public class ActionBar extends FrameLayout implements FactorAnimator.Target, Theme.Colorable {
+public class ActionBar extends FrameLayout implements FactorAnimator.Target, Theme.Colorable, LiquidTouchDispatcher.Target {
 
     public static class ActionBarMenuOnItemClick {
         public void onItemClick(int id) {
@@ -2090,9 +2091,9 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
                     child = findChildUnder(this, x, y, null);
                 }
                 if (child == chatAvatarContainer) {
-                    observeLiquidTouch(ev);
+                    if (!LiquidTouchDispatcher.isDispatchingControls()) observeLiquidTouch(ev);
                     boolean handled = super.dispatchTouchEvent(ev);
-                    if (!handled) resetLiquidTouch();
+                    if (!LiquidTouchDispatcher.isDispatchingControls() && !handled) resetLiquidTouch();
                     return handled;
                 }
 
@@ -2109,9 +2110,9 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             }
         }
 
-        observeLiquidTouch(ev);
+        if (!LiquidTouchDispatcher.isDispatchingControls()) observeLiquidTouch(ev);
         boolean handled = super.dispatchTouchEvent(ev);
-        if (!handled) resetLiquidTouch();
+        if (!LiquidTouchDispatcher.isDispatchingControls() && !handled) resetLiquidTouch();
         return handled;
     }
 
@@ -2565,7 +2566,8 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
                 ? effect.begin(canvas) : -1;
     }
 
-    private void observeLiquidTouch(MotionEvent event) {
+    @Override
+    public void observeLiquidTouch(MotionEvent event) {
         if (liquidBack == null) return;
         boolean enabled = liquidTouchAllowed();
         liquidPressAnimations.sync(this, enabled);

@@ -70,6 +70,7 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
     private final int blurPopupInChatRow = rowId++;
     private final int holdToOpenPopupRow = rowId++;
     private final int popupHoldTimeRow = rowId++;
+    private final int showMessageAbovePopupRow = rowId++;
 
     private final int transcribeProviderRow = rowId++;
     private final int cfCredentialsRow = rowId++;
@@ -188,6 +189,7 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
         items.add(UItem.asHeader(LocaleController.getString(R.string.ChatPopupSection)));
         items.add(UItem.asCheck(blurPopupInChatRow, LocaleController.getString(R.string.BlurPopupInChat)).setChecked(NekoConfig.blurPopupInChat).slug("blurPopupInChat"));
         items.add(UItem.asCheck(holdToOpenPopupRow, LocaleController.getString(R.string.HoldToOpenPopup)).setChecked(NekoConfig.holdToOpenPopup).slug("holdToOpenPopup"));
+        items.add(UItem.asCheck(showMessageAbovePopupRow, LocaleController.getString(R.string.ShowMessageAbovePopup)).setChecked(NekoConfig.showMessageAbovePopup).slug("showMessageAbovePopup"));
         if (NekoConfig.holdToOpenPopup) {
             SeekbarConfig holdTimeConfig = new SeekbarConfig(
                     LocaleController.getString(R.string.PopupHoldTime),
@@ -485,6 +487,11 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
             NekoConfig.toggleBlurPopupInChat();
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.blurPopupInChat);
+            }
+        } else if (id == showMessageAbovePopupRow) {
+            NekoConfig.toggleShowMessageAbovePopup();
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.showMessageAbovePopup);
             }
         } else if (id == holdToOpenPopupRow) {
             NekoConfig.toggleHoldToOpenPopup();

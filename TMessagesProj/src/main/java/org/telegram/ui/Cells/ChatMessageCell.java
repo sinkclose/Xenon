@@ -612,6 +612,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         default void didLongPress(ChatMessageCell cell, float x, float y) {
         }
 
+        default boolean isHoldingMessagePopup(ChatMessageCell cell) {
+            return false;
+        }
+
         default void didPressReplyMessage(ChatMessageCell cell, int id, float x, float y, boolean longpress) {
         }
 
@@ -5835,6 +5839,25 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     public int visibleParent;
     public float visibleParentOffset;
     public float visibleTop;
+    private boolean drawingMessagePopup;
+
+    /** Draw all text blocks even when this live cell is partly outside the chat viewport. */
+    public void drawMessagePopup(Canvas canvas) {
+        int position = childPosition, height = visibleHeight, position2 = childPosition2;
+        boolean newVisiblePart = needNewVisiblePart;
+        drawingMessagePopup = true;
+        setVisiblePart(0, getHeight(), visibleParent, visibleParentOffset, visibleTop,
+                parentWidth, backgroundHeight, blurredViewTopOffset, blurredViewBottomOffset, childPosition2);
+        try {
+            draw(canvas);
+        } finally {
+            drawingMessagePopup = false;
+            setVisiblePart(position, height, visibleParent, visibleParentOffset, visibleTop,
+                    parentWidth, backgroundHeight, blurredViewTopOffset, blurredViewBottomOffset, position2);
+            needNewVisiblePart = newVisiblePart;
+        }
+    }
+
     public void setVisiblePart(
         int position,
         int height,
@@ -12149,6 +12172,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
 
     @Override
     protected boolean onLongPress() {
+        if (delegate != null && delegate.isHoldingMessagePopup(this)) {
+            return false;
+        }
         if (isRoundVideo && isPlayingRound && MediaController.getInstance().isPlayingMessage(currentMessageObject)) {
             float touchRadius = (lastTouchX - photoImage.getCenterX()) * (lastTouchX - photoImage.getCenterX()) + (lastTouchY - photoImage.getCenterY()) * (lastTouchY - photoImage.getCenterY());
             float r1 = (photoImage.getImageWidth() / 2f) * (photoImage.getImageWidth() / 2f);
@@ -14335,7 +14361,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         }
         boolean newPart = needNewVisiblePart && currentMessageObject.type == MessageObject.TYPE_TEXT, hasSpoilers = hasSpoilers();
         if (newPart || hasSpoilers) {
-            getLocalVisibleRect(scrollRect);
+            if (drawingMessagePopup) {
+                scrollRect.set(0, 0, getWidth(), getHeight());
+            } else {
+                getLocalVisibleRect(scrollRect);
+            }
             if (hasSpoilers) {
                 updateSpoilersVisiblePart(scrollRect.top, scrollRect.bottom);
             }

@@ -1102,8 +1102,13 @@ public class ChatActivity extends BaseFragment implements
     private View popupBlurWaitingView;
     private boolean popupBlurPending;
     private Runnable holdPopupRunnable;
-    private Runnable holdOpenRunnable;
     private View holdPopupView;
+    private MessagePopupPreviewLayout messagePopupPreviewLayout;
+    private MessageObject messagePopupPreviewMessage;
+    private ValueAnimator holdPopupAnimator;
+    private boolean holdPopupOpened;
+    private float holdPopupDownX, holdPopupDownY;
+    private float holdPopupScaleX, holdPopupScaleY, holdPopupPivotX, holdPopupPivotY;
     private final Runnable updateDeleteItemRunnable = new Runnable() {
         @Override
         public void run() {
@@ -1873,6 +1878,9 @@ public class ChatActivity extends BaseFragment implements
             if (isTryingTextSelection() || hasTextSelection() || inPreviewMode || isInsideContainer) {
                 return false;
             }
+            if (NekoConfig.holdToOpenPopup) {
+                return false;
+            }
             wasManualScroll = true;
             boolean result = true;
             boolean showMenu = true;
@@ -1883,9 +1891,6 @@ public class ChatActivity extends BaseFragment implements
                 showMenu = messageObject.messageOwner.action instanceof TLRPC.TL_messageActionSetMessagesTTL || actionCell.getMessageObject().type == MessageObject.TYPE_SUGGEST_PHOTO || actionCell.getMessageObject().isWallpaperAction() || actionCell.getMessageObject().type == MessageObject.TYPE_GIFT_STARS;
             }
             if (!actionBar.isActionModeShowed() && (!isReport() || showMenu)) {
-                if (NekoConfig.holdToOpenPopup) {
-                    return true;
-                }
                 result = createMenu(view, false, true, x, y, true);
             } else {
                 boolean outside = false;
@@ -1895,9 +1900,7 @@ public class ChatActivity extends BaseFragment implements
                 processRowSelect(view, outside, x, y);
             }
             if (view instanceof ChatMessageCell && (((ChatMessageCell) view).getMessageObject() != null && ((ChatMessageCell) view).getMessageObject().type != MessageObject.TYPE_JOINED_CHANNEL)) {
-                if (!NekoConfig.holdToOpenPopup) {
-                    startMultiselect(position);
-                }
+                startMultiselect(position);
                 result = true;
             }
             return result;
@@ -2132,13 +2135,13 @@ public class ChatActivity extends BaseFragment implements
                         bottomChannelButtonsLayout != null && bottomChannelButtonsLayout.getVisibility() == View.VISIBLE && !(bottomOverlayChatWaitsReply && message != null && (MessageObject.getTopicId(currentAccount, message.messageOwner, ChatObject.isForum(currentChat)) != 0 || message.wasJustSent))) {
                     allowChatActions = false;
                 }
-                if (currentChat != null && (ChatObject.isNotInChat(currentChat) && !ChatObject.isMonoForum(currentChat) && !isThreadChat())) {
+                if (currentChat != null && (ChatObject.isNotInChat(getSendingChat()) && !ChatObject.isMonoForum(currentChat) && !isThreadChat())) {
                     allowChatActions = false;
                 }
-                if (currentChat != null && (ChatObject.isChannel(currentChat) && !ChatObject.canPost(currentChat) && !currentChat.megagroup)) {
+                if (currentChat != null && (ChatObject.isChannel(currentChat) && !ChatObject.canPost(getSendingChat()) && !currentChat.megagroup)) {
                     allowChatActions = false;
                 }
-                if (currentChat != null && (!ChatObject.canSendMessages(currentChat))) {
+                if (currentChat != null && (!ChatObject.canSendMessages(getSendingChat()))) {
                     allowChatActions = false;
                 }
                 switch (doubleTapAction) {
@@ -3697,6 +3700,7 @@ public class ChatActivity extends BaseFragment implements
     @Override
     public void onBeginSlide() {
         super.onBeginSlide();
+        closeMessagePopupForTransition();
 
         if (selectionReactionsOverlay != null && selectionReactionsOverlay.isVisible()) {
             selectionReactionsOverlay.setHiddenByScroll(true);
@@ -3705,6 +3709,9 @@ public class ChatActivity extends BaseFragment implements
 
     @Override
     public void onFragmentDestroy() {
+        if (messagePopupPreviewLayout != null && scrimPopupWindow != null) scrimPopupWindow.dismiss(false);
+        cancelHold();
+        holdPopupOpened = false;
         accountSendAsLoader.close();
         for (NotificationCenter.ObserversGroup group : accountSendAsObservers) group.removeAllObservers();
         accountSendAsObservers.clear();
@@ -5112,6 +5119,21 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
         chatListView = new ChatListRecyclerView(context, themeDelegate) {
             private int lastWidth;
 
+            @Override
+            public boolean dispatchTouchEvent(MotionEvent event) {
+                final long downTime = event.getDownTime();
+                final float x = event.getX(), y = event.getY();
+                if (handleHoldPopupTouch(event, () -> {
+                    // Cancel the cell, list click detector and swipe gesture before opening the menu.
+                    MotionEvent cancel = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), MotionEvent.ACTION_CANCEL, x, y, 0);
+                    super.dispatchTouchEvent(cancel);
+                    cancel.recycle();
+                })) {
+                    return true;
+                }
+                return super.dispatchTouchEvent(event);
+            }
+
             private final ArrayList<ChatMessageCell> drawTimeAfter = new ArrayList<>();
             private final ArrayList<ChatMessageCell> drawNamesAfter = new ArrayList<>();
             private final ArrayList<ChatMessageCell> drawCaptionAfter = new ArrayList<>();
@@ -6133,9 +6155,9 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
                         } else if (
                             bottomChannelButtonsLayout != null && bottomChannelButtonsLayout.getVisibility() == View.VISIBLE && !(bottomOverlayChatWaitsReply && allowReplyOnOpenTopic || message.wasJustSent) ||
                             currentChat != null && (
-                                ChatObject.isNotInChat(currentChat) && !isThreadChat() ||
-                                ChatObject.isChannel(currentChat) && !ChatObject.canPost(currentChat) && !currentChat.megagroup ||
-                                !ChatObject.canSendMessages(currentChat)
+                                ChatObject.isNotInChat(getSendingChat()) && !isThreadChat() ||
+                                ChatObject.isChannel(currentChat) && !ChatObject.canPost(getSendingChat()) && !currentChat.megagroup ||
+                                !ChatObject.canSendMessages(getSendingChat())
                             )
                         ) {
                             if (message.getGroupId() != 0) {
@@ -6659,7 +6681,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
                 if (size > 0) {
                     for (int a = 0; a < size; a++) {
                         ChatMessageCell cell = drawTimeAfter.get(a);
-                        if (quickRejectChild(cell, position)) {
+                        if (isMessagePopupPreviewCell(cell) || quickRejectChild(cell, position)) {
                             continue;
                         }
                         canvas.save();
@@ -6673,7 +6695,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
                 if (size > 0) {
                     for (int a = 0; a < size; a++) {
                         ChatMessageCell cell = drawNamesAfter.get(a);
-                        if (quickRejectChild(cell, position)) {
+                        if (isMessagePopupPreviewCell(cell) || quickRejectChild(cell, position)) {
                             continue;
                         }
                         float canvasOffsetX = cell.getLeft() + cell.getNonAnimationTranslationX(false);
@@ -6693,7 +6715,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
                 if (size > 0) {
                     for (int a = 0; a < size; a++) {
                         ChatMessageCell cell = drawCaptionAfter.get(a);
-                        if (quickRejectChild(cell, position)) {
+                        if (isMessagePopupPreviewCell(cell) || quickRejectChild(cell, position)) {
                             continue;
                         }
                         boolean selectionOnly = false;
@@ -6735,7 +6757,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
                 if (size > 0) {
                     for (int a = 0; a < size; a++) {
                         ChatMessageCell cell = drawReactionsAfter.get(a);
-                        if (quickRejectChild(cell, position)) {
+                        if (isMessagePopupPreviewCell(cell) || quickRejectChild(cell, position)) {
                             continue;
                         }
                         boolean selectionOnly = false;
@@ -6782,7 +6804,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
 
                 for (int a = 0; a < count; a++) {
                     View child = getChildAt(a);
-                    if (child.getVisibility() == View.INVISIBLE || child.getVisibility() == View.GONE || quickRejectChild(child, positionF)) {
+                    if (isMessagePopupPreviewCell(child) || child.getVisibility() == View.INVISIBLE || child.getVisibility() == View.GONE || quickRejectChild(child, positionF)) {
                         continue;
                     }
                     if (child instanceof ChatMessageUnsupportedCell) {
@@ -6896,13 +6918,13 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
                                 }
                             }
                         }
-                        if ((scrimView != cell || scrimViewTask != null) && group == null && cell.drawBackgroundInParent()) {
+                        if ((scrimView != cell || scrimViewTask != null || messagePopupPreviewLayout != null) && group == null && cell.drawBackgroundInParent()) {
                             canvas.save();
                             canvas.translate(cell.getX(), cell.getY() + cell.getPaddingTop());
                             if (cell.getScaleX() != 1f) {
                                 canvas.scale(
                                     cell.getScaleX(), cell.getScaleY(),
-                                    cell.getPivotX(), (cell.getHeight() >> 1)
+                                    cell.getPivotX(), holdPopupView == cell ? cell.getPivotY() - cell.getPaddingTop() : (cell.getHeight() >> 1)
                                 );
                             }
                             cell.drawBackgroundInternal(canvas, true);
@@ -7059,6 +7081,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
 
             @Override
             public boolean drawChild(Canvas canvas, View child, long drawingTime) {
+                if (isMessagePopupPreviewCell(child)) return false;
                 if (isSkeletonVisible()) {
                     invalidated = false;
                     invalidate();
@@ -7066,7 +7089,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
 
                 int clipLeft = 0;
                 int clipBottom = 0;
-                boolean skipDraw = child == scrimView && scrimViewTask == null;
+                boolean skipDraw = messagePopupPreviewLayout == null && child == scrimView && scrimViewTask == null;
                 IMessageCell mcell = null;
                 ChatMessageCell cell;
                 ChatActionCell actionCell = null;
@@ -7100,7 +7123,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
                     if (cell.needDelayRoundProgressDraw()) {
                         drawLaterRoundProgressCell = cell;
                     }
-                    if (!skipDraw && scrimView instanceof ChatMessageCell && scrimViewTask == null) {
+                    if (!skipDraw && messagePopupPreviewLayout == null && scrimView instanceof ChatMessageCell && scrimViewTask == null) {
                         ChatMessageCell cell2 = (ChatMessageCell) scrimView;
                         if (cell2.getCurrentMessagesGroup() != null && cell2.getCurrentMessagesGroup() == group) {
                             skipDraw = true;
@@ -7896,45 +7919,6 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
         });
         chatListView.setOnItemLongClickListener(onItemLongClickListener);
         chatListView.setOnItemClickListener(onItemClickListener);
-        chatListView.setOnInterceptTouchListener(event -> {
-            if (!NekoConfig.holdToOpenPopup) return false;
-            if (actionBar.isActionModeShowed() || isReport()) return false;
-            int action = event.getActionMasked();
-            if (action == MotionEvent.ACTION_DOWN) {
-                cancelHold();
-                View child = chatListView.findChildViewUnder(event.getX(), event.getY());
-                if (child instanceof ChatMessageCell) {
-                    final View hv = child;
-                    final float fx = event.getX() - child.getLeft();
-                    final float fy = event.getY() - child.getTop();
-                    holdPopupView = hv;
-                    final long holdDelay = 200L;
-                    final long scaleDuration = (long) (NekoConfig.popupHoldTime * 1000);
-                    holdPopupRunnable = () -> {
-                        ChatMessageCell cellHv = (ChatMessageCell) hv;
-                        hv.setPivotX((cellHv.getBackgroundDrawableLeft() + cellHv.getBackgroundDrawableRight()) / 2f);
-                        hv.setPivotY((cellHv.getBackgroundDrawableTop() + cellHv.getBackgroundDrawableBottom()) / 2f);
-                        hv.animate().scaleX(0.95f).scaleY(0.95f).setDuration(scaleDuration).setInterpolator(CubicBezierInterpolator.EASE_OUT).start();
-                        hv.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-                        holdOpenRunnable = () -> {
-                            hv.animate().scaleX(1f).scaleY(1f).setDuration(150).setInterpolator(CubicBezierInterpolator.EASE_OUT).start();
-                            hv.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
-                            holdPopupRunnable = null;
-                            holdOpenRunnable = null;
-                            holdPopupView = null;
-                            createMenu(hv, false, true, fx, fy, true);
-                        };
-                        AndroidUtilities.runOnUIThread(holdOpenRunnable, scaleDuration);
-                        holdPopupRunnable = null;
-                    };
-                    AndroidUtilities.runOnUIThread(holdPopupRunnable, holdDelay);
-                    return true;
-                }
-            } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
-                cancelHold();
-            }
-            return false;
-        });
         chatListView.setOnScrollListener(new RecyclerView.OnScrollListener() {
 
             private float totalDy = 0;
@@ -7943,6 +7927,9 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
 
             @Override
             public void onScrollStateChanged(RecyclerView recyclerView, int newState) {
+                if (newState != RecyclerView.SCROLL_STATE_IDLE) {
+                    cancelHold();
+                }
                 if (newState == RecyclerView.SCROLL_STATE_IDLE) {
                     if (pollHintCell != null) {
                         pollHintView.showForMessageCell(pollHintCell, -1, pollHintX, pollHintY, true);
@@ -18614,6 +18601,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     public class ChatActivityFragmentView extends SizeNotifierFrameLayout {
+        private final org.telegram.ui.Components.LiquidTouchDispatcher liquidTouchDispatcher = new org.telegram.ui.Components.LiquidTouchDispatcher();
 
         public ChatActivity getChatActivity() {
             return ChatActivity.this;
@@ -18938,6 +18926,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
         @Override
         protected void onDetachedFromWindow() {
+            liquidTouchDispatcher.cancel(this);
             super.onDetachedFromWindow();
             adjustPanLayoutHelper.onDetach();
             if (pullingDownDrawable != null) {
@@ -18956,6 +18945,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
         @Override
         public boolean dispatchTouchEvent(MotionEvent ev) {
+            return liquidTouchDispatcher.dispatchTouchEvent(this, ev, NekoConfig.liquidChatElements,
+                    () -> dispatchChatTouchEvent(ev));
+        }
+
+        private boolean dispatchChatTouchEvent(MotionEvent ev) {
             if (messageMetricsView != null) {
                 messageMetricsView.setIsUserActive();
             }
@@ -19131,6 +19125,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             MessageObject messageObject = MediaController.getInstance().getPlayingMessageObject();
             boolean isRoundVideo = false;
             boolean isVideo = messageObject != null && messageObject.eventId == 0 && ((isRoundVideo = messageObject.isRoundVideo()) || messageObject.isVideo());
+            if (child == videoPlayerContainer && isMessagePopupPreviewObject(messageObject)) return false;
             if (child == videoPlayerContainer) {
                 canvas.save();
                 float transitionOffset = 0;
@@ -19166,7 +19161,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     super.drawChild(canvas, instantCameraView, drawingTime);
                 }
                 result = super.drawChild(canvas, child, drawingTime);
-                if (isVideo && child == chatListView && messageObject.type != MessageObject.TYPE_ROUND_VIDEO && videoPlayerContainer != null && videoPlayerContainer.getTag() != null) {
+                if (isVideo && !isMessagePopupPreviewObject(messageObject) && child == chatListView && messageObject.type != MessageObject.TYPE_ROUND_VIDEO && videoPlayerContainer != null && videoPlayerContainer.getTag() != null) {
                     canvas.save();
                     float transitionOffset = 0;
                     if (pullingDownAnimateProgress != 0) {
@@ -19295,6 +19290,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             // }
             for (int a = 0, N = animateSendingViews.size(); a < N; a++) {
                 ChatMessageCell cell = animateSendingViews.get(a);
+                if (isMessagePopupPreviewCell(cell)) continue;
                 MessageObject.SendAnimationData data = cell.getMessageObject().sendAnimationData;
                 if (data != null) {
                     canvas.save();
@@ -19341,7 +19337,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 invalidate();
             }
 
-            if (scrimView != null) {
+            if (scrimView != null && messagePopupPreviewLayout == null) {
                 if (scrimView == sideControlsButtonsLayout) {
                     if (scrimViewAlpha < 1f) {
                         scrimPaint.setAlpha((int) (255 * scrimPaintAlpha * (1f - scrimViewAlpha)));
@@ -19497,6 +19493,10 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                             }
                             canvas.clipRect(viewClipLeft, viewClipTop, viewClipRight, viewClipBottom);
                             canvas.translate(chatListView.getLeft() + child.getX(), chatListView.getY() + child.getY());
+                            // Scrim cells are drawn directly, so their View transform must be applied here.
+                            if (child == holdPopupView) {
+                                canvas.scale(child.getScaleX(), child.getScaleY(), child.getPivotX(), child.getPivotY());
+                            }
                             if (cell != null && scrimGroup == null && cell.drawBackgroundInParent()) {
                                 canvas.save();
                                 canvas.translate(0, cell.getPaddingTop());
@@ -20873,7 +20873,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 if (actionsButtonsLayout != null) {
                     boolean allowChatActions = true;
                     if (bottomChannelButtonsLayout != null && bottomChannelButtonsLayout.getVisibility() == View.VISIBLE && !bottomOverlayChatWaitsReply ||
-                            currentChat != null && (ChatObject.isNotInChat(currentChat) && !isThreadChat() || ChatObject.isChannel(currentChat) && !ChatObject.canPost(currentChat) && !currentChat.megagroup || !ChatObject.canSendMessages(currentChat))) {
+                            currentChat != null && (ChatObject.isNotInChat(getSendingChat()) && !isThreadChat() || ChatObject.isChannel(currentChat) && !ChatObject.canPost(getSendingChat()) && !currentChat.megagroup || !ChatObject.canSendMessages(getSendingChat()))) {
                         allowChatActions = false;
                     }
 
@@ -26691,6 +26691,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         chatActivityEnterView.updateSendAsButton(animatedUpdate);
     }
 
+    private TLRPC.Chat getSendingChat() {
+        int account = AccountSendAs.get(currentAccount, dialog_id);
+        return account >= 0 ? MessagesController.getInstance(account).getChat(-dialog_id) : currentChat;
+    }
+
     public void onAccountSendAsChanged() {
         if (chatActivityEnterView == null) return;
         loadSendAsPeers(false);
@@ -29055,6 +29060,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     @Override
     public void onTransitionAnimationStart(boolean isOpen, boolean backward) {
         super.onTransitionAnimationStart(isOpen, backward);
+        if (!isOpen) closeMessagePopupForTransition();
         startMs = System.currentTimeMillis();
         int[] alowedNotifications = null;
         if (isOpen) {
@@ -31854,6 +31860,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
     @Override
     public void onPause() {
+        closeMessagePopupForTransition();
+        cancelHold();
+        holdPopupOpened = false;
         super.onPause();
         scrolling = false;
         if (isFeedSearch()) {
@@ -32626,20 +32635,162 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         removePopupBlur(true);
     }
 
+    private boolean handleHoldPopupTouch(MotionEvent event, Runnable cancelTouch) {
+        final int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
+            cancelHold();
+            holdPopupOpened = false;
+        } else if (holdPopupOpened) {
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                holdPopupOpened = false;
+            }
+            return true;
+        }
+        if (!NekoConfig.holdToOpenPopup || actionBar == null || actionBar.isActionModeShowed() || isReport()
+                || inPreviewMode || isInsideContainer || isTryingTextSelection() || hasTextSelection()) {
+            cancelHold();
+            return false;
+        }
+        if (action == MotionEvent.ACTION_DOWN && event.getPointerCount() == 1
+                && chatListView.getScrollState() == RecyclerView.SCROLL_STATE_IDLE) {
+            View child = chatListView.findChildViewUnder(event.getX(), event.getY());
+            if (!(child instanceof ChatMessageCell)) {
+                return false;
+            }
+            ChatMessageCell cell = (ChatMessageCell) child;
+            final MessageObject message = cell.getMessageObject();
+            final float x = event.getX() - cell.getX(), y = event.getY() - cell.getY();
+            if (message == null || message.type == MessageObject.TYPE_JOINED_CHANNEL) {
+                return false;
+            }
+            holdPopupDownX = event.getX();
+            holdPopupDownY = event.getY();
+            holdPopupView = cell;
+            holdPopupScaleX = cell.getScaleX();
+            holdPopupScaleY = cell.getScaleY();
+            holdPopupPivotX = cell.getPivotX();
+            holdPopupPivotY = cell.getPivotY();
+            final long duration = Math.round(Math.max(0.1f, Math.min(2f, NekoConfig.popupHoldTime)) * 1000);
+            holdPopupRunnable = () -> {
+                if (holdPopupView != cell || cell.getParent() != chatListView || cell.getMessageObject() != message
+                        || !NekoConfig.holdToOpenPopup || actionBar.isActionModeShowed() || isReport()
+                        || chatListView.getScrollState() != RecyclerView.SCROLL_STATE_IDLE) {
+                    cancelHold();
+                    return;
+                }
+                cell.setPivotX((cell.getBackgroundDrawableLeft() + cell.getBackgroundDrawableRight()) / 2f);
+                cell.setPivotY((cell.getBackgroundDrawableTop() + cell.getBackgroundDrawableBottom()) / 2f);
+                cell.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+                holdPopupAnimator = ValueAnimator.ofFloat(1f, 0.94f);
+                holdPopupAnimator.setDuration(duration);
+                holdPopupAnimator.setInterpolator(CubicBezierInterpolator.EASE_BOTH);
+                holdPopupAnimator.addUpdateListener(animation -> {
+                    if (cell.getParent() != chatListView || cell.getMessageObject() != message) {
+                        cancelHold();
+                        return;
+                    }
+                    float scale = (float) animation.getAnimatedValue();
+                    cell.setScaleX(holdPopupScaleX * scale);
+                    cell.setScaleY(holdPopupScaleY * scale);
+                    chatListView.invalidate();
+                });
+                holdPopupAnimator.start();
+                holdPopupRunnable = () -> {
+                    if (holdPopupView != cell || cell.getParent() != chatListView || cell.getMessageObject() != message
+                            || !NekoConfig.holdToOpenPopup || actionBar.isActionModeShowed() || isReport()
+                            || chatListView.getScrollState() != RecyclerView.SCROLL_STATE_IDLE) {
+                        cancelHold();
+                        return;
+                    }
+                    holdPopupRunnable = null;
+                    cancelTouch.run();
+                    // Use the tap-menu path: the other path selects messages of some media types.
+                    holdPopupOpened = true;
+                    if (createMenu(cell, true, true, x, y, true)) {
+                        cell.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                        animateHoldPopupReturn(cell, message);
+                    } else {
+                        cancelHold();
+                    }
+                };
+                AndroidUtilities.runOnUIThread(holdPopupRunnable, duration);
+            };
+            AndroidUtilities.runOnUIThread(holdPopupRunnable, 200);
+        } else if (action == MotionEvent.ACTION_MOVE && holdPopupView != null) {
+            int slop = ViewConfiguration.get(chatListView.getContext()).getScaledTouchSlop();
+            if (Math.hypot(event.getX() - holdPopupDownX, event.getY() - holdPopupDownY) > slop) {
+                cancelHold();
+            }
+        } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL
+                || action == MotionEvent.ACTION_POINTER_DOWN || action == MotionEvent.ACTION_POINTER_UP) {
+            cancelHold();
+        }
+        return false;
+    }
+
+    private static float getHoldPopupReturnInterpolation(float progress) {
+        if (progress <= 0f) return 0f;
+        if (progress >= 1f) return 1f;
+        // Same spring as BottomSheet opening; the 6% travel keeps the rebound subtle.
+        final double omega = Math.sqrt(380.0);
+        final double dampingRatio = 0.8;
+        final double dampedOmega = omega * Math.sqrt(1.0 - dampingRatio * dampingRatio);
+        final double time = progress * 0.5;
+        return (float) (1.0 - Math.exp(-dampingRatio * omega * time)
+                * (Math.cos(dampedOmega * time)
+                + dampingRatio * omega / dampedOmega * Math.sin(dampedOmega * time)));
+    }
+
+    private void animateHoldPopupReturn(ChatMessageCell cell, MessageObject message) {
+        if (holdPopupAnimator != null) {
+            holdPopupAnimator.cancel();
+        }
+        final float fromX = cell.getScaleX(), fromY = cell.getScaleY();
+        holdPopupAnimator = ValueAnimator.ofFloat(0f, 1f);
+        holdPopupAnimator.setDuration(500);
+        holdPopupAnimator.setInterpolator(ChatActivity::getHoldPopupReturnInterpolation);
+        holdPopupAnimator.addUpdateListener(animation -> {
+            if (cell.getParent() != chatListView || cell.getMessageObject() != message) {
+                cancelHold();
+                return;
+            }
+            float progress = (float) animation.getAnimatedValue();
+            cell.setScaleX(fromX + (holdPopupScaleX - fromX) * progress);
+            cell.setScaleY(fromY + (holdPopupScaleY - fromY) * progress);
+            chatListView.invalidate();
+            if (contentView != null) {
+                contentView.invalidate();
+            }
+        });
+        holdPopupAnimator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                if (holdPopupAnimator == animation) {
+                    holdPopupAnimator = null;
+                    cancelHold();
+                }
+            }
+        });
+        holdPopupAnimator.start();
+    }
+
     private void cancelHold() {
         if (holdPopupRunnable != null) {
             AndroidUtilities.cancelRunOnUIThread(holdPopupRunnable);
             holdPopupRunnable = null;
         }
-        if (holdOpenRunnable != null) {
-            AndroidUtilities.cancelRunOnUIThread(holdOpenRunnable);
-            holdOpenRunnable = null;
+        if (holdPopupAnimator != null) {
+            ValueAnimator animator = holdPopupAnimator;
+            holdPopupAnimator = null;
+            animator.cancel();
         }
         if (holdPopupView != null) {
-            holdPopupView.animate().cancel();
-            holdPopupView.setScaleX(1f);
-            holdPopupView.setScaleY(1f);
+            holdPopupView.setScaleX(holdPopupScaleX);
+            holdPopupView.setScaleY(holdPopupScaleY);
+            holdPopupView.setPivotX(holdPopupPivotX);
+            holdPopupView.setPivotY(holdPopupPivotY);
             holdPopupView = null;
+            chatListView.invalidate();
         }
     }
 
@@ -32697,6 +32848,172 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
     private CharSequence getMessageCaption(MessageObject messageObject, MessageObject.GroupedMessages group) {
         return getMessageCaption(messageObject, group, null);
+    }
+
+    private boolean isMessagePopupPreviewObject(MessageObject object) {
+        MessageObject selected = messagePopupPreviewMessage;
+        return messagePopupPreviewLayout != null && messagePopupPreviewLayout.isDrawingMessage() && selected != null && object != null
+                && object.getDialogId() == selected.getDialogId()
+                && (selected.getGroupId() != 0 ? object.getGroupId() == selected.getGroupId() : object.getId() == selected.getId());
+    }
+
+    private boolean isMessagePopupPreviewCell(View view) {
+        return view instanceof ChatMessageCell && isMessagePopupPreviewObject(((ChatMessageCell) view).getMessageObject());
+    }
+
+    private void closeMessagePopupForTransition() {
+        if (messagePopupPreviewLayout == null || scrimPopupWindow == null) return;
+        final ActionBarPopupWindow window = scrimPopupWindow;
+        removePopupBlur(true);
+        messagePopupPreviewLayout.closeForTransition(() -> window.dismiss(false));
+    }
+
+    private MessagePopupPreviewLayout.Source createMessagePopupPreviewSource(MessageObject message) {
+        return new MessagePopupPreviewLayout.Source() {
+            private final ArrayList<ChatMessageCell> cells = new ArrayList<>();
+            private final int[] position = new int[2];
+            private final long groupId = message.getGroupId();
+            private final HashMap<ChatMessageCell, Float> avatarOffsets = new HashMap<>();
+            private final HashMap<ChatMessageCell, Boolean> avatarVisibility = new HashMap<>();
+            private final Rect visibleFrame = new Rect();
+
+            @Override
+            public boolean getBounds(RectF bounds) {
+                cells.clear();
+                bounds.setEmpty();
+                for (int i = 0; i < chatListView.getChildCount(); i++) {
+                    View view = chatListView.getChildAt(i);
+                    if (!(view instanceof ChatMessageCell)) continue;
+                    ChatMessageCell cell = (ChatMessageCell) view;
+                    MessageObject object = cell.getMessageObject();
+                    if (object == null || object.getDialogId() != message.getDialogId()
+                            || (groupId != 0 ? object.getGroupId() != groupId : object.getId() != message.getId())) continue;
+                    cells.add(cell);
+                    cell.getLocationOnScreen(position);
+                    float left = position[0] - cell.getPivotX() * (1f - cell.getScaleX());
+                    float top = position[1] - cell.getPivotY() * (1f - cell.getScaleY());
+                    // Include the whole cell, not only the bubble: avatars and name/status overlays belong to it.
+                    bounds.union(left, top - dp(8), left + cell.getWidth(), top + cell.getHeight() + dp(8));
+                    ImageReceiver avatar = cell.getAvatarImage();
+                    if (avatar != null && !avatarOffsets.containsKey(cell)) {
+                        avatarOffsets.put(cell, avatar.getImageY() - cell.getY());
+                        avatarVisibility.put(cell, avatar.getVisible());
+                    }
+                    if (avatar != null && Boolean.TRUE.equals(avatarVisibility.get(cell))) {
+                        chatListView.getLocationOnScreen(position);
+                        float avatarTop = top + avatarOffsets.get(cell);
+                        bounds.union(position[0] + avatar.getImageX(), avatarTop,
+                                position[0] + avatar.getImageX2(), avatarTop + avatar.getImageHeight());
+                    }
+                }
+                return !cells.isEmpty() && !bounds.isEmpty();
+            }
+
+            @Override
+            public boolean contains(float screenX, float screenY) {
+                for (ChatMessageCell cell : cells) {
+                    cell.getLocationOnScreen(position);
+                    float localY = (screenY - position[1]) / cell.getScaleY();
+                    if (localY >= cell.getBackgroundDrawableTop() && localY <= cell.getBackgroundDrawableBottom()
+                            && cell.isInsideBackground((screenX - position[0]) / cell.getScaleX(), localY)) return true;
+                    ImageReceiver avatar = cell.getAvatarImage();
+                    if (avatar != null && Boolean.TRUE.equals(avatarVisibility.get(cell))) {
+                        float avatarTop = position[1] - cell.getPivotY() * (1f - cell.getScaleY()) + avatarOffsets.get(cell);
+                        chatListView.getLocationOnScreen(position);
+                        float avatarLeft = position[0] + avatar.getImageX();
+                        if (screenX >= avatarLeft && screenX < avatarLeft + avatar.getImageWidth()
+                                && screenY >= avatarTop && screenY < avatarTop + avatar.getImageHeight()) return true;
+                    }
+                }
+                return false;
+            }
+
+            @Override
+            public void getViewport(RectF bounds) {
+                contentView.getLocationOnScreen(position);
+                contentView.getWindowVisibleDisplayFrame(visibleFrame);
+                // The content's top can include the action bar. Only system insets bound the preview.
+                float top = visibleFrame.top + dp(12);
+                float bottom = Math.min(visibleFrame.bottom,
+                        position[1] + contentView.getHeight() - windowInsetsStateHolder.getCurrentMaxBottomInset()) - dp(20);
+                bounds.set(position[0], top, position[0] + contentView.getWidth(), bottom);
+            }
+
+            @Override
+            public void draw(Canvas canvas) {
+                boolean groupDrawn = false;
+                for (ChatMessageCell cell : cells) {
+                    MessageObject object = cell.getMessageObject();
+                    if (object == null || object.getDialogId() != message.getDialogId()
+                            || (groupId != 0 ? object.getGroupId() != groupId : object.getId() != message.getId())) continue;
+                    MessageObject.GroupedMessages group = cell.getCurrentMessagesGroup();
+                    if (group != null && !groupDrawn && group.transitionParams.cell != null) {
+                        chatListView.getLocationOnScreen(position);
+                        int saved = canvas.save();
+                        canvas.translate(position[0], position[1]);
+                        float x = group.transitionParams.cell.getNonAnimationTranslationX(true);
+                        float dy = group.transitionParams.backgroundChangeBounds ? 0 : group.transitionParams.cell.getTranslationY();
+                        group.transitionParams.cell.drawBackground(canvas,
+                                (int) (group.transitionParams.left + x + group.transitionParams.offsetLeft),
+                                (int) (group.transitionParams.top + group.transitionParams.offsetTop + dy),
+                                (int) (group.transitionParams.right + x + group.transitionParams.offsetRight),
+                                (int) (group.transitionParams.bottom + group.transitionParams.offsetBottom + dy),
+                                group.transitionParams.pinnedTop, group.transitionParams.pinnedBotton, false, 0);
+                        canvas.restoreToCount(saved);
+                        groupDrawn = true;
+                    }
+                    cell.getLocationOnScreen(position);
+                    int saved = canvas.save();
+                    canvas.translate(position[0], position[1]);
+                    // getLocationOnScreen includes the transformed top-left; undo that offset first.
+                    canvas.translate(-cell.getPivotX() * (1f - cell.getScaleX()), -cell.getPivotY() * (1f - cell.getScaleY()));
+                    canvas.scale(cell.getScaleX(), cell.getScaleY(), cell.getPivotX(), cell.getPivotY());
+                    if (group == null && cell.drawBackgroundInParent()) {
+                        canvas.save();
+                        canvas.translate(0, cell.getPaddingTop());
+                        cell.drawBackgroundInternal(canvas, true);
+                        canvas.restore();
+                    }
+                    cell.drawMessagePopup(canvas);
+                    if (videoPlayerContainer != null && videoPlayerContainer.getWidth() > 0 && videoPlayerContainer.getHeight() > 0
+                            && MediaController.getInstance().isPlayingMessageAndReadyToDraw(object)
+                            && (object.isVideo() || object.isRoundVideo())) {
+                        ImageReceiver photo = cell.getPhotoImage();
+                        canvas.save();
+                        canvas.translate(photo.getImageX(), cell.getPaddingTop() + photo.getImageY());
+                        canvas.scale(photo.getImageWidth() / videoPlayerContainer.getWidth(), photo.getImageHeight() / videoPlayerContainer.getHeight());
+                        videoPlayerContainer.draw(canvas);
+                        canvas.restore();
+                        canvas.save();
+                        canvas.translate(0, cell.getPaddingTop());
+                        if (object.isRoundVideo()) cell.drawRoundProgress(canvas);
+                        else cell.drawOverlays(canvas);
+                        cell.drawTime(canvas, 1f, true);
+                        canvas.restore();
+                    }
+                    canvas.save();
+                    canvas.translate(0, cell.getPaddingTop());
+                    MessageObject.GroupedMessagePosition groupedPosition = cell.getCurrentPosition();
+                    if (groupedPosition != null || cell.getTransitionParams().animateBackgroundBoundsInner) {
+                        if (groupedPosition == null || groupedPosition.last) cell.drawTime(canvas, 1f, true);
+                        if (groupedPosition == null || groupedPosition.minX == 0 && groupedPosition.minY == 0) cell.drawNamesLayout(canvas, 1f);
+                        if (groupedPosition == null || (groupedPosition.flags & cell.captionFlag()) != 0) cell.drawCaptionLayout(canvas, false, 1f);
+                        if (groupedPosition == null || (groupedPosition.flags & MessageObject.POSITION_FLAG_BOTTOM) != 0 && (groupedPosition.flags & MessageObject.POSITION_FLAG_LEFT) != 0) cell.drawReactionsLayout(canvas, 1f, null);
+                    }
+                    if (cell.hasOutboundsContent()) cell.drawOutboundsContent(canvas);
+                    canvas.restore();
+                    ImageReceiver avatar = cell.getAvatarImage();
+                    if (avatar != null && Boolean.TRUE.equals(avatarVisibility.get(cell))) {
+                        float ax = avatar.getImageX(), ay = avatar.getImageY();
+                        float aw = avatar.getImageWidth(), ah = avatar.getImageHeight();
+                        avatar.setImageCoords(ax - cell.getX(), avatarOffsets.get(cell), aw, ah);
+                        avatar.draw(canvas);
+                        avatar.setImageCoords(ax, ay, aw, ah);
+                    }
+                    canvas.restoreToCount(saved);
+                }
+            }
+        };
     }
 
     public static CharSequence getMessageCaption(MessageObject messageObject, MessageObject.GroupedMessages group, int[] msgId) {
@@ -32934,15 +33251,15 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             allowChatActions = false;
         }
 
-        if (currentChat != null && (ChatObject.isNotInChat(currentChat) && !ChatObject.isMonoForum(currentChat) && !isThreadChat())) {
+        if (currentChat != null && (ChatObject.isNotInChat(getSendingChat()) && !ChatObject.isMonoForum(currentChat) && !isThreadChat())) {
             allowChatActions = false;
         }
 
-        if (currentChat != null && (ChatObject.isChannel(currentChat) && !ChatObject.canPost(currentChat) && !currentChat.megagroup)) {
+        if (currentChat != null && (ChatObject.isChannel(currentChat) && !ChatObject.canPost(getSendingChat()) && !currentChat.megagroup)) {
             allowChatActions = false;
         }
 
-        if (currentChat != null && (!ChatObject.canSendMessages(currentChat))) {
+        if (currentChat != null && (!ChatObject.canSendMessages(getSendingChat()))) {
             allowChatActions = false;
         }
 
@@ -33051,6 +33368,12 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 icons.add(R.drawable.msg_calendar2);
             }
 
+            if (NekoConfig.holdToOpenPopup && selectedObject != null && !options.contains(OPTION_SELECT)) {
+                items.add(LocaleController.getString(R.string.Select));
+                options.add(OPTION_SELECT);
+                icons.add(R.drawable.msg_select);
+            }
+
             if (options.isEmpty() && optionsView == null) {
                 return false;
             }
@@ -33115,6 +33438,10 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             final boolean isReactionsAvailableFinal = !suggestEdit && isReactionsAvailable;
 
             int flags = 0;
+            final boolean showMessagePreview = NekoConfig.showMessageAbovePopup && v instanceof ChatMessageCell;
+            if (showMessagePreview) {
+                flags |= ActionBarPopupWindow.ActionBarPopupWindowLayout.FLAG_DONT_USE_SCROLLVIEW;
+            }
             if (isReactionsViewAvailable || showMessageSeen || showSponsorInfo || options.contains(OPTION_TRANSLATE) || options.contains(OPTION_FORWARD) || options.contains(OPTION_FORWARD_NOQUOTE) || options.contains(OPTION_FORWARD_NOCAPTION)) {
                 flags |= ActionBarPopupWindow.ActionBarPopupWindowLayout.FLAG_USE_SWIPEBACK;
             }
@@ -34084,6 +34411,12 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
             ChatScrimPopupContainerLayout scrimPopupContainerLayout = new ChatScrimPopupContainerLayout(contentView.getContext()) {
                 @Override
+                protected void onMeasure(int widthSpec, int heightSpec) {
+                    if (showMessagePreview) setMaxHeight(0);
+                    super.onMeasure(widthSpec, heightSpec);
+                }
+
+                @Override
                 public boolean dispatchKeyEvent(KeyEvent event) {
                     if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && event.getRepeatCount() == 0) {
                         closeMenu();
@@ -34094,7 +34427,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 @Override
                 public boolean dispatchTouchEvent(MotionEvent ev) {
                     boolean b = super.dispatchTouchEvent(ev);
-                    if (ev.getAction() == MotionEvent.ACTION_DOWN && !b) {
+                    if (!showMessagePreview && ev.getAction() == MotionEvent.ACTION_DOWN && !b) {
                         closeMenu();
                     }
                     return b;
@@ -34106,6 +34439,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
                 @Override
                 public boolean onTouch(View v, MotionEvent event) {
+                    if (showMessagePreview) return false;
                     if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
                         if (scrimPopupWindow != null && scrimPopupWindow.isShowing()) {
                             View contentView = scrimPopupWindow.getContentView();
@@ -34180,7 +34514,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                         }
                     });
 
-                    LinearLayout.LayoutParams params = LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, (int) (52 + reactionsLayout.getTopOffset() / AndroidUtilities.density + pad), Gravity.RIGHT, 0, 50, 0, -20);
+                    LinearLayout.LayoutParams params = LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, (int) (52 + reactionsLayout.getTopOffset() / AndroidUtilities.density + pad), Gravity.RIGHT, 0, showMessagePreview ? 0 : 50, 0, -20);
                     scrimPopupContainerLayout.addView(reactionsLayout, params);
                     scrimPopupContainerLayout.setReactionsLayout(reactionsLayout);
                     scrimPopupContainerLayout.setClipChildren(false);
@@ -34333,11 +34667,51 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             if (reactionsLayout != null) {
                 reactionsLayout.setParentLayout(scrimPopupContainerLayout);
             }
-            scrimPopupWindow = new ActionBarPopupWindow(scrimPopupContainerLayout, LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT) {
+            final MessagePopupPreviewLayout previewLayout;
+            if (showMessagePreview) {
+                scrimPopupContainerLayout.measure(View.MeasureSpec.makeMeasureSpec(contentView.getWidth() - dp(16), View.MeasureSpec.AT_MOST),
+                        View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+                previewLayout = new MessagePopupPreviewLayout(getContext(), scrimPopupContainerLayout,
+                        createMessagePopupPreviewSource(message), 0, 0, this::closeMenu);
+                messagePopupPreviewLayout = previewLayout;
+                messagePopupPreviewMessage = message;
+            } else {
+                previewLayout = null;
+            }
+            scrimPopupWindow = new ActionBarPopupWindow(previewLayout != null ? previewLayout : scrimPopupContainerLayout,
+                    previewLayout != null ? contentView.getRootView().getWidth() : LayoutHelper.WRAP_CONTENT,
+                    previewLayout != null ? contentView.getRootView().getHeight() : LayoutHelper.WRAP_CONTENT) {
+                private boolean previewReturned;
+
                 @Override
                 public void dismiss() {
+                    dismiss(true);
+                }
+
+                @Override
+                public void dismiss(boolean animated) {
                     removePopupBlur(true);
-                    super.dismiss(true);
+                    if (previewLayout != null && animated && !previewReturned && isShowing()) {
+                        previewLayout.close(() -> {
+                            previewReturned = true;
+                            dismiss(false);
+                        });
+                        return;
+                    }
+                    if (previewLayout != null) {
+                        previewLayout.dispose();
+                        if (messagePopupPreviewLayout == previewLayout) {
+                            messagePopupPreviewLayout = null;
+                            messagePopupPreviewMessage = null;
+                            setScrimView(null);
+                            chatListView.invalidate();
+                            contentView.invalidate();
+                        }
+                    }
+                    super.dismiss(previewLayout == null && animated);
+                    if (finalReactionsLayout1 != null) {
+                        finalReactionsLayout1.dismissParent(animated);
+                    }
                     if (scrimPopupWindow != this) {
                         return;
                     }
@@ -34359,26 +34733,28 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     }
                 }
 
-                @Override
-                public void dismiss(boolean animated) {
-                    removePopupBlur(true);
-                    super.dismiss(animated);
-                    if (finalReactionsLayout1 != null) {
-                        finalReactionsLayout1.dismissParent(animated);
-                    }
-                }
             };
             scrimPopupWindow.setPauseNotifications(true);
             scrimPopupWindow.setDismissAnimationDuration(220);
             scrimPopupWindow.setOutsideTouchable(true);
-            scrimPopupWindow.setClippingEnabled(true);
-            if (!isReactionsAvailable || reactionsLayout == null || !ReactionsContainerLayout.allowSmoothEnterTransition()) {
+            scrimPopupWindow.setClippingEnabled(previewLayout == null);
+            if (previewLayout != null) {
+                scrimPopupWindow.setAttachedInDecor(false);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    scrimPopupWindow.setIsLaidOutInScreen(true);
+                } else {
+                    scrimPopupWindow.setLayoutInScreen(true);
+                }
+            }
+            if (previewLayout == null && (!isReactionsAvailable || reactionsLayout == null || !ReactionsContainerLayout.allowSmoothEnterTransition())) {
                 scrimPopupWindow.setAnimationStyle(R.style.PopupContextAnimation);
             } else {
                 scrimPopupWindow.setAnimationStyle(0);
             }
             scrimPopupWindow.setFocusable(true);
-            scrimPopupContainerLayout.measure(View.MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(1000), View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(1000), View.MeasureSpec.AT_MOST));
+            scrimPopupContainerLayout.measure(View.MeasureSpec.makeMeasureSpec(contentView.getWidth() - dp(16), View.MeasureSpec.AT_MOST),
+                    previewLayout != null ? View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+                            : View.MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(1000), View.MeasureSpec.AT_MOST));
             scrimPopupWindow.setInputMethodMode(ActionBarPopupWindow.INPUT_METHOD_NOT_NEEDED);
             scrimPopupWindow.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
             scrimPopupWindow.getContentView().setFocusableInTouchMode(true);
@@ -34426,7 +34802,15 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             }
             final int finalPopupX = scrimPopupX = popupX;
             final int finalPopupY = scrimPopupY = popupY;
-            scrimPopupContainerLayout.setMaxHeight(maxY + height - popupY);
+            final int[] previewWindowLocation = new int[2];
+            if (previewLayout != null) {
+                int[] messageLocation = new int[2];
+                v.getLocationOnScreen(messageLocation);
+                // Anchor to the message rather than the legacy menu's upward height correction.
+                previewLayout.setAnchor(popupX, messageLocation[1] + v.getHeight() + dp(20));
+            } else {
+                scrimPopupContainerLayout.setMaxHeight(maxY + height - popupY);
+            }
             ReactionsContainerLayout finalReactionsLayout = reactionsLayout;
             Runnable showMenu = () -> {
                 if (scrimPopupWindow == null || fragmentView == null || scrimPopupWindow.isShowing() || !AndroidUtilities.isActivityRunning(getParentActivity())) {
@@ -34435,12 +34819,27 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 if (waitForLangDetection.get() || waitForQr.get()) {
                     return;
                 }
-                scrimPopupWindow.showAtLocation(chatListView, Gravity.LEFT | Gravity.TOP, finalPopupX, finalPopupY);
-                applyPopupBlur(v);
-                if (isReactionsAvailableFinal && finalReactionsLayout != null) {
-                    finalReactionsLayout.startEnterAnimation(true);
+                scrimPopupWindow.showAtLocation(chatListView, Gravity.LEFT | Gravity.TOP,
+                        previewLayout != null ? previewWindowLocation[0] : finalPopupX,
+                        previewLayout != null ? previewWindowLocation[1] : finalPopupY);
+                if (previewLayout != null) {
+                    previewLayout.open(() -> {
+                        dimBehindView(v, true);
+                        chatListView.invalidate();
+                        contentView.invalidate();
+                        applyPopupBlur(v);
+                        if (isReactionsAvailableFinal && finalReactionsLayout != null) {
+                            finalReactionsLayout.startEnterAnimation(true);
+                        }
+                    });
+                } else {
+                    applyPopupBlur(v);
+                    if (isReactionsAvailableFinal && finalReactionsLayout != null) {
+                        finalReactionsLayout.startEnterAnimation(true);
+                    }
                 }
                 AndroidUtilities.runOnUIThread(() -> {
+                    if (previewLayout != null && !AndroidUtilities.isAccessibilityScreenReaderEnabled()) return;
                     if (scrimPopupWindowItems != null && scrimPopupWindowItems.length > 0 && scrimPopupWindowItems[0] != null) {
                         scrimPopupWindowItems[0].requestFocus();
                         scrimPopupWindowItems[0].performAccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS, null);
@@ -34460,7 +34859,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             }
             chatListView.stopScroll();
             chatLayoutManager.setCanScrollVertically(false);
-            dimBehindView(v, true);
+            if (previewLayout == null) dimBehindView(v, true);
             hideHints(false);
             if (topUndoView != null) {
                 topUndoView.hide(true, 1);
@@ -34481,6 +34880,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             return false;
         }
 
+        enterMessageSelectionMode(message, listView);
+        return false;
+    }
+
+    private void enterMessageSelectionMode(MessageObject message, boolean listView) {
         createActionMode();
         final ActionBarMenu actionMode = actionBar.createActionMode();
         actionMode.setItemVisibility(delete, View.VISIBLE);
@@ -34538,7 +34942,6 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (chatActivityEnterView != null) {
             chatActivityEnterView.hideBotCommands();
         }
-        return false;
     }
 
     private void createEmptyView(boolean recreate) {
@@ -35444,31 +35847,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 break;
             }
             case OPTION_SELECT: {
+                MessageObject message = selectedObject;
                 closeMenu();
-                // the action mode must exist and be visible BEFORE the row is selected:
-                // showActionMode() no-ops when actionBar.createActionMode() was never created,
-                // and updateVisibleRows only applies checkmarks while action mode is showed
-                createActionMode();
-                if (chatActivityEnterView != null && chatActivityEnterView.getVisibility() == View.VISIBLE) {
-                    ArrayList<View> views = new ArrayList<>();
-                    if (mentionContainer != null && mentionContainer.getVisibility() == View.VISIBLE)
-                        views.add(mentionContainer);
-                    actionBar.showActionMode(true, null, null, views.toArray(new View[0]), new boolean[]{false, true, true}, null, 0);
-                } else {
-                    actionBar.showActionMode(true, null, null, null, null, null, 0);
+                if (message != null && !message.isEphemeral() && message.type != MessageObject.TYPE_JOINED_CHANNEL) {
+                    enterMessageSelectionMode(message, true);
                 }
-                // don't require the cell to be fully visible - a partially clipped cell
-                // (under the top padding / behind the keyboard) must still be selectable
-                BaseCell cell = findMessageCell(selectedObject.getId(), false);
-                if (cell != null) {
-                    processRowSelect(cell, false, 0, 0);
-                } else {
-                    // cell not attached - select the message object directly
-                    addToSelectedMessages(selectedObject, false);
-                    updateActionModeTitle();
-                    updateVisibleRows();
-                }
-                chatLayoutManager.setCanScrollVertically(true);
                 return;
             }
             case OPTION_RETRY: {
@@ -35821,7 +36204,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 if (selectedObject != null && selectedObject.messageOwner != null && selectedObject.messageOwner.noforwards) {
                     return;
                 }
-                if (selectedObject != null && currentChat != null && (ChatObject.isNotInChat(currentChat) && !ChatObject.isMonoForum(currentChat) && !isThreadChat() || ChatObject.isChannel(currentChat) && !ChatObject.canPost(currentChat) && !currentChat.megagroup || !ChatObject.canSendMessages(currentChat))) {
+                if (selectedObject != null && currentChat != null && (ChatObject.isNotInChat(getSendingChat()) && !ChatObject.isMonoForum(currentChat) && !isThreadChat() || ChatObject.isChannel(currentChat) && !ChatObject.canPost(getSendingChat()) && !currentChat.megagroup || !ChatObject.canSendMessages(getSendingChat()))) {
                     MessageObject messageObject = selectedObject;
                     if (messageObject.getGroupId() != 0) {
                         MessageObject.GroupedMessages group = getGroup(messageObject.getGroupId());
@@ -43549,6 +43932,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
 
         @Override
+        public boolean isHoldingMessagePopup(ChatMessageCell cell) {
+            return holdPopupView == cell;
+        }
+
+        @Override
         public boolean canPerformActions() {
             return actionBar != null && !actionBar.isActionModeShowed() && !isReport() && !inPreviewMode;
         }
@@ -45085,7 +45473,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
         @Override
         public TextSelectionHelper.ChatListTextSelectionHelper getTextSelectionHelper() {
-            return textSelectionHelper;
+            return holdPopupView != null ? null : textSelectionHelper;
         }
 
         @Override
@@ -48863,15 +49251,15 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             allowChatActions = false;
         }
 
-        if (currentChat != null && (ChatObject.isNotInChat(currentChat) && !ChatObject.isMonoForum(currentChat) && !isThreadChat())) {
+        if (currentChat != null && (ChatObject.isNotInChat(getSendingChat()) && !ChatObject.isMonoForum(currentChat) && !isThreadChat())) {
             allowChatActions = false;
         }
 
-        if (currentChat != null && (ChatObject.isChannel(currentChat) && !ChatObject.canPost(currentChat) && !currentChat.megagroup)) {
+        if (currentChat != null && (ChatObject.isChannel(currentChat) && !ChatObject.canPost(getSendingChat()) && !currentChat.megagroup)) {
             allowChatActions = false;
         }
 
-        if (currentChat != null && (!ChatObject.canSendMessages(currentChat))) {
+        if (currentChat != null && (!ChatObject.canSendMessages(getSendingChat()))) {
             allowChatActions = false;
         }
 
@@ -48924,11 +49312,6 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             options.add(OPTION_DELETE);
             icons.add(deleteIconRes);
         } else if (type == 1) {
-            if (NekoConfig.holdToOpenPopup) {
-                items.add(LocaleController.getString(R.string.Select));
-                options.add(OPTION_SELECT);
-                icons.add(R.drawable.msg_select);
-            }
             if (currentChat != null) {
                 if ((allowChatActions || isEphemeralFromBot) && (primaryMessage == null || !primaryMessage.isWelcomeMessage()) && !isInsideContainer && chatMode != MODE_WELCOME_MESSAGES) {
                     items.add(LocaleController.getString(R.string.Reply));
@@ -49544,6 +49927,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             items.add(LocaleController.getString(R.string.FeedExcludeChannel));
             options.add(OPTION_FEED_EXCLUDE_CHANNEL);
             icons.add(R.drawable.msg_delete);
+        }
+        if (NekoConfig.holdToOpenPopup && !options.contains(OPTION_SELECT)) {
+            items.add(LocaleController.getString(R.string.Select));
+            options.add(OPTION_SELECT);
+            icons.add(R.drawable.msg_select);
         }
     }
 
