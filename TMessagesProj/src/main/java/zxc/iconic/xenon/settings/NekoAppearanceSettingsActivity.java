@@ -102,7 +102,6 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
     private final int tabsPositionRow = rowId++;
 
     private final int blurSettingsRow = rowId++;
-    private final int hideRecordButtonRow = rowId++;
     private final int disableGooeyAvatarAnimationRow = rowId++;
     private final int gooeyAvatarOffsetRow = rowId++;
     private final int keepUnreadChatsOnTopRow = rowId++;
@@ -186,7 +185,6 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
             items.add(UItem.asCheck(keepUnreadArchivedOnTopRow, LocaleController.getString(R.string.KeepUnreadArchivedOnTop)).setChecked(NekoConfig.keepUnreadArchivedOnTop).slug("keepUnreadArchivedOnTop"));
         }
         items.add(UItem.asCheck(smoothlyMoveChatsRow, LocaleController.getString(R.string.SmoothlyMoveChats)).setChecked(NekoConfig.smoothlyMoveChats).slug("smoothlyMoveChats"));
-        items.add(UItem.asCheck(hideRecordButtonRow, LocaleController.getString(R.string.HideRecordButton)).setChecked(NekoConfig.hideRecordButton).slug("hideRecordButton"));
         items.add(UItem.asCheck(roundedBulletinRow, LocaleController.getString(R.string.RoundedBulletin)).setChecked(NekoConfig.roundedBulletin).slug("roundedBulletin"));
         items.add(UItem.asCheck(appBarShadowRow, LocaleController.getString(R.string.DisableAppBarShadow)).slug("appBarShadow").setChecked(NekoConfig.disableAppBarShadow));
         items.add(UItem.asCheck(formatTimeWithSecondsRow, LocaleController.getString(R.string.FormatWithSeconds)).slug("formatTimeWithSeconds").setChecked(NekoConfig.formatTimeWithSeconds));
@@ -370,11 +368,6 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
             NekoConfig.toggleSmoothlyMoveChats();
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.smoothlyMoveChats);
-            }
-        } else if (id == hideRecordButtonRow) {
-            NekoConfig.toggleHideRecordButton();
-            if (view instanceof TextCheckCell) {
-                ((TextCheckCell) view).setChecked(NekoConfig.hideRecordButton);
             }
         } else if (id == material3SwitchesRow) {
             NekoConfig.toggleMaterial3Switches();

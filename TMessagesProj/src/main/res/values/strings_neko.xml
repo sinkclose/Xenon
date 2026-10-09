@@ -143,7 +143,7 @@
     <string name="Switches">Switches</string>
     <string name="MaterialSliders">Sliders</string>
     <string name="BottomNavigationBar">Bottom navigation bar</string>
-    <string name="Md3Folders">Folder (WIP)</string>
+    <string name="Md3Folders">Folder</string>
     <string name="Material3Dialogs">Dialogs</string>
     <string name="Material3DialogsConflict">Disable \"%1$s\" to enable \"%2$s\"</string>
     <string name="TelegramDefaultDialog">Telegram default dialog</string>
@@ -414,7 +414,7 @@
     <string name="GooeyAvatarOffset">Avatar pull-in offset</string>
     <string name="GooeyAvatarOffsetLeft">Higher</string>
     <string name="GooeyAvatarOffsetRight">Lower</string>
-    <string name="HideRecordButton">Hide record button</string>
+    <string name="DisableRecordButton">Disable record button</string>
     <string name="TelegaDetectorEnabled">Telega detector</string>
     <string name="TelegaDetectorHint">Checks if a profile uses or used Telega.</string>
     <string name="TelegaDetectorStatusTitle">Telega status</string>
@@ -687,6 +687,7 @@
     <string name="MarkdownParserXenon">Xenon</string>
     <string name="MarkdownParserTelegram">Telegram</string>
     <string name="GifsUnavailableForAnotherAccount">Sending GIFs from another account is currently unavailable.</string>
+    <string name="IosLikeInputField">iOS like input field</string>
 </resources>
 
 

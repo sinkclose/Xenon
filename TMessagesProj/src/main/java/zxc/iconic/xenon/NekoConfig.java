@@ -274,6 +274,7 @@ public class NekoConfig {
     public static final int GLASS_GLARE_DISABLE = 2;
 
     public static boolean liquidChatElements = false;
+    public static boolean iosLikeInputField = false;
     public static float liquidGlassIntensity = 0.75f;
     public static int liquidGlassThickness = 11;
     public static boolean useAdvancedLiquidGlass = false;
@@ -474,6 +475,7 @@ public class NekoConfig {
             xrayAppProxyConfigJson = preferences.getString("xrayAppProxyConfigJson", "");
             xrayAppProxyCheckUrl = normalizeXrayCheckUrl(preferences.getString("xrayAppProxyCheckUrl", XRAY_DEFAULT_CHECK_URL));
             liquidChatElements = preferences.getBoolean("liquidChatElements", false);
+            iosLikeInputField = preferences.getBoolean("iosLikeInputField", false);
             liquidGlassIntensity = preferences.getFloat("liquidGlassIntensity", 0.75f);
             liquidGlassThickness = preferences.getInt("liquidGlassThickness", 11);
             useAdvancedLiquidGlass = preferences.getBoolean("useAdvancedLiquidGlass", false);
@@ -2138,6 +2140,12 @@ public class NekoConfig {
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("avatarShapeSquareBase", avatarShapeSquareBase);
         editor.apply();
+    }
+
+    public static void toggleIosLikeInputField() {
+        iosLikeInputField = !iosLikeInputField;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        preferences.edit().putBoolean("iosLikeInputField", iosLikeInputField).apply();
     }
 
     public static void toggleLiquidChatElements() {

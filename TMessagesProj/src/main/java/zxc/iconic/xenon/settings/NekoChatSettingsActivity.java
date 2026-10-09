@@ -54,6 +54,8 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
     private final int reducedColorsRow = rowId++;
 
     private final int liquidChatElementsRow = rowId++;
+    private final int iosLikeInputFieldRow = rowId++;
+    private final int disableRecordButtonRow = rowId++;
     private final int ignoreBlockedRow = rowId++;
     private final int quickForwardRow = rowId++;
     private final int otherSwipeActionsRow = rowId++;
@@ -169,6 +171,8 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
         items.add(UItem.asShadow(null));
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.Chat)));
+        items.add(UItem.asCheck(iosLikeInputFieldRow, LocaleController.getString(R.string.IosLikeInputField)).slug("iosLikeInputField").setChecked(NekoConfig.iosLikeInputField));
+        items.add(UItem.asCheck(disableRecordButtonRow, LocaleController.getString(R.string.DisableRecordButton)).slug("hideRecordButton").setChecked(NekoConfig.hideRecordButton));
         items.add(UItem.asCheck(liquidChatElementsRow, LocaleController.getString(R.string.LiquidChatElements)).slug("liquidChatElements").setChecked(NekoConfig.liquidChatElements));
         items.add(UItem.asCheck(ignoreBlockedRow, LocaleController.getString(R.string.IgnoreBlocked), LocaleController.getString(R.string.IgnoreBlockedAbout)).slug("ignoreBlocked").setChecked(NekoConfig.ignoreBlocked));
         items.add(UItem.asCheck(quickForwardRow, LocaleController.getString(R.string.QuickForward)).slug("quickForward").setChecked(NekoConfig.quickForward));
@@ -267,7 +271,17 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
     @Override
     protected void onItemClick(UItem item, View view, int position, float x, float y) {
         var id = item.id;
-        if (id == liquidChatElementsRow) {
+        if (id == iosLikeInputFieldRow) {
+            NekoConfig.toggleIosLikeInputField();
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.iosLikeInputField);
+            }
+        } else if (id == disableRecordButtonRow) {
+            NekoConfig.toggleHideRecordButton();
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.hideRecordButton);
+            }
+        } else if (id == liquidChatElementsRow) {
             NekoConfig.toggleLiquidChatElements();
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.liquidChatElements);

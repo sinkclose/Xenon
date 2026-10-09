@@ -52,6 +52,8 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
     private final OnButtonFullyVisibleListener[] onButtonFullyVisible = new OnButtonFullyVisibleListener[BUTTONS_COUNT];
     private OnButtonsTotalWidthChanged onButtonsTotalWidthChanged;
     private final FrameLayout container;
+    private boolean centerUsesAvailableWidth;
+    private boolean iosInputLayout;
     private boolean liquidTouchEnabled;
     private LiquidTouchEffect centerLiquid;
     private float centerLiquidX, centerLiquidY;
@@ -144,6 +146,15 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
         BUTTON_GIGA_GROUP_INFO,
         BUTTON_RECENT_ACTIONS_INFO
     };
+    private static final int[] iosButtonsOrderLeft = new int[] {
+        BUTTON_GIFT
+    };
+    private static final int[] iosButtonsOrderRight = new int[] {
+        BUTTON_SEARCH,
+        BUTTON_DIRECT,
+        BUTTON_GIGA_GROUP_INFO,
+        BUTTON_RECENT_ACTIONS_INFO
+    };
 
     private final Theme.ResourcesProvider resourcesProvider;
     private final BlurredBackgroundDrawableViewFactory blurredBackgroundDrawableViewFactory;
@@ -174,6 +185,22 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
 
     public FrameLayout getContainer() {
         return container;
+    }
+
+    public void setIosInputLayout(boolean enabled) {
+        if (iosInputLayout == enabled) return;
+        iosInputLayout = enabled;
+        checkContainerPaddings(true);
+        checkButtonsPositionsAndVisibility();
+        requestLayout();
+        invalidate();
+    }
+
+    public void setCenterUsesAvailableWidth(boolean enabled) {
+        if (centerUsesAvailableWidth == enabled) return;
+        centerUsesAvailableWidth = enabled;
+        requestLayout();
+        invalidate();
     }
 
     public void makeViewWrapContent(View view) {
@@ -346,7 +373,7 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
 
     private void checkContainerPaddings(boolean canRequestLayout) {
         int paddingLeft = NonIslandHelper.chatElements() ? 0 : dp(7), paddingRight = NonIslandHelper.chatElements() ? 0 : dp(7);
-        for (final int buttonId : buttonsOrderLeft) {
+        for (final int buttonId : iosInputLayout ? iosButtonsOrderLeft : buttonsOrderLeft) {
             final ButtonHolder holder = buttonHolders[buttonId];
             if (holder == null) {
                 continue;
@@ -354,7 +381,7 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
             paddingLeft += holder.visibilityAnimator.getValue() ? dp(44 + 10) : 0;
         }
 
-        for (final int buttonId : buttonsOrderRight) {
+        for (final int buttonId : iosInputLayout ? iosButtonsOrderRight : buttonsOrderRight) {
             final ButtonHolder holder = buttonHolders[buttonId];
             if (holder == null) {
                 continue;
@@ -362,9 +389,15 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
             paddingRight += holder.visibilityAnimator.getValue() ? dp(44 + 10) : 0;
         }
 
-        final MarginLayoutParams lp = (MarginLayoutParams) container.getLayoutParams();
-
-        if (lp.leftMargin != paddingLeft || lp.rightMargin != paddingRight) {
+        final FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) container.getLayoutParams();
+        // Keep the centered width with search and direct messages on the same side,
+        // even when direct messages or gifts are unavailable in this channel.
+        if (centerUsesAvailableWidth) paddingLeft = paddingRight = dp(7 + 2 * (44 + 10));
+        int width = LayoutHelper.MATCH_PARENT;
+        int gravity = centerUsesAvailableWidth ? Gravity.CENTER : Gravity.CENTER_VERTICAL;
+        if (lp.leftMargin != paddingLeft || lp.rightMargin != paddingRight || lp.width != width || lp.gravity != gravity) {
+            lp.width = width;
+            lp.gravity = gravity;
             lp.leftMargin = paddingLeft;
             lp.rightMargin = paddingRight;
             if (canRequestLayout) {
@@ -389,7 +422,7 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
             holder.button.setScaleY(lerp(0.4f, 1f, visibility));
         }
 
-        for (final int buttonId : buttonsOrderLeft) {
+        for (final int buttonId : iosInputLayout ? iosButtonsOrderLeft : buttonsOrderLeft) {
             final ButtonHolder holder = buttonHolders[buttonId];
             if (holder == null) {
                 continue;
@@ -400,7 +433,7 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
             totalWidthLeft += width;
         }
 
-        for (final int buttonId : buttonsOrderRight) {
+        for (final int buttonId : iosInputLayout ? iosButtonsOrderRight : buttonsOrderRight) {
             final ButtonHolder holder = buttonHolders[buttonId];
             if (holder == null) {
                 continue;
@@ -412,7 +445,7 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
         }
 
         if (totalVisibilityFactor < 1) {
-            for (final int buttonId : buttonsOrderLeft) {
+            for (final int buttonId : iosInputLayout ? iosButtonsOrderLeft : buttonsOrderLeft) {
                 final ButtonHolder holder = buttonHolders[buttonId];
                 if (holder == null) {
                     continue;
@@ -421,7 +454,7 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
                 holder.button.setTranslationX(holder.button.getTranslationX() - totalWidthLeft * (1 - totalVisibilityFactor));
             }
 
-            for (final int buttonId : buttonsOrderRight) {
+            for (final int buttonId : iosInputLayout ? iosButtonsOrderRight : buttonsOrderRight) {
                 final ButtonHolder holder = buttonHolders[buttonId];
                 if (holder == null) {
                     continue;
@@ -451,6 +484,10 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
             totalWidthRight = lerp(totalWidthRight, getMeasuredWidth() - right - dp(17.66f), wrapping);
         }
 
+        if (centerUsesAvailableWidth && totalVisibilityFactor > 0 && container.getWidth() > 0) {
+            totalWidthLeft = Math.max(totalWidthLeft, container.getLeft() - dp(7));
+            totalWidthRight = Math.max(totalWidthRight, getMeasuredWidth() - container.getRight() - dp(7));
+        }
         if (onButtonsTotalWidthChanged != null) {
             onButtonsTotalWidthChanged.onButtonsTotalWidthChanged(totalWidthLeft, totalWidthRight);
         }

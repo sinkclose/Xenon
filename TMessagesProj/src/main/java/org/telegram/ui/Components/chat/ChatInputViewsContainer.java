@@ -18,6 +18,7 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 
 import org.telegram.ui.Components.LayoutHelper;
+import org.telegram.ui.Components.ChatActivityEnterView;
 import org.telegram.ui.Components.chat.layouts.ChatActivityActionsButtonsLayout;
 import org.telegram.ui.Components.chat.layouts.ChatActivityChannelButtonsLayout;
 import org.telegram.ui.Components.LiquidTouchEffect;
@@ -37,11 +38,61 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
     private WindowInsetsProvider windowInsetsProvider;
 
     private LiquidTouchEffect liquidTouch;
+    private LiquidTouchEffect[] iosLiquidEffects;
+    private final RectF[] iosSurfaceBounds = {new RectF(), new RectF(), new RectF()};
+    private final BlurredBackgroundDrawable[] iosSideDrawables = new BlurredBackgroundDrawable[2];
+    private ChatActivityEnterView iosComposer;
+    private float iosComposerVisibility = 1f;
+
+    public void setIosComposerVisibility(float visibility) {
+        visibility = Math.max(0f, Math.min(1f, visibility));
+        if (iosComposerVisibility == visibility) return;
+        iosComposerVisibility = visibility;
+        if (visibility == 0f) resetLiquidTouch();
+        invalidate();
+    }
+
+    public void resetLiquidTouch() {
+        if (liquidTouch != null) liquidTouch.reset();
+        if (iosLiquidEffects != null) for (LiquidTouchEffect effect : iosLiquidEffects) effect.reset();
+    }
+
+    private void applyIosSurfaceVisibility(float visibility, Rect stockBounds) {
+        RectF center = iosSurfaceBounds[1];
+        center.set(stockBounds.left + (center.left - stockBounds.left) * visibility,
+                stockBounds.top + (center.top - stockBounds.top) * visibility,
+                stockBounds.right + (center.right - stockBounds.right) * visibility,
+                stockBounds.bottom + (center.bottom - stockBounds.bottom) * visibility);
+        iosSurfaceBounds[0].offset(-dp(64) * (1f - visibility), 0);
+        iosSurfaceBounds[2].offset(dp(64) * (1f - visibility), 0);
+    }
+
+    public void setIosSideDrawables(BlurredBackgroundDrawable left, BlurredBackgroundDrawable right) {
+        iosSideDrawables[0] = left;
+        iosSideDrawables[1] = right;
+        for (BlurredBackgroundDrawable drawable : iosSideDrawables) {
+            drawable.setPadding(dp(7));
+            drawable.setRadius(dp(INPUT_BUBBLE_RADIUS));
+        }
+    }
+
+    private ChatActivityEnterView findIosComposer() {
+        for (int i = 0; i < inputIslandBubbleContainer.getChildCount(); i++) {
+            View child = inputIslandBubbleContainer.getChildAt(i);
+            if (child instanceof ChatActivityEnterView && child.getVisibility() == VISIBLE
+                    && ((ChatActivityEnterView) child).isIosLikeInputField()) return (ChatActivityEnterView) child;
+        }
+        return null;
+    }
     private final LiquidPressAnimationSuppressor liquidPressAnimations = new LiquidPressAnimationSuppressor();
 
     public void setLiquidTouchEnabled(boolean enabled) {
         if (enabled == (liquidTouch != null)) return;
         if (liquidTouch != null) liquidTouch.reset();
+        if (iosLiquidEffects != null) for (LiquidTouchEffect effect : iosLiquidEffects) effect.reset();
+        iosLiquidEffects = enabled ? new LiquidTouchEffect[] {
+                new LiquidTouchEffect(this), new LiquidTouchEffect(this), new LiquidTouchEffect(this)} : null;
+        if (iosLiquidEffects != null) for (LiquidTouchEffect effect : iosLiquidEffects) effect.setDragStrength(1.65f);
         liquidTouch = enabled ? new LiquidTouchEffect(this) : null;
         if (liquidTouch != null) liquidTouch.setDragStrength(1.65f);
         if (!enabled) liquidPressAnimations.restore();
@@ -61,6 +112,16 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
     @Override
     public void observeLiquidTouch(MotionEvent event) {
         liquidPressAnimations.sync(inputIslandBubbleContainer, liquidTouchAllowed());
+        if (event.getActionMasked() == MotionEvent.ACTION_UP || event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+            // Always release every surface, including one that disappeared during recording.
+            if (iosLiquidEffects != null) for (LiquidTouchEffect effect : iosLiquidEffects) effect.onTouchEvent(event, liquidTouchAllowed());
+            if (liquidTouch != null) liquidTouch.onTouchEvent(event, liquidTouchAllowed(), false);
+            return;
+        }
+        if (iosComposer != null && iosLiquidEffects != null) {
+            for (LiquidTouchEffect effect : iosLiquidEffects) effect.onTouchEvent(event, liquidTouchAllowed() && iosComposerVisibility > 0f);
+            return;
+        }
         boolean sideHit = false;
         for (int i = 0; i < inputIslandBubbleContainer.getChildCount(); i++) {
             View child = inputIslandBubbleContainer.getChildAt(i);
@@ -78,13 +139,14 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
     public boolean dispatchTouchEvent(MotionEvent event) {
         if (!LiquidTouchDispatcher.isDispatchingControls()) observeLiquidTouch(event);
         boolean handled = super.dispatchTouchEvent(event);
-        if (!LiquidTouchDispatcher.isDispatchingControls() && !handled && liquidTouch != null) liquidTouch.reset();
+        if (!LiquidTouchDispatcher.isDispatchingControls() && !handled) resetLiquidTouch();
         return handled;
     }
 
     @Override
     protected void onDetachedFromWindow() {
         if (liquidTouch != null) liquidTouch.reset();
+        if (iosLiquidEffects != null) for (LiquidTouchEffect effect : iosLiquidEffects) effect.reset();
         liquidPressAnimations.restore();
         super.onDetachedFromWindow();
     }
@@ -157,6 +219,7 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
     public void updateColors() {
         blurredBackgroundDrawable.updateColors();
         underKeyboardBackgroundDrawable.updateColors();
+        for (BlurredBackgroundDrawable drawable : iosSideDrawables) if (drawable != null) drawable.updateColors();
         invalidate();
     }
 
@@ -332,22 +395,50 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
         tmpRect.inset(0, -dp(7));
         tmpRect.offset(0, blurTop + (int) bubbleInputTranlationY);
 
-        if (zxc.iconic.xenon.helpers.NonIslandHelper.chatElements()) {
+        ChatActivityEnterView previousComposer = iosComposer;
+        iosComposer = drawInputBackground ? findIosComposer() : null;
+        if (previousComposer != iosComposer) resetLiquidTouch();
+        if (zxc.iconic.xenon.helpers.NonIslandHelper.chatElements() && iosComposer == null) {
             tmpRect.top += dp(16);
             tmpRect.bottom = getMeasuredHeight();
             tmpRect.left = 0;
             tmpRect.right = getMeasuredWidth();
         }
 
-        blurredBackgroundDrawable.setBounds(tmpRect);
-        if (liquidTouch != null) liquidTouch.setBounds(tmpRect.left, tmpRect.top, tmpRect.right, tmpRect.bottom);
-        if (drawInputBackground) {
-            int save = liquidTouchAllowed() ? liquidTouch.begin(canvas) : -1;
-            blurredBackgroundDrawable.draw(canvas);
-            if (liquidTouchAllowed()) liquidTouch.drawHighlight(canvas, dp(INPUT_BUBBLE_RADIUS), dp(7));
-            if (save != -1) canvas.restoreToCount(save);
+        if (iosComposer != null && iosSideDrawables[0] != null) {
+            float originX = inputIslandBubbleContainer.getX() + iosComposer.getX();
+            float originY = inputIslandBubbleContainer.getY() + iosComposer.getY();
+            iosComposer.getIosInputSurfaceBounds(iosSurfaceBounds, originX, originY, tmpRect.top, tmpRect.bottom);
+            float visibility = Math.min(iosComposerVisibility, iosComposer.getAlpha());
+            applyIosSurfaceVisibility(visibility, tmpRect);
+            iosComposer.setIosInputEffects(liquidTouchAllowed() && visibility > 0f ? iosLiquidEffects : null, originX, originY);
+            // The center glass is behind the detached buttons, including during expansion.
+            for (int order = 0; order < 3; order++) {
+                int i = order == 0 ? 1 : order == 1 ? 0 : 2;
+                RectF bounds = iosSurfaceBounds[i];
+                BlurredBackgroundDrawable drawable = i == 1 ? blurredBackgroundDrawable : iosSideDrawables[i == 0 ? 0 : 1];
+                drawable.setAlpha(blurredBackgroundDrawable.getAlpha());
+                drawable.setBounds(Math.round(bounds.left), Math.round(bounds.top), Math.round(bounds.right), Math.round(bounds.bottom));
+                LiquidTouchEffect effect = iosLiquidEffects == null ? null : iosLiquidEffects[i];
+                if (effect != null) effect.setBounds(bounds.left + dp(7), bounds.top + dp(7), bounds.right - dp(7), bounds.bottom - dp(7));
+                int save = effect != null && liquidTouchAllowed() ? effect.begin(canvas) : -1;
+                float surfaceAlpha = i == 1 ? 1f : visibility * (i == 2 ? 1f - iosComposer.getIosInputProgress() : 1f);
+                int layer = surfaceAlpha < 1f ? canvas.saveLayerAlpha(bounds.left - dp(8), bounds.top - dp(8), bounds.right + dp(8), bounds.bottom + dp(8), Math.round(255 * surfaceAlpha)) : -1;
+                drawable.draw(canvas);
+                if (effect != null && liquidTouchAllowed()) effect.drawHighlight(canvas, dp(INPUT_BUBBLE_RADIUS), 0);
+                if (layer != -1) canvas.restoreToCount(layer);
+                if (save != -1) canvas.restoreToCount(save);
+            }
+        } else {
+            blurredBackgroundDrawable.setBounds(tmpRect);
+            if (liquidTouch != null) liquidTouch.setBounds(tmpRect.left, tmpRect.top, tmpRect.right, tmpRect.bottom);
+            if (drawInputBackground) {
+                int save = liquidTouchAllowed() ? liquidTouch.begin(canvas) : -1;
+                blurredBackgroundDrawable.draw(canvas);
+                if (liquidTouchAllowed()) liquidTouch.drawHighlight(canvas, dp(INPUT_BUBBLE_RADIUS), dp(7));
+                if (save != -1) canvas.restoreToCount(save);
+            }
         }
-
         if (needDrawInAppKeyboard) {
             underKeyboardBackgroundDrawable.draw(canvas);
         }
@@ -373,7 +464,7 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
             }
             if (!channelSurfaces && liquidTouch != null) liquidTouch.setContentView(null);
         }
-        final int liquidSave = child == inputIslandBubbleContainer && !channelSurfaces && liquidTouchAllowed() ? liquidTouch.begin(canvas) : -1;
+        final int liquidSave = child == inputIslandBubbleContainer && iosComposer == null && !channelSurfaces && liquidTouchAllowed() ? liquidTouch.begin(canvas) : -1;
         final boolean needClip = child == inAppKeyboardBubbleContainer;
         if (needClip) {
             canvas.save();
@@ -416,6 +507,7 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
     public void setInputBubbleAlpha(int alpha) {
         if (blurredBackgroundDrawable != null) {
             blurredBackgroundDrawable.setAlpha(alpha);
+            for (BlurredBackgroundDrawable drawable : iosSideDrawables) if (drawable != null) drawable.setAlpha(alpha);
         }
 
     }

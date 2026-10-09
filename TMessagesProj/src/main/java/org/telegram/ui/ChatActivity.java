@@ -5087,6 +5087,9 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
             glassBackgroundDrawableFactory.create(chatInputViewsContainer, blurredBackgroundColorProvider));
         chatInputViewsContainer.setUnderKeyboardBackgroundDrawable(
             glassBackgroundDrawableFactoryFrosted.create(chatInputViewsContainer, blurredBackgroundColorProvider));
+        chatInputViewsContainer.setIosSideDrawables(
+            glassBackgroundDrawableFactory.create(chatInputViewsContainer, blurredBackgroundColorProvider),
+            glassBackgroundDrawableFactory.create(chatInputViewsContainer, blurredBackgroundColorProvider));
         if (isFeedSearch()) {
             chatInputViewsContainer.drawInputBackground = false;
         }
@@ -29927,6 +29930,13 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
         bottomOverlayChatText.setTextColorKey(accentTextButton ? Theme.key_featuredStickers_buttonText : Theme.key_glass_defaultText);
 
+        CharSequence overlayLabel = bottomOverlayChatText.getContentDescription();
+        boolean compactMute = NekoConfig.iosLikeInputField && ChatObject.isChannelAndNotMegaGroup(currentChat)
+                && (TextUtils.equals(overlayLabel, getString(R.string.ChannelMuteNoCaps))
+                    || TextUtils.equals(overlayLabel, getString(R.string.ChannelUnmuteNoCaps)));
+        bottomChannelButtonsLayout.setIosInputLayout(NekoConfig.iosLikeInputField);
+        bottomChannelButtonsLayout.setCenterUsesAvailableWidth(compactMute);
+
         bottomChannelButtonsLayout.setCenterAccentBackground(accentTextButton, animated);
         bottomChannelButtonsLayout.updateWrappingVisible(animated);
         bottomChannelButtonsLayout.showButton(ChatActivityChannelButtonsLayout.BUTTON_SEARCH, showSearchButton && bottomChannelButtonsLayout.getVisibility() == View.VISIBLE, animated);
@@ -32861,7 +32871,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         return view instanceof ChatMessageCell && isMessagePopupPreviewObject(((ChatMessageCell) view).getMessageObject());
     }
 
-    private void closeMessagePopupForTransition() {
+    public void closeMessagePopupForTransition() {
         if (messagePopupPreviewLayout == null || scrimPopupWindow == null) return;
         final ActionBarPopupWindow window = scrimPopupWindow;
         removePopupBlur(true);
@@ -34819,6 +34829,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 if (waitForLangDetection.get() || waitForQr.get()) {
                     return;
                 }
+                if (chatActivityEnterView != null) {
+                    chatActivityEnterView.closeKeyboard();
+                } else {
+                    AndroidUtilities.hideKeyboard(contentView);
+                }
                 scrimPopupWindow.showAtLocation(chatListView, Gravity.LEFT | Gravity.TOP,
                         previewLayout != null ? previewWindowLocation[0] : finalPopupX,
                         previewLayout != null ? previewWindowLocation[1] : finalPopupY);
@@ -35923,6 +35938,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 args.putBoolean("canSelectTopics", true);
                 DialogsActivity fragment = new DialogsActivity(args);
                 fragment.setDelegate(this);
+                if (isFeedSearch()) closeMessagePopupForTransition();
                 presentFragment(fragment);
                 break;
             }
@@ -50325,6 +50341,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     private void onBottomItemsVisibilityChanged() {
         checkBottomViewVisibility(actionsButtonsLayout, MESSAGE_ACTION_CONTAINER, true);
         checkBottomViewVisibility(chatActivityEnterView, MESSAGE_INPUT_CONTAINER, false);
+        if (chatInputViewsContainer != null) {
+            chatInputViewsContainer.setIosComposerVisibility(chatActivityEnterView == null ? 0f : chatActivityEnterView.getAlpha());
+        }
         checkBottomViewVisibility(searchContainer, MESSAGE_SEARCH_CONTAINER, true);
         checkBottomViewVisibility(bottomChannelButtonsLayout, BOTTOM_OVERLAY_CHAT_CONTAINER, false);
         checkBottomViewVisibility(bottomOverlay, BOTTOM_OVERLAY_TEXT_CONTAINER, false);

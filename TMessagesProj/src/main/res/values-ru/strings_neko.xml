@@ -391,7 +391,7 @@
     <string name="GooeyAvatarOffset">Смещение точки втягивания</string>
     <string name="GooeyAvatarOffsetLeft">Выше</string>
     <string name="GooeyAvatarOffsetRight">Ниже</string>
-    <string name="HideRecordButton">Скрыть кнопку записи</string>
+    <string name="DisableRecordButton">Отключить кнопку записи</string>
     <string name="TelegaDetectorEnabled">Telega детектор</string>
     <string name="TextAnimation">Анимация текста</string>
     <string name="TextAnimationToggle">Анимация текста</string>
@@ -599,7 +599,7 @@
     <string name="FadeTransitionSpeed">Скорость затухания (мс)</string>
     <string name="MaterialSliders">Слайдеры</string>
     <string name="BottomNavigationBar">Нижняя панель навигации</string>
-    <string name="Md3Folders">Папки (WIP)</string>
+    <string name="Md3Folders">Папки</string>
     <string name="Material3Dialogs">Диалоги</string>
     <string name="AvatarShapesHeader">Формы</string>
     <string name="Avatars">Аватарки</string>
@@ -680,5 +680,6 @@
     <string name="MarkdownParserXenon">Xenon</string>
     <string name="MarkdownParserTelegram">Telegram</string>
     <string name="GifsUnavailableForAnotherAccount">Сейчас отправлять GIF через другой аккаунт нельзя.</string>
+    <string name="IosLikeInputField">Поле ввода в стиле iOS</string>
 </resources>
 
