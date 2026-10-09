@@ -1,5 +1,6 @@
 package org.telegram.ui.Components;
 
+import android.annotation.SuppressLint;
 import android.graphics.Canvas;
 import android.graphics.RectF;
 import android.graphics.Paint;
@@ -8,6 +9,7 @@ import android.graphics.RadialGradient;
 import android.graphics.Shader;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
+import android.os.SystemClock;
 import android.view.MotionEvent;
 import android.view.View;
 
@@ -103,7 +105,7 @@ public final class LiquidTouchEffect {
                 downX = event.getX();
                 downY = event.getY();
                 pointerId = event.getPointerId(0);
-                press.animateToFinalPosition(1f);
+                startPress();
                 break;
             case MotionEvent.ACTION_MOVE:
                 if (pointerId == -1) return;
@@ -127,6 +129,18 @@ public final class LiquidTouchEffect {
                 if (event.getPointerId(event.getActionIndex()) == pointerId) release();
                 break;
         }
+    }
+
+    @SuppressLint("RestrictedApi")
+    private void startPress() {
+        press.cancel();
+        press.setStartValue(progress).setStartVelocity(0f);
+        press.animateToFinalPosition(1f);
+        // Prime the spring's clock during ACTION_DOWN, before child controls handle it.
+        // This only publishes the current size: no time advances and no scale jump.
+        // The first scheduled frame can then integrate elapsed time instead of spending
+        // a whole frame initializing the animation at the unchanged start value.
+        press.doAnimationFrame(SystemClock.uptimeMillis());
     }
 
     private void release() {
