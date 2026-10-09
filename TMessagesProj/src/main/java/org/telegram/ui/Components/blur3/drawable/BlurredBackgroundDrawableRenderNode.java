@@ -278,13 +278,17 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
     public void setAlpha(int alpha) {
         final int oldAlpha = getAlpha();
 
-        super.setAlpha(alpha);
         // In advanced glass mode, advancedGlassAlpha scales the drawable alpha
         // so the entire glass surface (refraction + tint) can be made translucent.
         final float glassAlphaFactor = !fixedRefraction && zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass
                 ? Math.max(0f, Math.min(1f, zxc.iconic.xenon.NekoConfig.advancedGlassAlpha / 100f))
                 : 1f;
-        renderNode.setAlpha(alpha / 255f * glassAlphaFactor);
+        final float renderAlpha = alpha / 255f * glassAlphaFactor;
+        if (oldAlpha == alpha && renderNode.getAlpha() == renderAlpha) {
+            return;
+        }
+        super.setAlpha(alpha);
+        renderNode.setAlpha(renderAlpha);
         renderNodeInvalidated = true;
 
         if (oldAlpha == 0 && alpha > 0) {

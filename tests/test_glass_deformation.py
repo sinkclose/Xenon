@@ -51,6 +51,8 @@ COMMON = r'''
         void drawShadows(Canvas c, Paint p, boolean b) {}
     }
     static class BlurredBackgroundDrawable {
+        int alpha = 255;
+        int getAlpha() { return alpha; } void setAlpha(int value) { alpha = value; }
         float sourceOffsetX=23, sourceOffsetY=400;
         float sourceScaleX=1, sourceScaleY=1, sourceTranslationX, sourceTranslationY;
         Props boundProps = new Props(); int notifications;
@@ -93,7 +95,8 @@ class GlassDeformationTest(unittest.TestCase):
             old = subprocess.check_output(["git", "show", os.environ["GLASS_RENDER_BASELINE"] + ":" + str(renderer.relative_to(ROOT.parents[3]))], text=True)
             source = source.replace(method(source, "public void updateDisplayList()"), method(old, "public void updateDisplayList()"))
         renderer_methods = "\n".join(method(source, signature) for signature in (
-            "protected void onSourceOffsetChange(", "public void updateDisplayList()", "public void draw("))
+            "protected void onSourceOffsetChange(", "public void updateDisplayList()", "public void draw(",
+            "public void setAlpha("))
         renderer_methods = renderer_methods.replace("@NonNull ", "").replace("@Override", "")
         renderer_methods = renderer_methods.replace("org.telegram.messenger.LiteMode", "LiteMode").replace("zxc.iconic.xenon.NekoConfig", "NekoConfig")
         harness = r'''
@@ -122,7 +125,6 @@ public class GlassDeformationHarness {
         Effect liquidGlassEffect=new Effect(); int backgroundColor, strokeColorTop, strokeColorBottom, shadowColor;
         float shadowAlpha=1, shadowLayerRadius, shadowLayerDx, shadowLayerDy;
         Paint paintShadow=new Paint(), paintStrokeTop=new Paint(), paintStrokeBottom=new Paint();
-        int getAlpha() { return 255; }
         void recreateLiquidGlassEffect() {} void drawSource(Canvas c,Source s) {}
         void drawStroke(Object... a) {}
         RENDERER_METHODS
@@ -145,6 +147,8 @@ public class GlassDeformationHarness {
             near(outer.ty,glass.sourceOffsetY+min*(float)Math.tanh(.05f*e.dragStrength*e.offsetY/min)
                     +(1-sy)*(e.bounds.centerY()-originY));
         }
+        // ActionBar/input surfaces apply the same alpha on every draw.
+        glass.setAlpha(glass.getAlpha());
         glass.draw(outer);
         Rect padded=glass.boundProps.boundsWithPadding; Source s=glass.source;
         near(s.l,outer.sx*padded.left+outer.tx); near(s.t,outer.sy*padded.top+outer.ty);
@@ -178,8 +182,28 @@ public class GlassDeformationHarness {
                 verify(g,e,origin[0],origin[1]);
                 check(!LiquidTouchEffect.updateBackground(g,null,0,0),"rest must be identity");
                 e.bounds.set(0,0,0,0); e.progress=1; verify(g,e,0,0);
+                int idleRecordings = g.source.recordings;
+                for (int frame=0;frame<1000;frame++) verify(g,e,0,0);
+                check(g.source.recordings==idleRecordings,"unchanged alpha rebuilt idle glass");
             }
         }
+        Glass alphaGlass = new Glass(); Canvas alphaCanvas = new Canvas();
+        alphaGlass.draw(alphaCanvas);
+        alphaGlass.setAlpha(128); alphaGlass.draw(alphaCanvas);
+        near(alphaGlass.renderNode.getAlpha(),128/255f);
+        int alphaRecordings = alphaGlass.source.recordings;
+        alphaGlass.setAlpha(128); alphaGlass.draw(alphaCanvas);
+        check(alphaGlass.source.recordings==alphaRecordings,"unchanged translucent alpha rebuilt glass");
+        NekoConfig.useAdvancedLiquidGlass=true; NekoConfig.advancedGlassAlpha=40;
+        alphaGlass.setAlpha(128); alphaGlass.draw(alphaCanvas);
+        near(alphaGlass.renderNode.getAlpha(),128/255f*.4f);
+        alphaRecordings = alphaGlass.source.recordings;
+        for(int frame=0;frame<1000;frame++) { alphaGlass.setAlpha(128); alphaGlass.draw(alphaCanvas); }
+        check(alphaGlass.source.recordings==alphaRecordings,"unchanged advanced alpha rebuilt glass");
+        NekoConfig.advancedGlassAlpha=60; alphaGlass.setAlpha(128); alphaGlass.draw(alphaCanvas);
+        near(alphaGlass.renderNode.getAlpha(),128/255f*.6f);
+        alphaGlass.fixedRefraction=true; alphaGlass.setAlpha(128); alphaGlass.draw(alphaCanvas);
+        near(alphaGlass.renderNode.getAlpha(),128/255f);
         // The software Canvas path must cancel the deformation in source coordinates too.
         BlurredBackgroundDrawable d=new BlurredBackgroundDrawable(); d.setSourceTransform(1.2f,1.1f,17,-9);
         Canvas c=new Canvas(); c.translate(d.sourceOffsetX,d.sourceOffsetY); c.translate(17,-9); c.scale(1.2f,1.1f);

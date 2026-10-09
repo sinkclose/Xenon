@@ -18627,13 +18627,16 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         @Override
         public void onDescendantInvalidated(View child, View target) {
             super.onDescendantInvalidated(child, target);
-            if (child == backgroundView) {
-                invalidateMergedVisibleBlurredPositionsAndSources(BLUR_INVALIDATE_FLAG_WALLPAPER);
-            } else if (child == chatListView || child == messagesSearchListContainer) {
-                // HWUI can update a child without running our dispatchDraw.
-                // Observe source changes, excluding glass views to avoid feedback.
-                invalidateMergedVisibleBlurredPositionsAndSources(BLUR_INVALIDATE_FLAG_SCROLL);
+            if (glassSourceCaptureDepth != 0) {
+                return;
             }
+            if (child == backgroundView) {
+                pendingGlassSourceFlags |= BLUR_INVALIDATE_FLAG_WALLPAPER;
+            } else if (child == chatListView || child == messagesSearchListContainer) {
+                pendingGlassSourceFlags |= BLUR_INVALIDATE_FLAG_SCROLL;
+            }
+            // Animated messages/wallpapers must not drive glass captures at rest.
+            // Flush these changes on the next scroll, layout or liquid deformation.
         }
 
         private final RectF glassWallpaperCaptureRect = new RectF();
@@ -18649,11 +18652,16 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 return;
             }
             final int save = canvas.save();
-            canvas.clipRect(position);
-            // drawChild reuses the background view's hardware display list.
-            // It preserves its transforms and does not draw messages or glass.
-            super.drawChild(canvas, backgroundView, getDrawingTime());
-            canvas.restoreToCount(save);
+            glassSourceCaptureDepth++;
+            try {
+                canvas.clipRect(position);
+                // drawChild reuses the background view's hardware display list.
+                // It preserves its transforms and does not draw messages or glass.
+                super.drawChild(canvas, backgroundView, getDrawingTime());
+            } finally {
+                glassSourceCaptureDepth--;
+                canvas.restoreToCount(save);
+            }
         }
 
         public ChatActivity getChatActivity() {
@@ -18896,6 +18904,15 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
 
         public void drawList(Canvas blurCanvas, RectF position) {
+            glassSourceCaptureDepth++;
+            try {
+                drawListForGlass(blurCanvas, position);
+            } finally {
+                glassSourceCaptureDepth--;
+            }
+        }
+
+        private void drawListForGlass(Canvas blurCanvas, RectF position) {
             final ViewGroup parent = parentChatActivity != null ? parentChatActivity.contentView : contentView;
             final float searchListVisibilityFactor = animatorSearchResultAsListVisibility.getFloatValue();
             final int chatListAlpha = (int) (255 * (1f - searchListVisibilityFactor));
@@ -50417,6 +50434,8 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     private OnPostDrawView invalidateBlurredSourcesView;
+    private int glassSourceCaptureDepth;
+    private int pendingGlassSourceFlags;
 
     private static final int BLUR_INVALIDATE_FLAG_SCROLL = 1;
     private static final int BLUR_INVALIDATE_FLAG_POSITIONS = 1 << 1;
@@ -50428,6 +50447,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     private void invalidateMergedVisibleBlurredPositionsAndSources(int flags) {
+        // Source views may invalidate themselves while drawList/drawWallpaper
+        // records them. That is part of this capture, not a new glass frame.
+        if (glassSourceCaptureDepth != 0) {
+            return;
+        }
         if (feedContentChangedCallback != null) feedContentChangedCallback.run();
         if (parentChatActivity != null) {
             parentChatActivity.invalidateMergedVisibleBlurredPositionsAndSources(flags);
@@ -50447,9 +50471,13 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     private int glassDrawablesPositionsCount;
 
     private void invalidateMergedVisibleBlurredPositionsAndSourcesImpl(int flags) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || scrollableViewNoiseSuppressor == null) {
+        if (flags == 0 || Build.VERSION.SDK_INT < Build.VERSION_CODES.S || scrollableViewNoiseSuppressor == null
+                || contentView == null || contentView.getWidth() <= 0 || contentView.getHeight() <= 0) {
             return;
         }
+
+        flags |= pendingGlassSourceFlags;
+        pendingGlassSourceFlags = 0;
 
         if (BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_CLIP)) {
             invalidateClipRectForBackgroundAndChatList();
@@ -50473,11 +50501,15 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         final boolean hasChanges = BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_POSITIONS | BLUR_INVALIDATE_FLAG_SCROLL | BLUR_INVALIDATE_FLAG_CLIP)
                 && scrollableViewNoiseSuppressor.invalidateResultRenderNodes(contentView::drawList, contentView.getWidth(), contentView.getHeight());
         if (hasChanges || wallpaperChanged) {
-            if (glassBackgroundSourceRenderNode != null) {
-                glassBackgroundSourceRenderNode.invalidateDisplayListForDrawables();
-            }
-            if (glassBackgroundSourceFrostedRenderNode != null) {
-                glassBackgroundSourceFrostedRenderNode.invalidateDisplayListForDrawables();
+            // Content updates re-record child RenderNodes already referenced by
+            // cached glass. Rebuild surface commands only if capture regions move.
+            if (BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_POSITIONS)) {
+                if (glassBackgroundSourceRenderNode != null) {
+                    glassBackgroundSourceRenderNode.invalidateDisplayListForDrawables();
+                }
+                if (glassBackgroundSourceFrostedRenderNode != null) {
+                    glassBackgroundSourceFrostedRenderNode.invalidateDisplayListForDrawables();
+                }
             }
             if (actionBar != null) {
                 actionBar.invalidate();
