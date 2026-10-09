@@ -1060,6 +1060,12 @@ public class ReactionsLayoutInBubble {
                 }
             }
 
+            if (isOutOwner() && !paid) {
+                int themeBackgroundColor = Theme.getColor(Theme.key_windowBackgroundGray, resourcesProvider);
+                backgroundColor = ColorUtils.setAlphaComponent(choosen ? ColorUtils.blendARGB(themeBackgroundColor, backgroundColor, 0.15f) : themeBackgroundColor, 255);
+                textColor = Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider);
+            }
+
             if (drawBgOnlyIfChosen) {
                 backgroundColor = 0;
                 serviceBackgroundColor = 0;
