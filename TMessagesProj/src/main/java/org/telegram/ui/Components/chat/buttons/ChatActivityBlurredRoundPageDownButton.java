@@ -60,6 +60,9 @@ public class ChatActivityBlurredRoundPageDownButton extends FrameLayout {
     }
 
     public int beginLiquidDraw(Canvas canvas) {
+        if (buttonView != null) {
+            buttonView.updateLiquidBackground(liquidTouchAllowed() ? liquidTouch : null, buttonView.getX(), buttonView.getY());
+        }
         return liquidTouchAllowed() ? liquidTouch.beginInParent(canvas, getX(), getY()) : -1;
     }
 

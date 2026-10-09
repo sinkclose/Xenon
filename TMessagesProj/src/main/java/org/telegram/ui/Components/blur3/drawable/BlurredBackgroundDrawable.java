@@ -58,6 +58,29 @@ public abstract class BlurredBackgroundDrawable extends Drawable {
     protected float sourceOffsetX;
     protected float sourceOffsetY;
 
+    protected float sourceScaleX = 1f, sourceScaleY = 1f;
+    protected float sourceTranslationX, sourceTranslationY;
+
+    /** The surface's Canvas deformation, in this drawable's local coordinates. */
+    public boolean setSourceTransform(float scaleX, float scaleY, float translationX, float translationY) {
+        if (sourceScaleX == scaleX && sourceScaleY == scaleY
+                && sourceTranslationX == translationX && sourceTranslationY == translationY) {
+            return false;
+        }
+        sourceScaleX = scaleX;
+        sourceScaleY = scaleY;
+        sourceTranslationX = translationX;
+        sourceTranslationY = translationY;
+        onSourceOffsetChange(sourceOffsetX, sourceOffsetY);
+        return true;
+    }
+
+    /** Keep the backdrop anchored while the enclosing Canvas deforms the surface. */
+    protected void transformSourceCanvas(Canvas canvas) {
+        canvas.scale(1f / sourceScaleX, 1f / sourceScaleY);
+        canvas.translate(-sourceOffsetX - sourceTranslationX, -sourceOffsetY - sourceTranslationY);
+    }
+
     public void setSourceOffset(float sourceOffsetX, float sourceOffsetY) {
         if (this.sourceOffsetX != sourceOffsetX || this.sourceOffsetY != sourceOffsetY) {
             this.sourceOffsetX = sourceOffsetX;
@@ -626,12 +649,10 @@ public abstract class BlurredBackgroundDrawable extends Drawable {
             boundProps.drawShadows(canvas, shadowPaint, inAppKeyboardOptimization);
         }
 
-        final float offsetX = sourceOffsetX;
-        final float offsetY = sourceOffsetY;
-        final float sL = boundProps.boundsWithPadding.left + offsetX;
-        final float sT = boundProps.boundsWithPadding.top + offsetY;
-        final float sR = boundProps.boundsWithPadding.right + offsetX;
-        final float sB = boundProps.boundsWithPadding.bottom + offsetY;
+        final float sL = sourceScaleX * boundProps.boundsWithPadding.left + sourceOffsetX + sourceTranslationX;
+        final float sT = sourceScaleY * boundProps.boundsWithPadding.top + sourceOffsetY + sourceTranslationY;
+        final float sR = sourceScaleX * boundProps.boundsWithPadding.right + sourceOffsetX + sourceTranslationX;
+        final float sB = sourceScaleY * boundProps.boundsWithPadding.bottom + sourceOffsetY + sourceTranslationY;
 
         final boolean needSaveLayer = alpha != 255;
         if (needSaveLayer) {
@@ -641,11 +662,7 @@ public abstract class BlurredBackgroundDrawable extends Drawable {
 
         canvas.save();
         canvas.clipPath(boundProps.path);
-        canvas.translate(
-            boundProps.boundsWithPadding.left,
-            boundProps.boundsWithPadding.top
-        );
-        canvas.translate(-sL, -sT);
+        transformSourceCanvas(canvas);
         source.draw(canvas, sL, sT, sR, sB);
         canvas.restore();
 
@@ -710,7 +727,8 @@ public abstract class BlurredBackgroundDrawable extends Drawable {
 
         if (bitmapShader != null && newBitmap != null && !newBitmap.isRecycled() && alpha > 0) {
             bitmapShaderMatrix.set(source.getMatrix());
-            bitmapShaderMatrix.postTranslate(-sourceOffsetX, -sourceOffsetY);
+            bitmapShaderMatrix.postTranslate(-sourceOffsetX - sourceTranslationX, -sourceOffsetY - sourceTranslationY);
+            bitmapShaderMatrix.postScale(1f / sourceScaleX, 1f / sourceScaleY);
             bitmapShader.setLocalMatrix(bitmapShaderMatrix);
             backgroundBitmapPaint.setAlpha(alpha);
             boundProps.draw(canvas, backgroundBitmapPaint);
@@ -767,8 +785,11 @@ public abstract class BlurredBackgroundDrawable extends Drawable {
     }
 
     public void getPositionRelativeSource(RectF position) {
-        position.set(boundProps.boundsWithPadding);
-        position.offset(sourceOffsetX, sourceOffsetY);
+        position.set(
+                sourceScaleX * boundProps.boundsWithPadding.left + sourceOffsetX + sourceTranslationX,
+                sourceScaleY * boundProps.boundsWithPadding.top + sourceOffsetY + sourceTranslationY,
+                sourceScaleX * boundProps.boundsWithPadding.right + sourceOffsetX + sourceTranslationX,
+                sourceScaleY * boundProps.boundsWithPadding.bottom + sourceOffsetY + sourceTranslationY);
     }
 
 

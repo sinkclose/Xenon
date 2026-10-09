@@ -336,6 +336,7 @@ public class ChatInputViewsContainer extends FrameLayout {
         blurredBackgroundDrawable.setBounds(tmpRect);
         if (liquidTouch != null) liquidTouch.setBounds(tmpRect.left, tmpRect.top, tmpRect.right, tmpRect.bottom);
         if (drawInputBackground) {
+            LiquidTouchEffect.updateBackground(blurredBackgroundDrawable, liquidTouchAllowed() ? liquidTouch : null, 0f, 0f);
             int save = liquidTouchAllowed() ? liquidTouch.begin(canvas) : -1;
             blurredBackgroundDrawable.draw(canvas);
             if (liquidTouchAllowed()) liquidTouch.drawHighlight(canvas, dp(INPUT_BUBBLE_RADIUS), dp(7));

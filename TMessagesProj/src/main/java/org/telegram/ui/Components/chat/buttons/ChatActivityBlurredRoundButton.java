@@ -48,6 +48,7 @@ public class ChatActivityBlurredRoundButton extends FrameLayout implements Facto
         if (enabled == (liquidTouch != null)) return;
         if (liquidTouch != null) liquidTouch.reset();
         liquidTouch = enabled ? new LiquidTouchEffect(this) : null;
+        if (!enabled) LiquidTouchEffect.updateBackground(backgroundDrawable, null, 0f, 0f);
         liquidPressAnimations.sync(this, liquidTouchAllowed());
         invalidate();
     }
@@ -96,10 +97,20 @@ public class ChatActivityBlurredRoundButton extends FrameLayout implements Facto
     @Override
     public void draw(@NonNull Canvas canvas) {
         liquidPressAnimations.sync(this, liquidTouchAllowed());
+        if (liquidTouch != null) {
+            LiquidTouchEffect.updateBackground(backgroundDrawable, liquidTouchAllowed() ? liquidTouch : null, 0f, 0f);
+        }
         int save = liquidTouchAllowed() ? liquidTouch.begin(canvas) : -1;
         if (backgroundDrawable != null) backgroundDrawable.draw(canvas);
         super.draw(canvas);
         if (save != -1) canvas.restoreToCount(save);
+    }
+
+    /** Update before a parent draws our cached display list under its liquid transform. */
+    public void updateLiquidBackground(LiquidTouchEffect effect, float originX, float originY) {
+        if (LiquidTouchEffect.updateBackground(backgroundDrawable, effect, originX, originY)) {
+            invalidate();
+        }
     }
 
     @Override
