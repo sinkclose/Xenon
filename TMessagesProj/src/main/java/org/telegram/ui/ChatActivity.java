@@ -18856,6 +18856,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             }
 
             Blur3Utils.captureRelativeParent(this::drawListImpl, blurCanvas, position, chatListView, parent, chatListAlpha);
+            if (PhotoViewer.hasInstance()) {
+                PhotoViewer.getInstance().drawClosingPhotoBehindChatUi(blurCanvas, chatListView, parent);
+            }
 
             if (messagesSearchListView != null) {
                 Blur3Utils.captureRelativeParent(messagesSearchListView, blurCanvas, position, messagesSearchListView, parent, searchListAlpha);
@@ -19164,6 +19167,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     super.drawChild(canvas, instantCameraView, drawingTime);
                 }
                 result = super.drawChild(canvas, child, drawingTime);
+                if (child == chatListView && PhotoViewer.hasInstance()) {
+                    PhotoViewer.getInstance().drawClosingPhotoBehindChatUi(canvas, chatListView, this);
+                }
                 if (isVideo && !isMessagePopupPreviewObject(messageObject) && child == chatListView && messageObject.type != MessageObject.TYPE_ROUND_VIDEO && videoPlayerContainer != null && videoPlayerContainer.getTag() != null) {
                     canvas.save();
                     float transitionOffset = 0;
@@ -21736,6 +21742,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 object.viewY = coords[1] - 0 + view.getPaddingTop();
                 object.parentView = chatListView;
                 object.animatingImageView = null;
+                object.drawUnderChatUi = true;
                 object.imageReceiver = imageReceiver;
                 if (needPreview) {
                     object.thumb = imageReceiver.getBitmapSafe();
@@ -21952,6 +21959,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 object.imageReceiver = imageReceiver;
                 object.thumb = imageReceiver.getBitmapSafe();
                 object.radius = imageReceiver.getRoundRadius(true);
+                object.drawUnderChatUi = true;
                 object.clipTopAddition = (int) (chatListViewPaddingTop - chatListViewPaddingVisibleOffset - AndroidUtilities.dp(4));
                 object.clipBottomAddition = (int) (blurredViewBottomOffset
                     + dp(9)
@@ -50787,6 +50795,13 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     private static final int BLUR_INVALIDATE_FLAG_SCROLL = 1;
     private static final int BLUR_INVALIDATE_FLAG_POSITIONS = 1 << 1;
     private static final int BLUR_INVALIDATE_FLAG_CLIP = 1 << 2;
+
+    public void invalidatePhotoViewerTransition() {
+        if (contentView != null) {
+            contentView.invalidate();
+            invalidateMergedVisibleBlurredPositionsAndSources(BLUR_INVALIDATE_FLAG_SCROLL);
+        }
+    }
 
     private void invalidateMergedVisibleBlurredPositionsAndSourcesPositions() {
         invalidateMergedVisibleBlurredPositionsAndSources(BLUR_INVALIDATE_FLAG_POSITIONS);

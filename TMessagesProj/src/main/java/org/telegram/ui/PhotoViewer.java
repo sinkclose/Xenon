@@ -2020,10 +2020,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         }
     }
 
-    private float[][] animationValues = new float[2][13];
+    private float[][] animationValues = new float[2][15];
     private OnBackInvokedDispatcher photoBackDispatcher;
     private OnBackInvokedCallback photoBackCallback;
     private PlaceProviderObject predictiveBackPlace;
+    private PlaceProviderObject closeTransitionPlace;
+    private final int[] closeTransitionLocation = new int[2];
     private ClippingImageView[] predictiveBackViews;
     private ValueAnimator predictiveBackAnimator;
     private float predictiveBackProgress;
@@ -2035,7 +2037,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     private int predictiveBackBackgroundAlpha;
     private float predictiveBackContainerAlpha, predictiveBackNavigationAlpha;
     private int predictiveBackSurfaceVisibility;
-    private final float[] predictiveBackTarget = new float[13];
+    private final float[] predictiveBackTarget = new float[15];
     private long predictiveBackTargetTime;
     private final Runnable predictiveBackTargetUpdater = this::updatePredictiveBackTargetFrame;
 
@@ -2392,10 +2394,20 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                 return;
             }
 
-            if (animationInProgress != 0 && !AndroidUtilities.isTablet() && currentPlaceObject != null && currentPlaceObject.animatingImageView != null) {
-                animatingImageView.getClippedVisibleRect(visibleRect);
+            boolean chatTransition = closeTransitionPlace != null && closeTransitionPlace.drawUnderChatUi
+                    && (predictiveBackActive && !predictiveBackFramePending || animationInProgress == 3);
+            if (chatTransition || animationInProgress != 0 && !AndroidUtilities.isTablet() && currentPlaceObject != null && currentPlaceObject.animatingImageView != null) {
+                if (chatTransition) {
+                    // Both windows draw the same photo. The fading black scrim must
+                    // stay outside it, otherwise the crossfade darkens the chat copy.
+                    animatingImageView.getVisibleRectBehindChatUi(visibleRect);
+                } else {
+                    animatingImageView.getClippedVisibleRect(visibleRect);
+                }
                 if (!visibleRect.isEmpty()) {
-                    visibleRect.inset(dp(1f), dp(1f));
+                    if (!chatTransition) {
+                        visibleRect.inset(dp(1f), dp(1f));
+                    }
 
                     final Rect boundsRect = getBounds();
                     final float width = boundsRect.right;
@@ -2830,6 +2842,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         public int starOffset;
         public boolean fadeIn;
         public boolean keepImageReceiverVisible;
+        public boolean drawUnderChatUi;
     }
 
     public static class EmptyPhotoViewerProvider implements PhotoViewerProvider {
@@ -18424,7 +18437,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         if (object == null) {
             fillCloseFallbackTarget(predictiveBackTarget);
         }
-        predictiveBackEndAlpha = object == null || object.fadeIn ? 0f : 1f;
+        predictiveBackEndAlpha = object == null || object.fadeIn || object.drawUnderChatUi ? 0f : 1f;
         System.arraycopy(predictiveBackTarget, 0, animationValues[1], 0, predictiveBackTarget.length);
         if (animatingImageView.getBitmap() == null && !predictiveBackFramePending) {
             resetPredictiveBack();
@@ -18553,6 +18566,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         }
         predictiveBackPlace = object;
         float endAlpha = object == null || object.fadeIn ? 0f : 1f;
+        closeTransitionPlace = object;
+        if (object != null && object.drawUnderChatUi) {
+            endAlpha = 0f;
+        }
         if (!committing) {
             predictiveBackEndAlpha += (endAlpha - predictiveBackEndAlpha) * blend;
         }
@@ -18591,6 +18608,11 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     }
 
     private void resetPredictiveBack() {
+        boolean hadChatTransition = closeTransitionPlace != null && closeTransitionPlace.drawUnderChatUi;
+        closeTransitionPlace = null;
+        if (hadChatTransition && parentFragment instanceof ChatActivity) {
+            ((ChatActivity) parentFragment).invalidatePhotoViewerTransition();
+        }
         predictiveBackFramePending = false;
         if (containerView != null) {
             containerView.removeCallbacks(predictiveBackTargetUpdater);
@@ -18644,30 +18666,21 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
 
         int[] coords2 = new int[2];
         object.parentView.getLocationInWindow(coords2);
-        int clipTop = (int) (coords2[1] - 0 - (object.viewY + drawRegion.top) + object.clipTopAddition);
-        if (clipTop < 0) {
-            clipTop = 0;
-        }
-        int clipBottom = (int) (object.viewY + drawRegion.top + (drawRegion.bottom - drawRegion.top) - (coords2[1] + object.parentView.getHeight() - 0) + object.clipBottomAddition);
-        if (clipBottom < 0) {
-            clipBottom = 0;
-        }
-
-        clipTop = Math.max(clipTop, clipVertical);
-        clipBottom = Math.max(clipBottom, clipVertical);
-
         target[0] = object.scale * drawRegion.width() / width;
         target[1] = object.scale * drawRegion.height() / height;
         target[2] = object.viewX + drawRegion.left * object.scale;
         target[3] = object.viewY + drawRegion.top * object.scale;
         target[4] = clipHorizontal * object.scale;
-        target[5] = clipTop * object.scale;
-        target[6] = clipBottom * object.scale;
+        target[5] = clipVertical * object.scale;
+        target[6] = clipVertical * object.scale;
         for (int a = 0; a < 4; a++) {
             target[7 + a] = object.radius != null ? object.radius[a] : 0;
         }
         target[11] = clipVertical * object.scale;
         target[12] = clipHorizontal * object.scale;
+        // Keep viewport occlusion separate from the thumbnail's own crop.
+        target[13] = coords2[1] + object.clipTopAddition;
+        target[14] = Math.max(target[13], coords2[1] + object.parentView.getHeight() - object.clipBottomAddition);
     }
 
     private ImageReceiver.BitmapHolder getPredictiveBackBitmap(PlaceProviderObject object) {
@@ -18685,8 +18698,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     }
 
     private void prepareCloseTransition(PlaceProviderObject object, ClippingImageView[] animatingImageViews, boolean predictive) {
+        closeTransitionPlace = object;
         for (int i = 0; i < animatingImageViews.length; i++) {
             animatingImageViews[i].setAnimationValues(animationValues, false, object == null ? false : object.fadeIn);
+            animatingImageViews[i].setAnimationClipBounds(true);
             animatingImageViews[i].setVisibility(View.VISIBLE);
         }
 
@@ -18768,6 +18783,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         animationValues[0][10] = 0;
         animationValues[0][11] = 0;
         animationValues[0][12] = 0;
+        animationValues[0][13] = 0;
+        animationValues[0][14] = AndroidUtilities.displaySize.y + (isStatusBarVisible() ? AndroidUtilities.statusBarHeight : 0);
 
         if (object != null) {
             fillCloseTarget(object, animationValues[1], layoutParams.width, layoutParams.height);
@@ -19026,7 +19043,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                         animators.add(animator);
                     }
                     if (continuingPredictiveBack) {
-                        animators.add(ObjectAnimator.ofFloat(animatingImageView, View.ALPHA, object == null || object.fadeIn ? 0f : 1f));
+                        animators.add(ObjectAnimator.ofFloat(animatingImageView, View.ALPHA, object == null || object.fadeIn || object.drawUnderChatUi ? 0f : 1f));
+                    } else if (object != null && object.drawUnderChatUi) {
+                        animators.add(ObjectAnimator.ofFloat(animatingImageView, View.ALPHA, 0f));
                     }
                     if (animatingImageViews.length > 1) {
                         animators.add(ObjectAnimator.ofFloat(animatingImageView, View.ALPHA, 0f));
@@ -19262,6 +19281,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     }
 
     private void onPhotoClosed(PlaceProviderObject object) {
+        closeTransitionPlace = null;
+        if (parentFragment instanceof ChatActivity) {
+            ((ChatActivity) parentFragment).invalidatePhotoViewerTransition();
+        }
         if (doneButtonPressed) {
             releasePlayer(true);
         }
@@ -23352,7 +23375,35 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         }
     }
 
+    public void drawClosingPhotoBehindChatUi(Canvas canvas, View chatList, View coordinateView) {
+        PlaceProviderObject object = closeTransitionPlace;
+        if (object == null || !object.drawUnderChatUi || object.parentView != chatList
+                || !(predictiveBackActive && !predictiveBackFramePending || animationInProgress == 3)
+                || animatingImageView.getVisibility() != View.VISIBLE) {
+            return;
+        }
+        coordinateView.getLocationInWindow(closeTransitionLocation);
+        float parentScaleX = 1f;
+        float parentScaleY = 1f;
+        for (View view = coordinateView; view != null; view = view.getParent() instanceof View ? (View) view.getParent() : null) {
+            parentScaleX *= view.getScaleX();
+            parentScaleY *= view.getScaleY();
+        }
+        if (parentScaleX == 0f || parentScaleY == 0f) {
+            return;
+        }
+        canvas.save();
+        canvas.translate((animatingImageView.getTranslationX() - closeTransitionLocation[0]) / parentScaleX,
+                (animatingImageView.getTranslationY() - closeTransitionLocation[1]) / parentScaleY);
+        canvas.scale(animatingImageView.getScaleX() / parentScaleX, animatingImageView.getScaleY() / parentScaleY);
+        animatingImageView.drawBehindChatUi(canvas);
+        canvas.restore();
+    }
+
     private void invalidateBlur() {
+        if (closeTransitionPlace != null && closeTransitionPlace.drawUnderChatUi && parentFragment instanceof ChatActivity) {
+            ((ChatActivity) parentFragment).invalidatePhotoViewerTransition();
+        }
         if (stickerMakerView != null && stickerMakerView.isThanosInProgress) {
             return;
         }

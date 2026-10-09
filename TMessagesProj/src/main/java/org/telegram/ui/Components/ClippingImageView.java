@@ -54,6 +54,7 @@ public class ClippingImageView extends View {
     private float animationProgress;
     private boolean fade;
     private float[][] animationValues;
+    private boolean animationClipBounds;
 
     private float additionalTranslationY;
     private float additionalTranslationX;
@@ -75,6 +76,33 @@ public class ClippingImageView extends View {
         animationValues = values;
         this.in = in;
         this.fade = fade;
+        animationClipBounds = false;
+    }
+
+    public void setAnimationClipBounds(boolean enabled) {
+        animationClipBounds = enabled;
+    }
+
+    public void drawBehindChatUi(Canvas canvas) {
+        int oldTop = clipTop;
+        int oldBottom = clipBottom;
+        // The chat panels provide the occlusion; their blur needs the pixels underneath.
+        clipTop = (int) (animationValues[0][5] + (animationValues[1][5] - animationValues[0][5]) * animationProgress);
+        clipBottom = (int) (animationValues[0][6] + (animationValues[1][6] - animationValues[0][6]) * animationProgress);
+        try {
+            onDraw(canvas);
+        } finally {
+            clipTop = oldTop;
+            clipBottom = oldBottom;
+        }
+    }
+
+    public void getVisibleRectBehindChatUi(RectF rect) {
+        getClippedVisibleRect(rect);
+        float cropTop = (int) (animationValues[0][5] + (animationValues[1][5] - animationValues[0][5]) * animationProgress);
+        float cropBottom = (int) (animationValues[0][6] + (animationValues[1][6] - animationValues[0][6]) * animationProgress);
+        rect.top += cropTop - clipTop;
+        rect.bottom += clipBottom - cropBottom;
     }
 
     public void setAdditionalTranslationY(float value) {
@@ -111,6 +139,16 @@ public class ClippingImageView extends View {
         setClipHorizontal((int) (animationValues[0][4] + (animationValues[1][4] - animationValues[0][4]) * animationProgress));
         setClipTop((int) (animationValues[0][5] + (animationValues[1][5] - animationValues[0][5]) * animationProgress));
         setClipBottom((int) (animationValues[0][6] + (animationValues[1][6] - animationValues[0][6]) * animationProgress));
+        if (animationClipBounds) {
+            // Move the screen-space clipping planes from the viewer to the chat.
+            // Only hide pixels after the moving image actually crosses a plane.
+            float top = animationValues[0][13] + (animationValues[1][13] - animationValues[0][13]) * animationProgress;
+            float bottom = animationValues[0][14] + (animationValues[1][14] - animationValues[0][14]) * animationProgress;
+            float imageTop = getTranslationY();
+            float imageBottom = imageTop + getLayoutParams().height * getScaleY();
+            setClipTop(Math.max(clipTop, (int) Math.ceil(top - imageTop)));
+            setClipBottom(Math.max(clipBottom, (int) Math.ceil(imageBottom - bottom)));
+        }
         for (int a = 0; a < radius.length; a++) {
             radius[a] = (int) (animationValues[0][7 + a] + (animationValues[1][7 + a] - animationValues[0][7 + a]) * animationProgress);
             setRadius(radius);
