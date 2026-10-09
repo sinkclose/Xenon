@@ -21,7 +21,7 @@ import zxc.iconic.xenon.helpers.NonIslandHelper;
 
 import me.vkryl.android.animator.ListAnimator;
 
-public class ChatActivityTopPanelLayout extends AnimatedLinearLayout {
+public class ChatActivityTopPanelLayout extends AnimatedLinearLayout implements LiquidTouchDispatcher.Target {
     public ChatActivityTopPanelLayout(@NonNull Context context) {
         super(context);
 
@@ -78,12 +78,17 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout {
     }
 
     @Override
-    public boolean dispatchTouchEvent(MotionEvent ev) {
+    public void observeLiquidTouch(MotionEvent ev) {
         liquidPressAnimations.sync(this, liquidTouchAllowed());
         if (liquidTouch != null) liquidTouch.onTouchEvent(ev, liquidTouchAllowed());
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (!LiquidTouchDispatcher.isDispatchingControls()) observeLiquidTouch(ev);
         boolean handled = super.dispatchTouchEvent(ev)
                 || ev.getAction() == MotionEvent.ACTION_DOWN && backgroundDrawable != null && backgroundDrawable.getBounds().contains((int) ev.getX(), (int) ev.getY());
-        if (!handled && liquidTouch != null) liquidTouch.reset();
+        if (!LiquidTouchDispatcher.isDispatchingControls() && !handled && liquidTouch != null) liquidTouch.reset();
         return handled;
     }
 

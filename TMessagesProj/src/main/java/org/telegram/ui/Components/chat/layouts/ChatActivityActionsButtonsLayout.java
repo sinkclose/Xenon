@@ -28,6 +28,7 @@ import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.LiquidTouchEffect;
+import org.telegram.ui.Components.LiquidTouchDispatcher;
 import org.telegram.ui.Components.LiquidPressAnimationSuppressor;
 import org.telegram.ui.Components.ScaleStateListAnimator;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
@@ -41,7 +42,7 @@ import me.vkryl.android.animator.FactorAnimator;
 import zxc.iconic.xenon.forward.ForwardItem;
 
 @SuppressLint("ViewConstructor")
-public class ChatActivityActionsButtonsLayout extends LinearLayout {
+public class ChatActivityActionsButtonsLayout extends LinearLayout implements LiquidTouchDispatcher.Target {
     private final Theme.ResourcesProvider resourcesProvider;
 
     private final LiquidPressAnimationSuppressor liquidPressAnimations = new LiquidPressAnimationSuppressor();
@@ -123,7 +124,7 @@ public class ChatActivityActionsButtonsLayout extends LinearLayout {
     }
 
     @Override
-    public boolean dispatchTouchEvent(MotionEvent event) {
+    public void observeLiquidTouch(MotionEvent event) {
         boolean enabled = liquidTouchAllowed();
         liquidPressAnimations.sync(this, enabled);
         updateLiquidBounds();
@@ -133,8 +134,13 @@ public class ChatActivityActionsButtonsLayout extends LinearLayout {
             // Observe before the options wrapper can intercept a forward-button gesture.
             forwardLiquid.onTouchEvent(event, enabled && forwardButton.button.getVisibility() == VISIBLE && forwardButton.button.isEnabled());
         }
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        if (!LiquidTouchDispatcher.isDispatchingControls()) observeLiquidTouch(event);
         boolean handled = super.dispatchTouchEvent(event);
-        if (!handled && event.getActionMasked() == MotionEvent.ACTION_DOWN && leftLiquid != null) {
+        if (!LiquidTouchDispatcher.isDispatchingControls() && !handled && event.getActionMasked() == MotionEvent.ACTION_DOWN && leftLiquid != null) {
             leftLiquid.reset();
             forwardLiquid.reset();
         }

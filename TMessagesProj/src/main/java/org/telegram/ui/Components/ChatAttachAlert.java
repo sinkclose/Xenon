@@ -1370,6 +1370,14 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
         exclusionRects.add(exclustionRect);
 
         sizeNotifierFrameLayout = new SizeNotifierFrameLayout(context) {
+            private final LiquidTouchDispatcher liquidTouchDispatcher = new LiquidTouchDispatcher();
+
+            @Override
+            public boolean dispatchTouchEvent(MotionEvent event) {
+                return liquidTouchDispatcher.dispatchTouchEvent(this, event, zxc.iconic.xenon.NekoConfig.liquidChatElements,
+                        () -> super.dispatchTouchEvent(event));
+            }
+
 
             private Bulletin.Delegate bulletinDelegate = new Bulletin.Delegate() {
                 @Override
@@ -2162,6 +2170,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
 
             @Override
             protected void onDetachedFromWindow() {
+                liquidTouchDispatcher.cancel(this);
                 super.onDetachedFromWindow();
                 adjustPanLayoutHelper.onDetach();
                 //  Bulletin.removeDelegate(this);
@@ -2559,7 +2568,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
 
 
         containerView.addView(headerView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP | Gravity.LEFT, 23, 0, 21, 0));
-        topCommentContainer = new FrameLayout(context) {
+        topCommentContainer = new LiquidCaptionLayout(context) {
             private final Path path = new Path();
             private final GradientClip clip = new GradientClip();
             @Override
@@ -3039,7 +3048,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
             }
         };
 
-        captionContainer = new FrameLayout(context) {
+        captionContainer = new LiquidCaptionLayout(context) {
             private final Path path = new Path();
             private final GradientClip clip = new GradientClip();
 

@@ -21,13 +21,14 @@ import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.chat.layouts.ChatActivityActionsButtonsLayout;
 import org.telegram.ui.Components.chat.layouts.ChatActivityChannelButtonsLayout;
 import org.telegram.ui.Components.LiquidTouchEffect;
+import org.telegram.ui.Components.LiquidTouchDispatcher;
 import org.telegram.ui.Components.LiquidPressAnimationSuppressor;
 import org.telegram.ui.Components.blur3.BlurredBackgroundWithFadeDrawable;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
 import org.telegram.ui.Components.inset.InAppKeyboardInsetView;
 import org.telegram.ui.Components.inset.WindowInsetsProvider;
 
-public class ChatInputViewsContainer extends FrameLayout {
+public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchDispatcher.Target {
     public static final int INPUT_BUBBLE_RADIUS = 22;
     public static final int INPUT_KEYBOARD_RADIUS = 29;
 
@@ -58,7 +59,7 @@ public class ChatInputViewsContainer extends FrameLayout {
     }
 
     @Override
-    public boolean dispatchTouchEvent(MotionEvent event) {
+    public void observeLiquidTouch(MotionEvent event) {
         liquidPressAnimations.sync(inputIslandBubbleContainer, liquidTouchAllowed());
         boolean sideHit = false;
         for (int i = 0; i < inputIslandBubbleContainer.getChildCount(); i++) {
@@ -71,8 +72,13 @@ public class ChatInputViewsContainer extends FrameLayout {
         }
         if (liquidTouch != null) liquidTouch.onTouchEvent(event, liquidTouchAllowed(),
                 !sideHit && liquidTouch.contains(event.getX(), event.getY()));
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        if (!LiquidTouchDispatcher.isDispatchingControls()) observeLiquidTouch(event);
         boolean handled = super.dispatchTouchEvent(event);
-        if (!handled && liquidTouch != null) liquidTouch.reset();
+        if (!LiquidTouchDispatcher.isDispatchingControls() && !handled && liquidTouch != null) liquidTouch.reset();
         return handled;
     }
 

@@ -24,6 +24,7 @@ import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.LiquidTouchEffect;
+import org.telegram.ui.Components.LiquidTouchDispatcher;
 import org.telegram.ui.Components.LiquidPressAnimationSuppressor;
 import org.telegram.ui.Components.ScaleStateListAnimator;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
@@ -38,7 +39,7 @@ import me.vkryl.android.animator.BoolAnimator;
 import me.vkryl.android.animator.FactorAnimator;
 
 @SuppressLint("ViewConstructor")
-public class ChatActivityChannelButtonsLayout extends FrameLayout implements FactorAnimator.Target {
+public class ChatActivityChannelButtonsLayout extends FrameLayout implements FactorAnimator.Target, LiquidTouchDispatcher.Target {
     public static final int BUTTON_SEARCH = 0;
     public static final int BUTTON_GIFT = 1;
     public static final int BUTTON_DIRECT = 2;
@@ -91,7 +92,7 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
     }
 
     @Override
-    public boolean dispatchTouchEvent(MotionEvent event) {
+    public void observeLiquidTouch(MotionEvent event) {
         boolean enabled = liquidTouchAllowed();
         liquidPressAnimations.sync(this, enabled);
         for (ButtonHolder holder : buttonHolders) {
@@ -101,8 +102,13 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
                     button.getX() + button.getWidth(), button.getY() + button.getHeight());
             holder.liquid.onTouchEvent(event, enabled && button.getVisibility() == VISIBLE && button.isEnabled());
         }
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        if (!LiquidTouchDispatcher.isDispatchingControls()) observeLiquidTouch(event);
         boolean handled = super.dispatchTouchEvent(event);
-        if (!handled && event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+        if (!LiquidTouchDispatcher.isDispatchingControls() && !handled && event.getActionMasked() == MotionEvent.ACTION_DOWN) {
             for (ButtonHolder holder : buttonHolders) {
                 if (holder != null && holder.liquid != null) holder.liquid.reset();
             }

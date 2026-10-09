@@ -17,13 +17,14 @@ import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.CounterView;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.LiquidTouchEffect;
+import org.telegram.ui.Components.LiquidTouchDispatcher;
 import org.telegram.ui.Components.ScaleStateListAnimator;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
 import org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundColorProvider;
 
 
 @SuppressLint("ViewConstructor")
-public class ChatActivityBlurredRoundPageDownButton extends FrameLayout {
+public class ChatActivityBlurredRoundPageDownButton extends FrameLayout implements LiquidTouchDispatcher.Target {
     private final Theme.ResourcesProvider resourcesProvider;
 
     private ChatActivityBlurredRoundButton buttonView;
@@ -49,13 +50,18 @@ public class ChatActivityBlurredRoundPageDownButton extends FrameLayout {
     }
 
     @Override
-    public boolean dispatchTouchEvent(MotionEvent event) {
+    public void observeLiquidTouch(MotionEvent event) {
         if (liquidTouch != null) {
             liquidTouch.setBounds(0, getHeight() - getWidth(), getWidth(), getHeight());
             liquidTouch.onTouchEvent(event, liquidTouchAllowed());
         }
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        if (!LiquidTouchDispatcher.isDispatchingControls()) observeLiquidTouch(event);
         boolean handled = super.dispatchTouchEvent(event);
-        if (!handled && event.getActionMasked() == MotionEvent.ACTION_DOWN && liquidTouch != null) liquidTouch.reset();
+        if (!LiquidTouchDispatcher.isDispatchingControls() && !handled && event.getActionMasked() == MotionEvent.ACTION_DOWN && liquidTouch != null) liquidTouch.reset();
         return handled;
     }
 

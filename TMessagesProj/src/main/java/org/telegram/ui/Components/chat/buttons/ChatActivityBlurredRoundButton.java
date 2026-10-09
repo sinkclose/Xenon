@@ -25,6 +25,7 @@ import org.telegram.ui.Components.CircularProgressDrawable;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.LiquidTouchEffect;
+import org.telegram.ui.Components.LiquidTouchDispatcher;
 import org.telegram.ui.Components.LiquidPressAnimationSuppressor;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
@@ -33,7 +34,7 @@ import org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundColorPro
 import me.vkryl.android.animator.BoolAnimator;
 import me.vkryl.android.animator.FactorAnimator;
 
-public class ChatActivityBlurredRoundButton extends FrameLayout implements FactorAnimator.Target {
+public class ChatActivityBlurredRoundButton extends FrameLayout implements FactorAnimator.Target, LiquidTouchDispatcher.Target {
     public static final int CLICK_ZONE_MARGIN = 6;
     public static final int BUTTON_SIZE = 44;
 
@@ -58,14 +59,19 @@ public class ChatActivityBlurredRoundButton extends FrameLayout implements Facto
     }
 
     @Override
-    public boolean dispatchTouchEvent(MotionEvent event) {
+    public void observeLiquidTouch(MotionEvent event) {
         liquidPressAnimations.sync(this, liquidTouchAllowed());
         if (liquidTouch != null) {
             liquidTouch.setBounds(0, 0, getWidth(), getHeight());
             liquidTouch.onTouchEvent(event, liquidTouchAllowed());
         }
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        if (!LiquidTouchDispatcher.isDispatchingControls()) observeLiquidTouch(event);
         boolean handled = super.dispatchTouchEvent(event);
-        if (!handled && event.getActionMasked() == MotionEvent.ACTION_DOWN && liquidTouch != null) liquidTouch.reset();
+        if (!LiquidTouchDispatcher.isDispatchingControls() && !handled && event.getActionMasked() == MotionEvent.ACTION_DOWN && liquidTouch != null) liquidTouch.reset();
         return handled;
     }
 
