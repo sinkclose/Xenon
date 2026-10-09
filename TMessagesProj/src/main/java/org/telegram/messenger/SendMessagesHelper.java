@@ -4364,6 +4364,19 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
         if (overrideAccount == AccountSendAs.UNAVAILABLE_ACCOUNT) return;
         boolean hasOverride = overrideAccount >= 0 && overrideAccount != currentAccount;
         if (hasOverride) {
+            if (sendMessageParams.document != null && MessageObject.isGifDocument(sendMessageParams.document)) {
+                // Inline query IDs belong to the account which performed the search.
+                // Send the document itself when switching to another account.
+                if (sendMessageParams.params != null && sendMessageParams.params.containsKey("query_id")) {
+                    sendMessageParams.params = new HashMap<>(sendMessageParams.params);
+                    sendMessageParams.params.remove("query_id");
+                    sendMessageParams.params.remove("id");
+                }
+                if (sendMessageParams.parentObject instanceof String
+                        && ((String) sendMessageParams.parentObject).startsWith("gif")) {
+                    sendMessageParams.parentObject = new FileRefController.AccountGifReference(currentAccount);
+                }
+            }
             AccountSendAs.route(() -> getInstance(overrideAccount).sendMessage(sendMessageParams));
             return;
         }

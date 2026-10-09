@@ -239,6 +239,8 @@ public class EmojiView extends FrameLayout implements
     private boolean emojiSmoothScrolling;
 
     private FrameLayout gifContainer;
+    private TextView gifSendingBlockedText;
+    private boolean gifSendingBlocked;
     private RecyclerListView gifGridView;
     private GifLayoutManager gifLayoutManager;
     private GifAdapter gifSearchAdapter;
@@ -2017,7 +2019,7 @@ public class EmojiView extends FrameLayout implements
                         if (firstGifAttach && gifAdapter.getItemCount() > 1) {
                             ignoreLayout = true;
                             gifLayoutManager.scrollToPositionWithOffset(0, 0);
-                            gifSearchField.setVisibility(VISIBLE);
+                            gifSearchField.setVisibility(gifSendingBlocked ? INVISIBLE : VISIBLE);
                             gifTabs.onPageScrolled(0, 0);
                             firstGifAttach = false;
                             ignoreLayout = false;
@@ -2158,6 +2160,16 @@ public class EmojiView extends FrameLayout implements
                     }
                     resetTabsY(Type.GIFS);
                 });
+
+                gifSendingBlockedText = new TextView(context);
+                gifSendingBlockedText.setText(getString(R.string.GifsUnavailableForAnotherAccount));
+                gifSendingBlockedText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
+                gifSendingBlockedText.setTextColor(getThemedColor(Theme.key_chat_emojiPanelEmptyText));
+                gifSendingBlockedText.setGravity(Gravity.CENTER);
+                gifSendingBlockedText.setPadding(dp(24), dp(24), dp(24), dp(24));
+                gifSendingBlockedText.setClickable(true);
+                gifSendingBlockedText.setVisibility(GONE);
+                gifContainer.addView(gifSendingBlockedText, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
                 gifAdapter.loadTrendingGifs();
             }
@@ -3818,6 +3830,23 @@ public class EmojiView extends FrameLayout implements
         }
     }
 
+    public void setGifSendingBlocked(boolean blocked) {
+        if (gifSendingBlocked == blocked) return;
+        gifSendingBlocked = blocked;
+        if (gifSendingBlockedText == null) return;
+        if (blocked) {
+            gifGridView.stopScroll();
+            if (gifSearchField.searchEditText.isFocused()) {
+                AndroidUtilities.hideKeyboard(gifSearchField.searchEditText);
+                gifSearchField.searchEditText.clearFocus();
+            }
+        }
+        gifGridView.setVisibility(blocked ? INVISIBLE : VISIBLE);
+        gifSearchField.setVisibility(blocked ? INVISIBLE : VISIBLE);
+        gifTabs.setVisibility(blocked ? INVISIBLE : VISIBLE);
+        gifSendingBlockedText.setVisibility(blocked ? VISIBLE : GONE);
+    }
+
     private void checkGridVisibility(int position, float positionOffset) {
         if (stickersContainer == null || gifContainer == null) {
             return;
@@ -3846,6 +3875,10 @@ public class EmojiView extends FrameLayout implements
             if (stickersTabContainer != null) {
                 stickersTabContainer.setVisibility(View.VISIBLE);
             }
+        }
+        if (gifSendingBlocked) {
+            gifGridView.setVisibility(INVISIBLE);
+            gifTabs.setVisibility(INVISIBLE);
         }
     }
 
@@ -5882,6 +5915,10 @@ public class EmojiView extends FrameLayout implements
     }
 
     public void updateColors() {
+        if (gifSendingBlockedText != null) {
+            gifSendingBlockedText.setTextColor(getThemedColor(Theme.key_chat_emojiPanelEmptyText));
+        }
+
         if (!shouldDrawBackground) {
             setBackground(null);
             bottomTabContainerBackground.setBackground(null);

@@ -11256,7 +11256,15 @@ public class ChatActivityEnterView extends FrameLayout implements
         updateSendAsButton(false, animated);
     }
 
+    private boolean isGifSendingBlocked() {
+        return AccountSendAs.get(currentAccount, dialog_id) >= 0;
+    }
+
     public void updateSendAsButton(boolean forceHide, boolean animated) {
+        if (emojiView != null) {
+            emojiView.setGifSendingBlocked(isGifSendingBlocked());
+        }
+
         if (delegate == null) {
             return;
         }
@@ -11958,6 +11966,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                 }
             }
         };
+        emojiView.setGifSendingBlocked(isGifSendingBlocked());
         emojiView.shouldDrawStickerSettings = true;
         if (!shouldDrawBackground) {
             emojiView.updateColors();
@@ -12112,6 +12121,7 @@ public class ChatActivityEnterView extends FrameLayout implements
 
             @Override
             public void onGifSelectedForAddCaption(View view, Object gif, String query, Object parent, boolean notify, int scheduleDate, int scheduleRepeatPeriod) {
+                if (isGifSendingBlocked()) return;
                 if (parentFragment == null) {
                     return;
                 }
@@ -12360,6 +12370,7 @@ public class ChatActivityEnterView extends FrameLayout implements
             }
 
             public void onGifSelected(View view, Object gif, String query, Object parent, boolean notify, int scheduleDate, int scheduleRepeatPeriod, MediaController.PhotoEntry entry, boolean invertMedia) {
+                if (isGifSendingBlocked()) return;
                 if (replyingQuote != null && parentFragment != null && replyingQuote.outdated) {
                     parentFragment.showQuoteMessageUpdate();
                     return;
@@ -12375,6 +12386,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                     }
                     AlertsCreator.ensurePaidMessageConfirmation(currentAccount, dialog_id, 1, stars -> {
                         Runnable runnable = () -> {
+                            if (isGifSendingBlocked()) return;
                             if (stickersExpanded) {
                                 if (searchingType != 0) {
                                     emojiView.hideSearchKeyboard();

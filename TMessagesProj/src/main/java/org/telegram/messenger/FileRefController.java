@@ -3,6 +3,7 @@ package org.telegram.messenger;
 import android.os.SystemClock;
 import android.util.Pair;
 
+import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.RequestDelegate;
 import org.telegram.tgnet.TLObject;
 import org.telegram.tgnet.TLRPC;
@@ -352,6 +353,22 @@ public class FileRefController extends BaseController {
         return null;
     }
 
+    /** Keep saved-GIF reference recovery on the account that owns the GIF list. */
+    public static final class AccountGifReference {
+        final int account;
+        final long userId;
+
+        public AccountGifReference(int account) {
+            this.account = account;
+            userId = UserConfig.getInstance(account).getClientUserId();
+        }
+
+        @Override
+        public String toString() {
+            return "accountGif_" + account + "_" + userId;
+        }
+    }
+
     @SuppressWarnings("unchecked")
     public void requestReference(Object parentObject, Object... args) {
         if (BuildVars.LOGS_ENABLED) {
@@ -509,6 +526,20 @@ public class FileRefController extends BaseController {
     }
 
     private void requestReferenceFromServer(Object parentObject, String locationKey, String parentKey, Object[] args) {
+        if (parentObject instanceof AccountGifReference) {
+            AccountGifReference origin = (AccountGifReference) parentObject;
+            UserConfig config = UserConfig.getInstance(origin.account);
+            if (!config.isClientActivated() || config.getClientUserId() != origin.userId) {
+                onRequestComplete(locationKey, parentKey, null, null, false, false);
+                return;
+            }
+            TLRPC.TL_messages_getSavedGifs req = new TLRPC.TL_messages_getSavedGifs();
+            // The response updates the pending destination request, not its saved GIF list.
+            ConnectionsManager.getInstance(origin.account).sendRequest(req,
+                    (response, error) -> onRequestComplete(locationKey, parentKey, response, error, false, false, false));
+            return;
+        }
+
         if (parentObject instanceof StoriesController.BotPreview) {
             StoriesController.BotPreview storyItem = (StoriesController.BotPreview) parentObject;
             if (storyItem.list == null) {
@@ -1080,6 +1111,10 @@ public class FileRefController extends BaseController {
     }
 
     private boolean onRequestComplete(String locationKey, String parentKey, TLObject response, TLRPC.TL_error error, boolean cache, boolean fromCache) {
+        return onRequestComplete(locationKey, parentKey, response, error, cache, fromCache, true);
+    }
+
+    private boolean onRequestComplete(String locationKey, String parentKey, TLObject response, TLRPC.TL_error error, boolean cache, boolean fromCache, boolean cacheResponse) {
         boolean found = false;
         String cacheKey = parentKey;
         if (response instanceof TLRPC.TL_help_premiumPromo) {
@@ -1101,11 +1136,11 @@ public class FileRefController extends BaseController {
                     if (requester.completed) {
                         continue;
                     }
-                    if (onRequestComplete(requester.locationKey, null, response, error, cache && !found, fromCache)) {
+                    if (onRequestComplete(requester.locationKey, null, response, error, cache && !found, fromCache, cacheResponse)) {
                         found = true;
                     }
                 }
-                if (found) {
+                if (found && cacheResponse) {
                     putReponseToCache(cacheKey, response);
                 }
                 parentRequester.remove(parentKey);
@@ -1492,7 +1527,7 @@ public class FileRefController extends BaseController {
             }
         }
         locationRequester.remove(locationKey);
-        if (found) {
+        if (found && cacheResponse) {
             putReponseToCache(cacheKey, response);
         }
         return found;
