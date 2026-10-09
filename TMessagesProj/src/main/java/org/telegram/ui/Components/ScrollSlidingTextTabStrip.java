@@ -15,12 +15,15 @@ import static org.telegram.messenger.AndroidUtilities.lerp;
 import android.animation.LayoutTransition;
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.InsetDrawable;
 import android.os.SystemClock;
@@ -41,6 +44,10 @@ import android.widget.TextView;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
+import androidx.core.graphics.ColorUtils;
+import androidx.dynamicanimation.animation.FloatValueHolder;
+import androidx.dynamicanimation.animation.SpringAnimation;
+import androidx.dynamicanimation.animation.SpringForce;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.Emoji;
@@ -51,6 +58,8 @@ import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
 import org.telegram.ui.Stories.recorder.HintView2;
 
 import java.util.ArrayList;
+
+import zxc.iconic.xenon.helpers.Md3FilterTabsHelper;
 
 public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements Theme.Colorable {
 
@@ -79,6 +88,7 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
     private int tabCount;
     private int currentPosition;
     private int selectedTabId = -1;
+    private int md3SwipeTabId = -1;
     private int allTextWidth;
 
     private int indicatorX;
@@ -153,6 +163,14 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
 
     protected int processColor(int color) {
         return color;
+    }
+
+    protected boolean isMd3Enabled() {
+        return false;
+    }
+
+    private int getMd3SelectedTabId() {
+        return md3SwipeTabId >= 0 ? md3SwipeTabId : selectedTabId;
     }
 
     public ScrollSlidingTextTabStrip(Context context) {
@@ -367,6 +385,10 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
 
         prevTab.setTextColor(Color.argb((int) (a1 + (a2 - a1) * value), (int) (r1 + (r2 - r1) * value), (int) (g1 + (g2 - g1) * value), (int) (b1 + (b2 - b1) * value)));
         newTab.setTextColor(Color.argb((int) (a2 + (a1 - a2) * value), (int) (r2 + (r1 - r2) * value), (int) (g2 + (g1 - g2) * value), (int) (b2 + (b1 - b2) * value)));
+        if (isMd3Enabled()) {
+            prevTab.invalidate();
+            newTab.invalidate();
+        }
 
         indicatorX = (int) (animateIndicatorStartX + (animateIndicatorToX - animateIndicatorStartX) * value);
         indicatorWidth = (int) (animateIndicatorStartWidth + (animateIndicatorToWidth - animateIndicatorStartWidth) * value);
@@ -440,6 +462,7 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
         tabsContainer.removeAllViews();
         allTextWidth = 0;
         tabCount = 0;
+        md3SwipeTabId = -1;
 
         return views;
     }
@@ -500,6 +523,191 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
         return idToPosition.get(id, -1) != -1;
     }
 
+    private class TabView extends AnimatedEmojiSpan.TextViewEmojis {
+        private final int id;
+
+        TabView(Context context, int id) {
+            super(context);
+            this.id = id;
+        }
+
+        // Draw the container in View's background stage, before text and emoji.
+        private final Drawable md3Background = new Drawable() {
+            private int alpha = 255;
+
+            @Override
+            public void draw(@NonNull Canvas canvas) {
+                int save = canvas.save();
+                if (alpha < 255) {
+                    canvas.saveLayerAlpha(0, 0, TabView.this.getWidth(), TabView.this.getHeight(), alpha);
+                }
+                drawMd3Background(canvas);
+                canvas.restoreToCount(save);
+            }
+
+            @Override
+            public void setAlpha(int alpha) {
+                this.alpha = alpha;
+                invalidateSelf();
+            }
+
+            @Override
+            public void setColorFilter(android.graphics.ColorFilter colorFilter) {}
+
+            @Override
+            public int getOpacity() {
+                return android.graphics.PixelFormat.TRANSLUCENT;
+            }
+        };
+
+        @Override
+        public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
+            super.onInitializeAccessibilityNodeInfo(info);
+            info.setSelected(selectedTabId == id);
+        }
+
+        private Shaker shaker;
+        private float md3InnerRadius = Float.NaN;
+        private float md3TargetRadius = Float.NaN;
+        private float md3StartRadius;
+        private float md3ShapeProgress = 1f;
+        private float md3ShapeVelocity;
+        private SpringAnimation md3ShapeAnimation;
+        private RippleDrawable md3Ripple;
+
+        private float getMd3InnerRadius(boolean checked) {
+            float full = Math.min(getMeasuredWidth() - dp(2), getMeasuredHeight() - dp(2)) / 2f;
+            float target = Math.min(full, isPressed() && !reordering ? dp(4) : checked ? full : dp(8));
+            if (Float.isNaN(md3InnerRadius)) {
+                md3InnerRadius = md3TargetRadius = target;
+                return target;
+            }
+            if (md3TargetRadius != target) {
+                float progress = 0f;
+                float velocity = 0f;
+                if (target == md3StartRadius && md3ShapeAnimation != null) {
+                    progress = 1f - md3ShapeProgress;
+                    velocity = -md3ShapeVelocity;
+                    md3StartRadius = md3TargetRadius;
+                } else {
+                    md3StartRadius = md3InnerRadius;
+                }
+                md3TargetRadius = target;
+                if (md3ShapeAnimation == null) {
+                    md3ShapeAnimation = new SpringAnimation(new FloatValueHolder());
+                    md3ShapeAnimation.setSpring(new SpringForce(1f)
+                            .setDampingRatio(0.6f).setStiffness(800f));
+                    md3ShapeAnimation.setMinimumVisibleChange(0.01f);
+                    md3ShapeAnimation.addUpdateListener((animation, value, speed) -> {
+                        md3ShapeProgress = value;
+                        md3ShapeVelocity = speed;
+                        md3InnerRadius = md3StartRadius + (md3TargetRadius - md3StartRadius) * value;
+                        invalidate();
+                    });
+                } else {
+                    md3ShapeAnimation.cancel();
+                }
+                md3ShapeProgress = progress;
+                md3ShapeVelocity = velocity;
+                md3ShapeAnimation.setStartValue(progress).setStartVelocity(velocity);
+                md3ShapeAnimation.animateToFinalPosition(1f);
+            }
+            return md3InnerRadius;
+        }
+
+        private void drawMd3Background(Canvas canvas) {
+            if (!isMd3Enabled()) return;
+            boolean checked = id == getMd3SelectedTabId();
+            int active = processColor(Theme.getColor(activeTextColorKey, resourcesProvider));
+            int inactive = processColor(Theme.getColor(unactiveTextColorKey, resourcesProvider));
+            int surface = Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider);
+            int content = Md3FilterTabsHelper.getContentColor(checked, active, inactive, surface);
+            setTextColor(content);
+            if (md3Ripple == null) {
+                md3Ripple = new RippleDrawable(ColorStateList.valueOf(content), null, new ColorDrawable(Color.WHITE));
+                md3Ripple.setCallback(this);
+            }
+            md3Ripple.setColor(ColorStateList.valueOf(ColorUtils.setAlphaComponent(content, 26)));
+            md3Ripple.setBounds(dp(1), dp(1), getWidth() - dp(1), getHeight() - dp(1));
+            md3Ripple.setState(isPressed() && !reordering
+                    ? new int[]{android.R.attr.state_enabled, android.R.attr.state_pressed}
+                    : new int[]{android.R.attr.state_enabled});
+            Md3FilterTabsHelper.drawTabBackground(canvas, getWidth(), getHeight(),
+                    tabsContainer.indexOfChild(this), tabsContainer.getChildCount(), getMd3InnerRadius(checked),
+                    Md3FilterTabsHelper.getContainerColor(checked, active, inactive, surface), md3Ripple);
+        }
+
+        @Override
+        public void setPressed(boolean pressed) {
+            super.setPressed(pressed);
+            if (isMd3Enabled()) {
+                if (md3Ripple != null) {
+                    md3Ripple.setState(pressed && !reordering
+                            ? new int[]{android.R.attr.state_enabled, android.R.attr.state_pressed}
+                            : new int[]{android.R.attr.state_enabled});
+                }
+                invalidate();
+            }
+        }
+
+        @Override
+        public void drawableHotspotChanged(float x, float y) {
+            super.drawableHotspotChanged(x, y);
+            if (md3Ripple != null) md3Ripple.setHotspot(x, y);
+        }
+
+        @Override
+        protected boolean verifyDrawable(@NonNull Drawable who) {
+            return who == md3Ripple || super.verifyDrawable(who);
+        }
+
+        @Override
+        protected void onDetachedFromWindow() {
+            super.onDetachedFromWindow();
+            if (md3ShapeAnimation != null) {
+                md3ShapeAnimation.cancel();
+                md3ShapeAnimation = null;
+            }
+            md3InnerRadius = md3TargetRadius = Float.NaN;
+            md3ShapeProgress = 1f;
+            md3ShapeVelocity = 0f;
+            if (md3Ripple != null) {
+                md3Ripple.setState(new int[0]);
+                md3Ripple.jumpToCurrentState();
+            }
+        }
+
+        private AnimatedFloat reorderingAlpha = new AnimatedFloat(this, 360, CubicBezierInterpolator.EASE_OUT_QUINT);
+        private boolean isReordering() {
+            return delegate != null && reordering && delegate.canReorder(id);
+        }
+        @Override
+        protected void onDraw(Canvas canvas) {
+            final float reordering = reorderingAlpha.set(ScrollSlidingTextTabStrip.this.reordering);
+            if (delegate != null && delegate.canReorder(id)) {
+                if (reordering > 0) {
+                    if (shaker == null) {
+                        shaker = new Shaker(this);
+                    }
+                    canvas.save();
+                    shaker.concat(canvas, reordering, getWidth() / 2.0f, getHeight() / 2.0f);
+                }
+                super.onDraw(canvas);
+                if (reordering > 0) {
+                    canvas.restore();
+                }
+            } else {
+                if (reordering > 0) {
+                    canvas.saveLayerAlpha(0, 0, getWidth(), getHeight(), (int) (0xFF * lerp(1.0f, 0.5f, reordering)));
+                }
+                super.onDraw(canvas);
+                if (reordering > 0) {
+                    canvas.restore();
+                }
+            }
+        }
+    }
+
     public void addTextTab(final int id, CharSequence text) {
         addTextTab(id, text, null);
     }
@@ -520,44 +728,7 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
             viewsCache.delete(id);
         }
         if (tab == null) {
-            tab = new AnimatedEmojiSpan.TextViewEmojis(getContext()) {
-                @Override
-                public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
-                    super.onInitializeAccessibilityNodeInfo(info);
-                    info.setSelected(selectedTabId == id);
-                }
-
-                private Shaker shaker;
-                private AnimatedFloat reorderingAlpha = new AnimatedFloat(this, 360, CubicBezierInterpolator.EASE_OUT_QUINT);
-                private boolean isReordering() {
-                    return delegate != null && reordering && delegate.canReorder(id);
-                }
-                @Override
-                protected void onDraw(Canvas canvas) {
-                    final float reordering = reorderingAlpha.set(ScrollSlidingTextTabStrip.this.reordering);
-                    if (delegate != null && delegate.canReorder(id)) {
-                        if (reordering > 0) {
-                            if (shaker == null) {
-                                shaker = new Shaker(this);
-                            }
-                            canvas.save();
-                            shaker.concat(canvas, reordering, getWidth() / 2.0f, getHeight() / 2.0f);
-                        }
-                        super.onDraw(canvas);
-                        if (reordering > 0) {
-                            canvas.restore();
-                        }
-                    } else {
-                        if (reordering > 0) {
-                            canvas.saveLayerAlpha(0, 0, getWidth(), getHeight(), (int) (0xFF * lerp(1.0f, 0.5f, reordering)));
-                        }
-                        super.onDraw(canvas);
-                        if (reordering > 0) {
-                            canvas.restore();
-                        }
-                    }
-                }
-            };
+            tab = new TabView(getContext(), id);
             tab.setGravity(Gravity.CENTER);
             tab.setTextAlignment(TEXT_ALIGNMENT_CENTER);
             tab.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
@@ -598,6 +769,7 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
         previousPosition = currentPosition;
         currentPosition = position1;
         selectedTabId = pageId;
+        md3SwipeTabId = -1;
 
         if (animatingIndicator) {
             AndroidUtilities.cancelRunOnUIThread(animationRunnable);
@@ -669,7 +841,7 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
             TextView tab = (TextView) tabsContainer.getChildAt(a);
             tab.setTextColor(processColor(Theme.getColor(currentPosition == a ? activeTextColorKey : unactiveTextColorKey, resourcesProvider)));
 //            tab.setBackground(Theme.createSelectorDrawable(Theme.multAlpha(processColor(Theme.getColor(activeTextColorKey, resourcesProvider)), .15f), 3));
-            tab.setBackground(
+            tab.setBackground(isMd3Enabled() ? ((TabView) tab).md3Background :
                 new InsetDrawable(
                     Theme.createSelectorDrawable(Theme.multAlpha(processColor(Theme.getColor(activeTextColorKey, resourcesProvider)), .15f), Theme.RIPPLE_MASK_ROUNDRECT_6DP, dp(14)),
                     dp(4), dp(4), dp(4), dp(4)
@@ -689,6 +861,7 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
     public void setInitialTabId(int id) {
         setInitialTab = true;
         selectedTabId = id;
+        md3SwipeTabId = -1;
         int pos = idToPosition.get(id);
         TextView child = (TextView) tabsContainer.getChildAt(pos);
         if (child != null) {
@@ -710,6 +883,10 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
 
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
+        if (isMd3Enabled()) {
+            super.dispatchDraw(canvas);
+            return;
+        }
         if (nonIsland) {
             canvas.save();
             canvas.translate(getScrollX(), 0);
@@ -760,6 +937,7 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
     protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
         if (child == tabsContainer) {
             final boolean result = super.drawChild(canvas, child, drawingTime);
+            if (isMd3Enabled()) return result;
 
             final int height = getMeasuredHeight();
             float l = indicatorX + indicatorXAnimationDx;
@@ -939,6 +1117,9 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
         } else if (progress > 1.0f) {
             progress = 1.0f;
         }
+        // Switch the expressive shape at the swipe midpoint without changing
+        // the committed page, so reversing a gesture still targets its origin.
+        md3SwipeTabId = progress >= 0.5f ? id : -1;
         TextView child = (TextView) tabsContainer.getChildAt(currentPosition);
         TextView nextChild = (TextView) tabsContainer.getChildAt(position);
         if (child != null && nextChild != null) {
@@ -956,6 +1137,7 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
         if (progress >= 1.0f) {
             currentPosition = position;
             selectedTabId = id;
+            md3SwipeTabId = -1;
         }
     }
 

@@ -3808,6 +3808,9 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                     scrollSlidingTextTabStrip.makeNonIsland(zxc.iconic.xenon.helpers.BlurBehindHelper.create(scrollSlidingTextTabStrip, sizeNotifierFrameLayout, Theme.key_windowBackgroundWhite));
                 }
             }
+            if (scrollSlidingTextTabStrip.isMd3Enabled()) {
+                scrollSlidingTextTabStrip.setTranslationY(-dp(3));
+            }
             searchTagsList = new SearchTagsList(getContext(), profileActivity, profileActivity.getCurrentAccount(), includeSavedDialogs() ? 0 : dialog_id, resourcesProvider) {
                 @Override
                 protected boolean setFilter(ReactionsLayoutInBubble.VisibleReaction reaction) {
@@ -11631,8 +11634,13 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
         }
 
         @Override
+        protected boolean isMd3Enabled() {
+            return viewType == VIEW_TYPE_PROFILE_ACTIVITY && zxc.iconic.xenon.helpers.Md3FilterTabsHelper.isEnabled();
+        }
+
+        @Override
         protected void dispatchDraw(@NonNull Canvas canvas) {
-            if (nonIsland) { super.dispatchDraw(canvas); return; }
+            if (isMd3Enabled() || nonIsland) { super.dispatchDraw(canvas); return; }
             if (backgroundColor != Color.TRANSPARENT) {
                 if (backgroundPaint == null) {
                     backgroundPaint = new Paint();
