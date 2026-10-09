@@ -447,7 +447,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
                     shadowDrawable.draw(canvas);
 
                     if (!isProfilePlaylist && rad != 1.0f) {
-                        Theme.dialogs_onlineCirclePaint.setColor(getThemedColor(Theme.key_dialogBackground));
+                        Theme.dialogs_onlineCirclePaint.setColor(getSheetBackgroundColor());
                         rect.set(backgroundPaddingLeft, backgroundPaddingTop + top, getMeasuredWidth() - backgroundPaddingLeft, backgroundPaddingTop + top + dp(24));
                         canvas.drawRoundRect(rect, dp(12) * rad, dp(12) * rad, Theme.dialogs_onlineCirclePaint);
                     }
@@ -509,7 +509,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
         final ActionBarMenu menu = actionBar.createMenu();
         menu.setLayoutParams(LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.FILL));
         actionBarBackground = new View(context);
-        actionBarBackground.setBackgroundColor(getThemedColor(Theme.key_dialogBackground));
+        actionBarBackground.setBackgroundColor(getSheetBackgroundColor());
         actionBar.addView(actionBarBackground, 0, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.FILL));
         actionBarBackground.setAlpha(0.0f);
         actionBar.setAlpha(0.0f);
@@ -2024,7 +2024,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
             rad = 1.0f - moveProgress;
         }
 
-        boolean light = rad <= 0.5f && ColorUtils.calculateLuminance(getThemedColor(Theme.key_dialogBackground)) > 0.7f;
+        boolean light = rad <= 0.5f && ColorUtils.calculateLuminance(getSheetBackgroundColor()) > 0.7f;
         if (light != wasLight) {
             AndroidUtilities.setLightStatusBar(this, wasLight = light);
         }
@@ -2542,7 +2542,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
             } else {
                 onReorderTouch = null;
             }
-            cell.setBackgroundColor(Theme.getColor(Theme.key_dialogBackground, resourcesProvider));
+            cell.setBackgroundColor(getSheetBackgroundColor());
             cell.setMessageObject(messageObject, isMyList(), isMyList() || noforwards || messageObject.getId() <= 0 ? null : btn -> showOptions(cell, messageObject), needDivider, onReorderTouch);
         }
 
@@ -2654,8 +2654,12 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
     @Override
     public ArrayList<ThemeDescription> getThemeDescriptions() {
         ArrayList<ThemeDescription> themeDescriptions = new ArrayList<>();
+        int backgroundKey = isProfilePlaylist ? Theme.key_windowBackgroundGray : Theme.getActiveTheme().isMonet() && Theme.isCurrentThemeDark() ? Theme.key_windowBackgroundWhite : Theme.key_dialogBackground;
 
         ThemeDescription.ThemeDescriptionDelegate delegate = () -> {
+            setBackgroundColor(getThemedColor(backgroundKey));
+            actionBarBackground.setBackgroundColor(getSheetBackgroundColor());
+            listAdapter.notifyDataSetChanged();
             EditTextBoldCursor editText = searchItem.getSearchField();
             editText.setCursorColor(getThemedColor(Theme.key_player_actionBarTitle));
 
@@ -2693,7 +2697,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
         themeDescriptions.add(new ThemeDescription(listView, 0, new Class[]{AudioPlayerCell.class}, null, null, null, Theme.key_chat_inAudioSelectedProgress));
         themeDescriptions.add(new ThemeDescription(listView, 0, new Class[]{AudioPlayerCell.class}, null, null, null, Theme.key_chat_inAudioProgress));
 
-        themeDescriptions.add(new ThemeDescription(containerView, 0, null, null, new Drawable[]{shadowDrawable}, null, Theme.key_dialogBackground));
+        themeDescriptions.add(new ThemeDescription(containerView, 0, null, null, new Drawable[]{shadowDrawable}, delegate, backgroundKey));
 
         themeDescriptions.add(new ThemeDescription(progressView, 0, null, null, null, null, Theme.key_player_progressBackground));
         themeDescriptions.add(new ThemeDescription(progressView, 0, null, null, null, null, Theme.key_player_progress));
