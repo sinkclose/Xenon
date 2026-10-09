@@ -450,6 +450,16 @@ public class ChatActivity extends BaseFragment implements
     private final @NonNull BlurredBackgroundDrawableViewFactory navbarContentDrawableFactory;
 
     private final @NonNull BlurredBackgroundSourceWrapped navbarContentSourceWallpaperSharp;
+    private final BlurredBackgroundSource glassWallpaperSource = new BlurredBackgroundSourceWrapped() {
+        @Override
+        public void draw(Canvas canvas, float left, float top, float right, float bottom) {
+            if (contentView != null && contentView.backgroundView != null) {
+                contentView.drawWallpaperForGlass(canvas, left, top, right, bottom);
+            } else {
+                navbarContentSourceWallpaperSharp.draw(canvas, left, top, right, bottom);
+            }
+        }
+    };
     private final @Nullable BlurredBackgroundSourceRenderNode fadeWallpaperSource;
     private final @NonNull BlurredBackgroundDrawableViewFactory dimWallpaperDrawableFactory;
 
@@ -2937,10 +2947,9 @@ public class ChatActivity extends BaseFragment implements
             glassBackgroundSourceFrostedRenderNode = new BlurredBackgroundSourceRenderNode(navbarContentSourceWallpaper);
             glassBackgroundSourceFrostedRenderNode.setOnDrawablesRelativePositionChangeListener(this::invalidateMergedVisibleBlurredPositionsAndSourcesPositions);
             glassBackgroundSourceFrostedRenderNode.setScrollableNoiseSuppressor(scrollableViewNoiseSuppressor, DownscaleScrollableNoiseSuppressor.DRAW_FROSTED_GLASS);
-            // Glass samples the sharp wallpaper; its blur is applied on the GPU
-            // inside the node (same radius as the glass content). The blurred
-            // matte stays only as the software fallback and for the action bar.
-            glassBackgroundSourceFrostedRenderNode.setUnderSource(navbarContentSourceWallpaperSharp);
+            // Replay the actual background view so glass shares its wallpaper,
+            // crossfade, dimming and motion instead of a bitmap snapshot.
+            glassBackgroundSourceFrostedRenderNode.setUnderSource(glassWallpaperSource);
 
             glassBackgroundDrawableFactoryFrosted = new BlurredBackgroundDrawableViewFactory(glassBackgroundSourceFrostedRenderNode);
             glassBackgroundDrawableFactoryFrosted.setLiquidGlassEffectAllowed(!NonIslandHelper.chatElements());
@@ -2949,7 +2958,7 @@ public class ChatActivity extends BaseFragment implements
                 glassBackgroundSourceRenderNode = new BlurredBackgroundSourceRenderNode(navbarContentSourceWallpaper);
                 glassBackgroundSourceRenderNode.setOnDrawablesRelativePositionChangeListener(this::invalidateMergedVisibleBlurredPositionsAndSourcesPositions);
                 glassBackgroundSourceRenderNode.setScrollableNoiseSuppressor(scrollableViewNoiseSuppressor, DownscaleScrollableNoiseSuppressor.DRAW_GLASS);
-                glassBackgroundSourceRenderNode.setUnderSource(navbarContentSourceWallpaperSharp);
+                glassBackgroundSourceRenderNode.setUnderSource(glassWallpaperSource);
                 glassBackgroundDrawableFactory = new BlurredBackgroundDrawableViewFactory(glassBackgroundSourceRenderNode);
                 glassBackgroundDrawableFactory.setLiquidGlassEffectAllowed(!NonIslandHelper.chatElements());
             } else {
@@ -18614,6 +18623,38 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     public class ChatActivityFragmentView extends SizeNotifierFrameLayout {
+
+        @Override
+        public void onDescendantInvalidated(View child, View target) {
+            super.onDescendantInvalidated(child, target);
+            if (child == backgroundView) {
+                invalidateMergedVisibleBlurredPositionsAndSources(BLUR_INVALIDATE_FLAG_WALLPAPER);
+            } else if (child == chatListView || child == messagesSearchListContainer) {
+                // HWUI can update a child without running our dispatchDraw.
+                // Observe source changes, excluding glass views to avoid feedback.
+                invalidateMergedVisibleBlurredPositionsAndSources(BLUR_INVALIDATE_FLAG_SCROLL);
+            }
+        }
+
+        private final RectF glassWallpaperCaptureRect = new RectF();
+
+        public void drawWallpaperForGlass(Canvas canvas, float left, float top, float right, float bottom) {
+            final ViewGroup parent = parentChatActivity != null ? parentChatActivity.contentView : this;
+            glassWallpaperCaptureRect.set(left, top, right, bottom);
+            Blur3Utils.captureRelativeParent(this::drawWallpaperImpl, canvas, glassWallpaperCaptureRect, this, parent);
+        }
+
+        private void drawWallpaperImpl(Canvas canvas, RectF position) {
+            if (backgroundView == null || backgroundView.getVisibility() != View.VISIBLE) {
+                return;
+            }
+            final int save = canvas.save();
+            canvas.clipRect(position);
+            // drawChild reuses the background view's hardware display list.
+            // It preserves its transforms and does not draw messages or glass.
+            super.drawChild(canvas, backgroundView, getDrawingTime());
+            canvas.restoreToCount(save);
+        }
 
         public ChatActivity getChatActivity() {
             return ChatActivity.this;
@@ -50380,6 +50421,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     private static final int BLUR_INVALIDATE_FLAG_SCROLL = 1;
     private static final int BLUR_INVALIDATE_FLAG_POSITIONS = 1 << 1;
     private static final int BLUR_INVALIDATE_FLAG_CLIP = 1 << 2;
+    private static final int BLUR_INVALIDATE_FLAG_WALLPAPER = 1 << 3;
 
     private void invalidateMergedVisibleBlurredPositionsAndSourcesPositions() {
         invalidateMergedVisibleBlurredPositionsAndSources(BLUR_INVALIDATE_FLAG_POSITIONS);
@@ -50393,7 +50435,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
         invalidateFadeBlur();
 
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || scrollableViewNoiseSuppressor == null) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || scrollableViewNoiseSuppressor == null || invalidateBlurredSourcesView == null) {
             return;
         }
 
@@ -50418,9 +50460,19 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             scrollableViewNoiseSuppressor.setupRenderNodes(glassDrawablesPositionsMerged, glassDrawablesPositionsCount);
         }
 
-        //if (BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_POSITIONS | BLUR_INVALIDATE_FLAG_SCROLL)) {
-        final boolean hasChanges = scrollableViewNoiseSuppressor.invalidateResultRenderNodes(contentView::drawList, contentView.getWidth(), contentView.getHeight());
-        if (hasChanges) {
+        final boolean wallpaperChanged = BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_WALLPAPER);
+        if (wallpaperChanged) {
+            if (glassBackgroundSourceRenderNode != null) {
+                glassBackgroundSourceRenderNode.invalidateWallpaper();
+            }
+            if (glassBackgroundSourceFrostedRenderNode != null) {
+                glassBackgroundSourceFrostedRenderNode.invalidateWallpaper();
+            }
+        }
+
+        final boolean hasChanges = BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_POSITIONS | BLUR_INVALIDATE_FLAG_SCROLL | BLUR_INVALIDATE_FLAG_CLIP)
+                && scrollableViewNoiseSuppressor.invalidateResultRenderNodes(contentView::drawList, contentView.getWidth(), contentView.getHeight());
+        if (hasChanges || wallpaperChanged) {
             if (glassBackgroundSourceRenderNode != null) {
                 glassBackgroundSourceRenderNode.invalidateDisplayListForDrawables();
             }
@@ -50432,8 +50484,6 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             }
             invalidateAllGlassAttachedViews();
         }
-
-        //}
     }
 
     private long lastFadeBlurUpdateTime;

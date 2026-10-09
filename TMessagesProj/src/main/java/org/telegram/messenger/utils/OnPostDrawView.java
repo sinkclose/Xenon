@@ -55,8 +55,9 @@ public class OnPostDrawView extends View implements ViewTreeObserver.OnPreDrawLi
     protected void onDraw(@NonNull Canvas canvas) {
         super.onDraw(canvas);
         if (!onPreDrawMode) {
-            callback.onPostDraw(invalidateFlags);
+            final int flags = invalidateFlags;
             invalidateFlags = 0;
+            callback.onPostDraw(flags);
         }
     }
 
@@ -97,8 +98,9 @@ public class OnPostDrawView extends View implements ViewTreeObserver.OnPreDrawLi
     public boolean onPreDraw() {
         preDrawCount++;
         if (onPreDrawMode && invalidateFlags != 0) {
-            callback.onPostDraw(invalidateFlags);
+            final int flags = invalidateFlags;
             invalidateFlags = 0;
+            callback.onPostDraw(flags);
         }
         return true;
     }
