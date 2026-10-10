@@ -1,4 +1,6 @@
 uniform shader img;
+// Specialized at construction for the fixed slots in each host's group.
+const int SHAPE_COUNT = 8;
 uniform float4 shapes[8];
 uniform float4 cornerRadii[8];
 uniform float4 tints[8];
@@ -19,65 +21,98 @@ layout(color) uniform half4 shadow;
 uniform float shadowRadius;
 uniform float4 glows[8];
 uniform float links[64];
+uniform float touchActive;
 
 float touchLight(float2 p, float4 glow) {
+    if (glow.w <= 0.0) return 0.0;
     float halo = 1.0 - smoothstep(glow.z * 0.5, max(glow.z, 0.001), length(p - glow.xy));
     return glow.w * (0.08 + 0.15 * halo);
 }
 
-float shapeDistance(float2 p, float4 shape, float4 corners, float alpha) {
-    if (alpha <= 0.0 || min(shape.z, shape.w) <= 0.0) return 100000.0;
+// Distance and its analytic gradient share the same corner calculation.
+// Carry the gradient through the smooth union instead of evaluating the whole
+// eight-shape field four more times for a finite-difference normal per pixel.
+float3 shapeDistance(float2 p, float4 shape, float4 corners, float alpha) {
+    if (alpha <= 0.0 || min(shape.z, shape.w) <= 0.0) return float3(100000.0, 0.0, 0.0);
     float2 local = p - shape.xy;
     float radius = local.x >= 0.0 ? (local.y >= 0.0 ? corners.z : corners.y)
                                  : (local.y >= 0.0 ? corners.w : corners.x);
     float2 q = abs(local) - shape.zw + radius;
-    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+    float2 normal;
+    float distance;
+    if (min(q.x, q.y) > 0.0) {
+        float cornerLength = length(q);
+        distance = cornerLength - radius;
+        normal = q / cornerLength;
+    } else if (q.x > q.y) {
+        distance = q.x - radius;
+        normal = float2(1.0, 0.0);
+    } else if (q.y > q.x) {
+        distance = q.y - radius;
+        normal = float2(0.0, 1.0);
+    } else {
+        distance = q.x - radius;
+        normal = float2(0.5);
+    }
+    return float3(distance, normal * sign(local));
 }
 
-struct Surface { float d; float4 a; float4 b; };
+struct Surface { float d; float2 normal; float4 a; float4 b; };
 Surface surface(float2 p) {
     Surface s;
     s.d = 100000.0;
+    s.normal = float2(0.0);
     s.a = float4(0.0); s.b = float4(0.0);
-    float d0 = shapeDistance(p, shapes[0], cornerRadii[0], opacity[0]);
-    float d1 = shapeDistance(p, shapes[1], cornerRadii[1], opacity[1]);
-    float d2 = shapeDistance(p, shapes[2], cornerRadii[2], opacity[2]);
-    float d3 = shapeDistance(p, shapes[3], cornerRadii[3], opacity[3]);
-    float d4 = shapeDistance(p, shapes[4], cornerRadii[4], opacity[4]);
-    float d5 = shapeDistance(p, shapes[5], cornerRadii[5], opacity[5]);
-    float d6 = shapeDistance(p, shapes[6], cornerRadii[6], opacity[6]);
-    float d7 = shapeDistance(p, shapes[7], cornerRadii[7], opacity[7]);
+    float3 field0 = shapeDistance(p, shapes[0], cornerRadii[0], opacity[0]);
+    float d0 = field0.x;
+    float3 field1 = SHAPE_COUNT > 1 ? shapeDistance(p, shapes[1], cornerRadii[1], opacity[1]) : float3(100000.0, 0.0, 0.0);
+    float d1 = field1.x;
+    float3 field2 = SHAPE_COUNT > 2 ? shapeDistance(p, shapes[2], cornerRadii[2], opacity[2]) : float3(100000.0, 0.0, 0.0);
+    float d2 = field2.x;
+    float3 field3 = SHAPE_COUNT > 3 ? shapeDistance(p, shapes[3], cornerRadii[3], opacity[3]) : float3(100000.0, 0.0, 0.0);
+    float d3 = field3.x;
+    float3 field4 = SHAPE_COUNT > 4 ? shapeDistance(p, shapes[4], cornerRadii[4], opacity[4]) : float3(100000.0, 0.0, 0.0);
+    float d4 = field4.x;
+    float3 field5 = SHAPE_COUNT > 5 ? shapeDistance(p, shapes[5], cornerRadii[5], opacity[5]) : float3(100000.0, 0.0, 0.0);
+    float d5 = field5.x;
+    float3 field6 = SHAPE_COUNT > 6 ? shapeDistance(p, shapes[6], cornerRadii[6], opacity[6]) : float3(100000.0, 0.0, 0.0);
+    float d6 = field6.x;
+    float3 field7 = SHAPE_COUNT > 7 ? shapeDistance(p, shapes[7], cornerRadii[7], opacity[7]) : float3(100000.0, 0.0, 0.0);
+    float d7 = field7.x;
     if (opacity[0] > 0.0) {
-        s.d = d0; s.a.x = 1.0;
+        s.d = d0; s.normal = field0.yz; s.a.x = 1.0;
     }
-    if (opacity[1] > 0.0) {
+    if (SHAPE_COUNT > 1 && opacity[1] > 0.0) {
         float closest = 100000.0; float merge = 8.0;
         if (opacity[0] > 0.0 && d0 < closest) { closest = d0; merge = merges[8]; }
         float h = clamp(0.5 + 0.5 * (d1 - s.d) / merge, 0.0, 1.0);
         s.d = mix(d1, s.d, h) - merge * h * (1.0 - h);
+        s.normal = mix(field1.yz, s.normal, h);
         s.a *= h; s.b *= h;
         s.a.y += 1.0 - h;
     }
-    if (opacity[2] > 0.0) {
+    if (SHAPE_COUNT > 2 && opacity[2] > 0.0) {
         float closest = 100000.0; float merge = 8.0;
         if (opacity[0] > 0.0 && d0 < closest) { closest = d0; merge = merges[16]; }
         if (opacity[1] > 0.0 && d1 < closest) { closest = d1; merge = merges[17]; }
         float h = clamp(0.5 + 0.5 * (d2 - s.d) / merge, 0.0, 1.0);
         s.d = mix(d2, s.d, h) - merge * h * (1.0 - h);
+        s.normal = mix(field2.yz, s.normal, h);
         s.a *= h; s.b *= h;
         s.a.z += 1.0 - h;
     }
-    if (opacity[3] > 0.0) {
+    if (SHAPE_COUNT > 3 && opacity[3] > 0.0) {
         float closest = 100000.0; float merge = 8.0;
         if (opacity[0] > 0.0 && d0 < closest) { closest = d0; merge = merges[24]; }
         if (opacity[1] > 0.0 && d1 < closest) { closest = d1; merge = merges[25]; }
         if (opacity[2] > 0.0 && d2 < closest) { closest = d2; merge = merges[26]; }
         float h = clamp(0.5 + 0.5 * (d3 - s.d) / merge, 0.0, 1.0);
         s.d = mix(d3, s.d, h) - merge * h * (1.0 - h);
+        s.normal = mix(field3.yz, s.normal, h);
         s.a *= h; s.b *= h;
         s.a.w += 1.0 - h;
     }
-    if (opacity[4] > 0.0) {
+    if (SHAPE_COUNT > 4 && opacity[4] > 0.0) {
         float closest = 100000.0; float merge = 8.0;
         if (opacity[0] > 0.0 && d0 < closest) { closest = d0; merge = merges[32]; }
         if (opacity[1] > 0.0 && d1 < closest) { closest = d1; merge = merges[33]; }
@@ -85,10 +120,11 @@ Surface surface(float2 p) {
         if (opacity[3] > 0.0 && d3 < closest) { closest = d3; merge = merges[35]; }
         float h = clamp(0.5 + 0.5 * (d4 - s.d) / merge, 0.0, 1.0);
         s.d = mix(d4, s.d, h) - merge * h * (1.0 - h);
+        s.normal = mix(field4.yz, s.normal, h);
         s.a *= h; s.b *= h;
         s.b.x += 1.0 - h;
     }
-    if (opacity[5] > 0.0) {
+    if (SHAPE_COUNT > 5 && opacity[5] > 0.0) {
         float closest = 100000.0; float merge = 8.0;
         if (opacity[0] > 0.0 && d0 < closest) { closest = d0; merge = merges[40]; }
         if (opacity[1] > 0.0 && d1 < closest) { closest = d1; merge = merges[41]; }
@@ -97,10 +133,11 @@ Surface surface(float2 p) {
         if (opacity[4] > 0.0 && d4 < closest) { closest = d4; merge = merges[44]; }
         float h = clamp(0.5 + 0.5 * (d5 - s.d) / merge, 0.0, 1.0);
         s.d = mix(d5, s.d, h) - merge * h * (1.0 - h);
+        s.normal = mix(field5.yz, s.normal, h);
         s.a *= h; s.b *= h;
         s.b.y += 1.0 - h;
     }
-    if (opacity[6] > 0.0) {
+    if (SHAPE_COUNT > 6 && opacity[6] > 0.0) {
         float closest = 100000.0; float merge = 8.0;
         if (opacity[0] > 0.0 && d0 < closest) { closest = d0; merge = merges[48]; }
         if (opacity[1] > 0.0 && d1 < closest) { closest = d1; merge = merges[49]; }
@@ -110,10 +147,11 @@ Surface surface(float2 p) {
         if (opacity[5] > 0.0 && d5 < closest) { closest = d5; merge = merges[53]; }
         float h = clamp(0.5 + 0.5 * (d6 - s.d) / merge, 0.0, 1.0);
         s.d = mix(d6, s.d, h) - merge * h * (1.0 - h);
+        s.normal = mix(field6.yz, s.normal, h);
         s.a *= h; s.b *= h;
         s.b.z += 1.0 - h;
     }
-    if (opacity[7] > 0.0) {
+    if (SHAPE_COUNT > 7 && opacity[7] > 0.0) {
         float closest = 100000.0; float merge = 8.0;
         if (opacity[0] > 0.0 && d0 < closest) { closest = d0; merge = merges[56]; }
         if (opacity[1] > 0.0 && d1 < closest) { closest = d1; merge = merges[57]; }
@@ -124,6 +162,7 @@ Surface surface(float2 p) {
         if (opacity[6] > 0.0 && d6 < closest) { closest = d6; merge = merges[62]; }
         float h = clamp(0.5 + 0.5 * (d7 - s.d) / merge, 0.0, 1.0);
         s.d = mix(d7, s.d, h) - merge * h * (1.0 - h);
+        s.normal = mix(field7.yz, s.normal, h);
         s.a *= h; s.b *= h;
         s.b.w += 1.0 - h;
     }
@@ -138,17 +177,16 @@ half4 main(float2 p) {
         float fade = exp(-max(s.d, 0.0) * max(s.d, 0.0) / (2.0 * shadowRadius * shadowRadius));
         return half4(shadow.rgb * shadow.a, shadow.a) * half(fade * glassAlpha * alpha);
     }
-    float2 grad = float2(surface(p + float2(0.5, 0.0)).d - surface(p - float2(0.5, 0.0)).d,
-                        surface(p + float2(0.0, 0.5)).d - surface(p - float2(0.0, 0.5)).d);
+    float2 grad = s.normal;
     grad /= max(length(grad), 0.0001);
-    float2 displacement;
+    float2 displacement = float2(0.0);
     if (refractive < 0.5) {
         displacement = float2(0.0);
     } else if (advanced > 0.5) {
         float maxDepth = s.a.x * min(shapes[0].z, shapes[0].w) + s.a.y * min(shapes[1].z, shapes[1].w) + s.a.z * min(shapes[2].z, shapes[2].w) + s.a.w * min(shapes[3].z, shapes[3].w) + s.b.x * min(shapes[4].z, shapes[4].w) + s.b.y * min(shapes[5].z, shapes[5].w) + s.b.z * min(shapes[6].z, shapes[6].w) + s.b.w * min(shapes[7].z, shapes[7].w);
         float edge = clamp(1.0 + min(s.d, 0.0) / max(min(depth, maxDepth), 0.001), 0.0, 1.0);
         displacement = grad * amount * (1.0 - sqrt(max(0.0, 1.0 - edge * edge)));
-    } else {
+    } else if (intensity != 0.0 && s.d > -thickness) {
         float sd = min(s.d, 0.0);
         float nc = clamp((thickness + sd) / thickness, 0.0, 1.0);
         float3 normal = float3(grad * nc, sqrt(max(0.0001, 1.0 - nc * nc)));
@@ -184,7 +222,9 @@ half4 main(float2 p) {
     }
     half4 tint = half4(tints[0] * s.a.x + tints[1] * s.a.y + tints[2] * s.a.z + tints[3] * s.a.w + tints[4] * s.b.x + tints[5] * s.b.y + tints[6] * s.b.z + tints[7] * s.b.w);
     color = tint + color * (1.0 - tint.a);
-    float touch = touchLight(p, glows[0]) * (s.a.x * links[0] + s.a.y * links[1] + s.a.z * links[2] + s.a.w * links[3] + s.b.x * links[4] + s.b.y * links[5] + s.b.z * links[6] + s.b.w * links[7]) +
+    float touch = 0.0;
+    if (touchActive > 0.5) {
+        touch = touchLight(p, glows[0]) * (s.a.x * links[0] + s.a.y * links[1] + s.a.z * links[2] + s.a.w * links[3] + s.b.x * links[4] + s.b.y * links[5] + s.b.z * links[6] + s.b.w * links[7]) +
         touchLight(p, glows[1]) * (s.a.x * links[8] + s.a.y * links[9] + s.a.z * links[10] + s.a.w * links[11] + s.b.x * links[12] + s.b.y * links[13] + s.b.z * links[14] + s.b.w * links[15]) +
         touchLight(p, glows[2]) * (s.a.x * links[16] + s.a.y * links[17] + s.a.z * links[18] + s.a.w * links[19] + s.b.x * links[20] + s.b.y * links[21] + s.b.z * links[22] + s.b.w * links[23]) +
         touchLight(p, glows[3]) * (s.a.x * links[24] + s.a.y * links[25] + s.a.z * links[26] + s.a.w * links[27] + s.b.x * links[28] + s.b.y * links[29] + s.b.z * links[30] + s.b.w * links[31]) +
@@ -192,9 +232,10 @@ half4 main(float2 p) {
         touchLight(p, glows[5]) * (s.a.x * links[40] + s.a.y * links[41] + s.a.z * links[42] + s.a.w * links[43] + s.b.x * links[44] + s.b.y * links[45] + s.b.z * links[46] + s.b.w * links[47]) +
         touchLight(p, glows[6]) * (s.a.x * links[48] + s.a.y * links[49] + s.a.z * links[50] + s.a.w * links[51] + s.b.x * links[52] + s.b.y * links[53] + s.b.z * links[54] + s.b.w * links[55]) +
         touchLight(p, glows[7]) * (s.a.x * links[56] + s.a.y * links[57] + s.a.z * links[58] + s.a.w * links[59] + s.b.x * links[60] + s.b.y * links[61] + s.b.z * links[62] + s.b.w * links[63]);
+    }
     color.rgb = min(half3(color.a), color.rgb + half3(min(touch, 0.35) * color.a));
     // Light follows the outer union normal, so no internal seam remains at the neck.
-    float light = glare <= 0.0 ? 0.0 : pow(abs(dot(grad, float2(cos(angle), sin(angle)))), max(0.1, glare));
+    float light = glare <= 0.0 || abs(s.d) >= 1.2 ? 0.0 : pow(abs(dot(grad, float2(cos(angle), sin(angle)))), max(0.1, glare));
     float rim = 1.0 - smoothstep(0.0, 1.2, abs(s.d));
     color.rgb = min(half3(color.a), color.rgb + half3(light * rim * 0.165 * color.a));
     return color * half(coverage * glassAlpha * alpha);

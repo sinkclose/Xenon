@@ -2058,7 +2058,10 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
     }
 
     private void setupRoundedCorners(View view) {
-        final WindowInsets insets = getRootWindowInsets();
+        // Display rounded corners are exposed only on Android 12+. Older
+        // versions keep the transition's default radius without querying them.
+        final WindowInsets insets = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                ? getRootWindowInsets() : null;
         final float cornerRadius;
         if (insets != null) {
             final RoundedCorner topLeft = insets.getRoundedCorner(RoundedCorner.POSITION_TOP_LEFT);

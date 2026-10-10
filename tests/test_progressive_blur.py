@@ -439,11 +439,11 @@ public class ChatCaptureHarness {
         NekoConfig.enabled = true;
         Chat opening = new Chat(); opening.openAnimationEnded = false;
         opening.startFadeBlurContinuousUpdates(); opening.frame(17);
-        check(opening.fadeBlurSource.records == 0 && opening.fadeBlurCapturePending);
+        check(opening.fadeBlurSource.records == 1 && !opening.fadeBlurCapturePending);
         opening.openAnimationEnded = true; opening.invalidateFadeBlur(); opening.frame(17);
-        check(opening.fadeBlurSource.records == 1 && opening.fadeWallpaperSource.records == 1);
-        opening.generation++; opening.invalidateFadeBlur(); opening.frame(17);
         check(opening.fadeBlurSource.records == 2 && opening.fadeWallpaperSource.records == 1);
+        opening.generation++; opening.invalidateFadeBlur(); opening.frame(17);
+        check(opening.fadeBlurSource.records == 3 && opening.fadeWallpaperSource.records == 1);
         opening.fadeWallpaperDirty = true; opening.invalidateFadeBlur(); opening.frame(17);
         check(opening.fadeWallpaperSource.records == 2);
         opening.stopFadeBlurContinuousUpdates();
@@ -451,7 +451,7 @@ public class ChatCaptureHarness {
         Chat beforeLayout = new Chat(); beforeLayout.contentView.width = 0;
         beforeLayout.startFadeBlurContinuousUpdates(); beforeLayout.frame(17);
         for (int i = 0; i < 60; i++) beforeLayout.frame(17);
-        check(beforeLayout.fadeBlurCaptureView.requests == 1 && beforeLayout.fadeBlurSource.records == 0);
+        check(beforeLayout.fadeBlurCapturePending && beforeLayout.fadeBlurSource.records == 0);
         beforeLayout.contentView.width = 360; beforeLayout.invalidateFadeBlur(); beforeLayout.frame(17);
         check(beforeLayout.fadeBlurSource.records == 1);
     }

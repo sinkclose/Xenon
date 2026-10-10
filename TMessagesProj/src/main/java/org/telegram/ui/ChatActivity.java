@@ -8132,7 +8132,8 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
         contentView.addView(chatListView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
         chatActivityFadeView = new ChatActivityFadeView(context);
-        if (fadeBlurFactory != null && (openAnimationEnded || inPreviewMode || isInsideContainer || inBubbleMode)) {
+        fadeBlurStockApplied = false;
+        if (fadeBlurFactory != null) {
             chatActivityFadeView.setup(fadeBlurFactory, dimWallpaperDrawableFactory);
             chatActivityFadeView.setDim(NekoConfig.blurredFadeDimming ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
             chatActivityFadeView.setOpaqueFade(true);
@@ -18673,7 +18674,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                         if (!drawable.hasDisplayList()) drawable.updateDisplayList();
                     }
                     if (headerGlassGroup == null) {
-                        headerGlassGroup = new LiquidGlassInputGroup();
+                        headerGlassGroup = new LiquidGlassInputGroup(headerGlassMembers.length);
                         // Header/pinned gap is 7 dp; keep it open at rest, join on deformation.
                         headerGlassGroup.setMergeDistance(dp(6));
                         headerGlassGroup.setPairMergeDistance(0, 1, dp(6));
@@ -51095,10 +51096,8 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (glassSourceCaptureDepth != 0 || !NekoConfig.blurredFadeViewEnabled()) {
             return;
         }
-        if (!openAnimationEnded && !inPreviewMode && !isInsideContainer && !inBubbleMode) {
-            fadeBlurCapturePending = true;
-            return;
-        }
+        // Capture on pre-draw during opening too, so the first visible frame
+        // already contains messages at both edges. Requests still coalesce.
         if (fadeBlurCaptureView != null && !fadeBlurCaptureScheduled) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurEnabled()) {
                 final long now = SystemClock.uptimeMillis();
@@ -51169,6 +51168,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         final int fw = contentView.getWidth();
         final int fh = contentView.getHeight();
         if (fw <= 0 || fh <= 0) {
+            fadeBlurCapturePending = true;
             return;
         }
         lastFadeBlurUpdateTime = SystemClock.uptimeMillis();

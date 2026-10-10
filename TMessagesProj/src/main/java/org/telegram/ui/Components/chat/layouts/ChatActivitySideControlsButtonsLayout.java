@@ -105,7 +105,7 @@ public class ChatActivitySideControlsButtonsLayout extends FrameLayout implement
         if (Build.VERSION.SDK_INT >= 33 && canvas.isHardwareAccelerated() && liquidTouchEnabled
                 && !zxc.iconic.xenon.helpers.NonIslandHelper.chatElements() && !liquidGroupFailed) {
             try {
-                if (liquidGroup == null) liquidGroup = new LiquidGlassInputGroup();
+                if (liquidGroup == null) liquidGroup = new LiquidGlassInputGroup(groupMembers.length);
                 for (int i = 0; i < BUTTONS_COUNT; i++) {
                     ButtonHolder holder = buttonHolders[i];
                     groupMembers[i] = null;

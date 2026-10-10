@@ -56,6 +56,18 @@ public class CaptureAudit {
   void flush(){if(fadeBlurCaptureView.flags!=0){fadeBlurCaptureView.flags=0;invalidateFadeBlurImpl();}}
  }
  public static void main(String[] args){
+  if(!BASELINE){
+   NekoConfig.fade=true;NekoConfig.progressive=true;
+   Chat opening=new Chat();opening.openAnimationEnded=false;
+   SystemClock.now+=1000;
+   for(int change=0;change<1000;change++)opening.invalidateFadeBlur();
+   opening.flush();
+   if(opening.contentView.captures!=1 || opening.fadeBlurCaptureScheduled)throw new AssertionError("Opening must capture before the transition ends and coalesce requests");
+   opening.invalidateFadeBlur();opening.flush();
+   if(opening.contentView.captures!=1 || !opening.fadeBlurCapturePending)throw new AssertionError("Opening must retain the refresh limit");
+   SystemClock.now+=1000;opening.invalidateFadeBlur();opening.flush();
+   if(opening.contentView.captures!=2)throw new AssertionError("Opening content must keep updating");
+  }
   for(int flags : new int[]{2,1,8}) for(int mode=0;mode<3;mode++){
    NekoConfig.fade=mode!=0;NekoConfig.progressive=mode==2;Chat c=new Chat();
    for(int frame=0;frame<120;frame++){SystemClock.now+=9;c.invalidateMergedVisibleBlurredPositionsAndSources(flags);c.flush();}
