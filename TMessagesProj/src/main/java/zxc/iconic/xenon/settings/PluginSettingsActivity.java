@@ -46,7 +46,8 @@ public class PluginSettingsActivity extends BaseNekoSettingsActivity {
     // Permissions section rows.
     private int permHeaderRow;
     private int permGeneralRow;
-    private int permMessagingRow;
+    private final java.util.Map<Integer, String> permissionRows = new java.util.HashMap<>();
+    private final java.util.Map<Integer, Integer> accessRows = new java.util.HashMap<>();
 
     public PluginSettingsActivity setPlugin(PluginManager.LoadedPlugin p) {
         this.plugin = p;
@@ -64,18 +65,40 @@ public class PluginSettingsActivity extends BaseNekoSettingsActivity {
         // Permissions section — always shown, even before plugin settings.
         permHeaderRow = rowIdCounter++;
         permGeneralRow = rowIdCounter++;
-        permMessagingRow = rowIdCounter++;
+        permissionRows.clear();
+        accessRows.clear();
+        items.add(UItem.asHeader(LocaleController.getString(R.string.PluginAccessLevel)));
+        int access = plugin == null ? 0 : PluginManager.hasScope(plugin.fileName, PluginManager.SCOPE_JAVA) ? 2
+                : PluginManager.hasScope(plugin.fileName, PluginManager.SCOPE_LIMITED_JAVA) ? 1 : 0;
+        int[] accessLabels = {R.string.PluginAccessIsolated, R.string.PluginAccessLimited, R.string.PluginAccessTrusted};
+        for (int level = 0; level < 3; level++) {
+            int id = rowIdCounter++; accessRows.put(id, level);
+            UItem choice = UItem.asRadio(id, LocaleController.getString(accessLabels[level])).setChecked(access == level);
+            if (level == 2 && !zxc.iconic.xenon.NekoConfig.pluginGodMode) choice.setEnabled(false);
+            items.add(choice);
+        }
         items.add(UItem.asHeader(LocaleController.getString(R.string.PluginPermissions)));
-        // GENERAL is always granted and can't be revoked — disabled, checked.
-        UItem general = UItem.asCheck(permGeneralRow, LocaleController.getString(R.string.PluginScopeGeneral))
-                .setChecked(true);
+        UItem general = UItem.asCheck(permGeneralRow, LocaleController.getString(R.string.PluginScopeGeneral)).setChecked(true);
         general.setEnabled(false);
         items.add(general);
-        boolean messaging = plugin != null
-                && getPrefs().getBoolean("plugin_scope_" + (plugin.pluginId != null ? plugin.pluginId : plugin.fileName) + "_" + PluginManager.SCOPE_MESSAGING, false);
-        items.add(UItem.asCheck(permMessagingRow, LocaleController.getString(R.string.PluginScopeMessaging))
-                .setChecked(messaging));
-        items.add(UItem.asShadow(null));
+        int[] labels = {R.string.PluginScopeMessaging, R.string.PluginScopeRead, R.string.PluginScopeSend,
+                R.string.PluginScopeDelete, R.string.PluginScopeReactions, R.string.PluginScopeReceipts,
+                R.string.PluginScopeUI, R.string.PluginScopeJava, R.string.PluginScopeHooks,
+                R.string.PluginScopeLimitedJava, R.string.PluginScopeFiles, R.string.PluginScopeInternet, R.string.PluginScopeLinks};
+        for (int i = 0; i < PluginManager.OPTIONAL_SCOPES.length; i++) {
+            int id = rowIdCounter++;
+            String scope = PluginManager.OPTIONAL_SCOPES[i];
+            if (PluginManager.SCOPE_JAVA.equals(scope) || PluginManager.SCOPE_LIMITED_JAVA.equals(scope)) continue;
+            permissionRows.put(id, scope);
+            UItem permission = UItem.asCheck(id, LocaleController.getString(labels[i]))
+                    .setChecked(plugin != null && PluginManager.hasScope(plugin.fileName, scope));
+            if ((PluginManager.SCOPE_JAVA.equals(scope) || PluginManager.SCOPE_HOOKS.equals(scope))
+                    && !zxc.iconic.xenon.NekoConfig.pluginGodMode) permission.setEnabled(false);
+            if (plugin != null && i >= 1 && i <= 5 && !PluginManager.hasScope(plugin.fileName, PluginManager.SCOPE_MESSAGING)) permission.setEnabled(false);
+            if (plugin != null && PluginManager.SCOPE_HOOKS.equals(scope) && !PluginManager.hasScope(plugin.fileName, PluginManager.SCOPE_JAVA)) permission.setEnabled(false);
+            items.add(permission);
+        }
+        items.add(UItem.asShadow(LocaleController.getString(R.string.PluginPermissionsWarning)));
 
         if (plugin == null || plugin.settings.isEmpty()) {
             items.add(UItem.asShadow(LocaleController.getString(R.string.PluginsEmpty)));
@@ -160,17 +183,24 @@ public class PluginSettingsActivity extends BaseNekoSettingsActivity {
 
     @Override
     protected void onItemClick(UItem item, View view, int position, float x, float y) {
-        if (plugin == null) return;
-        // Permissions section: only MESSAGING is interactive (GENERAL is locked
-        // on). Toggling persists the scope flag; hasScope() reads it live on
-        // every API call, so no engine reload is needed for it to take effect.
-        if (item.id == permMessagingRow) {
-            String key = "plugin_scope_" + (plugin.pluginId != null ? plugin.pluginId : plugin.fileName) + "_" + PluginManager.SCOPE_MESSAGING;
-            boolean newVal = !getPrefs().getBoolean(key, false);
-            getPrefs().edit().putBoolean(key, newVal).apply();
-            if (view instanceof TextCheckCell) {
-                ((TextCheckCell) view).setChecked(newVal);
-            }
+        if (plugin == null || !item.enabled) return;
+        Integer access = accessRows.get(item.id);
+        if (access != null) {
+            String owner = plugin.fileName;
+            getPrefs().edit().putBoolean("plugin_scope_" + owner + "_JAVA", access == 2)
+                    .putBoolean("plugin_scope_" + owner + "_LIMITED_JAVA", access == 1).commit();
+            PluginManager.getInstance().reloadAll();
+            plugin = PluginManager.getInstance().findPlugin(owner); updateRows(); return;
+        }
+        String scope = permissionRows.get(item.id);
+        if (scope != null) {
+            String owner = plugin.fileName;
+            boolean enabled = !PluginManager.hasScope(owner, scope);
+            getPrefs().edit().putBoolean("plugin_scope_" + owner + "_" + scope, enabled).commit();
+            // Drop captured Java objects, registered callbacks and hooks on revocation.
+            PluginManager.getInstance().reloadAll();
+            plugin = PluginManager.getInstance().findPlugin(owner);
+            updateRows();
             return;
         }
         int idx = settingRowIds.indexOf(item.id);
@@ -198,8 +228,9 @@ public class PluginSettingsActivity extends BaseNekoSettingsActivity {
             case BUTTON: {
                 if (s.action != null) {
                     try {
-                        s.action.call();
-                    } catch (Exception e) {
+                        PluginManager.invokeCallback(plugin.fileName, s.action, LuaValue.NONE);
+                    } catch (Throwable e) {
+                        PluginManager.getInstance().quarantineFile(plugin.fileName, "settings", e);
                         FileLog.e(e);
                     }
                 }
@@ -234,8 +265,8 @@ public class PluginSettingsActivity extends BaseNekoSettingsActivity {
     }
 
     private String settingKey(String key) {
-        String prefix = plugin != null && plugin.pluginId != null ? plugin.pluginId : (plugin != null ? plugin.fileName : "unknown");
-        return prefix + "_" + key;
+        String owner = plugin != null ? plugin.fileName : "unknown";
+        return "settings:" + owner.length() + ":" + owner + ":" + key;
     }
 
     static android.content.SharedPreferences getPrefs() {

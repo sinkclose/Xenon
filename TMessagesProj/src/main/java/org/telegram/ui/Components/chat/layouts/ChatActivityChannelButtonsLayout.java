@@ -9,6 +9,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.os.Build;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -19,6 +20,7 @@ import androidx.annotation.NonNull;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.R;
+import org.telegram.messenger.FileLog;
 import org.telegram.messenger.utils.ViewOutlineProviderImpl;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.CubicBezierInterpolator;
@@ -29,6 +31,7 @@ import org.telegram.ui.Components.LiquidPressAnimationSuppressor;
 import org.telegram.ui.Components.ScaleStateListAnimator;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
+import org.telegram.ui.Components.blur3.drawable.LiquidGlassInputGroup;
 import org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundColorProvider;
 import zxc.iconic.xenon.helpers.NonIslandHelper;
 import org.telegram.ui.Components.chat.buttons.ChatActivityBlurredRoundButton;
@@ -58,6 +61,92 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
     private boolean liquidTouchEnabled;
     private LiquidTouchEffect centerLiquid;
     private float centerLiquidX, centerLiquidY;
+    private LiquidGlassInputGroup liquidGroup;
+    private boolean liquidGroupFailed, liquidGroupDrawn;
+    private final BlurredBackgroundDrawable[] groupMembers = new BlurredBackgroundDrawable[6];
+    private final LiquidTouchEffect[] groupEffects = new LiquidTouchEffect[6];
+    private final RectF[] groupBounds = {new RectF(), new RectF(), new RectF(), new RectF(), new RectF(), new RectF()};
+    private final float[] groupAlpha = new float[6];
+    private final float[] groupOrigins = new float[12];
+
+    /** Draw in the input container's coordinates, keeping each button's spring independent. */
+    public boolean drawLiquidGlassGroup(Canvas canvas, BlurredBackgroundDrawable center,
+                                        LiquidTouchEffect centerEffect, float originX, float originY) {
+        liquidGroupDrawn = false;
+        for (ButtonHolder holder : buttonHolders) {
+            if (holder == null) continue;
+            if (holder.button.getLiquidSurface() != null) holder.button.getLiquidSurface().setAlpha(255);
+        }
+        if (!liquidTouchAllowed() || Build.VERSION.SDK_INT < 33 || !canvas.isHardwareAccelerated()
+                || liquidGroupFailed || center == null) {
+            for (ButtonHolder holder : buttonHolders) if (holder != null) holder.button.setLiquidGroupDrawn(false);
+            return false;
+        }
+        try {
+            if (liquidGroup == null) {
+                liquidGroup = new LiquidGlassInputGroup();
+                for (int a = 0; a < 6; a++) for (int b = a + 1; b < 6; b++)
+                    liquidGroup.setPairMergeDistance(a, b, dp(6));
+            }
+            for (int i = 0; i < 6; i++) {
+                groupMembers[i] = null; groupEffects[i] = null; groupAlpha[i] = 0f;
+                groupOrigins[i * 2] = groupOrigins[i * 2 + 1] = 0f;
+            }
+            groupMembers[1] = center;
+            groupEffects[1] = centerEffect;
+            groupAlpha[1] = 1f;
+            groupBounds[1].set(center.getPaddedBounds());
+            if (centerEffect != null) centerEffect.mapBounds(groupBounds[1], groupBounds[1]);
+            LiquidTouchEffect.updateBackground(center, centerEffect, 0f, 0f);
+            if (!center.hasDisplayList()) center.updateDisplayList();
+            for (int i = 0; i < BUTTONS_COUNT; i++) {
+                ButtonHolder holder = buttonHolders[i];
+                if (holder == null || holder.button.getVisibility() != VISIBLE
+                        || holder.button.getWidth() <= 0 || holder.button.getHeight() <= 0) continue;
+                View button = holder.button;
+                BlurredBackgroundDrawable drawable = holder.button.getLiquidSurface();
+                if (drawable == null) continue;
+                int slot = i == 0 ? 0 : i + 1;
+                groupMembers[slot] = drawable; groupEffects[slot] = holder.liquid; groupAlpha[slot] = 1f;
+                drawable.setAlpha(Math.round(255 * button.getAlpha()));
+                drawable.setBounds(0, 0, button.getWidth(), button.getHeight());
+                RectF bounds = groupBounds[slot];
+                bounds.set(drawable.getPaddedBounds());
+                bounds.set((bounds.left - button.getPivotX()) * button.getScaleX() + button.getPivotX() + button.getX(),
+                        (bounds.top - button.getPivotY()) * button.getScaleY() + button.getPivotY() + button.getY(),
+                        (bounds.right - button.getPivotX()) * button.getScaleX() + button.getPivotX() + button.getX(),
+                        (bounds.bottom - button.getPivotY()) * button.getScaleY() + button.getPivotY() + button.getY());
+                if (holder.liquid != null) holder.liquid.mapBounds(bounds, bounds);
+                bounds.offset(originX, originY);
+                groupOrigins[slot * 2] = originX;
+                groupOrigins[slot * 2 + 1] = originY;
+                LiquidTouchEffect.updateBackground(drawable, holder.liquid, button.getX(), button.getY());
+                if (!drawable.hasDisplayList()) drawable.updateDisplayList();
+            }
+            liquidGroup.draw(canvas, groupMembers, groupBounds, groupAlpha, groupEffects, groupOrigins);
+            liquidGroupDrawn = true;
+            for (int i = 0; i < BUTTONS_COUNT; i++) {
+                if (buttonHolders[i] != null)
+                    buttonHolders[i].button.setLiquidGroupDrawn(groupMembers[i == 0 ? 0 : i + 1] != null);
+            }
+        } catch (RuntimeException error) {
+            FileLog.e(error); liquidGroupFailed = true; liquidGroup = null;
+            for (ButtonHolder holder : buttonHolders) {
+                if (holder != null) holder.button.setLiquidGroupDrawn(false);
+                if (holder != null && holder.button.getLiquidSurface() != null)
+                    holder.button.getLiquidSurface().setAlpha(255);
+            }
+        }
+        return liquidGroupDrawn;
+    }
+
+    @Override
+    public void invalidate() {
+        super.invalidate();
+        // The optical union is recorded by the enclosing input container.
+        if (liquidGroupDrawn && getParent() != null && getParent().getParent() instanceof View)
+            ((View) getParent().getParent()).invalidate();
+    }
     private final LiquidPressAnimationSuppressor liquidPressAnimations = new LiquidPressAnimationSuppressor();
 
     public void setLiquidTouchEnabled(boolean enabled) {
@@ -104,6 +193,7 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
             holder.liquid.setBounds(button.getX(), button.getY(),
                     button.getX() + button.getWidth(), button.getY() + button.getHeight());
             holder.liquid.onTouchEvent(event, enabled && button.getVisibility() == VISIBLE && button.isEnabled());
+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) holder.liquid.setMinimumPressDuration(100);
         }
     }
 
@@ -598,7 +688,7 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
         }
 
         boolean result = super.drawChild(canvas, child, drawingTime);
-        if (sideLiquid != null && liquidTouchAllowed()) sideLiquid.drawHighlight(canvas, dp(22), dp(6));
+        if (!liquidGroupDrawn && sideLiquid != null && liquidTouchAllowed()) sideLiquid.drawHighlight(canvas, dp(22), dp(6));
         if (save != -1) canvas.restoreToCount(save);
         return result;
     }

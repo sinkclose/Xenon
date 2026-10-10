@@ -460,6 +460,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
         super.onCreate(savedInstanceState);
         if (Build.VERSION.SDK_INT >= 24) {
+            zxc.iconic.xenon.plugins.PluginSafeMode.markBootStarted();
             AndroidUtilities.isInMultiwindow = isInMultiWindowMode();
         }
         // Load custom badges independently of plugins so channel/user badges

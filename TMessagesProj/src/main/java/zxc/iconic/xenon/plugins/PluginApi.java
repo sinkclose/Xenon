@@ -92,13 +92,12 @@ public class PluginApi {
         TimerEntry(Runnable r, String pn) { runnable = r; pluginFileName = pn; }
     }
 
-    private static final Map<Integer, TimerEntry> timers = new HashMap<>();
+    private static final Map<Integer, TimerEntry> timers = new java.util.concurrent.ConcurrentHashMap<>();
     private static final Handler timerHandler = new Handler(Looper.getMainLooper());
-    private static int nextTimerId = 1;
+    private static final java.util.concurrent.atomic.AtomicInteger nextTimerId = new java.util.concurrent.atomic.AtomicInteger(1);
 
-    static int setTimeout(double seconds, LuaValue callback) {
-        String plugin = currentPluginFileName;
-        int id = nextTimerId++;
+    static int setTimeout(String plugin, double seconds, LuaValue callback) {
+        int id = nextTimerId.getAndIncrement();
         Runnable runnable = () -> {
             TimerEntry entry = timers.remove(id);
             if (entry != null && isPluginValid(entry.pluginFileName)) {
@@ -147,11 +146,11 @@ public class PluginApi {
     }
     private static final Map<String, List<NcObserver>> ncObservers = new ConcurrentHashMap<>();
 
-    static void startMessageWatcher(String key, long[] chats, int interval, int threshold, LuaValue callback) {
+    static void startMessageWatcher(String owner, String key, long[] chats, int interval, int threshold, LuaValue callback) {
         stopMessageWatcher(key);
         MessageWatcher w = new MessageWatcher();
         w.key = key;
-        w.pluginFileName = currentPluginFileName;
+        w.pluginFileName = owner;
         w.chats = chats;
         w.interval = interval;
         w.threshold = threshold;
@@ -236,7 +235,7 @@ public class PluginApi {
 
     private static void scheduleWatcher(MessageWatcher w) {
         if (!w.running) return;
-        w.timerId = setTimeout(w.interval, new ZeroArgFunction() {
+        w.timerId = setTimeout(w.pluginFileName, w.interval, new ZeroArgFunction() {
             @Override
             public LuaValue call() {
                 runWatcherCheck(w);
@@ -337,7 +336,8 @@ public class PluginApi {
                 boolean triggeredAny = idx[0] > 1;
                 Log.d("XenonPlugin", "runWatcherCheck: key=" + w.key + " done. triggered=" + triggeredAny + " triggeredCount=" + (idx[0] - 1));
                 if (triggeredAny && w.callback != null && !w.callback.isnil()) {
-                    w.callback.call(triggered);
+                    try { PluginManager.invokeCallback(w.pluginFileName, w.callback, triggered); }
+                    catch (Throwable error) { PluginManager.getInstance().quarantineFile(w.pluginFileName, "watcher", error); }
                 }
                 scheduleWatcher(w);
             });
@@ -380,6 +380,8 @@ public class PluginApi {
 
     static void stopAllForPlugin(String pluginFileName) {
         if (pluginFileName == null) return;
+        PluginManager.stopRuntime(pluginFileName);
+        PluginScreenActivity.closeForPlugin(pluginFileName);
         timers.entrySet().removeIf(e -> {
             if (pluginFileName.equals(e.getValue().pluginFileName)) {
                 timerHandler.removeCallbacks(e.getValue().runnable);
@@ -417,6 +419,8 @@ public class PluginApi {
     }
 
     static void stopAll() {
+        PluginManager.stopAllRuntimes();
+        PluginScreenActivity.closeAll();
         timers.values().forEach(e -> timerHandler.removeCallbacks(e.runnable));
         timers.clear();
         watchers.values().forEach(w -> w.running = false);
@@ -462,10 +466,16 @@ public class PluginApi {
         // binds this, so it stays tied to the right plugin even though
         // currentPluginFileName is a shared mutable static.
         final String pluginFileName = currentPluginFileName;
+        final PluginLuaRuntime apiRuntime = PluginManager.getRuntime(pluginFileName);
         LuaTable hooks = new LuaTable();
         globals.set("xenon_hooks", hooks);
 
         LuaTable api = new LuaTable();
+        api.set("hasPermission", new OneArgFunction() {
+            @Override public LuaValue call(LuaValue scope) {
+                return LuaValue.valueOf(PluginManager.hasScope(pluginFileName, scope.checkjstring()));
+            }
+        });
         api.set("on", new TwoArgFunction() {
             @Override
             public LuaValue call(LuaValue name, LuaValue handler) {
@@ -492,7 +502,7 @@ public class PluginApi {
                     } else if (n >= 5 && uargs.arg(5).isnumber()) {
                         senderId = (long) uargs.arg(5).todouble();
                     }
-                    Log.d("XenonPlugin", "xenon.sendMessage called: text=" + text + " peer=" + peer + " replyTo=" + replyTo + " hasCb=" + (cb != null) + " senderId=" + senderId);
+                    Log.d("XenonPlugin", "xenon.sendMessage called: peer=" + peer + " replyTo=" + replyTo + " hasCb=" + (cb != null) + " senderId=" + senderId);
                     sendMessage(text, peer, replyTo, cb, senderId);
                 }
                 return LuaValue.NIL;
@@ -559,7 +569,7 @@ public class PluginApi {
                 if (uargs.narg() >= 2 && uargs.arg(2).isfunction()) {
                     double seconds = uargs.arg(1).todouble();
                     LuaValue callback = uargs.arg(2);
-                    int id = setTimeout(seconds, callback);
+                    int id = setTimeout(pluginFileName, seconds, callback);
                     return LuaValue.valueOf(id);
                 }
                 return LuaValue.NIL;
@@ -568,7 +578,8 @@ public class PluginApi {
         api.set("clearTimeout", new OneArgFunction() {
             @Override
             public LuaValue call(LuaValue id) {
-                clearTimeout((int) id.todouble());
+                TimerEntry entry = timers.get((int) id.todouble());
+                if (entry != null && pluginFileName.equals(entry.pluginFileName)) clearTimeout((int) id.todouble());
                 return LuaValue.NIL;
             }
         });
@@ -591,14 +602,14 @@ public class PluginApi {
                 int threshold = Math.max(1, (int) t.get("threshold").optdouble(3));
                 LuaValue callback = t.get("callback");
                 if (!callback.isfunction()) return LuaValue.NIL;
-                startMessageWatcher(key, chats, interval, threshold, callback);
+                startMessageWatcher(pluginFileName, pluginFileName + ":" + key, chats, interval, threshold, callback);
                 return LuaValue.TRUE;
             }
         });
         api.set("stopMessageWatcher", new OneArgFunction() {
             @Override
             public LuaValue call(LuaValue key) {
-                stopMessageWatcher(key.optjstring(""));
+                stopMessageWatcher(pluginFileName + ":" + key.optjstring(""));
                 return LuaValue.NIL;
             }
         });
@@ -632,34 +643,30 @@ public class PluginApi {
                 return LuaValue.NIL;
             }
         });
-        final String capturedPluginForSettings = currentPluginId != null ? currentPluginId : currentPluginFileName;
-        final String capturedFileNameForMigration = (currentPluginId != null && currentPluginFileName != null) ? currentPluginFileName : null;
+        final String capturedPluginForSettings = "settings:" + pluginFileName.length() + ":" + pluginFileName + ":";
+        // Only already trusted plugins may import legacy ID-based settings.
+        // A newly installed restricted plugin cannot claim another plugin's ID.
+        android.content.SharedPreferences settingsPrefs = ApplicationLoader.applicationContext.getSharedPreferences("xenon_plugins", android.content.Context.MODE_PRIVATE);
+        String migrationKey = "plugin_settings_v3_" + pluginFileName;
+        if (!settingsPrefs.getBoolean(migrationKey, false) && PluginManager.hasScope(pluginFileName, PluginManager.SCOPE_JAVA)) {
+            String legacyPrefix = (currentPluginId != null ? currentPluginId : pluginFileName) + "_";
+            android.content.SharedPreferences.Editor migration = settingsPrefs.edit();
+            for (java.util.Map.Entry<String, ?> entry : settingsPrefs.getAll().entrySet()) {
+                if (entry.getKey().startsWith(legacyPrefix) && entry.getValue() instanceof String) {
+                    String target = capturedPluginForSettings + entry.getKey().substring(legacyPrefix.length());
+                    if (!settingsPrefs.contains(target)) migration.putString(target, (String)entry.getValue());
+                }
+            }
+            migration.putBoolean(migrationKey, true).commit();
+        }
         api.set("getSetting", new TwoArgFunction() {
             @Override
             public LuaValue call(LuaValue key, LuaValue def) {
                 String rawKey = key.checkjstring();
-                String namespacedKey = (capturedPluginForSettings != null ? capturedPluginForSettings + "_" : "") + rawKey;
+                String namespacedKey = capturedPluginForSettings + rawKey;
                 String defStr = def.isnil() ? null : def.tojstring();
                 String val = getSetting(namespacedKey, null);
-                if (val == null) {
-                    // Migration from old file-name-based key to plugin_id-based key
-                    if (capturedFileNameForMigration != null) {
-                        String oldKey = capturedFileNameForMigration + "_" + rawKey;
-                        val = getSetting(oldKey, null);
-                        if (val != null) {
-                            setSetting(namespacedKey, val);
-                            removeSetting(oldKey);
-                        }
-                    }
-                }
-                if (val == null) {
-                    val = getSetting(rawKey, null);
-                    if (val != null) {
-                        setSetting(namespacedKey, val);
-                    } else {
-                        val = defStr;
-                    }
-                }
+                if (val == null) val = defStr;
                 if (val == null) return LuaValue.NIL;
                 return LuaValue.valueOf(val);
             }
@@ -667,7 +674,7 @@ public class PluginApi {
         api.set("setSetting", new TwoArgFunction() {
             @Override
             public LuaValue call(LuaValue key, LuaValue value) {
-                String namespaced = (capturedPluginForSettings != null ? capturedPluginForSettings + "_" : "") + key.checkjstring();
+                String namespaced = capturedPluginForSettings + key.checkjstring();
                 setSetting(namespaced, value.tojstring());
                 return LuaValue.NIL;
             }
@@ -691,6 +698,12 @@ public class PluginApi {
             public LuaValue call(LuaValue arg) {
                 String name = arg.checkjstring();
                 openActivity(name);
+                return LuaValue.NIL;
+            }
+        });
+        api.set("openScreen", new OneArgFunction() {
+            @Override public LuaValue call(LuaValue options) {
+                PluginScreenActivity.open(pluginFileName, options.checktable());
                 return LuaValue.NIL;
             }
         });
@@ -809,6 +822,14 @@ public class PluginApi {
                     Log.e("XenonPlugin", "hookMethod requires God Mode!");
                     return LuaValue.NIL;
                 }
+                // Native ARM translation does not turn x86 ART into ARM ART.
+                // Pine supports ARM only; installing its trampoline in WSA
+                // otherwise crashes the process on the first hooked call.
+                String runtimeArch = System.getProperty("os.arch", "");
+                if (!runtimeArch.startsWith("arm") && !runtimeArch.equals("aarch64")) {
+                    Log.e("XenonPlugin", "hookMethod: Pine does not support runtime architecture " + runtimeArch);
+                    return LuaValue.NIL;
+                }
                 String className = args.arg(1).checkjstring();
                 String methodName = args.arg(2).checkjstring();
                 LuaTable callbackTable = args.arg(3).checktable();
@@ -829,6 +850,7 @@ public class PluginApi {
                     MethodHook.Unhook hook = Pine.hook(targetMethod, new MethodHook() {
                         @Override
                         public void beforeCall(Pine.CallFrame callFrame) throws Throwable {
+                            if (!PluginManager.hasScope(pluginFileName, PluginManager.SCOPE_HOOKS) || !PluginManager.isRuntimeCurrent(pluginFileName, apiRuntime)) return;
                             LuaValue beforeCb = callbackTable.get("before");
                             if (beforeCb.isfunction()) {
                                 try {
@@ -844,7 +866,7 @@ public class PluginApi {
                                     LuaValue thisObj = callFrame.thisObject != null
                                             ? CoerceJavaToLua.coerce(callFrame.thisObject)
                                             : LuaValue.NIL;
-                                    LuaValue result = beforeCb.call(thisObj, luaArgs);
+                                    LuaValue result = PluginManager.invokeCallback(pluginFileName, beforeCb, LuaValue.varargsOf(new LuaValue[]{thisObj, luaArgs})).arg1();
                                     if (!result.isnil()) {
                                         callFrame.setResult(CoerceLuaToJava.coerce(result, Object.class));
                                     }
@@ -857,6 +879,7 @@ public class PluginApi {
                         }
                         @Override
                         public void afterCall(Pine.CallFrame callFrame) throws Throwable {
+                            if (!PluginManager.hasScope(pluginFileName, PluginManager.SCOPE_HOOKS) || !PluginManager.isRuntimeCurrent(pluginFileName, apiRuntime)) return;
                             LuaValue afterCb = callbackTable.get("after");
                             if (afterCb.isfunction()) {
                                 try {
@@ -867,7 +890,7 @@ public class PluginApi {
                                     LuaValue thisObj = callFrame.thisObject != null
                                             ? CoerceJavaToLua.coerce(callFrame.thisObject)
                                             : LuaValue.NIL;
-                                    LuaValue result = afterCb.call(thisObj, resObj);
+                                    LuaValue result = PluginManager.invokeCallback(pluginFileName, afterCb, LuaValue.varargsOf(new LuaValue[]{thisObj, resObj})).arg1();
                                     if (!result.isnil()) {
                                         callFrame.setResult(CoerceLuaToJava.coerce(result, Object.class));
                                     }
@@ -910,6 +933,7 @@ public class PluginApi {
                 NotificationCenter.NotificationCenterDelegate delegate = (id, acc, args2) -> {
                     if (id != notificationId) return;
                     AndroidUtilities.runOnUIThread(() -> {
+                        if (!allowsApi(pluginFileName, "observeNotification") || !isPluginValid(pluginFileName)) return;
                         LuaTable luaArgs = new LuaTable();
                         if (args2 != null) {
                             for (int i = 0; i < args2.length; i++) {
@@ -919,7 +943,7 @@ public class PluginApi {
                             }
                         }
                         try {
-                            callback.call(luaArgs);
+                            PluginManager.invokeCallback(pluginFileName, callback, luaArgs);
                         } catch (Throwable t) {
                             FileLog.e("ObserveNotification callback error", t);
                             PluginManager.getInstance().quarantineFile(pluginFileName, "observeNotification " + notificationId, t);
@@ -982,8 +1006,75 @@ public class PluginApi {
                 return LuaValue.NIL;
             }
         });
-        Log.d("XenonPlugin", "createApiTable: hooks table created, identityHash=" + System.identityHashCode(hooks));
-        return new LuaTable[]{api, hooks};
+        LuaTable scopedApi = new LuaTable();
+        PluginCapabilities.attach(api, pluginFileName);
+        for (LuaValue key : api.keys()) {
+            final String apiName = key.tojstring();
+            final LuaValue function = api.get(key);
+            scopedApi.set(key, new VarArgFunction() {
+                @Override public Varargs invoke(Varargs args) {
+                    if (!PluginManager.isRuntimeCurrent(pluginFileName, apiRuntime)) throw new org.luaj.vm2.LuaError("Plugin was unloaded");
+                    if (!allowsApi(pluginFileName, apiName)) throw new org.luaj.vm2.LuaError("Permission denied: " + apiName);
+                    LuaValue[] values = new LuaValue[args.narg()];
+                    java.util.IdentityHashMap<LuaValue, LuaValue> copied = new java.util.IdentityHashMap<>();
+                    for (int i = 0; i < values.length; i++) values[i] = guardCallbacks(pluginFileName, apiRuntime,
+                            apiName, args.arg(i + 1), copied, 0);
+                    return function.invoke(LuaValue.varargsOf(values));
+                }
+            });
+        }
+        return new LuaTable[]{scopedApi, hooks};
+    }
+
+    private static LuaValue guardCallbacks(String owner, PluginLuaRuntime runtime, String api, LuaValue value,
+            java.util.IdentityHashMap<LuaValue, LuaValue> copied, int depth) {
+        if (value.isfunction()) {
+            return new VarArgFunction() {
+                @Override public Varargs invoke(Varargs args) {
+                    if (!isPluginValid(owner) || !PluginManager.isRuntimeCurrent(owner, runtime)) return LuaValue.NIL;
+                    try { return PluginManager.invokeCallback(owner, value, args); }
+                    catch (Throwable error) {
+                        if (PluginManager.isRuntimeCurrent(owner, runtime)) PluginManager.getInstance().quarantineFile(owner, "callback " + api, error);
+                        return LuaValue.NIL;
+                    }
+                }
+            };
+        }
+        if (!value.istable()) return value;
+        if (copied.containsKey(value)) return copied.get(value);
+        if (depth > 32) throw new org.luaj.vm2.LuaError("Callback table is too deeply nested");
+        LuaTable table = new LuaTable(); copied.put(value, table);
+        for (LuaValue key : value.checktable().keys()) table.set(key, guardCallbacks(owner, runtime, api, value.get(key), copied, depth + 1));
+        return table;
+    }
+
+    static boolean allowsApi(String owner, String name) {
+        String scope;
+        switch (name) {
+            case "readFile": case "writeFile": case "deleteFile": scope = PluginManager.SCOPE_FILES; break;
+            case "httpGet": scope = PluginManager.SCOPE_INTERNET; break;
+            case "openLink": scope = PluginManager.SCOPE_LINKS; break;
+            case "sendMedia": return PluginManager.hasScope(owner, PluginManager.SCOPE_SEND) && PluginManager.hasScope(owner, PluginManager.SCOPE_READ);
+            case "sendMessage": scope = PluginManager.SCOPE_SEND; break;
+            case "deleteMessage": scope = PluginManager.SCOPE_DELETE; break;
+            case "setReaction": scope = PluginManager.SCOPE_REACTIONS; break;
+            case "readHistory": scope = PluginManager.SCOPE_RECEIPTS; break;
+            case "getMessageById": case "getRecentMessages": case "getMessagesFromUser":
+            case "getPeerName": case "getOpenChatId": case "startMessageWatcher": scope = PluginManager.SCOPE_READ; break;
+            case "hookMethod": scope = PluginManager.SCOPE_HOOKS; break;
+            case "observeNotification":
+                return PluginManager.hasScope(owner, PluginManager.SCOPE_JAVA) && PluginManager.hasScope(owner, PluginManager.SCOPE_READ);
+            case "getPrivateField": case "setPrivateField": scope = PluginManager.SCOPE_JAVA; break;
+            case "openScreen":
+                return PluginManager.hasScope(owner, PluginManager.SCOPE_JAVA) && PluginManager.hasScope(owner, PluginManager.SCOPE_UI);
+            case "toast": case "bulletin": case "bulletinButton": case "openActivity":
+            case "openPluginSettings": case "promptText": case "createDialog": case "createBottomSheet":
+                scope = PluginManager.SCOPE_UI; break;
+            case "openChatPicker": return PluginManager.hasScope(owner, PluginManager.SCOPE_UI) && PluginManager.hasScope(owner, PluginManager.SCOPE_READ);
+            case "finish": scope = PluginManager.SCOPE_UI; break;
+            default: return true;
+        }
+        return PluginManager.hasScope(owner, scope);
     }
 
     static void sendMessage(final String text, final long peerId, final int replyToMsgId) {

@@ -20008,6 +20008,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     }
 
     public ImageReceiver getAvatarImage() {
+        // Archived messages stay in the list; keep the parent avatar position updated.
+        if (currentMessageObject != null && currentMessageObject.messageOwner.ayuDeleted) {
+            currentMessageObject.deleted = false;
+        }
         return isAvatarVisible ? avatarImage : null;
     }
 

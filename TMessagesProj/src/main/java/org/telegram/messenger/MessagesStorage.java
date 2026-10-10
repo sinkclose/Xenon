@@ -11964,6 +11964,7 @@ public class MessagesStorage extends BaseController {
                         messageId = message.local_id;
                     }
                     MessageObject.normalizeFlags(message);
+                    if (mode == 0) capturePluginEdit(message);
                     NativeByteBuffer data = new NativeByteBuffer(message.getObjectSize());
                     message.serializeToStream(data);
 
@@ -12028,6 +12029,7 @@ public class MessagesStorage extends BaseController {
                         messageId = message.local_id;
                     }
                     MessageObject.normalizeFlags(message);
+                    if (mode == 0) capturePluginEdit(message);
                     NativeByteBuffer data = new NativeByteBuffer(message.getObjectSize());
                     message.serializeToStream(data);
 
@@ -12089,6 +12091,7 @@ public class MessagesStorage extends BaseController {
                         messageId = message.local_id;
                     }
                     MessageObject.normalizeFlags(message);
+                    if (mode == 0) capturePluginEdit(message);
                     NativeByteBuffer data = new NativeByteBuffer(message.getObjectSize());
                     message.serializeToStream(data);
 
@@ -12600,6 +12603,7 @@ public class MessagesStorage extends BaseController {
                         messageId = message.local_id;
                     }
                     MessageObject.normalizeFlags(message);
+                    if (mode == 0) capturePluginEdit(message);
                     NativeByteBuffer data = new NativeByteBuffer(message.getObjectSize());
                     message.serializeToStream(data);
 
@@ -15839,6 +15843,45 @@ public class MessagesStorage extends BaseController {
         }
     }
 
+    /** Snapshot before SQLite replaces an edited message. Runs on this account's storage queue. */
+    private void capturePluginEdit(TLRPC.Message message) {
+        zxc.iconic.xenon.plugins.PluginManager plugins = zxc.iconic.xenon.plugins.PluginManager.getInstance();
+        if (message.edit_date <= 0 || message.id <= 0 || !plugins.hasEditListeners()) return;
+        long dialog = MessageObject.getDialogId(message);
+        if (DialogObject.isEncryptedDialog(dialog)) return;
+        SQLiteCursor cursor = null;
+        org.telegram.tgnet.SerializedData oldData = null, newData = null;
+        try {
+            cursor = database.queryFinalized("SELECT data FROM messages_v2 WHERE uid = ? AND mid = ?", dialog, message.id);
+            if (!cursor.next()) return;
+            byte[] bytes = cursor.byteArrayValue(0);
+            if (bytes == null) return;
+            oldData = new org.telegram.tgnet.SerializedData(bytes);
+            TLRPC.Message previous = TLRPC.Message.TLdeserialize(oldData, oldData.readInt32(true), true);
+            if (previous == null || message.edit_date < previous.edit_date) return;
+            if (java.util.Arrays.equals(pluginEditContent(previous), pluginEditContent(message))) return;
+            newData = new org.telegram.tgnet.SerializedData(message.getObjectSize());
+            message.serializeToStream(newData);
+            plugins.emitMessageEdit(currentAccount, dialog, message.id, bytes, newData.toByteArray());
+        } catch (Throwable error) {
+            FileLog.e("Could not capture plugin message edit", error);
+        } finally {
+            if (cursor != null) cursor.dispose();
+            if (oldData != null) oldData.cleanup();
+            if (newData != null) newData.cleanup();
+        }
+    }
+
+    private static byte[] pluginEditContent(TLRPC.Message message) {
+        org.telegram.tgnet.SerializedData data = new org.telegram.tgnet.SerializedData();
+        try {
+            data.writeString(message.message == null ? "" : message.message);
+            if (message.media != null) message.media.serializeToStream(data);
+            if (message.entities != null) for (TLRPC.MessageEntity entity : message.entities) entity.serializeToStream(data);
+            return data.toByteArray();
+        } finally { data.cleanup(); }
+    }
+
     public void replaceMessageIfExists(TLRPC.Message message, ArrayList<TLRPC.User> users, ArrayList<TLRPC.Chat> chats, boolean broadcast) {
         if (message == null || message instanceof TLRPC.TL_messageEmpty) {
             return;
@@ -15874,6 +15917,7 @@ public class MessagesStorage extends BaseController {
 
                 fixUnsupportedMedia(message);
                 MessageObject.normalizeFlags(message);
+                capturePluginEdit(message);
                 NativeByteBuffer data = new NativeByteBuffer(message.getObjectSize());
                 message.serializeToStream(data);
                 ArrayList<TLRPC.Message> changedSavedMessages = null;
@@ -16413,6 +16457,7 @@ public class MessagesStorage extends BaseController {
 
                         fixUnsupportedMedia(message);
                         MessageObject.normalizeFlags(message);
+                        if (!scheduled && !quickReplies && !welcomeMessages) capturePluginEdit(message);
                         NativeByteBuffer data = new NativeByteBuffer(message.getObjectSize());
                         message.serializeToStream(data);
 
@@ -17414,6 +17459,7 @@ public class MessagesStorage extends BaseController {
 
                         fixUnsupportedMedia(message);
                         MessageObject.normalizeFlags(message);
+                        capturePluginEdit(message);
                         NativeByteBuffer data = new NativeByteBuffer(message.getObjectSize());
                         message.serializeToStream(data);
 
