@@ -52,6 +52,28 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout implements 
     }
 
     BlurredBackgroundDrawable backgroundDrawable;
+    private boolean liquidGlassGroupDrawn;
+
+    public BlurredBackgroundDrawable prepareLiquidGlassGroup() {
+        checkBoundsAndClipping();
+        return backgroundDrawable;
+    }
+
+    public LiquidTouchEffect getLiquidGlassEffect() {
+        return liquidTouchAllowed() ? liquidTouch : null;
+    }
+
+    public void setLiquidGlassGroupDrawn(boolean drawn) {
+        if (liquidGlassGroupDrawn == drawn) return;
+        liquidGlassGroupDrawn = drawn;
+        invalidate();
+    }
+
+    @Override
+    public void invalidate() {
+        super.invalidate();
+        if (liquidGlassGroupDrawn && getParent() instanceof View) ((View) getParent()).invalidate();
+    }
 
     public void setBlurredBackground(BlurredBackgroundDrawable background) {
         backgroundDrawable = background;
@@ -146,7 +168,7 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout implements 
         LiquidTouchEffect.updateBackground(backgroundDrawable, liquidTouchAllowed() ? liquidTouch : null, 0f, 0f);
         final int liquidSave = liquidTouchAllowed() ? liquidTouch.begin(canvas) : -1;
 
-        if (backgroundDrawable != null) {
+        if (backgroundDrawable != null && !liquidGlassGroupDrawn) {
             backgroundDrawable.draw(canvas);
             if (liquidTouchAllowed()) liquidTouch.drawHighlight(canvas, dp(18));
         }

@@ -2375,6 +2375,9 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     public void setSearchFactor(float factor) {
         if (searchFactor != factor) {
             searchFactor = factor;
+            // Child display lists also depend on search state (spring transforms
+            // and detached avatar anchoring), not only on this parent alpha.
+            if (liquidAvatar != null) liquidAvatar.invalidate();
             invalidate();
         }
     }
@@ -2599,8 +2602,38 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
     public boolean doNotDrawGlassMenu;
 
+    private boolean liquidGlassGroupDrawn;
+    private int liquidGlassLeft, liquidGlassRight, liquidGlassTop, liquidGlassBottom;
+    private int liquidGlassMenuWidth;
+    private boolean liquidGlassHasBack;
+
+    public void setLiquidGlassGroupDrawn(boolean drawn) {
+        if (liquidGlassGroupDrawn == drawn) return;
+        liquidGlassGroupDrawn = drawn;
+        invalidate();
+    }
+
     @Override
-    protected void dispatchDraw(Canvas canvas) {
+    public void invalidate() {
+        super.invalidate();
+        if (liquidGlassGroupDrawn && getParent() instanceof View) ((View) getParent()).invalidate();
+    }
+
+    public boolean prepareLiquidGlassHeader(BlurredBackgroundDrawable[] members, LiquidTouchEffect[] effects) {
+        if (!glassMode || nonIsland || glassOnlyBack || plainBackCircle
+                || liquidAvatar == null || actionModeVisible || searchFactor > 0f
+                || glassDrawable == null || glassDrawableBack == null) return false;
+        prepareLiquidGlassSurfaces();
+        members[0] = glassDrawableBack;
+        members[1] = glassDrawable;
+        members[3] = glassDrawableMenu;
+        effects[3] = liquidTouchAllowed() ? liquidMenu : null;
+        effects[0] = liquidTouchAllowed() ? liquidBack : null;
+        effects[1] = liquidTitleTouchAllowed() ? liquidTitle : null;
+        return true;
+    }
+
+    private void prepareLiquidGlassSurfaces() {
         if (isCenterTitle && centerTitleFreeSpace && centeredTitleLaidOut && !centeredOverlayTitleLayoutPending) {
             updateCenteredTitle(true);
         }
@@ -2654,15 +2687,42 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         if (liquidBack != null) {
             liquidBack.setBounds(0, t, s + p * 2, b);
             liquidMenu.setBounds(getWidth() - Math.max(s, menuWidth) - p * 2, t, getWidth(), b);
-            if (chatAvatarContainer != null) {
-                liquidTitle.setBounds(left, t, right, b);
-            } else if (liquidAvatar != null) {
-                liquidTitle.setBounds(liquidAvatar.getX(), liquidAvatar.getY(),
-                        liquidAvatar.getX() + liquidAvatar.getWidth(), liquidAvatar.getY() + liquidAvatar.getHeight());
-            }
+            // Touch optics must use the visible pill, not the avatar container
+            // (which also includes the status bar and a detached right avatar).
+            liquidTitle.setBounds(left, t, right, b);
         }
 
-        if (glassDrawable != null && !glassOnlyBack && !m3ChatHeader) {
+        liquidGlassLeft = left; liquidGlassRight = right;
+        liquidGlassTop = t; liquidGlassBottom = b;
+        liquidGlassMenuWidth = menuWidth; liquidGlassHasBack = hasBackButton;
+        if (glassDrawable != null) {
+            glassDrawable.setBounds(nonIsland ? 0 : left, nonIsland ? 0 : t,
+                    nonIsland ? getWidth() : right, nonIsland ? getHeight() : b);
+            // Remove header pill suppresses this surface in the shared union too.
+            glassDrawable.setAlpha(m3ChatHeader ? 0 : chatAvatarContainer != null && !nonIsland
+                    ? (int) (255 * (1f - searchFactor)) : 255);
+        }
+        if (glassDrawableBack != null) {
+            glassDrawableBack.setBounds(0, t, s + p * 2, b);
+            glassDrawableBack.setAlpha(hasBackButton ? 255 : 0);
+        }
+        if (glassDrawableMenu != null) {
+            glassDrawableMenu.setBounds(getWidth() - Math.max(s, menuWidth) - p * 2, t, getWidth(), b);
+            glassDrawableMenu.setAlpha(menuWidth > 0 && !doNotDrawGlassMenu
+                    ? (hasForcedMenuWidth ? 255 : (int) (255 * animatorHasMenuItems.getFloatValue())) : 0);
+        }
+    }
+
+    @Override
+    protected void dispatchDraw(Canvas canvas) {
+        prepareLiquidGlassSurfaces();
+        final int p = dp(6), s = dp(46);
+        final int left = liquidGlassLeft, right = liquidGlassRight;
+        final int t = liquidGlassTop, b = liquidGlassBottom;
+        final int menuWidth = liquidGlassMenuWidth;
+        final boolean hasBackButton = liquidGlassHasBack;
+
+        if (glassDrawable != null && !glassOnlyBack && !m3ChatHeader && !liquidGlassGroupDrawn) {
             if (nonIsland) {
                 glassDrawable.setBounds(0, 0, getWidth(), getHeight());
             } else {
@@ -2679,10 +2739,15 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             int save = beginLiquid(canvas, liquidTitle);
             LiquidTouchEffect.updateBackground(glassDrawable, liquidTitleTouchAllowed() ? liquidTitle : null, 0f, 0f);
             glassDrawable.draw(canvas);
-            if (liquidTitleTouchAllowed()) liquidTitle.drawHighlight(canvas, dp(23), dp(6));
+            if (liquidTitleTouchAllowed()) {
+                int glowSave = canvas.save();
+                canvas.clipPath(glassDrawable.getPath());
+                liquidTitle.drawHighlight(canvas, dp(23), dp(6));
+                canvas.restoreToCount(glowSave);
+            }
             if (save != -1) canvas.restoreToCount(save);
         }
-        if (glassDrawableBack != null && hasBackButton && !nonIsland) {
+        if (glassDrawableBack != null && hasBackButton && !nonIsland && !liquidGlassGroupDrawn) {
             glassDrawableBack.setBounds(0, t, s + p * 2, b);
             int save = beginLiquid(canvas, liquidBack);
             LiquidTouchEffect.updateBackground(glassDrawableBack, liquidTouchAllowed() ? liquidBack : null, 0f, 0f);
@@ -2697,7 +2762,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             if (liquidTouchAllowed()) liquidBack.drawHighlight(canvas, dp(23), dp(6));
             if (save != -1) canvas.restoreToCount(save);
         }
-        if (glassDrawableMenu != null && menuWidth > 0 && !nonIsland && !glassOnlyBack && !doNotDrawGlassMenu && !avatarRightBigger) {
+        if (glassDrawableMenu != null && menuWidth > 0 && !nonIsland && !glassOnlyBack && !doNotDrawGlassMenu && !avatarRightBigger && !liquidGlassGroupDrawn) {
             glassDrawableMenu.setBounds(getWidth() - Math.max(s, menuWidth) - p * 2, t, getWidth(), b);
             glassDrawableMenu.setAlpha(hasForcedMenuWidth ? 255 : (int) (255 * animatorHasMenuItems.getFloatValue()));
             boolean liquidSelection = actionModeVisible && actionMode != null && liquidTouchAllowed();

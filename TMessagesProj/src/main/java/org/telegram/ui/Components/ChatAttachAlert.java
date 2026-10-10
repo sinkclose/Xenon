@@ -4449,6 +4449,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
 
     @Override
     public void show() {
+        if (isShowing()) return;
         super.show();
         buttonPressed = false;
         if (baseFragment instanceof ChatActivity) {
@@ -6859,11 +6860,9 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
 
     @Override
     public void dismissInternal() {
-        if (delegate != null) {
-            delegate.doOnIdle(this::removeFromRoot);
-        } else {
-            removeFromRoot();
-        }
+        // Detach the modal window as soon as the close animation finishes. Waiting
+        // for notification idle leaves an invisible window intercepting chat taps.
+        removeFromRoot();
     }
 
     private void removeFromRoot() {

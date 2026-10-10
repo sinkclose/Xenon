@@ -43,6 +43,15 @@ public class ChatActivityBlurredRoundButton extends FrameLayout implements Facto
     }
 
     private LiquidTouchEffect liquidTouch;
+    private boolean liquidGroupDrawn;
+
+    public BlurredBackgroundDrawable getLiquidSurface() { return backgroundDrawable; }
+
+    public void setLiquidGroupDrawn(boolean drawn) {
+        if (liquidGroupDrawn == drawn) return;
+        liquidGroupDrawn = drawn;
+        invalidate();
+    }
     private final LiquidPressAnimationSuppressor liquidPressAnimations = new LiquidPressAnimationSuppressor();
 
     public void setLiquidTouchEnabled(boolean enabled) {
@@ -107,7 +116,7 @@ public class ChatActivityBlurredRoundButton extends FrameLayout implements Facto
             LiquidTouchEffect.updateBackground(backgroundDrawable, liquidTouchAllowed() ? liquidTouch : null, 0f, 0f);
         }
         int save = liquidTouchAllowed() ? liquidTouch.begin(canvas) : -1;
-        if (backgroundDrawable != null) backgroundDrawable.draw(canvas);
+        if (backgroundDrawable != null && !liquidGroupDrawn) backgroundDrawable.draw(canvas);
         super.draw(canvas);
         if (save != -1) canvas.restoreToCount(save);
     }
@@ -121,7 +130,7 @@ public class ChatActivityBlurredRoundButton extends FrameLayout implements Facto
 
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
-        if (liquidTouchAllowed()) liquidTouch.drawHighlight(canvas, dp(22), dp(6));
+        if (liquidTouchAllowed() && !liquidGroupDrawn) liquidTouch.drawHighlight(canvas, dp(22), dp(6));
         super.dispatchDraw(canvas);
     }
 

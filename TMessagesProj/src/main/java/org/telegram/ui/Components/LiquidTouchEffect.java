@@ -223,6 +223,24 @@ public final class LiquidTouchEffect {
         return save;
     }
 
+    /** Current surface geometry in host coordinates, without coupling sibling springs. */
+    public void mapBounds(RectF source, RectF destination) {
+        updateTransform();
+        destination.set(source.left * scaleX + translationX, source.top * scaleY + translationY,
+                source.right * scaleX + translationX, source.bottom * scaleY + translationY);
+    }
+
+    /** Touch light in the same transformed host coordinates as the optical surface. */
+    public void writeGlow(float[] values, int offset, float originX, float originY) {
+        updateTransform();
+        float x = Math.max(bounds.left, Math.min(bounds.right, downX + offsetX));
+        float y = Math.max(bounds.top, Math.min(bounds.bottom, downY + offsetY));
+        values[offset] = x * scaleX + translationX - originX;
+        values[offset + 1] = y * scaleY + translationY - originY;
+        values[offset + 2] = Math.max(1f, Math.min(bounds.width(), bounds.height()) * 1.5f * Math.min(scaleX, scaleY));
+        values[offset + 3] = bounds.isEmpty() ? 0f : Math.max(0f, Math.min(1f, progress));
+    }
+
     /** Apply a parent-coordinate effect while drawing inside one of its children. */
     public int beginInChild(Canvas canvas, float childX, float childY) {
         int save = canvas.save();

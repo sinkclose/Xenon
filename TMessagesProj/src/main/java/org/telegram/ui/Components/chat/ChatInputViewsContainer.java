@@ -26,6 +26,9 @@ import org.telegram.ui.Components.LiquidTouchDispatcher;
 import org.telegram.ui.Components.LiquidPressAnimationSuppressor;
 import org.telegram.ui.Components.blur3.BlurredBackgroundWithFadeDrawable;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
+import org.telegram.ui.Components.blur3.drawable.LiquidGlassInputGroup;
+import org.telegram.messenger.LiteMode;
+import org.telegram.messenger.FileLog;
 import org.telegram.ui.Components.inset.InAppKeyboardInsetView;
 import org.telegram.ui.Components.inset.WindowInsetsProvider;
 
@@ -41,6 +44,11 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
     private LiquidTouchEffect[] iosLiquidEffects;
     private final RectF[] iosSurfaceBounds = {new RectF(), new RectF(), new RectF()};
     private final BlurredBackgroundDrawable[] iosSideDrawables = new BlurredBackgroundDrawable[2];
+    private final BlurredBackgroundDrawable[] iosGroupMembers = new BlurredBackgroundDrawable[3];
+    private final RectF[] iosGroupBounds = {new RectF(), new RectF(), new RectF()};
+    private final float[] iosGroupAlpha = new float[3];
+    private LiquidGlassInputGroup iosGlassGroup;
+    private boolean iosGlassGroupFailed;
     private ChatActivityEnterView iosComposer;
     private float iosComposerVisibility = 1f;
 
@@ -120,6 +128,7 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
         }
         if (iosComposer != null && iosLiquidEffects != null) {
             for (LiquidTouchEffect effect : iosLiquidEffects) effect.onTouchEvent(event, liquidTouchAllowed() && iosComposerVisibility > 0f);
+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) iosLiquidEffects[0].setMinimumPressDuration(100);
             return;
         }
         boolean sideHit = false;
@@ -148,6 +157,13 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
         LiquidTouchEffect effect = iosComposer != null && iosLiquidEffects != null
                 ? iosLiquidEffects[1] : liquidTouch;
         // The button accepted this DOWN; bypass the previous draw's hit bounds.
+        effect.onTouchEvent(event, true, true);
+        effect.setMinimumPressDuration(100);
+    }
+
+    public void onAttachButtonLiquidDown(MotionEvent event) {
+        if (!liquidTouchAllowed()) return;
+        LiquidTouchEffect effect = iosComposer != null && iosLiquidEffects != null ? iosLiquidEffects[0] : liquidTouch;
         effect.onTouchEvent(event, true, true);
         effect.setMinimumPressDuration(100);
     }
@@ -421,6 +437,7 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
             float visibility = Math.min(iosComposerVisibility, iosComposer.getAlpha());
             applyIosSurfaceVisibility(visibility, tmpRect);
             iosComposer.setIosInputEffects(liquidTouchAllowed() && visibility > 0f ? iosLiquidEffects : null, originX, originY);
+            boolean merged = drawIosGlassGroup(canvas, visibility);
             // The center glass is behind the detached buttons, including during expansion.
             for (int order = 0; order < 3; order++) {
                 int i = order == 0 ? 1 : order == 1 ? 0 : 2;
@@ -434,8 +451,8 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
                 int save = effect != null && liquidTouchAllowed() ? effect.begin(canvas) : -1;
                 float surfaceAlpha = i == 1 ? 1f : visibility * (i == 2 ? 1f - iosComposer.getIosInputProgress() : 1f);
                 int layer = surfaceAlpha < 1f ? canvas.saveLayerAlpha(bounds.left - dp(8), bounds.top - dp(8), bounds.right + dp(8), bounds.bottom + dp(8), Math.round(255 * surfaceAlpha)) : -1;
-                drawable.draw(canvas);
-                if (effect != null && liquidTouchAllowed()) effect.drawHighlight(canvas, dp(INPUT_BUBBLE_RADIUS), 0);
+                if (!merged) drawable.draw(canvas);
+                if (!merged && effect != null && liquidTouchAllowed()) effect.drawHighlight(canvas, dp(INPUT_BUBBLE_RADIUS), 0);
                 if (layer != -1) canvas.restoreToCount(layer);
                 if (save != -1) canvas.restoreToCount(save);
             }
@@ -455,6 +472,44 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
         }
 
         super.dispatchDraw(canvas);
+    }
+
+    private boolean drawIosGlassGroup(Canvas canvas, float visibility) {
+        if (Build.VERSION.SDK_INT < 33 || !canvas.isHardwareAccelerated() || iosGlassGroupFailed
+                || (!liquidTouchAllowed() && !LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS))) return false;
+        iosGroupMembers[0] = iosSideDrawables[0];
+        iosGroupMembers[1] = blurredBackgroundDrawable;
+        iosGroupMembers[2] = iosSideDrawables[1];
+        try {
+            for (int i = 0; i < 3; i++) {
+                BlurredBackgroundDrawable drawable = iosGroupMembers[i];
+                if (drawable == null) return false;
+                RectF bounds = iosSurfaceBounds[i];
+                drawable.setAlpha(blurredBackgroundDrawable.getAlpha());
+                drawable.setBounds(Math.round(bounds.left), Math.round(bounds.top), Math.round(bounds.right), Math.round(bounds.bottom));
+                iosGroupBounds[i].set(drawable.getPaddedBounds());
+                LiquidTouchEffect effect = iosLiquidEffects == null || !liquidTouchAllowed() ? null : iosLiquidEffects[i];
+                if (effect != null) {
+                    effect.setBounds(bounds.left + dp(7), bounds.top + dp(7), bounds.right - dp(7), bounds.bottom - dp(7));
+                    effect.mapBounds(iosGroupBounds[i], iosGroupBounds[i]);
+                }
+                LiquidTouchEffect.updateBackground(drawable, effect, 0f, 0f);
+                // Source capture discovers visible regions through the registered drawables.
+                // Keep them participating even though the union replaces their final draw.
+                if (!drawable.hasDisplayList()) drawable.updateDisplayList();
+                iosGroupAlpha[i] = i == 1 ? 1f : visibility * (i == 2 ? 1f - iosComposer.getIosInputProgress() : 1f);
+            }
+            if (iosGlassGroup == null) iosGlassGroup = new LiquidGlassInputGroup();
+            iosGlassGroup.draw(canvas, iosGroupMembers, iosGroupBounds, iosGroupAlpha,
+                    liquidTouchAllowed() ? iosLiquidEffects : null);
+            return true;
+        } catch (RuntimeException error) {
+            // Unsupported driver/shader: retain the independent glass surfaces.
+            FileLog.e(error);
+            iosGlassGroupFailed = true;
+            iosGlassGroup = null;
+            return false;
+        }
     }
 
     @Override

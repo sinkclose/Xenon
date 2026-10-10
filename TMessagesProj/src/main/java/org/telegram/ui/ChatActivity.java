@@ -298,6 +298,8 @@ import org.telegram.ui.Components.blur3.source.BlurredBackgroundSource;
 import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceBitmap;
 import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
+import org.telegram.ui.Components.blur3.drawable.LiquidGlassInputGroup;
+import org.telegram.ui.Components.LiquidTouchEffect;
 import org.telegram.ui.Components.chat.layouts.ChatActivityFadeView;
 import org.telegram.ui.Components.chat.layouts.ChatActivitySideControlsButtonsLayout;
 import org.telegram.ui.Components.inset.WindowInsetsStateHolder;
@@ -5049,6 +5051,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
         actionBar.textOnlyPill = textOnlyPill;
         avatarContainer.setAvatarPlacement(avatarPlacement);
         avatarContainer.setTextOnlyPill(textOnlyPill);
+        avatarContainer.setActionBar(actionBar);
         actionBar.setLiquidTouchAvatar(avatarContainer);
         actionBar.setupGlass(
             glassBackgroundDrawableFactory,
@@ -15052,6 +15055,8 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     private void openAttachMenu() {
+        // Do not dismiss and re-show the same sheet while its window is still attached.
+        if (chatAttachAlert != null && chatAttachAlert.isShowing()) return;
         if (getParentActivity() == null || chatActivityEnterView != null && !TextUtils.isEmpty(chatActivityEnterView.getSlowModeTimer())) {
             return;
         }
@@ -15079,6 +15084,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     public void openAttachMenuForCreatingSticker() {
+        if (chatAttachAlert != null && chatAttachAlert.isShowing()) return;
         ContentPreviewViewer.getInstance().setStickerSetForCustomSticker(null);
         if (getParentActivity() == null) {
             return;
@@ -18621,6 +18627,64 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
     public class ChatActivityFragmentView extends SizeNotifierFrameLayout {
         private final org.telegram.ui.Components.LiquidTouchDispatcher liquidTouchDispatcher = new org.telegram.ui.Components.LiquidTouchDispatcher();
+        private LiquidGlassInputGroup headerGlassGroup;
+        private boolean headerGlassGroupFailed, headerGlassPrepared;
+        private final BlurredBackgroundDrawable[] headerGlassMembers = new BlurredBackgroundDrawable[4];
+        private final LiquidTouchEffect[] headerGlassEffects = new LiquidTouchEffect[4];
+        private final RectF[] headerGlassBounds = {new RectF(), new RectF(), new RectF(), new RectF()};
+        private final float[] headerGlassAlpha = new float[4];
+        private final float[] headerGlassOrigins = new float[8];
+
+        private void drawHeaderGlassGroup(Canvas canvas) {
+            boolean merged = false;
+            if (Build.VERSION.SDK_INT >= 33 && canvas.isHardwareAccelerated() && !headerGlassGroupFailed
+                    && (NekoConfig.liquidChatElements || LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS))
+                    && !NonIslandHelper.chatElements() && !switchingFromTopics
+                    && glassSourceCaptureDepth == 0 && getTag(BlurBehindDrawable.TAG_DRAWING_AS_BACKGROUND) == null
+                    && actionBar != null && actionBar.getVisibility() == VISIBLE
+                    && topPanelLayout != null && actionBar.getScaleX() == 1f && actionBar.getScaleY() == 1f
+                    && topPanelLayout.getScaleX() == 1f && topPanelLayout.getScaleY() == 1f
+                    && actionBar.prepareLiquidGlassHeader(headerGlassMembers, headerGlassEffects)) {
+                try {
+                    headerGlassMembers[2] = topPanelLayout.prepareLiquidGlassGroup();
+                    headerGlassEffects[2] = topPanelLayout.getLiquidGlassEffect();
+                    for (int i = 0; i < headerGlassMembers.length; i++) {
+                        BlurredBackgroundDrawable drawable = headerGlassMembers[i];
+                        if (drawable == null) {
+                            throw new IllegalStateException("Missing header surface");
+                        }
+                        View host = i == 2 ? topPanelLayout : actionBar;
+                        headerGlassOrigins[i * 2] = host.getX();
+                        headerGlassOrigins[i * 2 + 1] = host.getY();
+                        headerGlassAlpha[i] = host.getVisibility() == VISIBLE ? host.getAlpha() : 0f;
+                        RectF bounds = headerGlassBounds[i];
+                        bounds.set(drawable.getPaddedBounds());
+                        LiquidTouchEffect effect = headerGlassEffects[i];
+                        if (effect != null) effect.mapBounds(bounds, bounds);
+                        bounds.offset(host.getX(), host.getY());
+                        LiquidTouchEffect.updateBackground(drawable, effect, 0f, 0f);
+                        if (!drawable.hasDisplayList()) drawable.updateDisplayList();
+                    }
+                    if (headerGlassGroup == null) {
+                        headerGlassGroup = new LiquidGlassInputGroup();
+                        // Header/pinned gap is 7 dp; keep it open at rest, join on deformation.
+                        headerGlassGroup.setMergeDistance(dp(6));
+                        headerGlassGroup.setPairMergeDistance(0, 1, dp(6));
+                        headerGlassGroup.setPairMergeDistance(0, 3, dp(6));
+                        headerGlassGroup.setPairMergeDistance(1, 3, dp(6));
+                    }
+                    headerGlassGroup.draw(canvas, headerGlassMembers, headerGlassBounds, headerGlassAlpha,
+                            headerGlassEffects, headerGlassOrigins);
+                    merged = true;
+                } catch (RuntimeException error) {
+                    FileLog.e(error);
+                    headerGlassGroupFailed = true;
+                    headerGlassGroup = null;
+                }
+            }
+            if (actionBar != null) actionBar.setLiquidGlassGroupDrawn(merged);
+            if (topPanelLayout != null) topPanelLayout.setLiquidGlassGroupDrawn(merged);
+        }
 
         @Override
         public void onDescendantInvalidated(View child, View target) {
@@ -19192,6 +19256,10 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     return false;
                 }
             }
+            if (!headerGlassPrepared && (child == topPanelLayout || child == actionBar)) {
+                headerGlassPrepared = true;
+                drawHeaderGlassGroup(canvas);
+            }
             boolean result;
             MessageObject messageObject = MediaController.getInstance().getPlayingMessageObject();
             boolean isRoundVideo = false;
@@ -19325,6 +19393,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
         @Override
         protected void dispatchDraw(Canvas canvas) {
+            headerGlassPrepared = false;
             chatActivityEnterView.checkAnimation();
             updateChatListViewTopPadding();
             if (invalidateMessagesVisiblePart) {
@@ -50363,7 +50432,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
     @Override
     public void onFactorChangeFinished(int id, float finalFactor, FactorAnimator callee) {
-        if (id == ANIMATOR_ID_POLL_ADD_ANSWER_VISIBILITY) {
+        if (id == ANIMATOR_ID_SEARCH_FIELD_VISIBILITY) {
+            if (actionBar != null) actionBar.setSearchFactor(finalFactor);
+            checkUi_avatarContainerVisibility();
+            if (avatarContainer != null) avatarContainer.invalidate();
+        } else if (id == ANIMATOR_ID_POLL_ADD_ANSWER_VISIBILITY) {
             if (finalFactor == 0) {
                 pollAddOptionModeDestroy();
             }

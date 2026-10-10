@@ -124,6 +124,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
     private boolean dismissed;
     private int tag;
     private OnBackAnimationCallback predictiveBackCallback;
+    private OnBackInvokedDispatcher predictiveBackDispatcher;
 
     protected boolean useHardwareLayer = true;
 
@@ -2841,6 +2842,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
         OnBackInvokedDispatcher dispatcher = getBackDispatcher();
         if (dispatcher != null) {
             dispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, callback);
+            predictiveBackDispatcher = dispatcher;
             predictiveBackCallback = callback;
         }
     }
@@ -2848,12 +2850,13 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
     @RequiresApi(34)
     private void unregisterPredictiveBack() {
         if (predictiveBackCallback == null) return;
-        OnBackInvokedDispatcher dispatcher = getBackDispatcher();
+        OnBackInvokedDispatcher dispatcher = predictiveBackDispatcher;
         if (dispatcher != null) {
             dispatcher.unregisterOnBackInvokedCallback(predictiveBackCallback);
         }
         zxc.iconic.xenon.helpers.BottomSheetPredictiveBack.releaseCallback(predictiveBackCallback);
         predictiveBackCallback = null;
+        predictiveBackDispatcher = null;
     }
 
     @RequiresApi(34)

@@ -497,12 +497,20 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         boolean transitioning = actionBar != null
                 && (actionBar.getSearchFactor() > 0f || actionBar.getActionModeFactor() > 0f);
         int[] anchor = transitioning ? null : anchorCenterInParent();
-        if (anchor != null) lastRightAvatarCenterX = anchor[0];
+        if (anchor != null) {
+            lastRightAvatarCenterX = anchor[0];
+            lastRightAvatarCenterY = anchor[1];
+        }
         if (lastRightAvatarCenterX == Integer.MIN_VALUE) return;
         // Layout and glass animations can move the container independently of
         // the menu. Resolve the avatar's position from their live coordinates.
-        setAvatarOffset(lastRightAvatarCenterX - getX() - avatarImageView.getLeft()
-                - avatarImageView.getWidth() / 2f);
+        setAvatarOffset(avatarOffset(lastRightAvatarCenterX, getX(), avatarImageView.getLeft(), avatarImageView.getWidth()));
+        setAvatarVerticalOffset(avatarOffset(lastRightAvatarCenterY, getY(), avatarImageView.getTop(),
+                avatarImageView.getHeight()) + dp(0.3f));
+    }
+
+    private static float avatarOffset(float anchorCenter, float containerPosition, float childPosition, float childSize) {
+        return anchorCenter - containerPosition - childPosition - childSize / 2f;
     }
 
     /**
@@ -512,6 +520,12 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
      */
     private boolean isAvatarSeparateFromPill() {
         return textOnlyPill || avatarPlacement == zxc.iconic.xenon.NekoConfig.AVATAR_PLACEMENT_RIGHT;
+    }
+
+    private float getHeaderContentAlpha() {
+        if (parentFragment != null || actionBar == null) return 1f;
+        // Standalone previews do not have ChatActivity's container fade owner.
+        return Math.max(0f, Math.min(1f, 1f - Math.max(actionBar.getSearchFactor(), actionBar.getActionModeFactor())));
     }
 
     @Override
@@ -539,20 +553,10 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
                 bounceScale = 1f;
             }
         }
-        // Fade the content with the search transition, using the same live
-        // factor as the pill glass. Pure function of the factor: no extra
-        // animator, so it can't desync and resets by itself. Title/subtitle
-        // fade together with the avatar, otherwise they linger and visibly
-        // recenter in the expanding pill while searching.
-        final boolean textChild = child == titleTextView || child == subtitleTextView || child == animatedSubtitleTextView
-            || child == titleTextLargerCopyView.get() || child == subtitleTextLargerCopyView.get();
-        float searchFade = 1f;
-        if ((avatarChild || textChild) && actionBar != null) {
-            final float hideFactor = Math.max(actionBar.getSearchFactor(), actionBar.getActionModeFactor());
-            if (hideFactor > 0f) {
-                searchFade = Math.max(0f, 1f - hideFactor);
-            }
-        }
+        // ChatActivity fades this entire container. Applying the same factor
+        // inside child display lists doubles the fade and can retain a stale
+        // dimmed layer when only the container's RenderNode alpha changes.
+        final float searchFade = getHeaderContentAlpha();
         final boolean fadeChild = searchFade < 1f;
         if (fadeChild) {
             canvas.saveLayerAlpha(child.getX(), child.getY(), child.getX() + child.getWidth(), child.getY() + child.getHeight(), (int) (255 * searchFade));
@@ -985,6 +989,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     public void setAvatarPlacement(int placement) {
         if (avatarPlacement == placement) return;
         setAvatarOffset(0);
+        setAvatarVerticalOffset(0);
         avatarPlacement = placement;
         avatarSizeInDp = biggerAvatar ? 48 : 42;
         lastRightAvatarLeft = Integer.MIN_VALUE;
@@ -1015,6 +1020,14 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         if (timeItem != null) timeItem.setTranslationX(offset);
         if (starBgItem != null) starBgItem.setTranslationX(offset);
         if (starFgItem != null) starFgItem.setTranslationX(offset);
+    }
+
+    private void setAvatarVerticalOffset(float offset) {
+        if (avatarImageView != null) avatarImageView.setTranslationY(offset);
+        if (communityItem != null) communityItem.setTranslationY(offset);
+        if (timeItem != null) timeItem.setTranslationY(offset);
+        if (starBgItem != null) starBgItem.setTranslationY(offset);
+        if (starFgItem != null) starFgItem.setTranslationY(offset);
     }
 
     public int getAvatarPlacement() {

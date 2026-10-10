@@ -1,0 +1,201 @@
+uniform shader img;
+uniform float4 shapes[8];
+uniform float4 cornerRadii[8];
+uniform float4 tints[8];
+uniform float opacity[8];
+uniform float merges[64];
+uniform float advanced;
+uniform float refractive;
+uniform float depth;
+uniform float amount;
+uniform float thickness;
+uniform float intensity;
+uniform float index;
+uniform float dispersion;
+uniform float angle;
+uniform float glare;
+uniform float glassAlpha;
+layout(color) uniform half4 shadow;
+uniform float shadowRadius;
+uniform float4 glows[8];
+uniform float links[64];
+
+float touchLight(float2 p, float4 glow) {
+    float halo = 1.0 - smoothstep(glow.z * 0.5, max(glow.z, 0.001), length(p - glow.xy));
+    return glow.w * (0.08 + 0.15 * halo);
+}
+
+float shapeDistance(float2 p, float4 shape, float4 corners, float alpha) {
+    if (alpha <= 0.0 || min(shape.z, shape.w) <= 0.0) return 100000.0;
+    float2 local = p - shape.xy;
+    float radius = local.x >= 0.0 ? (local.y >= 0.0 ? corners.z : corners.y)
+                                 : (local.y >= 0.0 ? corners.w : corners.x);
+    float2 q = abs(local) - shape.zw + radius;
+    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+}
+
+struct Surface { float d; float4 a; float4 b; };
+Surface surface(float2 p) {
+    Surface s;
+    s.d = 100000.0;
+    s.a = float4(0.0); s.b = float4(0.0);
+    float d0 = shapeDistance(p, shapes[0], cornerRadii[0], opacity[0]);
+    float d1 = shapeDistance(p, shapes[1], cornerRadii[1], opacity[1]);
+    float d2 = shapeDistance(p, shapes[2], cornerRadii[2], opacity[2]);
+    float d3 = shapeDistance(p, shapes[3], cornerRadii[3], opacity[3]);
+    float d4 = shapeDistance(p, shapes[4], cornerRadii[4], opacity[4]);
+    float d5 = shapeDistance(p, shapes[5], cornerRadii[5], opacity[5]);
+    float d6 = shapeDistance(p, shapes[6], cornerRadii[6], opacity[6]);
+    float d7 = shapeDistance(p, shapes[7], cornerRadii[7], opacity[7]);
+    if (opacity[0] > 0.0) {
+        s.d = d0; s.a.x = 1.0;
+    }
+    if (opacity[1] > 0.0) {
+        float closest = 100000.0; float merge = 8.0;
+        if (opacity[0] > 0.0 && d0 < closest) { closest = d0; merge = merges[8]; }
+        float h = clamp(0.5 + 0.5 * (d1 - s.d) / merge, 0.0, 1.0);
+        s.d = mix(d1, s.d, h) - merge * h * (1.0 - h);
+        s.a *= h; s.b *= h;
+        s.a.y += 1.0 - h;
+    }
+    if (opacity[2] > 0.0) {
+        float closest = 100000.0; float merge = 8.0;
+        if (opacity[0] > 0.0 && d0 < closest) { closest = d0; merge = merges[16]; }
+        if (opacity[1] > 0.0 && d1 < closest) { closest = d1; merge = merges[17]; }
+        float h = clamp(0.5 + 0.5 * (d2 - s.d) / merge, 0.0, 1.0);
+        s.d = mix(d2, s.d, h) - merge * h * (1.0 - h);
+        s.a *= h; s.b *= h;
+        s.a.z += 1.0 - h;
+    }
+    if (opacity[3] > 0.0) {
+        float closest = 100000.0; float merge = 8.0;
+        if (opacity[0] > 0.0 && d0 < closest) { closest = d0; merge = merges[24]; }
+        if (opacity[1] > 0.0 && d1 < closest) { closest = d1; merge = merges[25]; }
+        if (opacity[2] > 0.0 && d2 < closest) { closest = d2; merge = merges[26]; }
+        float h = clamp(0.5 + 0.5 * (d3 - s.d) / merge, 0.0, 1.0);
+        s.d = mix(d3, s.d, h) - merge * h * (1.0 - h);
+        s.a *= h; s.b *= h;
+        s.a.w += 1.0 - h;
+    }
+    if (opacity[4] > 0.0) {
+        float closest = 100000.0; float merge = 8.0;
+        if (opacity[0] > 0.0 && d0 < closest) { closest = d0; merge = merges[32]; }
+        if (opacity[1] > 0.0 && d1 < closest) { closest = d1; merge = merges[33]; }
+        if (opacity[2] > 0.0 && d2 < closest) { closest = d2; merge = merges[34]; }
+        if (opacity[3] > 0.0 && d3 < closest) { closest = d3; merge = merges[35]; }
+        float h = clamp(0.5 + 0.5 * (d4 - s.d) / merge, 0.0, 1.0);
+        s.d = mix(d4, s.d, h) - merge * h * (1.0 - h);
+        s.a *= h; s.b *= h;
+        s.b.x += 1.0 - h;
+    }
+    if (opacity[5] > 0.0) {
+        float closest = 100000.0; float merge = 8.0;
+        if (opacity[0] > 0.0 && d0 < closest) { closest = d0; merge = merges[40]; }
+        if (opacity[1] > 0.0 && d1 < closest) { closest = d1; merge = merges[41]; }
+        if (opacity[2] > 0.0 && d2 < closest) { closest = d2; merge = merges[42]; }
+        if (opacity[3] > 0.0 && d3 < closest) { closest = d3; merge = merges[43]; }
+        if (opacity[4] > 0.0 && d4 < closest) { closest = d4; merge = merges[44]; }
+        float h = clamp(0.5 + 0.5 * (d5 - s.d) / merge, 0.0, 1.0);
+        s.d = mix(d5, s.d, h) - merge * h * (1.0 - h);
+        s.a *= h; s.b *= h;
+        s.b.y += 1.0 - h;
+    }
+    if (opacity[6] > 0.0) {
+        float closest = 100000.0; float merge = 8.0;
+        if (opacity[0] > 0.0 && d0 < closest) { closest = d0; merge = merges[48]; }
+        if (opacity[1] > 0.0 && d1 < closest) { closest = d1; merge = merges[49]; }
+        if (opacity[2] > 0.0 && d2 < closest) { closest = d2; merge = merges[50]; }
+        if (opacity[3] > 0.0 && d3 < closest) { closest = d3; merge = merges[51]; }
+        if (opacity[4] > 0.0 && d4 < closest) { closest = d4; merge = merges[52]; }
+        if (opacity[5] > 0.0 && d5 < closest) { closest = d5; merge = merges[53]; }
+        float h = clamp(0.5 + 0.5 * (d6 - s.d) / merge, 0.0, 1.0);
+        s.d = mix(d6, s.d, h) - merge * h * (1.0 - h);
+        s.a *= h; s.b *= h;
+        s.b.z += 1.0 - h;
+    }
+    if (opacity[7] > 0.0) {
+        float closest = 100000.0; float merge = 8.0;
+        if (opacity[0] > 0.0 && d0 < closest) { closest = d0; merge = merges[56]; }
+        if (opacity[1] > 0.0 && d1 < closest) { closest = d1; merge = merges[57]; }
+        if (opacity[2] > 0.0 && d2 < closest) { closest = d2; merge = merges[58]; }
+        if (opacity[3] > 0.0 && d3 < closest) { closest = d3; merge = merges[59]; }
+        if (opacity[4] > 0.0 && d4 < closest) { closest = d4; merge = merges[60]; }
+        if (opacity[5] > 0.0 && d5 < closest) { closest = d5; merge = merges[61]; }
+        if (opacity[6] > 0.0 && d6 < closest) { closest = d6; merge = merges[62]; }
+        float h = clamp(0.5 + 0.5 * (d7 - s.d) / merge, 0.0, 1.0);
+        s.d = mix(d7, s.d, h) - merge * h * (1.0 - h);
+        s.a *= h; s.b *= h;
+        s.b.w += 1.0 - h;
+    }
+    return s;
+}
+
+half4 main(float2 p) {
+    Surface s = surface(p);
+    float coverage = 1.0 - smoothstep(-0.75, 0.75, s.d);
+    float alpha = opacity[0] * s.a.x + opacity[1] * s.a.y + opacity[2] * s.a.z + opacity[3] * s.a.w + opacity[4] * s.b.x + opacity[5] * s.b.y + opacity[6] * s.b.z + opacity[7] * s.b.w;
+    if (coverage <= 0.0) {
+        float fade = exp(-max(s.d, 0.0) * max(s.d, 0.0) / (2.0 * shadowRadius * shadowRadius));
+        return half4(shadow.rgb * shadow.a, shadow.a) * half(fade * glassAlpha * alpha);
+    }
+    float2 grad = float2(surface(p + float2(0.5, 0.0)).d - surface(p - float2(0.5, 0.0)).d,
+                        surface(p + float2(0.0, 0.5)).d - surface(p - float2(0.0, 0.5)).d);
+    grad /= max(length(grad), 0.0001);
+    float2 displacement;
+    if (refractive < 0.5) {
+        displacement = float2(0.0);
+    } else if (advanced > 0.5) {
+        float maxDepth = s.a.x * min(shapes[0].z, shapes[0].w) + s.a.y * min(shapes[1].z, shapes[1].w) + s.a.z * min(shapes[2].z, shapes[2].w) + s.a.w * min(shapes[3].z, shapes[3].w) + s.b.x * min(shapes[4].z, shapes[4].w) + s.b.y * min(shapes[5].z, shapes[5].w) + s.b.z * min(shapes[6].z, shapes[6].w) + s.b.w * min(shapes[7].z, shapes[7].w);
+        float edge = clamp(1.0 + min(s.d, 0.0) / max(min(depth, maxDepth), 0.001), 0.0, 1.0);
+        displacement = grad * amount * (1.0 - sqrt(max(0.0, 1.0 - edge * edge)));
+    } else {
+        float sd = min(s.d, 0.0);
+        float nc = clamp((thickness + sd) / thickness, 0.0, 1.0);
+        float3 normal = float3(grad * nc, sqrt(max(0.0001, 1.0 - nc * nc)));
+        normal /= max(length(normal), 0.0001);
+        float3 ray = refract(float3(0.0, 0.0, -1.0), normal, 1.0 / index);
+        float height = sd < -thickness ? thickness : sqrt(max(0.0, sd * (-2.0 * thickness - sd)));
+        displacement = ray.xy * ((height + 8.0 * thickness) / max(-ray.z, 0.001)) * intensity;
+    }
+    float2 uv = p + displacement;
+    half4 color = img.eval(uv);
+    if (advanced > 0.5 && dispersion > 0.0) {
+        float2 local0 = (p - shapes[0].xy) / max(shapes[0].zw, float2(0.001));
+        float2 local1 = (p - shapes[1].xy) / max(shapes[1].zw, float2(0.001));
+        float2 local2 = (p - shapes[2].xy) / max(shapes[2].zw, float2(0.001));
+        float2 local3 = (p - shapes[3].xy) / max(shapes[3].zw, float2(0.001));
+        float2 local4 = (p - shapes[4].xy) / max(shapes[4].zw, float2(0.001));
+        float2 local5 = (p - shapes[5].xy) / max(shapes[5].zw, float2(0.001));
+        float2 local6 = (p - shapes[6].xy) / max(shapes[6].zw, float2(0.001));
+        float2 local7 = (p - shapes[7].xy) / max(shapes[7].zw, float2(0.001));
+        float spread = local0.x * local0.y * s.a.x + local1.x * local1.y * s.a.y + local2.x * local2.y * s.a.z + local3.x * local3.y * s.a.w + local4.x * local4.y * s.b.x + local5.x * local5.y * s.b.y + local6.x * local6.y * s.b.z + local7.x * local7.y * s.b.w;
+        float2 delta = displacement * dispersion * clamp(spread, -1.0, 1.0);
+        half4 red = img.eval(uv + delta);
+        half4 orange = img.eval(uv + delta * (2.0 / 3.0));
+        half4 yellow = img.eval(uv + delta * (1.0 / 3.0));
+        half4 green = color;
+        half4 cyan = img.eval(uv - delta * (1.0 / 3.0));
+        half4 blue = img.eval(uv - delta * (2.0 / 3.0));
+        half4 purple = img.eval(uv - delta);
+        color = half4((red.r + orange.r + yellow.r) / 3.5 + purple.r / 7.0,
+                      orange.g / 7.0 + (yellow.g + green.g + cyan.g) / 3.5,
+                      (cyan.b + blue.b + purple.b) / 3.0,
+                      (red.a + orange.a + yellow.a + green.a + cyan.a + blue.a + purple.a) / 7.0);
+    }
+    half4 tint = half4(tints[0] * s.a.x + tints[1] * s.a.y + tints[2] * s.a.z + tints[3] * s.a.w + tints[4] * s.b.x + tints[5] * s.b.y + tints[6] * s.b.z + tints[7] * s.b.w);
+    color = tint + color * (1.0 - tint.a);
+    float touch = touchLight(p, glows[0]) * (s.a.x * links[0] + s.a.y * links[1] + s.a.z * links[2] + s.a.w * links[3] + s.b.x * links[4] + s.b.y * links[5] + s.b.z * links[6] + s.b.w * links[7]) +
+        touchLight(p, glows[1]) * (s.a.x * links[8] + s.a.y * links[9] + s.a.z * links[10] + s.a.w * links[11] + s.b.x * links[12] + s.b.y * links[13] + s.b.z * links[14] + s.b.w * links[15]) +
+        touchLight(p, glows[2]) * (s.a.x * links[16] + s.a.y * links[17] + s.a.z * links[18] + s.a.w * links[19] + s.b.x * links[20] + s.b.y * links[21] + s.b.z * links[22] + s.b.w * links[23]) +
+        touchLight(p, glows[3]) * (s.a.x * links[24] + s.a.y * links[25] + s.a.z * links[26] + s.a.w * links[27] + s.b.x * links[28] + s.b.y * links[29] + s.b.z * links[30] + s.b.w * links[31]) +
+        touchLight(p, glows[4]) * (s.a.x * links[32] + s.a.y * links[33] + s.a.z * links[34] + s.a.w * links[35] + s.b.x * links[36] + s.b.y * links[37] + s.b.z * links[38] + s.b.w * links[39]) +
+        touchLight(p, glows[5]) * (s.a.x * links[40] + s.a.y * links[41] + s.a.z * links[42] + s.a.w * links[43] + s.b.x * links[44] + s.b.y * links[45] + s.b.z * links[46] + s.b.w * links[47]) +
+        touchLight(p, glows[6]) * (s.a.x * links[48] + s.a.y * links[49] + s.a.z * links[50] + s.a.w * links[51] + s.b.x * links[52] + s.b.y * links[53] + s.b.z * links[54] + s.b.w * links[55]) +
+        touchLight(p, glows[7]) * (s.a.x * links[56] + s.a.y * links[57] + s.a.z * links[58] + s.a.w * links[59] + s.b.x * links[60] + s.b.y * links[61] + s.b.z * links[62] + s.b.w * links[63]);
+    color.rgb = min(half3(color.a), color.rgb + half3(min(touch, 0.35) * color.a));
+    // Light follows the outer union normal, so no internal seam remains at the neck.
+    float light = glare <= 0.0 ? 0.0 : pow(abs(dot(grad, float2(cos(angle), sin(angle)))), max(0.1, glare));
+    float rim = 1.0 - smoothstep(0.0, 1.2, abs(s.d));
+    color.rgb = min(half3(color.a), color.rgb + half3(light * rim * 0.165 * color.a));
+    return color * half(coverage * glassAlpha * alpha);
+}

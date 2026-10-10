@@ -689,15 +689,21 @@ public class ChatActivityEnterView extends FrameLayout implements
     }
 
     private void onSendButtonLiquidDown(MotionEvent event) {
+        onComposerButtonLiquidDown(event, sendButton, false);
+    }
+
+    private void onComposerButtonLiquidDown(MotionEvent event, View button, boolean attachment) {
         MotionEvent local = MotionEvent.obtain(event);
         try {
-            View child = sendButton;
+            View child = button;
             while (child.getParent() instanceof View) {
                 View parent = (View) child.getParent();
                 local.transform(child.getMatrix());
                 local.offsetLocation(child.getLeft() - parent.getScrollX(), child.getTop() - parent.getScrollY());
                 if (parent instanceof org.telegram.ui.Components.chat.ChatInputViewsContainer) {
-                    ((org.telegram.ui.Components.chat.ChatInputViewsContainer) parent).onSendButtonLiquidDown(local);
+                    org.telegram.ui.Components.chat.ChatInputViewsContainer controls = (org.telegram.ui.Components.chat.ChatInputViewsContainer) parent;
+                    if (attachment) controls.onAttachButtonLiquidDown(local);
+                    else controls.onSendButtonLiquidDown(local);
                     break;
                 }
                 child = parent;
@@ -3261,7 +3267,11 @@ public class ChatActivityEnterView extends FrameLayout implements
                 @Override
                 public boolean dispatchTouchEvent(MotionEvent event) {
                     if (getAlpha() < 0.5f) return false;
-                    return super.dispatchTouchEvent(event);
+                    boolean handled = super.dispatchTouchEvent(event);
+                    if (handled && event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                        ChatActivityEnterView.this.onComposerButtonLiquidDown(event, this, true);
+                    }
+                    return handled;
                 }
             };
             attachButton.setScaleType(ImageView.ScaleType.CENTER);

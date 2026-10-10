@@ -20,6 +20,7 @@ import org.telegram.ui.Components.LiquidTouchEffect;
 import org.telegram.ui.Components.LiquidTouchDispatcher;
 import org.telegram.ui.Components.ScaleStateListAnimator;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
+import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
 import org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundColorProvider;
 
 
@@ -30,6 +31,20 @@ public class ChatActivityBlurredRoundPageDownButton extends FrameLayout implemen
     private ChatActivityBlurredRoundButton buttonView;
     private CounterView counterView;
     private LiquidTouchEffect liquidTouch;
+    private boolean liquidGroupDrawn;
+    private long minimumLiquidPressDuration;
+
+    public void setMinimumLiquidPressDuration(long duration) { minimumLiquidPressDuration = duration; }
+    public BlurredBackgroundDrawable getLiquidSurface() { return buttonView.getLiquidSurface(); }
+    public LiquidTouchEffect getLiquidEffect() { return liquidTouchAllowed() ? liquidTouch : null; }
+    public View getLiquidSurfaceView() { return buttonView; }
+    public void setLiquidGroupDrawn(boolean drawn) {
+        if (liquidGroupDrawn == drawn) return;
+        liquidGroupDrawn = drawn;
+        buttonView.setLiquidGroupDrawn(drawn);
+        invalidate();
+    }
+
 
     public void setLiquidTouchEnabled(boolean enabled) {
         if (enabled == (liquidTouch != null)) return;
@@ -54,6 +69,7 @@ public class ChatActivityBlurredRoundPageDownButton extends FrameLayout implemen
         if (liquidTouch != null) {
             liquidTouch.setBounds(0, getHeight() - getWidth(), getWidth(), getHeight());
             liquidTouch.onTouchEvent(event, liquidTouchAllowed());
+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) liquidTouch.setMinimumPressDuration(minimumLiquidPressDuration);
         }
     }
 
@@ -75,7 +91,7 @@ public class ChatActivityBlurredRoundPageDownButton extends FrameLayout implemen
     @Override
     public void draw(Canvas canvas) {
         super.draw(canvas);
-        if (liquidTouchAllowed()) liquidTouch.drawHighlight(canvas, dp(22), dp(6));
+        if (liquidTouchAllowed() && !liquidGroupDrawn) liquidTouch.drawHighlight(canvas, dp(22), dp(6));
     }
 
     @Override
