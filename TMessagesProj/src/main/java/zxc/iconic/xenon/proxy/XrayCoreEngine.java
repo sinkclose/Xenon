@@ -58,6 +58,7 @@ final class XrayCoreEngine {
     private static final AtomicBoolean STARTING_OR_STOPPING = new AtomicBoolean(false);
     private static final Object CORE_LOCK = new Object();
     private static final Object LOG_LOCK = new Object();
+    private static final XrayTrafficStats TRAFFIC_STATS = new XrayTrafficStats();
     private static final int MAX_RECENT_LOG_LINES = 200;
     private static final String DEFAULT_DELAY_TEST_URL = "https://www.gstatic.com/generate_204";
     /**
@@ -394,7 +395,7 @@ final class XrayCoreEngine {
      *
      * @param tag  outbound tag (e.g. {@code "proxy"})
      * @param link stat name (e.g. {@code "uplink"} or {@code "downlink"})
-     * @return cumulative byte counter or 0 when unavailable
+     * @return bytes since the previous query or 0 when unavailable
      */
     static long queryStats(String tag, String link) {
         if (!isLibraryAvailable()) {
@@ -405,7 +406,7 @@ final class XrayCoreEngine {
             return 0L;
         }
         try {
-            return controller.queryStats(tag, link);
+            return TRAFFIC_STATS.query(controller, tag, link);
         } catch (Throwable t) {
             FileLog.e(TAG + ": queryStats failed for tag=" + tag + " link=" + link, t);
             return 0L;
@@ -608,6 +609,7 @@ final class XrayCoreEngine {
      * bind the tun interface passed by {@link XrayVpnService}.
      */
     private static void startCoreLoop(CoreController controller, String configJson, int tunFd) throws Exception {
+        TRAFFIC_STATS.reset();
         Method method = resolveStartLoopMethod(controller);
         if (tunFd > 0 && method.getParameterTypes().length != 2) {
             FileLog.e("[XrayCoreEngine] startLoop signature mismatch: VPN mode requires startLoop(String, int), but resolved: " + method.toGenericString());
