@@ -56,7 +56,7 @@ final class PrismGlassPipeline {
         final int width = bounds.width(), height = bounds.height();
         final boolean advanced = NekoConfig.useAdvancedLiquidGlass;
         final boolean refractionEnabled = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
-        final boolean hasEffect = effect != null;
+        final boolean hasEffect = effect != null && effect.hasRefractionShader();
 
         final boolean mappingChanged = !initialized || left != bounds.left || top != bounds.top
                 || right != bounds.right || bottom != bounds.bottom

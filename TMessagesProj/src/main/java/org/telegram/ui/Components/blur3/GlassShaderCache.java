@@ -10,18 +10,22 @@ import org.telegram.messenger.FileLog;
 import org.telegram.messenger.R;
 
 import java.util.ArrayDeque;
+import java.util.HashSet;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 /** Prepared shaders are handed off once; active surfaces never share mutable uniforms. */
 @RequiresApi(api = 33)
-final class GlassShaderCache {
+public final class GlassShaderCache {
     private static final Pool standard = new Pool(R.raw.liquid_glass_shader, 12);
     private static final Pool advanced = new Pool(R.raw.liquid_glass_shader_advanced, 12);
     private static final Pool prismStandard = new Pool(R.raw.prism_glass_shader, 12);
     private static final Pool prismAdvanced = new Pool(R.raw.prism_glass_shader_advanced, 12);
     private static final Pool highlight = new Pool(R.raw.liquid_glass_highlight, 16);
+    private static final ConcurrentHashMap<Integer, Pool> progressive = new ConcurrentHashMap<>();
 
     private static final ThreadPoolExecutor worker = new ThreadPoolExecutor(
             0, 1, 10, TimeUnit.SECONDS, new LinkedBlockingQueue<>(), task ->
@@ -47,46 +51,59 @@ final class GlassShaderCache {
     }
 
     static RuntimeShader acquireRefraction(boolean useAdvanced, boolean prism) {
-        try {
-            return refractionPool(useAdvanced, prism).acquire();
-        } catch (RuntimeException e) {
-            if (!prism) throw e;
-            // A driver rejecting the optimized program keeps the original optics.
-            FileLog.e(e);
-            return refractionPool(useAdvanced, false).acquire();
-        }
+        return acquireRefraction(useAdvanced, prism, null);
+    }
+
+    static RuntimeShader acquireRefraction(boolean useAdvanced, boolean prism, Runnable onReady) {
+        Pool pool = refractionPool(useAdvanced, prism);
+        if (prism && pool.hasFailed()) pool = refractionPool(useAdvanced, false);
+        return pool.acquire(onReady);
     }
 
     static RuntimeShader acquireHighlight() {
-        return highlight.acquire();
+        return acquireHighlight(null);
+    }
+
+    static RuntimeShader acquireHighlight(Runnable onReady) {
+        return highlight.acquire(onReady);
+    }
+
+    public static RuntimeShader acquireProgressive(int samples, Supplier<String> source, Runnable onReady) {
+        return progressive.computeIfAbsent(samples, key -> new Pool(source, 4)).acquire(onReady);
     }
 
     private static final class Pool {
-        private final int resource;
+        private final Supplier<String> sourceFactory;
         private final int capacity;
         private final ArrayDeque<RuntimeShader> ready = new ArrayDeque<>();
         private volatile String source;
         private boolean refillPending;
         private boolean warmupFailed;
+        private final HashSet<Runnable> waiting = new HashSet<>();
 
         Pool(int resource, int capacity) {
-            this.resource = resource;
+            this(() -> AndroidUtilities.readRes(resource), capacity);
+        }
+
+        Pool(Supplier<String> sourceFactory, int capacity) {
+            this.sourceFactory = sourceFactory;
             this.capacity = capacity;
         }
 
-        RuntimeShader acquire() {
+        synchronized boolean hasFailed() {
+            return warmupFailed;
+        }
+
+        RuntimeShader acquire(Runnable onReady) {
             final RuntimeShader shader;
             synchronized (this) {
                 shader = ready.pollFirst();
+                if (shader == null && !warmupFailed && onReady != null) waiting.add(onReady);
             }
-            if (shader != null) {
-                refill();
-                return shader;
-            }
-            // A miss keeps the existing rendering path. Never wait for the worker.
-            RuntimeShader created = new RuntimeShader(source());
+            // A cold chat must never compile on the UI thread. Until the worker
+            // publishes a shader, the surface keeps its ordinary blurred tint.
             refill();
-            return created;
+            return shader;
         }
 
         private String source() {
@@ -94,7 +111,7 @@ final class GlassShaderCache {
             if (code == null) {
                 // Resource I/O and compilation stay outside the queue monitor so the
                 // UI can take a prepared shader while the worker is compiling another.
-                code = AndroidUtilities.readRes(resource);
+                code = sourceFactory.get();
                 if (code != null) {
                     source = code;
                 }
@@ -125,16 +142,27 @@ final class GlassShaderCache {
                     synchronized (this) {
                         ready.addLast(shader);
                     }
+                    notifyWaiting();
                 }
             } catch (RuntimeException | LinkageError e) {
                 synchronized (this) {
                     warmupFailed = true;
                     refillPending = false;
                 }
-                // Optional warmup must not crash the process. Demand compilation
-                // still uses the original constructor and its normal error handling.
+                // A rejected optional program leaves consumers on the blurred tint.
                 FileLog.e(e);
+                // Also wake Prism users so they can request the original program.
+                notifyWaiting();
             }
+        }
+
+        private void notifyWaiting() {
+            Runnable[] callbacks;
+            synchronized (this) {
+                callbacks = waiting.toArray(new Runnable[0]);
+                waiting.clear();
+            }
+            for (Runnable callback : callbacks) AndroidUtilities.runOnUIThread(callback);
         }
     }
 }

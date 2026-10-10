@@ -80,7 +80,7 @@ public class GlassBlurHarness {
         boolean glassBlurEnabled;
         float standardGlassBlurRadius;
         RenderEffect standardGlassBlurEffect;
-        Object underSource;
+        Object underSource; Source wallpaperOwner;
         int wallpaperParentW, wallpaperParentH;
         void syncWallpaperEffect() {}
         void recordWallpaperIfNeeded() {}

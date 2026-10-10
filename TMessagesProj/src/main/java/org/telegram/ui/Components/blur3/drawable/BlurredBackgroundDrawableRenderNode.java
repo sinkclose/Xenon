@@ -57,6 +57,16 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
     private LiquidGlassEffect liquidGlassEffect;
     private boolean liquidGlassEffectAllowed;
     private boolean fixedRefraction;
+    private Runnable effectReadyListener;
+    private final Runnable onShadersReady = () -> {
+        invalidateDisplayList();
+        if (effectReadyListener != null) effectReadyListener.run();
+        else invalidateSelf();
+    };
+
+    public void setEffectReadyListener(Runnable listener) {
+        effectReadyListener = listener;
+    }
 
     @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
     public void setLiquidGlassEffectAllowed() {
@@ -83,9 +93,10 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
     private void ensureLiquidGlassEffect() {
         if (liquidGlassEffectAllowed && getAlpha() > 0
                 && (liquidGlassEffect == null || !liquidGlassEffect.isConfigurationCurrent())) {
-            liquidGlassEffect = new LiquidGlassEffect(renderNodeFill, fixedRefraction);
+            liquidGlassEffect = new LiquidGlassEffect(renderNodeFill, fixedRefraction, onShadersReady);
             renderNodeInvalidated = true;
         }
+        if (liquidGlassEffect != null && liquidGlassEffect.ensureShaders()) renderNodeInvalidated = true;
     }
 
 
@@ -212,7 +223,7 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
                     final float strength = Math.min(100, Math.max(0, percent)) / 100f * 0.60f;
                     c.drawColor(Theme.multAlpha(backgroundColor, strength));
                 }
-            } else if (liquidGlassEffect == null || !org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS)) {
+            } else if (liquidGlassEffect == null || !liquidGlassEffect.hasRefractionShader()) {
                 // No base AGSL tinting (no effect, or blur mode where the refraction
                 // shader is off): overlay the precomputed (tinted) backgroundColor.
                 if (Color.alpha(backgroundColor) != 0) {

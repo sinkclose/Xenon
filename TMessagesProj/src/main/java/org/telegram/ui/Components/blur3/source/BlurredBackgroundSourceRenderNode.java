@@ -13,6 +13,7 @@ import androidx.annotation.RequiresApi;
 
 import org.telegram.messenger.FileLog;
 import org.telegram.ui.Components.blur3.DownscaleScrollableNoiseSuppressor;
+import org.telegram.ui.Components.blur3.GlassShaderCache;
 import org.telegram.ui.Components.blur3.RenderNodeWithHash;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawableRenderNode;
@@ -68,6 +69,15 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
     private float progressiveFadeZoneTopFraction = -1f;
     private float progressiveFadeZoneBottomFraction = -1f;
     private int progressiveSamples = -1;
+    private Runnable onProgressiveBlurReadyListener;
+    private final Runnable onProgressiveShadersReady = () -> {
+        progressiveEffectApplied = false;
+        if (onProgressiveBlurReadyListener != null) onProgressiveBlurReadyListener.run();
+    };
+
+    public void setOnProgressiveBlurReadyListener(Runnable listener) {
+        onProgressiveBlurReadyListener = listener;
+    }
 
     // Two materialized image-filter passes replace the N*N kernel with 2*N
     // taps. Gaussian weights are normalized on the CPU only when quality changes;
@@ -129,14 +139,22 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
             setBlur(maxRadius);
             return;
         }
-        if (progressiveShader == null || progressiveShaderSamples != sampleCount) {
+        if (progressiveShader == null || progressiveVerticalShader == null || progressiveShaderSamples != sampleCount) {
             try {
-                final String shaderCode = buildProgressiveBlurShader(sampleCount);
-                progressiveShader = new RuntimeShader(shaderCode);
-                progressiveVerticalShader = new RuntimeShader(shaderCode);
+                if (progressiveShaderSamples != sampleCount) {
+                    progressiveShader = progressiveVerticalShader = null;
+                    progressiveShaderSamples = sampleCount;
+                }
+                if (progressiveShader == null) progressiveShader = GlassShaderCache.acquireProgressive(
+                        sampleCount, () -> buildProgressiveBlurShader(sampleCount), onProgressiveShadersReady);
+                if (progressiveVerticalShader == null) progressiveVerticalShader = GlassShaderCache.acquireProgressive(
+                        sampleCount, () -> buildProgressiveBlurShader(sampleCount), onProgressiveShadersReady);
+                if (progressiveShader == null || progressiveVerticalShader == null) {
+                    setBlur(maxRadius);
+                    return;
+                }
                 progressiveShader.setFloatUniform("direction", 1f, 0f);
                 progressiveVerticalShader.setFloatUniform("direction", 0f, 1f);
-                progressiveShaderSamples = sampleCount;
             } catch (RuntimeException e) {
                 // A shader compile error must never crash the app (e.g. the
                 // abs(int) AGSL crash): fall back to the platform blur.
@@ -196,8 +214,21 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
     }
 
     public void setUnderSource(BlurredBackgroundSource underSource) {
+        if (wallpaperOwner != null && wallpaperOwner.underSource != underSource) {
+            wallpaperParentW = wallpaperOwner.wallpaperParentW;
+            wallpaperParentH = wallpaperOwner.wallpaperParentH;
+            wallpaperOwner = null;
+        }
         this.underSource = underSource;
         wallpaperDirty = true;
+    }
+
+    /** Companion glass/frosted sources use the same wallpaper and blur material. */
+    public void shareWallpaperWith(BlurredBackgroundSourceRenderNode owner) {
+        if (owner == this || owner.wallpaperOwner != null || owner.underSource != underSource) {
+            throw new IllegalArgumentException("Wallpaper sources must match");
+        }
+        wallpaperOwner = owner;
     }
 
     // ------------------------------------------------------------------
@@ -210,6 +241,7 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
     // ------------------------------------------------------------------
 
     private final RenderNode wallpaperNode;
+    private BlurredBackgroundSourceRenderNode wallpaperOwner;
     private int wallpaperParentW, wallpaperParentH;
     private boolean wallpaperDirty = true;
     private boolean wallpaperRecording;
@@ -218,6 +250,10 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
 
     /** Parent-space size the wallpaper shader matrix is built for. */
     public void setWallpaperSize(int width, int height) {
+        if (wallpaperOwner != null) {
+            wallpaperOwner.setWallpaperSize(width, height);
+            return;
+        }
         if (this.wallpaperParentW != width || this.wallpaperParentH != height) {
             this.wallpaperParentW = width;
             this.wallpaperParentH = height;
@@ -227,6 +263,7 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
 
     /** Re-record the wallpaper node on next draw (bitmap finished loading). */
     public void invalidateWallpaper() {
+        if (wallpaperOwner != null) wallpaperOwner.invalidateWallpaper();
         wallpaperDirty = true;
         invalidateDisplayListForDrawables();
     }
@@ -282,6 +319,10 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
     }
 
     private void drawWallpaper(Canvas canvas, float left, float top, float right, float bottom) {
+        if (wallpaperOwner != null) {
+            wallpaperOwner.drawWallpaper(canvas, left, top, right, bottom);
+            return;
+        }
         if (underSource == null) {
             return;
         }
@@ -359,7 +400,9 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
     public void prepareToDraw() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (glassBlurEnabled) syncGlassBlur();
-            if (underSource != null && wallpaperParentW > 0 && wallpaperParentH > 0) {
+            if (wallpaperOwner != null) {
+                wallpaperOwner.prepareToDraw();
+            } else if (underSource != null && wallpaperParentW > 0 && wallpaperParentH > 0) {
                 syncWallpaperEffect();
                 // A cached glass drawable may never call source.draw() again.
                 // Flush wallpaper updates before drawing its existing display list.

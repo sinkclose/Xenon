@@ -1311,10 +1311,12 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
         if ((inPreviewMode || transitionAnimationPreviewMode) && child == containerView) {
             drawPreviewDrawables(canvas, containerView);
         }
+        final boolean result = super.drawChild(canvas, child, drawingTime);
         if (aospTransitionActive && (child == containerView || child == containerViewBack)) {
+            // Populate the normal child display lists first. The one-pixel edge
+            // capture can then reuse them instead of being the first scene draw.
             drawAospEdgeExtension(canvas, child);
         }
-        final boolean result = super.drawChild(canvas, child, drawingTime);
         canvas.restoreToCount(restoreCount);
 
         boolean slideTransition = m3PredictiveActive

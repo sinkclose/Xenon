@@ -101,6 +101,12 @@ public class ProgressiveFadeBlurController {
         source = new BlurredBackgroundSourceRenderNode(null);
         source.setUnderSource(underSource);
         fadeView = new ChatActivityFadeView(parent.getContext());
+        source.setOnProgressiveBlurReadyListener(() -> {
+            if (fadeView.isAttachedToWindow() && isEnabled()) {
+                capturePending = true;
+                scheduleUpdate(1);
+            }
+        });
         fadeView.setup(new BlurredBackgroundDrawableViewFactory(source));
         fadeView.setOpaqueFade(true);
         fadeView.setFadeHeightTop(AndroidUtilities.dp(48), false);

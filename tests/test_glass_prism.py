@@ -77,11 +77,12 @@ public class PrismHarness {
         void setColorUniform(String name, int c) {}
     }
     static class GlassShaderCache {
-        static int creations;
-        static RuntimeShader acquireRefraction(boolean advanced, boolean prism) {
+        static int creations; static boolean available = true;
+        static RuntimeShader acquireRefraction(boolean advanced, boolean prism, Runnable onReady) {
+            if (!available) return null;
             creations++; return new RuntimeShader((prism ? "prism_" : "") + (advanced ? "advanced" : "standard"));
         }
-        static RuntimeShader acquireHighlight() { return new RuntimeShader("highlight"); }
+        static RuntimeShader acquireHighlight(Runnable onReady) { return available ? new RuntimeShader("highlight") : null; }
         static void prewarm(boolean enabled, boolean advanced, boolean prism) {}
     }
     static class RenderEffect {
@@ -124,6 +125,15 @@ public class PrismHarness {
         effect.update(0, 0, 240, 80, 12, 18, 22, 8, 11, .75f, 1.5f, 0x80402010);
     }
     public static void main(String[] args) {
+        GlassShaderCache.available = false;
+        RenderNode coldNode = new RenderNode(); LiquidGlassEffect cold = new LiquidGlassEffect(coldNode);
+        update(cold); check(coldNode.effect == null && !cold.hasRefractionShader(), "Cold surface must keep fallback");
+        GlassShaderCache.available = true;
+        check(cold.ensureShaders(), "Prepared shaders must attach");
+        update(cold);
+        check(coldNode.effect != null && cold.highlightShader != null, "Stable geometry must initialize late uniforms");
+        near(32, coldNode.effect.shader.values.get("refractionHeight")[0]);
+        check(!cold.ensureShaders(), "Prepared instances must be retained");
         RenderNode node = new RenderNode(); LiquidGlassEffect effect = new LiquidGlassEffect(node);
         update(effect);
         check(node.effect.shader.kind.equals("prism_advanced"), "Pipeline must use the existing advanced shader");

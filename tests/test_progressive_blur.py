@@ -62,6 +62,13 @@ public class ProgressiveBlurHarness {
         RenderEffect effect;
         void setRenderEffect(RenderEffect effect) { updates++; this.effect = effect; }
     }
+    static class GlassShaderCache {
+        static int available = Integer.MAX_VALUE;
+        static RuntimeShader acquireProgressive(int samples, java.util.function.Supplier<String> code, Runnable ready) {
+            if (available == 0) return null;
+            available--; return new RuntimeShader(code.get());
+        }
+    }
     static class Source {
         RenderNode renderNode = new RenderNode();
         float lastBlurRadius = -1;
@@ -112,6 +119,17 @@ public class ProgressiveBlurHarness {
         int creations = RuntimeShader.creations;
         fallback.setProgressiveBlur(8, 100, 200, .2f, .1f, 11);
         check(RuntimeShader.creations == creations && fallback.renderNode.effect.radius == 8);
+        RuntimeShader.fail = false; GlassShaderCache.available = 0;
+        Source cold = new Source(); creations = RuntimeShader.creations;
+        cold.setProgressiveBlur(9, 100, 200, .2f, .1f, 11);
+        check(RuntimeShader.creations == creations && cold.renderNode.effect.radius == 9);
+        GlassShaderCache.available = 1;
+        cold.setProgressiveBlur(9, 100, 200, .2f, .1f, 11);
+        RuntimeShader first = cold.progressiveShader;
+        check(first != null && cold.progressiveVerticalShader == null);
+        GlassShaderCache.available = 1; cold.onProgressiveShadersReady.run();
+        cold.setProgressiveBlur(9, 100, 200, .2f, .1f, 11);
+        check(cold.progressiveShader == first && cold.progressiveVerticalShader != first && cold.progressiveEffectApplied);
     }
 }
 '''.replace('FIELDS', fields).replace('METHODS', methods)
@@ -341,6 +359,7 @@ public class ChatCaptureHarness {
         RectF fadeBlurCaptureRect = new RectF();
         int glassSourceCaptureDepth, generation = 1;
         boolean failCapture;
+        boolean openAnimationEnded = true, inPreviewMode, isInsideContainer, inBubbleMode;
         class Background {
             int getWidth() { return 360; }
             float getX() { return 0; } float getY() { return 0; }
@@ -417,6 +436,18 @@ public class ChatCaptureHarness {
                 check(c.glassSourceCaptureDepth == 0 && !c.fadeBlurCaptureScheduled && !c.fadeBlurSource.inRecording());
             }
         }
+        NekoConfig.enabled = true;
+        Chat opening = new Chat(); opening.openAnimationEnded = false;
+        opening.startFadeBlurContinuousUpdates(); opening.frame(17);
+        check(opening.fadeBlurSource.records == 0 && opening.fadeBlurCapturePending);
+        opening.openAnimationEnded = true; opening.invalidateFadeBlur(); opening.frame(17);
+        check(opening.fadeBlurSource.records == 1 && opening.fadeWallpaperSource.records == 1);
+        opening.generation++; opening.invalidateFadeBlur(); opening.frame(17);
+        check(opening.fadeBlurSource.records == 2 && opening.fadeWallpaperSource.records == 1);
+        opening.fadeWallpaperDirty = true; opening.invalidateFadeBlur(); opening.frame(17);
+        check(opening.fadeWallpaperSource.records == 2);
+        opening.stopFadeBlurContinuousUpdates();
+        check(!opening.fadeBlurContinuousUpdating && !opening.fadeBlurCapturePending);
         Chat beforeLayout = new Chat(); beforeLayout.contentView.width = 0;
         beforeLayout.startFadeBlurContinuousUpdates(); beforeLayout.frame(17);
         for (int i = 0; i < 60; i++) beforeLayout.frame(17);
