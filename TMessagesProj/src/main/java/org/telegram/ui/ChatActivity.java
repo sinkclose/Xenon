@@ -280,6 +280,8 @@ import org.telegram.ui.Components.Reactions.ReactionsEffectOverlay;
 import org.telegram.ui.Components.Reactions.ReactionsLayoutInBubble;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
 import org.telegram.ui.Components.blur3.DownscaleScrollableNoiseSuppressor;
+import org.telegram.ui.Components.blur3.capture.IBlur3Capture;
+import org.telegram.ui.Components.blur3.capture.IBlur3Hash;
 import org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundColorProviderThemed;
 import org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl;
 import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceWrapped;
@@ -5007,6 +5009,7 @@ if (feedIntegration != null) {
         }
         removingFromParent = false;
         fragmentView = contentView = new ChatActivityFragmentView(context, parentLayout);
+        stopFadeBlurContinuousUpdates();
         invalidateBlurredSourcesView = new OnPostDrawView(context, true, this::invalidateMergedVisibleBlurredPositionsAndSourcesImpl);
         contentView.addView(invalidateBlurredSourcesView);
 
@@ -7157,15 +7160,6 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
                     canvas.save();
                 } else if (clipBottom != 0) {
                     canvas.save();
-                }
-
-                if (skipDraw) {
-                    /*if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        if (DownscaleScrollableNoiseSuppressor.isRecordingCanvas(canvas)) {
-                            skipDraw = false;
-                        }
-                    }*/
-                    skipDraw = false;
                 }
 
                 boolean result;
@@ -18693,12 +18687,12 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 return;
             }
             if (child == backgroundView) {
-                pendingGlassSourceFlags |= BLUR_INVALIDATE_FLAG_WALLPAPER;
+                invalidateMergedVisibleBlurredPositionsAndSources(BLUR_INVALIDATE_FLAG_WALLPAPER);
             } else if (child == chatListView || child == messagesSearchListContainer) {
-                pendingGlassSourceFlags |= BLUR_INVALIDATE_FLAG_SCROLL;
+                invalidateMergedVisibleBlurredPositionsAndSources(BLUR_INVALIDATE_FLAG_SCROLL);
             }
-            // Animated messages/wallpapers must not drive glass captures at rest.
-            // Flush these changes on the next scroll, layout or liquid deformation.
+            // Only source changes request captures. Redrawing a glass surface
+            // must not freeze real message/wallpaper animations or feed back.
         }
 
         private final RectF glassWallpaperCaptureRect = new RectF();
@@ -37692,6 +37686,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
     public void onListItemAnimatorTick() {
         invalidateMessagesVisiblePart();
+        invalidateMergedVisibleBlurredPositionsAndSources(BLUR_INVALIDATE_FLAG_SCROLL);
         if (scrimView != null) {
             fragmentView.invalidate();
         }
@@ -50539,9 +50534,16 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     private void invalidateAllGlassAttachedViews() {
-        contentView.invalidate();
-        for (View v: glassAttachedViews) {
-            v.invalidate();
+        // Some glass surfaces are descendants of the captured list. Updating
+        // their output is not another change to the underlying chat content.
+        glassSourceCaptureDepth++;
+        try {
+            contentView.invalidate();
+            for (View v: glassAttachedViews) {
+                v.invalidate();
+            }
+        } finally {
+            glassSourceCaptureDepth--;
         }
     }
 
@@ -50931,6 +50933,22 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     private OnPostDrawView invalidateBlurredSourcesView;
     private int glassSourceCaptureDepth;
     private int pendingGlassSourceFlags;
+    private long glassListContentVersion;
+    private final IBlur3Capture glassListCapture = new IBlur3Capture() {
+        @Override
+        public void capture(Canvas canvas, RectF position) {
+            contentView.drawList(canvas, position);
+        }
+
+        @Override
+        public void captureCalculateHash(IBlur3Hash builder, RectF position) {
+            // Source invalidations advance the version; moving glass alone does not.
+            builder.add(glassListContentVersion);
+            builder.add(contentView);
+            builder.add(contentView.getWidth());
+            builder.add(contentView.getHeight());
+        }
+    };
 
     private static final int BLUR_INVALIDATE_FLAG_SCROLL = 1;
     private static final int BLUR_INVALIDATE_FLAG_POSITIONS = 1 << 1;
@@ -50965,6 +50983,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             return;
         }
 
+        pendingGlassSourceFlags |= flags;
         invalidateBlurredSourcesView.invalidate(flags);
     }
 
@@ -50973,14 +50992,26 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     private int glassDrawablesPositionsCount;
 
     private void invalidateMergedVisibleBlurredPositionsAndSourcesImpl(int flags) {
+        flags |= pendingGlassSourceFlags;
         if (flags == 0 || Build.VERSION.SDK_INT < Build.VERSION_CODES.S || scrollableViewNoiseSuppressor == null
                 || contentView == null || contentView.getWidth() <= 0 || contentView.getHeight() <= 0) {
             return;
         }
 
-        flags |= pendingGlassSourceFlags;
         pendingGlassSourceFlags = 0;
 
+        glassSourceCaptureDepth++;
+        try {
+            captureMergedVisibleBlurredPositionsAndSources(flags);
+        } finally {
+            glassSourceCaptureDepth--;
+        }
+    }
+
+    private void captureMergedVisibleBlurredPositionsAndSources(int flags) {
+        if (BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_SCROLL | BLUR_INVALIDATE_FLAG_CLIP)) {
+            glassListContentVersion++;
+        }
         if (BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_CLIP)) {
             invalidateClipRectForBackgroundAndChatList();
         }
@@ -50990,7 +51021,8 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             scrollableViewNoiseSuppressor.setupRenderNodes(glassDrawablesPositionsMerged, glassDrawablesPositionsCount);
         }
 
-        final boolean wallpaperChanged = BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_WALLPAPER);
+        // A clip change also changes the recorded wallpaper behind the glass.
+        final boolean wallpaperChanged = BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_WALLPAPER | BLUR_INVALIDATE_FLAG_CLIP);
         if (wallpaperChanged) {
             if (glassBackgroundSourceRenderNode != null) {
                 glassBackgroundSourceRenderNode.invalidateWallpaper();
@@ -51000,12 +51032,13 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             }
         }
 
+        final boolean positionsChanged = BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_POSITIONS);
         final boolean hasChanges = BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_POSITIONS | BLUR_INVALIDATE_FLAG_SCROLL | BLUR_INVALIDATE_FLAG_CLIP)
-                && scrollableViewNoiseSuppressor.invalidateResultRenderNodes(contentView::drawList, contentView.getWidth(), contentView.getHeight());
-        if (hasChanges || wallpaperChanged) {
+                && scrollableViewNoiseSuppressor.invalidateResultRenderNodes(glassListCapture, contentView.getWidth(), contentView.getHeight());
+        if (hasChanges || wallpaperChanged || positionsChanged) {
             // Content updates re-record child RenderNodes already referenced by
             // cached glass. Rebuild surface commands only if capture regions move.
-            if (BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_POSITIONS)) {
+            if (positionsChanged) {
                 if (glassBackgroundSourceRenderNode != null) {
                     glassBackgroundSourceRenderNode.invalidateDisplayListForDrawables();
                 }
@@ -51023,7 +51056,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     private long lastFadeBlurUpdateTime;
     private boolean fadeBlurContinuousUpdating;
     private boolean fadeBlurCapturePending;
-    private int lastFadeBlurCaptureDrawCount;
+    private boolean fadeBlurCaptureScheduled;
     private final Choreographer.FrameCallback fadeBlurFrameCallback = new Choreographer.FrameCallback() {
         @Override
         public void doFrame(long frameTimeNanos) {
@@ -51037,10 +51070,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 stopFadeBlurContinuousUpdates();
                 return;
             }
-            if (fadeBlurCapturePending || fadeBlurCaptureView == null || fadeBlurCaptureView.getPreDrawCount() != lastFadeBlurCaptureDrawCount
-                    || (chatListView != null && chatListView.isDirty())) {
-                // Only real content changes need a new snapshot; ignore the
-                // redraw caused by the previous blur capture itself.
+            if (fadeBlurCapturePending) {
+                // Retry only a rate-limited source change. A window pre-draw
+                // also happens for our own output, so it cannot identify one.
                 invalidateFadeBlur();
             }
             Choreographer.getInstance().postFrameCallback(this);
@@ -51052,17 +51084,22 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             return;
         }
         fadeBlurContinuousUpdating = true;
+        invalidateFadeBlur();
         Choreographer.getInstance().postFrameCallback(fadeBlurFrameCallback);
     }
 
     private void stopFadeBlurContinuousUpdates() {
         fadeBlurContinuousUpdating = false;
         fadeBlurCapturePending = false;
+        fadeBlurCaptureScheduled = false;
         Choreographer.getInstance().removeFrameCallback(fadeBlurFrameCallback);
     }
 
     private void invalidateFadeBlur() {
-        if (fadeBlurCaptureView != null) {
+        if (glassSourceCaptureDepth != 0 || !NekoConfig.blurredFadeViewEnabled()) {
+            return;
+        }
+        if (fadeBlurCaptureView != null && !fadeBlurCaptureScheduled) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurEnabled()) {
                 final long now = SystemClock.uptimeMillis();
                 if (now - lastFadeBlurUpdateTime < 1000 / Math.max(15, NekoConfig.progressiveFadeBlurRefreshRate)) {
@@ -51072,6 +51109,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 lastFadeBlurUpdateTime = now;
             }
             fadeBlurCapturePending = false;
+            fadeBlurCaptureScheduled = true;
             fadeBlurCaptureView.invalidate(1);
         }
     }
@@ -51108,6 +51146,16 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     private void invalidateFadeBlurImpl() {
+        fadeBlurCaptureScheduled = false;
+        glassSourceCaptureDepth++;
+        try {
+            captureFadeBlur();
+        } finally {
+            glassSourceCaptureDepth--;
+        }
+    }
+
+    private void captureFadeBlur() {
         if (fadeBlurSource == null || chatActivityFadeView == null || contentView == null) {
             return;
         }
@@ -51115,10 +51163,6 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (!NekoConfig.blurredFadeViewEnabled()) {
             return;
         }
-        // Mark this draw pass as captured even if the recording below is skipped,
-        // so the continuous loop does not retry every vsync while the view is not
-        // laid out; the next real draw pass will trigger a new capture anyway.
-        lastFadeBlurCaptureDrawCount = fadeBlurCaptureView.getPreDrawCount();
         if (fadeBlurSource.inRecording()) {
             return;
         }
@@ -51127,6 +51171,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (fw <= 0 || fh <= 0) {
             return;
         }
+        lastFadeBlurUpdateTime = SystemClock.uptimeMillis();
         fadeBlurCaptureRect.set(0, 0, fw, fh);
         int wallpaperColor = getThemedColor(Theme.key_chat_wallpaper);
         if (Color.alpha(wallpaperColor) < 255) {
@@ -51183,8 +51228,6 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         } finally {
             fadeBlurSource.endRecording();
         }
-        // Ignore the extra draw scheduled by the fade invalidation below.
-        lastFadeBlurCaptureDrawCount = fadeBlurCaptureView.getPreDrawCount() + 1;
         chatActivityFadeView.setDimColor(wallpaperColor);
         chatActivityFadeView.setDim(NekoConfig.blurredFadeDimming ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
         chatActivityFadeView.invalidate();

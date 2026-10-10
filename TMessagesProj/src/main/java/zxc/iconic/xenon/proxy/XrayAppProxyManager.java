@@ -106,7 +106,7 @@ public final class XrayAppProxyManager {
     }
 
     /**
-     * Queries cumulative traffic statistics for the given outbound tag. Returns 0 when the core is
+     * Queries traffic bytes since the previous query for the given outbound tag. Returns 0 when the core is
      * not running or libv2ray is unavailable. Mirrors v2rayNG's {@code V2RayServiceManager.queryStats}.
      *
      * @param tag  outbound tag, typically {@code "proxy"} or {@code "direct"}

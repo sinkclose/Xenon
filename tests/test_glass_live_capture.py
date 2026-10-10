@@ -18,12 +18,18 @@ public class GlassLiveCaptureHarness {
     static void check(boolean value, String message) {
         if (!value) throw new AssertionError(message);
     }
-    static class NekoConfig { static int blurStrength = 15; static boolean useAdvancedLiquidGlass = true; }
+    static class NekoConfig { static int blurStrength = 15; static boolean useAdvancedLiquidGlass = true, usePrismGlass; }
+    static class Build { static class VERSION { static int SDK_INT = 33; } }
     static class Canvas { void save() {} void restore() {} void translate(float x, float y) {} }
     static class Rect { int left, top, right = 100, bottom = 100; }
     static class RectF { void set(Rect rect) {} }
     static class RenderNode { boolean recorded; boolean hasDisplayList() { return recorded; } }
-    static class SourcePart { Rect position = new Rect(); RenderNode renderNode = new RenderNode(); long lastHash; }
+    static class SourcePart {
+        Rect position = new Rect(); RenderNode renderNode = new RenderNode(); long lastHash;
+        int materialBlurStrength, materialUpdates; boolean materialAdvanced;
+        boolean materialChanged() { return materialBlurStrength != NekoConfig.blurStrength || materialAdvanced != NekoConfig.useAdvancedLiquidGlass; }
+        void invalidate() { materialBlurStrength = NekoConfig.blurStrength; materialAdvanced = NekoConfig.useAdvancedLiquidGlass; materialUpdates++; }
+    }
     static class Builder {
         long hash; boolean unsupported;
         void start() { hash = 0; unsupported = false; }
@@ -51,7 +57,7 @@ public class GlassLiveCaptureHarness {
         List<SourcePart> rectRenderNodes = List.of(new SourcePart());
         static int captureScale(boolean glass, boolean noise, int strength) { return 1; }
         Canvas beginRecordingRect(int index) { return new Canvas(); }
-        void endRecordingRect() { rectRenderNodes.get(0).renderNode.recorded = true; }
+        void endRecordingRect() { rectRenderNodes.get(0).renderNode.recorded = true; rectRenderNodes.get(0).invalidate(); }
         // Composition needs rebuilding only once: the same child node receives new content.
         boolean invalidateResultRenderNodes(int width, int height) { return compositionChecks++ == 0; }
         CAPTURE_METHOD
@@ -74,11 +80,40 @@ public class GlassLiveCaptureHarness {
         NekoConfig.blurStrength++;
         check(s.invalidateResultRenderNodes(capture, 100, 100), "Blur setting changes must notify");
         check(!s.invalidateResultRenderNodes(capture, 100, 100), "Unchanged settings must stay cached");
+        NekoConfig.usePrismGlass = true;
+        check(s.invalidateResultRenderNodes(capture, 100, 100), "Switch to Prism");
+        int captures = capture.captures;
+        for (int strength : new int[]{0, 1, 15, 100, 0}) {
+            NekoConfig.blurStrength = strength;
+            check(s.invalidateResultRenderNodes(capture, 100, 100), "Prism material change must notify");
+            check(capture.captures == captures, "Prism recaptured unchanged scene for material change");
+            check(!s.invalidateResultRenderNodes(capture, 100, 100), "Prism material must settle");
+        }
+        NekoConfig.useAdvancedLiquidGlass = false;
+        check(s.invalidateResultRenderNodes(capture, 100, 100), "Prism saturation change must notify");
+        check(capture.captures == captures, "Saturation change recaptured content");
+        capture.generation++;
+        check(s.invalidateResultRenderNodes(capture, 100, 100), "Prism must keep live content");
+        check(capture.captures == captures + 1, "Prism lost new source pixels");
+        capture.hashed = false;
+        for (int frame = 0; frame < 3; frame++) {
+            check(s.invalidateResultRenderNodes(capture, 100, 100), "Prism unhashed animation");
+        }
+        check(capture.captures == captures + 4, "Prism froze unhashed animation");
+        capture.hashed = true;
+        check(s.invalidateResultRenderNodes(capture, 100, 100), "Restore scene caching");
+        captures = capture.captures;
+        // A source version alone is insufficient: moving a region must sample its new pixels.
+        s.rectRenderNodes.get(0).position.left += 16;
+        s.rectRenderNodes.get(0).position.right += 16;
+        check(s.invalidateResultRenderNodes(capture, 100, 100), "Moved region reused old pixels");
+        check(capture.captures == captures + 1, "Moved region must recapture once");
+        check(!s.invalidateResultRenderNodes(capture, 100, 100), "Stationary region must settle");
         s.rectRenderNodesCount = 0;
         check(!s.invalidateResultRenderNodes(capture, 100, 100), "No visible regions must not notify");
     }
 }
-'''.replace("CAPTURE_METHOD", capture_method.replace("zxc.iconic.xenon.NekoConfig", "NekoConfig"))
+'''.replace("CAPTURE_METHOD", capture_method.replace("zxc.iconic.xenon.NekoConfig", "NekoConfig").replace("android.os.Build", "Build"))
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "GlassLiveCaptureHarness.java"
             path.write_text(harness)

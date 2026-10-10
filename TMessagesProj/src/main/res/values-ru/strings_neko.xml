@@ -93,6 +93,8 @@
     <string name="IdTypeBOTAPI">Bot API</string>
     <string name="HidePhoneNumber">Скрыть номер телефона</string>
     <string name="LiquidGlassSettings">Жидкое стекло (API 33+)</string>
+    <string name="PrismGlass">Пайплайн рендеринга Prism</string>
+    <string name="PrismGlassDesc">Оптимизирует отрисовку стекла с сохранением преломления, цветовой дисперсии, размытия и бликов. Переключается сразу.</string>
     <string name="UseAdvancedLiquidGlass">Улучшенное жидкое стекло</string>
     <string name="UseAdvancedLiquidGlassDesc">Хроматическая дисперсия, свечение краёв Френеля, направленные блики. Требует перезапуск.</string>
     <string name="LiquidGlassIntensity">Интенсивность преломления</string>

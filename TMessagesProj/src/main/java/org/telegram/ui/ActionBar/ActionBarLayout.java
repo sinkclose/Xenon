@@ -773,6 +773,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
     private Runnable animationRunnable;
 
     private float animationProgress;
+    private float layoutAnimationDuration;
     private long lastFrameTime;
 
     private String titleOverlayText;
@@ -2097,7 +2098,11 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
         boolean styledOpen = altOpen || aospOpen || fadeOpen || slideOpen || legacyOpen || pieOpen;
         boolean styledClose = altClose || aospClose || fadeClose || slideClose || legacyClose || pieClose;
         boolean aosp = !preview && (open ? aospOpen : aospClose);
+        // Reuse the duration for this transition instead of querying Settings.Global
+        // and parsing transition_animation_scale again on every UI frame.
         if (first) {
+            layoutAnimationDuration = preview && open ? 190f
+                    : (open ? styledOpen : styledClose) && !preview ? NavigationTransition.duration(style) : 150f;
             animationProgress = 0.0f;
             lastFrameTime = System.nanoTime() / 1000000;
             if (aosp) {
@@ -2129,11 +2134,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                     dt = 18;
                 }
                 lastFrameTime = newTime;
-                float duration = preview && open ? 190.0f : 150.0f;
-                if ((open ? styledOpen : styledClose) && !preview) {
-                    duration = NavigationTransition.duration(style);
-                }
-                animationProgress += dt / duration;
+                animationProgress += dt / layoutAnimationDuration;
                 if (animationProgress > 1.0f) {
                     animationProgress = 1.0f;
                 }

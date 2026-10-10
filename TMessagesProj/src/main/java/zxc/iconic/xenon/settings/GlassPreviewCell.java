@@ -51,7 +51,6 @@ public class GlassPreviewCell extends View implements NotificationCenter.Notific
 
     private final android.graphics.RectF bubbleRect = new android.graphics.RectF();
     private final float cornerRadius;
-    private boolean lastAdvanced;
     @Nullable private Drawable capturedWallpaper;
     private boolean wallpaperDirty = true;
 
@@ -82,7 +81,6 @@ public class GlassPreviewCell extends View implements NotificationCenter.Notific
                 (int) bubbleRect.left, (int) bubbleRect.top,
                 (int) bubbleRect.right, (int) bubbleRect.bottom);
         glassDrawable.setRadius(cornerRadius);
-        lastAdvanced = NekoConfig.useAdvancedLiquidGlass;
     }
 
     /** Call whenever any glass parameter slider changes. */
@@ -96,14 +94,8 @@ public class GlassPreviewCell extends View implements NotificationCenter.Notific
         // Refresh the cached backgroundColor (tint) before redrawing, otherwise
         // the B/W toggle and tint slider would not visibly update the preview.
         glassDrawable.updateColors();
-        if (lastAdvanced != NekoConfig.useAdvancedLiquidGlass) {
-            // Toggle changed — need a fresh LiquidGlassEffect with recompiled shader.
-            rebuildGlass();
-            refreshRenderNodeBlur();
-        } else {
-            refreshRenderNodeBlur();
-            ((BlurredBackgroundDrawableRenderNode) glassDrawable).recreateLiquidGlassEffect();
-        }
+        // Uniforms update in place; the drawable detects renderer/mode changes on draw.
+        refreshRenderNodeBlur();
         invalidate();
     }
 
