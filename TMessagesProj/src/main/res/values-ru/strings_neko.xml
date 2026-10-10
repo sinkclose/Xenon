@@ -482,7 +482,7 @@
     <string name="PluginScopeGeneral">Общие</string>
     <string name="PluginScopeMessaging">Сообщения</string>
     <string name="PluginGodMode">God Mode</string>
-    <string name="PluginGodModeDesc">Активирует Xposed-хуки и рефлексию. Даёт всем плагинам все скоупы и полный доступ к API — перехват сообщений, чтение БД, хук методов в рантайме, обход блокировки экрана, биометрии и шифрования.</string>
+    <string name="PluginGodModeDesc">Разрешает доступ к Java и хуки методов плагинам, у которых включены эти разрешения. Доступ к Java даёт полный доступ к клиенту и позволяет обходить остальные ограничения. Включайте его только для доверенных плагинов.</string>
     <string name="PluginGodModeWarn">God Mode активирует Xposed-хуки и рефлексию для плагинов, давая им полный контроль над приложением в рантайме: перехватывать все сообщения в реальном времени, читать и изменять зашифрованную базу данных напрямую, хукать любые внутренние методы (включая сетевой уровень и мосты к нативному коду), извлекать приватные ключи и токены сессий из памяти, обходить блокировку экрана и биометрическую аутентификацию, записывать аудио и видео, подделывать любой диалог или UI-элемент для фишинга паролей и незаметно экспортировать все данные всех аккаунтов — всё это независимо от заявленных скоупов. Включайте только для плагинов, которым полностью доверяете. Продолжить?</string>
     <string name="PluginGodModeCountdown">Подождите %dс…</string>
     <string name="PluginGodModeEnable">Включить</string>
@@ -683,5 +683,25 @@
     <string name="MarkdownParserTelegram">Telegram</string>
     <string name="GifsUnavailableForAnotherAccount">Сейчас отправлять GIF через другой аккаунт нельзя.</string>
     <string name="IosLikeInputField">Поле ввода в стиле iOS</string>
+    <string name="PluginDevMode">Dev mode</string>
+    <string name="PluginDevModeDesc">Установка и перезагрузка плагинов через ADB, включая release. Включи для команд и диагностики.</string>
+    <string name="PluginDevModeCommands" formatted="false">Установка с ПК:\nadb shell content write --uri %URI%/install/test.xplugin &lt; test.xplugin\n\nСтатус:\nadb shell content call --uri %URI% --method status\n\nПерезагрузка:\nadb shell content call --uri %URI% --method reload\n\nЛоги:\nadb logcat -s XenonPluginDev PluginManager AyuHistoryProbe AndroidRuntime\n\nВ PowerShell используй scripts/plugin-dev.ps1. Принимаются только команды ADB shell. Максимум 2 МиБ.</string>
+    <string name="PluginScopeRead">Чтение сообщений и информации о чатах</string>
+    <string name="PluginScopeSend">Отправка сообщений и медиа</string>
+    <string name="PluginScopeDelete">Удаление сообщений</string>
+    <string name="PluginScopeReactions">Изменение реакций</string>
+    <string name="PluginScopeReceipts">Отметки прочтения</string>
+    <string name="PluginScopeUI">Интерфейс и открытие экранов</string>
+    <string name="PluginScopeJava">Неограниченный доступ к Java</string>
+    <string name="PluginScopeHooks">Перехват методов (Pine)</string>
+    <string name="PluginScopeLimitedJava">Безопасные Java-классы значений</string>
+    <string name="PluginScopeFiles">Чтение и запись файлов плагина (16 МиБ)</string>
+    <string name="PluginScopeInternet">Доступ в интернет (HTTP-запросы)</string>
+    <string name="PluginScopeLinks">Открытие веб-ссылок</string>
+    <string name="PluginAccessLevel">Уровень доступа к Java</string>
+    <string name="PluginAccessIsolated">Изоляция: только API с проверкой разрешений</string>
+    <string name="PluginAccessLimited">Ограниченный: безопасные Java-классы значений</string>
+    <string name="PluginAccessTrusted">Доверенный: полный доступ к Java и нативному коду</string>
+    <string name="PluginPermissionsWarning">Ограниченный Java даёт только классы значений: без рефлексии, Android, файлов и сокетов. Файлы доступны только в личном хранилище плагина. Доверенный Java требует God Mode и позволяет обойти все переключатели, включая файлы, интернет и нативные библиотеки. Изменение разрешений перезагружает плагины. Messaging управляет пятью разрешениями сообщений ниже.</string>
 </resources>
 

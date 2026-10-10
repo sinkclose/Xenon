@@ -460,10 +460,21 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
             blurredBackgroundDrawable.setBounds(tmpRect);
             if (liquidTouch != null) liquidTouch.setBounds(tmpRect.left, tmpRect.top, tmpRect.right, tmpRect.bottom);
             if (drawInputBackground) {
+                boolean channelMerged = false;
+                for (int i = 0; i < inputIslandBubbleContainer.getChildCount(); i++) {
+                    View item = inputIslandBubbleContainer.getChildAt(i);
+                    if (item instanceof ChatActivityChannelButtonsLayout && item.getVisibility() == VISIBLE) {
+                        channelMerged = ((ChatActivityChannelButtonsLayout) item).drawLiquidGlassGroup(
+                                canvas, blurredBackgroundDrawable, liquidTouchAllowed() ? liquidTouch : null,
+                                inputIslandBubbleContainer.getX() + item.getX(),
+                                inputIslandBubbleContainer.getY() + item.getY());
+                        break;
+                    }
+                }
                 LiquidTouchEffect.updateBackground(blurredBackgroundDrawable, liquidTouchAllowed() ? liquidTouch : null, 0f, 0f);
                 int save = liquidTouchAllowed() ? liquidTouch.begin(canvas) : -1;
-                blurredBackgroundDrawable.draw(canvas);
-                if (liquidTouchAllowed()) liquidTouch.drawHighlight(canvas, dp(INPUT_BUBBLE_RADIUS), dp(7));
+                if (!channelMerged) blurredBackgroundDrawable.draw(canvas);
+                if (!channelMerged && liquidTouchAllowed()) liquidTouch.drawHighlight(canvas, dp(INPUT_BUBBLE_RADIUS), dp(7));
                 if (save != -1) canvas.restoreToCount(save);
             }
         }

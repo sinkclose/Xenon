@@ -312,10 +312,8 @@ public class ApplicationLoader extends Application {
         // Install plugin Safe Mode crash handler as early as possible so it can
         // capture crashes from any thread (including startup).
         zxc.iconic.xenon.plugins.PluginSafeMode.install();
-        // Mark this launch as "in progress". If the process dies before the UI
-        // finishes coming up (crash, ANR, hang, killed), the flag stays set and
-        // the next launch detects the failed boot.
-        zxc.iconic.xenon.plugins.PluginSafeMode.markBootStarted();
+        // LaunchActivity tracks UI startup; background process starts must not
+        // leave a failed-boot marker when Android later reclaims the process.
         // Hardware panic switch: volume up/down/up/down disables plugins and
         // restarts the app even when the UI thread is wedged by a plugin.
         // Registered on a binder-backed ContentObserver, so it runs regardless

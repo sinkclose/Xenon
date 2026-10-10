@@ -527,7 +527,7 @@
     <string name="PluginScopeGeneral">General</string>
     <string name="PluginScopeMessaging">Messaging</string>
     <string name="PluginGodMode">God Mode</string>
-    <string name="PluginGodModeDesc">Activates Xposed hooks and reflection. Grants every plugin all scopes and full API capabilities — including intercepting messages, reading the database, hooking methods at runtime, and bypassing passcode, biometrics, and encryption.</string>
+    <string name="PluginGodModeDesc">Allows Java access and runtime hooks for plugins with those permissions enabled. Java access grants full client access and can bypass other permission restrictions. Enable it only for plugins you trust.</string>
     <string name="PluginGodModeWarn">God Mode activates Xposed hooks and reflection for plugins, giving them runtime control over the entire app: intercept every message in real time, read and modify the encrypted database directly, hook any internal method (including the networking layer and native code bridges), extract private keys and session tokens from memory, bypass the passcode lock and biometric authentication, record audio and video, spoof any dialog or UI element to phish credentials, and silently exfiltrate all account data — all regardless of declared scopes. Only enable this for plugins you fully trust. Continue?</string>
     <string name="PluginGodModeCountdown">Wait %ds…</string>
     <string name="PluginGodModeEnable">Enable</string>
@@ -690,6 +690,26 @@
     <string name="MarkdownParserTelegram">Telegram</string>
     <string name="GifsUnavailableForAnotherAccount">Sending GIFs from another account is currently unavailable.</string>
     <string name="IosLikeInputField">iOS like input field</string>
+    <string name="PluginDevMode">Dev mode</string>
+    <string name="PluginDevModeDesc">Install and reload plugins through ADB, including release builds. Enable to see commands and diagnostics.</string>
+    <string name="PluginDevModeCommands" formatted="false">Install from PC:\nadb shell content write --uri %URI%/install/test.xplugin &lt; test.xplugin\n\nStatus:\nadb shell content call --uri %URI% --method status\n\nReload:\nadb shell content call --uri %URI% --method reload\n\nLogs:\nadb logcat -s XenonPluginDev PluginManager AyuHistoryProbe AndroidRuntime\n\nIn PowerShell, use scripts/plugin-dev.ps1. Only ADB shell commands are accepted. Maximum size: 2 MiB.</string>
+    <string name="PluginScopeRead">Read messages and chat information</string>
+    <string name="PluginScopeSend">Send messages and media</string>
+    <string name="PluginScopeDelete">Delete messages</string>
+    <string name="PluginScopeReactions">Change reactions</string>
+    <string name="PluginScopeReceipts">Mark messages as read</string>
+    <string name="PluginScopeUI">Show interface and open screens</string>
+    <string name="PluginScopeJava">Unrestricted Java access</string>
+    <string name="PluginScopeHooks">Runtime hooks (Pine)</string>
+    <string name="PluginScopeLimitedJava">Restricted Java values</string>
+    <string name="PluginScopeFiles">Read and write plugin files (16 MiB)</string>
+    <string name="PluginScopeInternet">Internet access (HTTP requests)</string>
+    <string name="PluginScopeLinks">Open web links</string>
+    <string name="PluginAccessLevel">Java access level</string>
+    <string name="PluginAccessIsolated">Isolated: permission-gated APIs only</string>
+    <string name="PluginAccessLimited">Restricted: safe Java value classes</string>
+    <string name="PluginAccessTrusted">Trusted: unrestricted Java and native code</string>
+    <string name="PluginPermissionsWarning">Restricted Java exposes only value classes, without reflection, Android, files or sockets. File access is limited to this plugin’s own storage. Trusted Java requires God Mode and can bypass all switches, including files, internet and native libraries. Changing permissions reloads plugins. Messaging controls the five message permissions below it.</string>
 </resources>
 
 

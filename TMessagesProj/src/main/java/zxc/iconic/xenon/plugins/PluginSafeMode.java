@@ -1,6 +1,8 @@
 package zxc.iconic.xenon.plugins;
 
 import android.app.Activity;
+import android.app.ActivityManager;
+import android.app.ApplicationExitInfo;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
@@ -64,6 +66,7 @@ public final class PluginSafeMode {
 
     /** When true, we've already entered this launch — guards against double-handling. */
     private static volatile boolean bootHandledThisLaunch;
+    private static boolean bootStartedThisProcess;
 
     /**
      * Snapshot of the boot flag from the PREVIOUS launch, captured before
@@ -74,6 +77,7 @@ public final class PluginSafeMode {
      */
     private static volatile boolean previousBootIncomplete;
     private static volatile long previousBootTime;
+    private static boolean previousPluginsActive;
 
     private PluginSafeMode() {
     }
@@ -390,24 +394,26 @@ public final class PluginSafeMode {
 
     /**
      * Mark the start of a launch as "in progress". Call as early as possible
-     * (e.g. ApplicationLoader.onCreate). The matching {@link #markBootCompleted}
+     * from LaunchActivity.onCreate. The matching {@link #markBootCompleted}
      * clears it once the UI is up. If the process dies before that — whether by
      * a Java crash, an ANR, or an infinite loop hanging the UI thread — the flag
      * stays set, and the next launch knows the previous one never finished.
      */
-    public static void markBootStarted() {
+    public static synchronized void markBootStarted() {
+        Context ctx = ApplicationLoader.applicationContext;
+        if (ctx == null || bootStartedThisProcess) return;
+        bootStartedThisProcess = true;
         // Start a new boot session — volume key presses during this session
         // (the first onResume) will trigger Safe Mode if any were detected.
         bootSessionId++;
         volumeKeyHeldAtLaunch = false;
         volumeKeyDownTime = 0;
-        Context ctx = ApplicationLoader.applicationContext;
-        if (ctx == null) return;
         // CAPTURE the previous launch's state BEFORE we overwrite it with our
         // own "in progress" marker. This is read later by checkAndHandleCrash.
         android.content.SharedPreferences prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         previousBootIncomplete = prefs.getBoolean(KEY_BOOT_FLAG, false);
         previousBootTime = prefs.getLong(KEY_BOOT_TIME, 0);
+        previousPluginsActive = prefs.getBoolean("pluginsActiveLastTime", false);
         bootHandledThisLaunch = false;
 
         boolean pluginsActive = arePluginsActive();
@@ -452,21 +458,28 @@ public final class PluginSafeMode {
                 .commit();
     }
 
-    /**
-     * Called from {@link org.telegram.ui.LaunchActivity#onResume} once the UI is
-     * ready. Detects two failure modes from the previous launch and reacts:
-     *
-     * <ul>
-     *   <li><b>Java crash</b> — the {@code pluginCrash} flag was set by the
-     *       UncaughtExceptionHandler.</li>
-     *   <li><b>Hang / ANR / killed</b> — the {@code bootIn} flag was never
-     *       cleared, meaning the previous process died before reaching
-     *       {@link #markBootCompleted}. This catches the "stuck on the logo"
-     *       case that a crash handler alone can't see.</li>
-     * </ul>
-     *
-     * On either, plugins are disabled and the crash sheet is shown.
-     */
+    /** Android 11+ records native crashes even when Java exception handlers cannot run. */
+    private static ApplicationExitInfo findNativeCrash(Context ctx, android.content.SharedPreferences prefs) {
+        if (Build.VERSION.SDK_INT < 30) return null;
+        try {
+            ActivityManager manager = (ActivityManager) ctx.getSystemService(Context.ACTIVITY_SERVICE);
+            if (manager == null) return null;
+            long handled = prefs.getLong("nativeCrashHandledTime", 0);
+            for (ApplicationExitInfo exit : manager.getHistoricalProcessExitReasons(ctx.getPackageName(), 0, 16)) {
+                if (!ctx.getPackageName().equals(exit.getProcessName())) continue;
+                // Inspect only the most recent main-process exit, not an old crash
+                // followed by a normal force-stop or package update.
+                return exit.getReason() == ApplicationExitInfo.REASON_CRASH_NATIVE
+                        && exit.getTimestamp() > handled ? exit : null;
+            }
+        } catch (Throwable error) {
+            FileLog.e("Could not read process exit history", error);
+        }
+        return null;
+    }
+
+    /** Reports Java/native crashes and incomplete startups once per launch.
+     * Plugins are disabled only when the captured Java stack implicates them. */
     public static void checkAndHandleCrash(Activity activity) {
         if (activity == null) return;
         Context ctx = ApplicationLoader.applicationContext;
@@ -482,7 +495,8 @@ public final class PluginSafeMode {
         // appCrashFlag is set by the handler for ANY uncaught exception;
         // pluginCrash is the legacy plugin-attributed flag. Either means we
         // crashed last launch.
-        boolean crashed = prefs.getBoolean(KEY_APP_CRASH_FLAG, false)
+        ApplicationExitInfo nativeExit = findNativeCrash(ctx, prefs);
+        boolean crashed = nativeExit != null || prefs.getBoolean(KEY_APP_CRASH_FLAG, false)
                 || prefs.getBoolean(KEY_CRASH_FLAG, false);
         // IMPORTANT: read the PREVIOUS launch's boot state from the captured
         // field, not from prefs. prefs[KEY_BOOT_FLAG] was already overwritten
@@ -500,8 +514,8 @@ public final class PluginSafeMode {
         // the crash stack actually implicates them. Plugins are auto-disabled
         // only with stack evidence — a crash in pure Telegram code leaves
         // them alone.
-        boolean pluginsActiveLastTime = prefs.getBoolean("pluginsActiveLastTime", false);
-        boolean pluginBlamed = crashed && prefs.getBoolean("pluginBlamedLastTime", false);
+        boolean pluginsActiveLastTime = previousPluginsActive;
+        boolean pluginBlamed = nativeExit == null && crashed && prefs.getBoolean("pluginBlamedLastTime", false);
 
         // Prefer the explicit crash time; fall back to the boot time for hangs.
         long when = prefs.getLong(KEY_APP_CRASH_TIME, 0);
@@ -512,7 +526,19 @@ public final class PluginSafeMode {
             when = previousBootTime;
         }
 
-        String reason = crashed ? "crash" : "hang";
+        if (nativeExit != null) {
+            when = nativeExit.getTimestamp();
+            writeCrashLog("Xenon native crash report\n"
+                    + "Time: " + new Date(when) + "\n"
+                    + "Process: " + nativeExit.getProcessName() + "\n"
+                    + "PID: " + nativeExit.getPid() + "\n"
+                    + "Status: " + nativeExit.getStatus() + "\n"
+                    + "Description: " + nativeExit.getDescription() + "\n"
+                    + "Detected through Android process exit history. Java exception handlers cannot catch native crashes.\n"
+                    + "The native tombstone is stored by Android separately.\n");
+            prefs.edit().putLong("nativeCrashHandledTime", when).commit();
+        }
+        String reason = nativeExit != null ? "native" : crashed ? "crash" : "hang";
 
         // Only disable plugins if the crash stack implicates them — a crash/hang
         // in pure Telegram code shouldn't blame (and disable) plugins. And only
@@ -610,6 +636,10 @@ public final class PluginSafeMode {
                     body.setText("The client failed to finish starting up last time — it most likely "
                             + "hung or was killed. You can copy the log below to report it.");
                 }
+            } else if ("native".equals(reason)) {
+                body.setText("The client crashed in native code on the previous launch. Android detected the crash. "
+                        + "The available exit report does not identify the cause; plugins were left enabled. "
+                        + "You can copy the report below.");
             } else {
                 if (pluginsActive && pluginBlamed) {
                     if (pluginsDisabled) {
@@ -752,6 +782,17 @@ public final class PluginSafeMode {
      * @param stage    where it failed, e.g. "loading" or "hook onNewMessage"
      * @param t        the throwable that was caught (the source of the log)
      */
+    public static void recordWatchdogFailure(String hook, Throwable error) {
+        Context ctx = ApplicationLoader.applicationContext;
+        if (ctx == null) return;
+        writeCrashLog(buildPluginFailureReport("unknown", "watchdog " + hook, error));
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putBoolean(KEY_APP_CRASH_FLAG, true).putLong(KEY_APP_CRASH_TIME, System.currentTimeMillis())
+                .putBoolean("pluginBlamedLastTime", true).putBoolean("pluginsActiveLastTime", true).commit();
+        NekoConfig.pluginsEnabled = false;
+        ctx.getSharedPreferences("nekoconfig", Context.MODE_PRIVATE).edit().putBoolean("pluginsEnabled", false).commit();
+    }
+
     public static void reportPluginFailure(Activity activity, String fileName, String stage, Throwable t) {
         String report = buildPluginFailureReport(fileName, stage, t);
         writeCrashLog(report);

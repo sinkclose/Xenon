@@ -1111,8 +1111,8 @@ public class NekoConfig {
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("pluginGodMode", pluginGodMode);
         editor.apply();
-        // Scope grants are evaluated live, so a toggle takes effect on the next
-        // API call without reloading the engine.
+        // Remove the actual luajava library and captured objects on revocation.
+        zxc.iconic.xenon.plugins.PluginManager.getInstance().reloadAll();
     }
 
     public static void togglePluginAutoSafeMode() {

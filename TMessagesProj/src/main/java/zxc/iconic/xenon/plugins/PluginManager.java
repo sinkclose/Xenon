@@ -62,7 +62,15 @@ public class PluginManager {
      */
     public static final String SCOPE_GENERAL = "GENERAL";
     public static final String SCOPE_MESSAGING = "MESSAGING";
+    public static final String SCOPE_READ = "READ_MESSAGES", SCOPE_SEND = "SEND_MESSAGES",
+            SCOPE_DELETE = "DELETE_MESSAGES", SCOPE_REACTIONS = "REACTIONS",
+            SCOPE_RECEIPTS = "READ_RECEIPTS", SCOPE_UI = "UI", SCOPE_JAVA = "JAVA", SCOPE_HOOKS = "HOOKS",
+            SCOPE_LIMITED_JAVA = "LIMITED_JAVA", SCOPE_FILES = "FILES", SCOPE_INTERNET = "INTERNET", SCOPE_LINKS = "OPEN_LINKS";
+    public static final String[] OPTIONAL_SCOPES = {SCOPE_MESSAGING, SCOPE_READ, SCOPE_SEND,
+            SCOPE_DELETE, SCOPE_REACTIONS, SCOPE_RECEIPTS, SCOPE_UI, SCOPE_JAVA, SCOPE_HOOKS,
+            SCOPE_LIMITED_JAVA, SCOPE_FILES, SCOPE_INTERNET, SCOPE_LINKS};
 
+    private static final java.util.Map<String, PluginLuaRuntime> runtimes = new java.util.concurrent.ConcurrentHashMap<>();
     private static volatile PluginManager instance;
     private static WeakReference<Activity> currentActivity = new WeakReference<>(null);
     private static volatile long currentDialogId;
@@ -112,16 +120,18 @@ public class PluginManager {
      * process and let Safe Mode take over.
      */
     private static final long ENGINE_WATCHDOG_TIMEOUT_MS = 10_000;
-    private static volatile long hookStartTimestamp;
-    private static volatile String hookInProgress;
+    private static final class HookState {
+        final long started = System.nanoTime(); final String name; int depth = 1;
+        HookState(String name) { this.name = name; }
+    }
+    private static final java.util.Map<Long, HookState> activeHooks = new java.util.concurrent.ConcurrentHashMap<>();
     private static Thread watchdogThread;
     // Set once when the watchdog would have killed the process but automatic
     // Safe Mode is off, so we only log the skip a single time.
     private static volatile boolean watchdogKillSkippedLogged;
 
-    private static void startWatchdogIfNeeded() {
+    private static synchronized void startWatchdogIfNeeded() {
         if (watchdogThread != null && watchdogThread.isAlive()) return;
-        hookStartTimestamp = System.currentTimeMillis();
         watchdogThread = new Thread(() -> {
             while (true) {
                 try {
@@ -129,10 +139,12 @@ public class PluginManager {
                 } catch (InterruptedException e) {
                     return;
                 }
-                if (hookStartTimestamp == 0) continue;
-                long elapsed = System.currentTimeMillis() - hookStartTimestamp;
+                HookState oldest = null;
+                for (HookState state : activeHooks.values()) if (oldest == null || state.started < oldest.started) oldest = state;
+                if (oldest == null) continue;
+                long elapsed = (System.nanoTime() - oldest.started) / 1_000_000L;
                 if (elapsed > ENGINE_WATCHDOG_TIMEOUT_MS) {
-                    String hook = hookInProgress;
+                    String hook = oldest.name;
                     if (!NekoConfig.pluginAutoSafeMode) {
                         // Automatic Safe Mode is off — never kill the process or
                         // disable plugins on our own. If the UI thread is wedged
@@ -151,9 +163,7 @@ public class PluginManager {
                             + "ms — killing process to recover");
                     // Try to write a crash note first (best-effort).
                     try {
-                        PluginSafeMode.reportPluginFailure(getCurrentActivity(),
-                                "unknown", "watchdog: hook '" + hook + "' exceeded "
-                                        + ENGINE_WATCHDOG_TIMEOUT_MS + "ms",
+                        PluginSafeMode.recordWatchdogFailure(hook,
                                 new java.util.concurrent.TimeoutException(
                                         "Plugin engine watchdog killed the process: hook '"
                                                 + hook + "' did not return in "
@@ -172,15 +182,16 @@ public class PluginManager {
 
     /** Mark that a hook is about to run (called by fire/fireReturn). */
     public static void markHookStart(String hookName) {
-        hookInProgress = hookName;
-        hookStartTimestamp = System.currentTimeMillis();
+        long thread = Thread.currentThread().getId();
+        HookState state = activeHooks.get(thread);
+        if (state == null) activeHooks.put(thread, new HookState(hookName)); else state.depth++;
         startWatchdogIfNeeded();
     }
 
-    /** Mark that a hook finished (called by fire/fireReturn). */
     public static void markHookEnd() {
-        hookStartTimestamp = 0;
-        hookInProgress = null;
+        long thread = Thread.currentThread().getId();
+        HookState state = activeHooks.get(thread);
+        if (state != null && --state.depth == 0) activeHooks.remove(thread);
     }
 
     private PluginManager() {
@@ -397,9 +408,14 @@ public class PluginManager {
      * the installed plugin, or {@code null} on failure.
      */
     public LoadedPlugin installFrom(File source) {
+        lastInstallEngineOff = false;
         if (source == null || !source.exists()) {
             lastParseError = "source file is null or doesn't exist";
             Log.e(TAG, "installFrom: " + lastParseError);
+            return null;
+        }
+        if (!source.isFile() || source.length() > 2 * 1024 * 1024) {
+            lastParseError = "Use a plugin file no larger than 2 MiB";
             return null;
         }
         lastInstallEngineOff = false;
@@ -551,6 +567,7 @@ public class PluginManager {
             byte[] buf = new byte[8192];
             int n;
             while ((n = in.read(buf)) > 0) {
+                if (baos.size() + n > 2 * 1024 * 1024) throw new IOException("Plugin exceeds 2 MiB");
                 baos.write(buf, 0, n);
             }
             byte[] full = baos.toByteArray();
@@ -561,21 +578,21 @@ public class PluginManager {
             Log.e(TAG, "loadFile: " + lastParseError);
             return null;
         }
-        Globals globals = createSandboxGlobals();
+        grantScopes(file.getName(), file);
+        Globals globals = createSandboxGlobals(file.getName());
+        runtimes.put(file.getName(), PluginLuaRuntime.attach(globals));
         PluginApi.setCurrentPluginFileName(file.getName());
         // Pre-parse metadata so plugin_id is available before Lua execution
         // for settings keying, scope gating, etc.
         String[] pluginMeta = parseMetadata(file);
         PluginApi.setCurrentPluginId(pluginMeta != null && pluginMeta.length > 2 ? pluginMeta[2] : null);
-        // Auto-grant declared scopes BEFORE the plugin's top-level code runs,
-        // so protected calls made during load are gated correctly.
-        grantScopes(file.getName(), file);
+        // Scope migration/grants above run before the sandbox and top-level code.
         LuaTable[] tables = PluginApi.createApiTable(globals);
         globals.set("xenon", tables[0]);
         LuaTable hooks = tables[1];
         Log.d(TAG, "loadFile: hooks@" + System.identityHashCode(hooks) + " initialSize=" + hooks.length());
         try {
-            globals.load(source, file.getName(), globals).call();
+            invokeCallback(file.getName(), globals.load(source, file.getName(), globals), LuaValue.NONE);
             Log.d(TAG, "loadFile: " + file.getName() + " executed, hooks@" + System.identityHashCode(hooks) + " size=" + hooks.length());
             LuaValue[] hookKeys = hooks.keys();
             if (hookKeys.length > 0) {
@@ -588,8 +605,10 @@ public class PluginManager {
             } else {
                 Log.w(TAG, "loadFile: no hooks registered by " + file.getName());
             }
-        } catch (LuaError e) {
+        } catch (Throwable e) {
             FileLog.e("Failed to load plugin " + file.getName(), e);
+            PluginApi.stopAllForPlugin(file.getName());
+            quarantineFile(file.getName(), "loading", e);
             lastParseError = e.getMessage();
             Log.e(TAG, "loadFile: " + file.getName() + " failed - " + lastParseError);
             return null;
@@ -719,10 +738,9 @@ public class PluginManager {
             return;
         }
         Log.d(TAG, "fire(" + hookName + "): firing on " + plugins.size() + " plugin(s)");
-        markHookStart(hookName);
         try {
             for (LoadedPlugin plugin : plugins) {
-                if (!plugin.isEnabled()) {
+                if (!plugin.isEnabled() || !allowsHook(plugin.fileName, hookName)) {
                     Log.d(TAG, "fire(" + hookName + "): " + plugin.displayName + " disabled, skipping");
                     continue;
                 }
@@ -741,7 +759,7 @@ public class PluginManager {
                 }
             }
         } finally {
-            markHookEnd();
+            // Actual callback execution tracks its own watchdog lifetime.
         }
     }
 
@@ -773,6 +791,7 @@ public class PluginManager {
                     + "ms, quarantining " + plugin.fileName);
             quarantinePlugin(plugin, "hook '" + hookName + "' exceeded timeout");
         } catch (Exception e) {
+            quarantineFile(plugin.fileName, "hook " + hookName, e);
             Log.e(TAG, "fire(" + hookName + "): wait failed: " + e.getMessage());
         }
     }
@@ -892,10 +911,9 @@ public class PluginManager {
             return null;
         }
         Log.d(TAG, "fireReturn(" + hookName + "): firing on " + plugins.size() + " plugin(s)");
-        markHookStart(hookName);
         try {
             for (LoadedPlugin plugin : plugins) {
-                if (!plugin.isEnabled()) {
+                if (!plugin.isEnabled() || !allowsHook(plugin.fileName, hookName)) {
                     Log.d(TAG, "fireReturn(" + hookName + "): " + plugin.displayName + " disabled, skipping");
                     continue;
                 }
@@ -913,7 +931,7 @@ public class PluginManager {
             Log.d(TAG, "fireReturn(" + hookName + "): no plugin returned a value");
             return null;
         } finally {
-            markHookEnd();
+            // Actual callback execution tracks its own watchdog lifetime.
         }
     }
 
@@ -933,10 +951,9 @@ public class PluginManager {
             return false;
         }
         Log.d(TAG, "fireBooleanResult(" + hookName + "): firing on " + plugins.size() + " plugin(s)");
-        markHookStart(hookName);
         try {
             for (LoadedPlugin plugin : plugins) {
-                if (!plugin.isEnabled()) {
+                if (!plugin.isEnabled() || !allowsHook(plugin.fileName, hookName)) {
                     Log.d(TAG, "fireBooleanResult(" + hookName + "): " + plugin.displayName + " disabled, skipping");
                     continue;
                 }
@@ -953,7 +970,7 @@ public class PluginManager {
             }
             return false;
         } finally {
-            markHookEnd();
+            // Actual callback execution tracks its own watchdog lifetime.
         }
     }
 
@@ -1099,7 +1116,7 @@ public class PluginManager {
             java.util.regex.Matcher tm = tok.matcher(body);
             while (tm.find()) {
                 String s = tm.group(1).trim().toUpperCase();
-                if (SCOPE_GENERAL.equals(s) || SCOPE_MESSAGING.equals(s)) {
+                if (SCOPE_GENERAL.equals(s) || java.util.Arrays.asList(OPTIONAL_SCOPES).contains(s)) {
                     if (!scopes.contains(s)) scopes.add(s);
                 }
             }
@@ -1160,22 +1177,24 @@ public class PluginManager {
         }
     }
 
-    private static Globals createSandboxGlobals() {
+    private static Globals createSandboxGlobals(String owner) {
         Globals globals = JsePlatform.standardGlobals();
         // If God Mode is on, replace the default luajava module with our
         // custom XenonLuajavaLib (which overrides classForName to use the
         // app context classloader). This MUST happen before "package" is
         // removed below, because the INIT opcode of LuajavaLib tries to
         // register itself in package.loaded.
-        if (NekoConfig.pluginGodMode) {
+        if (hasScope(owner, SCOPE_JAVA)) {
             globals.load(new XenonLuajavaLib());
         }
         // Filesystem / process / code-loading libs — remove entirely.
         globals.set("io", LuaValue.NIL);
         globals.set("package", LuaValue.NIL);
         globals.set("debug", LuaValue.NIL);
-        if (!NekoConfig.pluginGodMode) {
-            globals.set("luajava", LuaValue.NIL);
+        if (!hasScope(owner, SCOPE_JAVA)) {
+            globals.set("luajava", hasScope(owner, SCOPE_LIMITED_JAVA) ? new PluginLimitedJava(() -> {
+                if (!hasScope(owner, SCOPE_LIMITED_JAVA)) throw new org.luaj.vm2.LuaError("Permission denied: LIMITED_JAVA");
+            }).library() : LuaValue.NIL);
         }
         globals.set("loadfile", LuaValue.NIL);
         globals.set("dofile", LuaValue.NIL);
@@ -1204,8 +1223,56 @@ public class PluginManager {
     public static boolean hasScope(String fileName, String scope) {
         if (fileName == null || scope == null) return false;
         if (SCOPE_GENERAL.equals(scope)) return true;
-        if (zxc.iconic.xenon.NekoConfig.pluginGodMode) return true;
-        return getPrefs().getBoolean("plugin_scope_" + fileName + "_" + scope, false);
+        SharedPreferences prefs = getPrefs();
+        return PluginPermissionPolicy.allows(scope, NekoConfig.pluginGodMode,
+                (permission, fallback) -> prefs.getBoolean("plugin_scope_" + fileName + "_" + permission, fallback));
+    }
+
+    public static PluginLuaRuntime getRuntime(String owner) { return runtimes.get(owner); }
+    public static boolean isRuntimeCurrent(String owner, PluginLuaRuntime runtime) {
+        return runtime != null && runtimes.get(owner) == runtime;
+    }
+    public boolean hasEditListeners() {
+        if (!isEnabled()) return false;
+        for (LoadedPlugin plugin : plugins) if (plugin.isEnabled() && hasScope(plugin.fileName, SCOPE_READ)
+                && plugin.hooks.get("onMessageEdited").isfunction()) return true;
+        return false;
+    }
+    public void emitMessageEdit(int account, long dialog, int messageId, byte[] previous, byte[] current) {
+        if (!hasEditListeners()) return;
+        // Primitive data only: the sandbox never receives a Java Message or Context.
+        org.telegram.messenger.AndroidUtilities.runOnUIThread(() -> {
+            LuaTable event = new LuaTable();
+            event.set("account", account); event.set("peer", LuaValue.valueOf(dialog));
+            event.set("messageId", messageId);
+            event.set("previousTl", org.luaj.vm2.LuaString.valueOf(previous));
+            event.set("currentTl", org.luaj.vm2.LuaString.valueOf(current));
+            fire("onMessageEdited", event);
+        });
+    }
+
+    public static org.luaj.vm2.Varargs invokeCallback(String owner, LuaValue callback, org.luaj.vm2.Varargs args) {
+        PluginLuaRuntime runtime = runtimes.get(owner);
+        if (runtime == null) return LuaValue.NIL;
+        markHookStart("callback " + owner);
+        try { return runtime.invoke(callback, args); } finally { markHookEnd(); }
+    }
+
+    static void stopAllRuntimes() {
+        for (PluginLuaRuntime runtime : runtimes.values()) runtime.stop();
+        runtimes.clear();
+    }
+
+    static void stopRuntime(String owner) {
+        PluginLuaRuntime runtime = runtimes.remove(owner);
+        if (runtime != null) runtime.stop();
+    }
+
+    public static boolean allowsHook(String owner, String hook) {
+        if ("onNewMessage".equals(hook) || "onMessageEdited".equals(hook)) return hasScope(owner, SCOPE_READ);
+        if ("onSendMessage".equals(hook)) return hasScope(owner, SCOPE_SEND) && hasScope(owner, SCOPE_READ);
+        if (hook.startsWith("onChatMenu")) return hasScope(owner, SCOPE_UI) && hasScope(owner, SCOPE_READ);
+        return true;
     }
 
     /**
@@ -1220,9 +1287,25 @@ public class PluginManager {
         List<String> scopes = parseScopes(file);
         SharedPreferences prefs = getPrefs();
         SharedPreferences.Editor ed = prefs.edit();
+        if (!prefs.getBoolean("plugin_permissions_v2_" + fileName, false)) {
+            String[] metadata = parseMetadata(file);
+            if (metadata != null && metadata.length > 2 && metadata[2] != null) {
+                String legacy = "plugin_scope_" + metadata[2] + "_" + SCOPE_MESSAGING;
+                if (prefs.contains(legacy)) ed.putBoolean("plugin_scope_" + fileName + "_" + SCOPE_MESSAGING, prefs.getBoolean(legacy, false));
+            }
+            // Preserve Java access for existing God Mode plugins; new plugins need
+            // a separate explicit Java grant even when global God Mode is enabled.
+            if (NekoConfig.pluginGodMode && prefs.contains("plugin_scope_" + fileName + "_" + SCOPE_GENERAL)) {
+                ed.putBoolean("plugin_scope_" + fileName + "_" + SCOPE_JAVA, true);
+            }
+            ed.putBoolean("plugin_permissions_v2_" + fileName, true);
+        }
+        ed.commit();
+        ed = prefs.edit();
         ed.putBoolean("plugin_scope_" + fileName + "_" + SCOPE_GENERAL, true);
         for (String s : scopes) {
-            if (!SCOPE_GENERAL.equals(s)) {
+            if (!SCOPE_GENERAL.equals(s) && !SCOPE_JAVA.equals(s) && !SCOPE_HOOKS.equals(s)
+                    && !SCOPE_LIMITED_JAVA.equals(s) && !SCOPE_FILES.equals(s) && !SCOPE_INTERNET.equals(s) && !SCOPE_LINKS.equals(s)) {
                 String key = "plugin_scope_" + fileName + "_" + s;
                 // Only grant if the user has never decided — preserve revocation.
                 if (!prefs.contains(key)) {
@@ -1276,6 +1359,7 @@ public class PluginManager {
      */
     public static class LoadedPlugin {
         public final String fileName;
+        private final PluginLuaRuntime runtime;
         public final String displayName;
         public final String name;
         public final String description;
@@ -1288,6 +1372,7 @@ public class PluginManager {
 
         LoadedPlugin(String fileName, String name, String description, String pluginId, String author, String version, List<PluginSetting> settings, Globals globals, LuaTable hooks) {
             this.fileName = fileName;
+            this.runtime = getRuntime(fileName);
             this.globals = globals;
             this.hooks = hooks;
             String disp = fileName;
@@ -1330,7 +1415,7 @@ public class PluginManager {
         }
 
         public boolean isEnabled() {
-            return PluginManager.getPrefs().getBoolean("plugin_enabled_" + fileName, true);
+            return isRuntimeCurrent(fileName, runtime) && PluginManager.getPrefs().getBoolean("plugin_enabled_" + fileName, true);
         }
 
         public void setEnabled(boolean enabled) {
@@ -1416,7 +1501,8 @@ public class PluginManager {
                 return;
             }
             Log.d(TAG, displayName + ": invoking hook '" + hookName + "'");
-            handler.invoke(args);
+            if (!isEnabled() || !allowsHook(fileName, hookName)) return;
+            invokeCallback(fileName, handler, LuaValue.varargsOf(args));
             Log.d(TAG, displayName + ": hook '" + hookName + "' completed");
         }
 
@@ -1427,7 +1513,7 @@ public class PluginManager {
                 return null;
             }
             Log.d(TAG, displayName + ": invoking return-hook '" + hookName + "'");
-            LuaValue result = handler.invoke(LuaValue.varargsOf(args)).arg1();
+            LuaValue result = invokeCallback(fileName, handler, LuaValue.varargsOf(args)).arg1();
             Log.d(TAG, displayName + ": return-hook '" + hookName + "' returned " + (result.isnil() ? "nil" : result.toString()));
             return result;
         }

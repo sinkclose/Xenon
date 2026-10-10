@@ -41,6 +41,7 @@ import java.util.Map;
 
 import zxc.iconic.xenon.NekoConfig;
 import zxc.iconic.xenon.plugins.PluginManager;
+import zxc.iconic.xenon.plugins.PluginDevProvider;
 
 public class NekoPluginsActivity extends BaseNekoSettingsActivity {
 
@@ -49,6 +50,7 @@ public class NekoPluginsActivity extends BaseNekoSettingsActivity {
     private final int enableRow = rowId++;
     private final int autoSafeModeRow = rowId++;
     private final int godModeRow = rowId++;
+    private final int devModeRow = rowId++;
     private final int installRow = rowId++;
     private final int pluginsHeaderRow = rowId++;
     private int nextPluginRow = rowId;
@@ -73,6 +75,9 @@ public class NekoPluginsActivity extends BaseNekoSettingsActivity {
         items.add(UItem.asShadow(null));
 
         items.add(TextSettingsCellFactory.of(installRow, LocaleController.getString(R.string.PluginsInstall)).accent());
+        items.add(UItem.asCheck(devModeRow, LocaleController.getString(R.string.PluginDevMode),
+                LocaleController.getString(R.string.PluginDevModeDesc))
+                .setChecked(PluginSettingsActivity.getPrefs().getBoolean(PluginDevProvider.PREF, false)));
         items.add(UItem.asShadow(null));
 
         // Plugin list is always shown — parsed from disk, independent of whether
@@ -145,6 +150,18 @@ public class NekoPluginsActivity extends BaseNekoSettingsActivity {
                 // Turning on is dangerous: force a 60s cooldown on the confirm
                 // button so it can't be enabled by an accidental tap.
                 showGodModeConfirmDialog(view);
+            }
+        } else if (id == devModeRow) {
+            boolean enabled = !PluginSettingsActivity.getPrefs().getBoolean(PluginDevProvider.PREF, false);
+            PluginSettingsActivity.getPrefs().edit().putBoolean(PluginDevProvider.PREF, enabled).apply();
+            updateRows();
+            if (enabled) {
+                String uri = "content://" + getParentActivity().getPackageName() + ".plugin-dev";
+                AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity(), resourcesProvider);
+                builder.setTitle(LocaleController.getString(R.string.PluginDevMode));
+                builder.setMessage(LocaleController.getString(R.string.PluginDevModeCommands).replace("%URI%", uri));
+                builder.setPositiveButton("OK", null);
+                showDialog(builder.create());
             }
         } else if (id == installRow) {
             // Allow installing plugins regardless of the engine state. They'll

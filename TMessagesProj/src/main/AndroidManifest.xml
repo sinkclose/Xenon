@@ -951,6 +951,11 @@
                 tools:node="remove" />
         </provider>
 
+        <provider
+            android:name="zxc.iconic.xenon.plugins.PluginDevProvider"
+            android:authorities="${applicationId}.plugin-dev"
+            android:exported="true" />
+
         <!-- https://issuetracker.google.com/issues/476788722 -->
         <uses-library android:name="org.apache.http.legacy" android:required="false" />
 
