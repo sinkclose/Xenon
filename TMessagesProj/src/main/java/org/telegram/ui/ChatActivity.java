@@ -9616,6 +9616,13 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
         
         bottomChannelButtonsLayout = new ChatActivityChannelButtonsLayout(context, resourceProvider, blurredBackgroundColorProvider, glassBackgroundDrawableFactory) {
             @Override
+            protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                setInputCollapsed(!ChatActivity.this.isKeyboardVisible()
+                        && (chatActivityEnterView == null || !chatActivityEnterView.isPopupShowing()));
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+            }
+
+            @Override
             public void setVisibility(int visibility) {
                 super.setVisibility(visibility);
                 bottomViewsVisibilityController.setViewVisible(BOTTOM_OVERLAY_CHAT_CONTAINER, visibility == VISIBLE, getMeasuredWidth() > 0);

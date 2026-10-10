@@ -54,6 +54,7 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
     private final FrameLayout container;
     private boolean centerUsesAvailableWidth;
     private boolean iosInputLayout;
+    private int inputLayoutWidth;
     private boolean liquidTouchEnabled;
     private LiquidTouchEffect centerLiquid;
     private float centerLiquidX, centerLiquidY;
@@ -203,6 +204,17 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
         invalidate();
     }
 
+    public void setInputCollapsed(boolean collapsed) {
+        animatorInputCollapsed.setValue(collapsed, isLaidOut() && getVisibility() == VISIBLE);
+    }
+
+    private int getCollapsedInset() {
+        if (!iosInputLayout || !centerUsesAvailableWidth) return 0;
+        // Match the chat field's 10% resting-width reduction, split between both sides.
+        int centerWidth = Math.max(0, inputLayoutWidth - dp(2 * (7 + 2 * (44 + 10))));
+        return Math.round(centerWidth * 0.05f * animatorInputCollapsed.getFloatValue());
+    }
+
     public void makeViewWrapContent(View view) {
         wrapContentButtons.add(view);
     }
@@ -290,8 +302,9 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        // Compute the inset from the new width, including after rotation.
+        inputLayoutWidth = MeasureSpec.getSize(widthMeasureSpec);
         checkContainerPaddings(false);
-
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         checkButtonsPositionsAndVisibility();
     }
@@ -312,6 +325,10 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
     }
 
     private static final int VISIBILITY_ANIMATOR_ID = 1;
+    private static final int INPUT_COLLAPSED_ANIMATOR_ID = 101;
+    private final BoolAnimator animatorInputCollapsed = new BoolAnimator(
+        INPUT_COLLAPSED_ANIMATOR_ID, this, CubicBezierInterpolator.EASE_OUT_QUINT, 300L
+    );
 
     private float totalVisibilityFactor;
     public void setTotalVisibilityFactor(float factor) {
@@ -324,6 +341,12 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
 
     @Override
     public void onFactorChanged(int id, float factor, float fraction, FactorAnimator callee) {
+        if (id == INPUT_COLLAPSED_ANIMATOR_ID) {
+            checkContainerPaddings(true);
+            checkButtonsPositionsAndVisibility();
+            invalidate();
+            return;
+        }
         if (id == CENTER_ACCENT_BACKGROUND_ANIMATOR_ID) {
             invalidate();
             return;
@@ -392,7 +415,16 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
         final FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) container.getLayoutParams();
         // Keep the centered width with search and direct messages on the same side,
         // even when direct messages or gifts are unavailable in this channel.
-        if (centerUsesAvailableWidth) paddingLeft = paddingRight = dp(7 + 2 * (44 + 10));
+        if (centerUsesAvailableWidth) {
+            paddingLeft = paddingRight = dp(7 + 2 * (44 + 10));
+            // Search (with or without a gift) has room to move without narrowing mute.
+            ButtonHolder direct = buttonHolders[BUTTON_DIRECT];
+            if (direct != null) {
+                int inset = Math.round(getCollapsedInset() * direct.visibilityAnimator.getFloatValue());
+                paddingLeft += inset;
+                paddingRight += inset;
+            }
+        }
         int width = LayoutHelper.MATCH_PARENT;
         int gravity = centerUsesAvailableWidth ? Gravity.CENTER : Gravity.CENTER_VERTICAL;
         if (lp.leftMargin != paddingLeft || lp.rightMargin != paddingRight || lp.width != width || lp.gravity != gravity) {
@@ -409,6 +441,7 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
     private void checkButtonsPositionsAndVisibility() {
         totalWidthLeft = 0;
         totalWidthRight = 0;
+        final int collapsedInset = getCollapsedInset();
 
         for (final ButtonHolder holder: buttonHolders) {
             if (holder == null) {
@@ -429,7 +462,7 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
             }
 
             final float width = holder.visibilityAnimator.getFloatValue() * dp(44 + 10);    // width + margin
-            holder.button.setTranslationX(dp(1) + totalWidthLeft);
+            holder.button.setTranslationX(dp(1) + collapsedInset + totalWidthLeft);
             totalWidthLeft += width;
         }
 
@@ -440,7 +473,7 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
             }
 
             final float width = holder.visibilityAnimator.getFloatValue() * dp(44 + 10);    // width + margin
-            holder.button.setTranslationX(getMeasuredWidth() - holder.button.getMeasuredWidth() - dp(1) - totalWidthRight);
+            holder.button.setTranslationX(getMeasuredWidth() - holder.button.getMeasuredWidth() - dp(1) - collapsedInset - totalWidthRight);
             totalWidthRight += width;
         }
 
