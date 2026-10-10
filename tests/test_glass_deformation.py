@@ -1,6 +1,7 @@
 """Verify backdrop anchoring through production liquid transforms and glass recordings."""
 
 import os
+import re
 import subprocess
 import unittest
 
@@ -96,9 +97,18 @@ class GlassDeformationTest(unittest.TestCase):
             source = source.replace(method(source, "public void updateDisplayList()"), method(old, "public void updateDisplayList()"))
         renderer_methods = "\n".join(method(source, signature) for signature in (
             "protected void onSourceOffsetChange(", "public void updateDisplayList()", "public void draw(",
-            "public void setAlpha("))
+            "public void setAlpha(", "public void invalidateDisplayList()", "private void updatePrismDisplayList(",
+            "private void ensureLiquidGlassEffect()"))
         renderer_methods = renderer_methods.replace("@NonNull ", "").replace("@Override", "")
-        renderer_methods = renderer_methods.replace("org.telegram.messenger.LiteMode", "LiteMode").replace("zxc.iconic.xenon.NekoConfig", "NekoConfig")
+        renderer_methods = renderer_methods.replace("org.telegram.messenger.LiteMode", "LiteMode").replace("zxc.iconic.xenon.NekoConfig", "NekoConfig").replace("new LiquidGlassEffect(", "new Effect(")
+        pipeline = (ROOT / "org/telegram/ui/Components/blur3/drawable/PrismGlassPipeline.java").read_text()
+        pipeline = re.sub(r"^(?:package|import) .*;\n", "", pipeline, flags=re.M)
+        pipeline = re.sub(r"@RequiresApi\([^\n]*\)\n", "", pipeline)
+        pipeline = pipeline.replace("final class PrismGlassPipeline", "static final class PrismGlassPipeline")
+        pipeline = pipeline.replace("BlurredBackgroundDrawableRenderNode", "Glass").replace("LiquidGlassEffect", "Effect")
+        pipeline = pipeline.replace("BlurredBackgroundSource", "Source").replace("BlurredBackgroundDrawable.Props", "Props")
+        pipeline = pipeline.replace("BlurredBackgroundDrawable.drawStroke", "drawable.drawStroke")
+        pipeline = pipeline.replace("Arrays.equals", "java.util.Arrays.equals")
         harness = r'''
 public class GlassDeformationHarness {
     COMMON
@@ -108,9 +118,15 @@ public class GlassDeformationHarness {
     static class LiteMode { static int FLAG_LIQUID_GLASS=1; static boolean isEnabled(int f) { return true; } }
     static class NekoConfig {
         static int liquidGlassThickness=11, advancedGlassTintPercent, advancedGlassAlpha=100;
-        static float liquidGlassIntensity=1; static boolean useAdvancedLiquidGlass;
+        static float liquidGlassIntensity=1; static boolean useAdvancedLiquidGlass, usePrismGlass;
     }
-    static class Effect { void update(Object... args) {} void drawHighlight(Canvas c,float a) {} }
+    static class Effect {
+        Effect() {} Effect(RenderNode node, boolean fixed) {}
+        int updates; Object[] lastUpdate;
+        void update(Object... args) { updates++; lastUpdate = args; } void drawHighlight(Canvas c,float a) {}
+        boolean current = true, configuredPrism = NekoConfig.usePrismGlass;
+        boolean isConfigurationCurrent() { return current && configuredPrism == NekoConfig.usePrismGlass; }
+    }
     static class Source {
         int recordings; float l,t,r,b,sx,sy,tx,ty;
         void prepareToDraw() {} void dispatchOnDrawablesRelativePositionChange() {}
@@ -122,13 +138,17 @@ public class GlassDeformationHarness {
     static class Glass extends BlurredBackgroundDrawable {
         Source source = new Source(); RenderNode renderNode=new RenderNode(), renderNodeFill=new RenderNode();
         boolean renderNodeInvalidated, fixedRefraction, liquidGlassEnabled, inAppKeyboardOptimization;
+        boolean liquidGlassEffectAllowed = true;
+        boolean prismPipelineActive; PrismGlassPipeline prismPipeline;
         Effect liquidGlassEffect=new Effect(); int backgroundColor, strokeColorTop, strokeColorBottom, shadowColor;
         float shadowAlpha=1, shadowLayerRadius, shadowLayerDx, shadowLayerDy;
         Paint paintShadow=new Paint(), paintStrokeTop=new Paint(), paintStrokeBottom=new Paint();
-        void recreateLiquidGlassEffect() {} void drawSource(Canvas c,Source s) {}
+        void recreateLiquidGlassEffect() { liquidGlassEffect = new Effect(); renderNodeInvalidated = true; }
+        void drawSource(Canvas c,Source s) {}
         void drawStroke(Object... a) {}
         RENDERER_METHODS
     }
+    PIPELINE_CLASS
     static void verify(Glass glass, LiquidTouchEffect e, float originX, float originY) {
         LiquidTouchEffect.updateBackground(glass,e,originX,originY);
         Canvas outer=new Canvas();
@@ -165,6 +185,8 @@ public class GlassDeformationHarness {
         if(save!=-1) outer.restoreToCount(save);
     }
     public static void main(String[] args) {
+        for (boolean prism : new boolean[]{false, true}) {
+        NekoConfig.usePrismGlass = prism;
         for (float[] size:new float[][]{{0,0,300,56},{38,90,94,146},{120,23,270,75}}) {
             for (float[] origin:new float[][]{{0,0},{31,47},{-25,-13}}) {
                 Glass g=new Glass(); LiquidTouchEffect e=new LiquidTouchEffect();
@@ -187,6 +209,8 @@ public class GlassDeformationHarness {
                 check(g.source.recordings==idleRecordings,"unchanged alpha rebuilt idle glass");
             }
         }
+        }
+        NekoConfig.usePrismGlass = false;
         Glass alphaGlass = new Glass(); Canvas alphaCanvas = new Canvas();
         alphaGlass.draw(alphaCanvas);
         alphaGlass.setAlpha(128); alphaGlass.draw(alphaCanvas);
@@ -204,13 +228,66 @@ public class GlassDeformationHarness {
         near(alphaGlass.renderNode.getAlpha(),128/255f*.6f);
         alphaGlass.fixedRefraction=true; alphaGlass.setAlpha(128); alphaGlass.draw(alphaCanvas);
         near(alphaGlass.renderNode.getAlpha(),128/255f);
+        // Renderer switches must refresh ordinary surfaces as well as the nav lens.
+        for (boolean fixed : new boolean[]{false, true}) {
+            alphaGlass.fixedRefraction = fixed;
+            Effect previous = alphaGlass.liquidGlassEffect;
+            previous.current = false;
+            int recordings = alphaGlass.source.recordings;
+            alphaGlass.draw(alphaCanvas);
+            check(alphaGlass.liquidGlassEffect != previous, "renderer switch did not recreate effect");
+            check(alphaGlass.source.recordings == recordings + 1, "renderer switch did not refresh display list");
+            alphaGlass.draw(alphaCanvas);
+            check(alphaGlass.source.recordings == recordings + 1, "renderer switch keeps recording idle frames");
+        }
+        // Count real production recordings for independent frame changes.
+        NekoConfig.useAdvancedLiquidGlass = false;
+        for (boolean prism : new boolean[]{false, true}) {
+            NekoConfig.usePrismGlass = prism;
+            for (int workload = 0; workload < 7; workload++) {
+                Glass g = new Glass(); Canvas output = new Canvas();
+                g.draw(output);
+                Effect originalEffect = g.liquidGlassEffect;
+                for (int frame = 0; frame < 120; frame++) {
+                    if (workload == 0) g.setAlpha(100 + frame);
+                    if (workload == 1) { g.backgroundColor = 0x40112200 | frame; g.renderNodeInvalidated = true; }
+                    if (workload == 2) { g.sourceOffsetX++; g.onSourceOffsetChange(g.sourceOffsetX, g.sourceOffsetY); }
+                    if (workload == 3) g.invalidateDisplayList();
+                    if (workload == 4) { g.boundProps.liquidIntensity = .5f + frame / 200f; g.renderNodeInvalidated = true; }
+                    if (workload == 5) { g.boundProps.boundsWithPadding.right++; g.renderNodeInvalidated = true; }
+                    if (workload == 6) g.updateDisplayList(); // GlassEngine's explicit capture refresh
+                    g.draw(output);
+                }
+                int backgroundRecordings = !prism || workload == 2 || workload == 3 || workload == 5 || workload == 6 ? 121 : 1;
+                int surfaceRecordings = !prism || workload == 1 || workload == 5 ? 121 : 1;
+                check(g.renderNodeFill.recordings == backgroundRecordings, "Unexpected background recordings for workload " + workload);
+                check(g.renderNode.recordings == surfaceRecordings, "Unexpected surface recordings for workload " + workload);
+                check(g.liquidGlassEffect == originalEffect, "Frame assembly replaced the existing optical effect");
+                // Switching the assembly strategy must synchronize both cached layers once.
+                NekoConfig.usePrismGlass = !prism;
+                g.draw(output);
+                check(g.liquidGlassEffect != originalEffect, "Pipeline toggle kept the old GPU program");
+                check(g.liquidGlassEffect.configuredPrism == NekoConfig.usePrismGlass, "Wrong GPU program after toggle");
+                check(g.renderNodeFill.recordings == backgroundRecordings + 1, "Toggle kept stale background commands");
+                check(g.renderNode.recordings == surfaceRecordings + 1, "Toggle kept stale surface commands");
+                NekoConfig.usePrismGlass = prism;
+            }
+        }
+        NekoConfig.usePrismGlass = false;
+        Glass explicit = new Glass(); explicit.draw(new Canvas());
+        Effect beforeExplicit = explicit.liquidGlassEffect;
+        NekoConfig.usePrismGlass = true;
+        explicit.updateDisplayList();
+        check(explicit.liquidGlassEffect != beforeExplicit && explicit.liquidGlassEffect.configuredPrism,
+                "Explicit GlassEngine refresh did not switch GPU program");
+        NekoConfig.usePrismGlass = false;
         // The software Canvas path must cancel the deformation in source coordinates too.
         BlurredBackgroundDrawable d=new BlurredBackgroundDrawable(); d.setSourceTransform(1.2f,1.1f,17,-9);
         Canvas c=new Canvas(); c.translate(d.sourceOffsetX,d.sourceOffsetY); c.translate(17,-9); c.scale(1.2f,1.1f);
         d.transformSourceCanvas(c); near(c.sx,1); near(c.sy,1); near(c.tx,0); near(c.ty,0);
     }
 }
-'''.replace("COMMON", common()).replace("RENDERER_METHODS", renderer_methods)
+'''.replace("COMMON", common()).replace("RENDERER_METHODS", renderer_methods).replace("PIPELINE_CLASS", pipeline)
         run_java(self, "GlassDeformationHarness", harness)
 
     def test_parent_surface_bindings_invalidate_cached_children(self):

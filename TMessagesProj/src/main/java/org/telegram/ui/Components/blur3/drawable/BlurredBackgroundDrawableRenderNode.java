@@ -32,6 +32,8 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
     private final Paint paintStrokeBottom = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private boolean renderNodeInvalidated;
+    private PrismGlassPipeline prismPipeline;
+    private boolean prismPipelineActive;
 
     public BlurredBackgroundDrawableRenderNode(BlurredBackgroundSource source) {
         this.renderNode = new RenderNode("BlurredNode");
@@ -53,8 +55,8 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
     }
 
     private LiquidGlassEffect liquidGlassEffect;
+    private boolean liquidGlassEffectAllowed;
     private boolean fixedRefraction;
-    private boolean liquidGlassEnabled;
 
     @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
     public void setLiquidGlassEffectAllowed() {
@@ -63,15 +65,24 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
 
     @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
     public void setLiquidGlassEffectAllowed(boolean fixedRefraction) {
+        liquidGlassEffectAllowed = true;
         this.fixedRefraction = fixedRefraction;
-        liquidGlassEnabled = org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS);
-        liquidGlassEffect = new LiquidGlassEffect(renderNodeFill, fixedRefraction);
-        renderNodeInvalidated = true;
+        recreateLiquidGlassEffect();
     }
 
     @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
     public void recreateLiquidGlassEffect() {
-        if (liquidGlassEffect != null) {
+        // Chat creation also constructs backgrounds for hidden menus and buttons.
+        // Only a visible surface needs its own mutable shader instances.
+        liquidGlassEffect = null;
+        renderNodeFill.setRenderEffect(null);
+        renderNodeInvalidated = true;
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
+    private void ensureLiquidGlassEffect() {
+        if (liquidGlassEffectAllowed && getAlpha() > 0
+                && (liquidGlassEffect == null || !liquidGlassEffect.isConfigurationCurrent())) {
             liquidGlassEffect = new LiquidGlassEffect(renderNodeFill, fixedRefraction);
             renderNodeInvalidated = true;
         }
@@ -120,6 +131,21 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
 
     @Override
     public void updateDisplayList() {
+        if (boundProps.boundsWithPadding.isEmpty()) {
+            return;
+        }
+        // GlassEngine can refresh before draw(); switch the GPU program here too.
+        if (Build.VERSION.SDK_INT >= 33) {
+            ensureLiquidGlassEffect();
+        }
+        if (Build.VERSION.SDK_INT >= 33 && liquidGlassEffect != null
+                && zxc.iconic.xenon.NekoConfig.usePrismGlass) {
+            // Explicit calls (including GlassEngine captures) must refresh source commands.
+            updatePrismDisplayList(true);
+            return;
+        }
+        prismPipelineActive = false;
+        if (prismPipeline != null) prismPipeline.invalidateAll();
         Canvas c;
 
         final float sL = sourceScaleX * boundProps.boundsWithPadding.left + sourceOffsetX + sourceTranslationX;
@@ -217,6 +243,16 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
         renderNode.setAlpha(getAlpha() / 255f * _glassAlphaFactor);
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
+    private void updatePrismDisplayList(boolean sourceInvalidated) {
+        if (prismPipeline == null) {
+            prismPipeline = new PrismGlassPipeline(source, renderNodeFill, renderNode);
+        }
+        if (sourceInvalidated) prismPipeline.invalidateSource();
+        prismPipeline.update(this, liquidGlassEffect, fixedRefraction, paintStrokeTop, paintStrokeBottom);
+        prismPipelineActive = true;
+    }
+
     @Override
     public void updateColors() {
         super.updateColors();
@@ -239,17 +275,22 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
             return;
         }
 
-        if (fixedRefraction && Build.VERSION.SDK_INT >= 33) {
-            boolean enabled = org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS);
-            if (liquidGlassEnabled != enabled) {
-                liquidGlassEnabled = enabled;
-                recreateLiquidGlassEffect();
-            }
+        if (Build.VERSION.SDK_INT >= 33) {
+            ensureLiquidGlassEffect();
+        }
+        final boolean prismActive = Build.VERSION.SDK_INT >= 33 && liquidGlassEffect != null
+                && zxc.iconic.xenon.NekoConfig.usePrismGlass;
+        if (prismPipelineActive != prismActive) {
+            prismPipelineActive = prismActive;
+            renderNodeInvalidated = true;
+            if (prismPipeline != null) prismPipeline.invalidateAll();
         }
         source.prepareToDraw();
         if (!renderNode.hasDisplayList()) {
             source.dispatchOnDrawablesRelativePositionChange();
             updateDisplayList();
+        } else if (prismActive) {
+            updatePrismDisplayList(false);
         } else if (renderNodeInvalidated) {
             updateDisplayList();
         }
@@ -272,6 +313,7 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
 
     public void invalidateDisplayList() {
         renderNodeInvalidated = true;
+        if (prismPipeline != null) prismPipeline.invalidateSource();
     }
 
     @Override

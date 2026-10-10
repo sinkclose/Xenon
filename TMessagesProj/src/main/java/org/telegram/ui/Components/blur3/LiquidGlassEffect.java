@@ -11,7 +11,6 @@ import android.graphics.RenderNode;
 import android.graphics.RuntimeShader;
 import androidx.annotation.RequiresApi;
 import org.telegram.messenger.AndroidUtilities;
-import org.telegram.messenger.R;
 
 @RequiresApi(api = 33)
 public class LiquidGlassEffect {
@@ -20,13 +19,25 @@ public class LiquidGlassEffect {
     private RuntimeShader shader;
     private final boolean fixedRefraction;
     private final boolean advanced;
+    private final boolean prism;
+    private final boolean refractionEnabled;
 
     // Highlight (edge glare)
     private RuntimeShader highlightShader;
     private final Paint highlightPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path highlightClipPath = new Path();
     private final RectF highlightRect = new RectF();
-    private float[] highlightCornerRadii;
+    private final float[] highlightCornerRadii = new float[8];
+    private boolean highlightGeometryInitialized;
+    private float highlightGeometryLeft, highlightGeometryTop, highlightGeometryRight, highlightGeometryBottom;
+    private boolean refractionUniformsInitialized;
+
+    public static void prewarmShaders() {
+        GlassShaderCache.prewarm(
+                org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS),
+                zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass,
+                zxc.iconic.xenon.NekoConfig.usePrismGlass);
+    }
 
     public LiquidGlassEffect(RenderNode node) {
         this(node, false);
@@ -35,22 +46,20 @@ public class LiquidGlassEffect {
     public LiquidGlassEffect(RenderNode node, boolean fixedRefraction) {
         this.node = node;
         this.fixedRefraction = fixedRefraction;
+        prism = zxc.iconic.xenon.NekoConfig.usePrismGlass;
         advanced = fixedRefraction || zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass;
+        refractionEnabled = org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS);
         // Refraction (the liquid-glass distortion) only runs when liquid glass is on.
         // The highlight (glare) is always created so it can be drawn over the frosted blur too.
         if (org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS)) {
-            String code = advanced
-                    ? AndroidUtilities.readRes(R.raw.liquid_glass_shader_advanced)
-                    : AndroidUtilities.readRes(R.raw.liquid_glass_shader);
-            shader = new RuntimeShader(code);
+            shader = GlassShaderCache.acquireRefraction(advanced, prism);
             node.setRenderEffect(RenderEffect.createRuntimeShaderEffect(shader, "img"));
         } else {
             shader = null;
             node.setRenderEffect(null);
         }
 
-        String highlightCode = AndroidUtilities.readRes(R.raw.liquid_glass_highlight);
-        highlightShader = new RuntimeShader(highlightCode);
+        highlightShader = GlassShaderCache.acquireHighlight();
         highlightPaint.setStyle(Paint.Style.STROKE);
         highlightPaint.setStrokeWidth(AndroidUtilities.dp(0.35f) * 2f);
         // Intentionally NOT using BlurMaskFilter on the stroke. A
@@ -75,6 +84,12 @@ public class LiquidGlassEffect {
     private float cachedFresnel, cachedDispersion, cachedGlare;
     private int foregroundColor;
 
+    public boolean isConfigurationCurrent() {
+        return prism == zxc.iconic.xenon.NekoConfig.usePrismGlass
+                && advanced == (fixedRefraction || zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass)
+                && refractionEnabled == org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS);
+    }
+
     public void update(
             float left, float top, float right, float bottom,
             float rLT, float rRT, float rRB, float rLB,
@@ -95,6 +110,15 @@ public class LiquidGlassEffect {
         float sY = (bottom - top) / 2f;
 
         final float angleDeg = zxc.iconic.xenon.NekoConfig.advancedGlassGlareAngle;
+        final boolean refractionChanged = this.resolutionX != resX || this.resolutionY != resY
+                || this.centerX != cX || this.centerY != cY || this.sizeX != sX || this.sizeY != sY
+                || this.radiusLeftTop != rLT || this.radiusRightTop != rRT
+                || this.radiusRightBottom != rRB || this.radiusLeftBottom != rLB
+                || (advanced
+                    ? (!fixedRefraction && this.cachedFresnel != zxc.iconic.xenon.NekoConfig.advancedGlassFresnel)
+                        || this.cachedDispersion != zxc.iconic.xenon.NekoConfig.advancedGlassDispersion
+                    : this.thickness != thickness || this.intensity != intensity || this.index != index
+                        || this.foregroundColor != foregroundColor);
 
         if (this.resolutionX != resX || this.resolutionY != resY ||
                 this.centerX != cX || this.centerY != cY ||
@@ -125,7 +149,7 @@ public class LiquidGlassEffect {
             final float g = Color.green(foregroundColor) / 255f * a;
             final float b = Color.blue(foregroundColor) / 255f * a;
 
-            if (shader != null) {
+            if (shader != null && (!refractionUniformsInitialized || refractionChanged)) {
                 if (advanced) {
                     // The navigation capsule uses the settings slider's 50 value.
                     final float fresnel = fixedRefraction ? 0.5f
@@ -153,6 +177,7 @@ public class LiquidGlassEffect {
                     shader.setFloatUniform("foreground_color_premultiplied", r, g, b, a);
                     node.setRenderEffect(RenderEffect.createRuntimeShaderEffect(shader, "img"));
                 }
+                refractionUniformsInitialized = true;
             }
 
             // Highlight (glare) uniforms — always updated so the glare draws
@@ -165,7 +190,24 @@ public class LiquidGlassEffect {
                 highlightShader.setFloatUniform("falloff", Math.max(0.1f, zxc.iconic.xenon.NekoConfig.advancedGlassGlare));
 
                 highlightRect.set(left, top, right, bottom);
-                highlightCornerRadii = new float[]{rLT, rLT, rRT, rRT, rRB, rRB, rLB, rLB};
+                if (!highlightGeometryInitialized
+                        || highlightCornerRadii[0] != rLT || highlightCornerRadii[2] != rRT
+                        || highlightCornerRadii[4] != rRB || highlightCornerRadii[6] != rLB
+                        || highlightClipPath.isEmpty()
+                        || highlightGeometryLeft != left || highlightGeometryTop != top
+                        || highlightGeometryRight != right || highlightGeometryBottom != bottom) {
+                    highlightCornerRadii[0] = highlightCornerRadii[1] = rLT;
+                    highlightCornerRadii[2] = highlightCornerRadii[3] = rRT;
+                    highlightCornerRadii[4] = highlightCornerRadii[5] = rRB;
+                    highlightCornerRadii[6] = highlightCornerRadii[7] = rLB;
+                    highlightGeometryLeft = left;
+                    highlightGeometryTop = top;
+                    highlightGeometryRight = right;
+                    highlightGeometryBottom = bottom;
+                    highlightClipPath.reset();
+                    highlightClipPath.addRoundRect(highlightRect, highlightCornerRadii, Path.Direction.CW);
+                    highlightGeometryInitialized = true;
+                }
             }
         }
     }
@@ -181,13 +223,11 @@ public class LiquidGlassEffect {
      * stroke costs almost nothing per frame on hardware-accelerated canvases.
      */
     public void drawHighlight(Canvas canvas, float parentAlpha) {
-        if (highlightShader == null || highlightCornerRadii == null) return;
+        if (highlightShader == null || !highlightGeometryInitialized) return;
         // Disable mode: shader glare strength is 0, so the highlight is skipped.
         if (zxc.iconic.xenon.NekoConfig.advancedGlassGlare <= 0f) return;
 
         canvas.save();
-        highlightClipPath.reset();
-        highlightClipPath.addRoundRect(highlightRect, highlightCornerRadii, Path.Direction.CW);
         canvas.clipPath(highlightClipPath);
 
         highlightPaint.setAlpha(Math.round(42f * Math.max(0f, Math.min(1f, parentAlpha))));

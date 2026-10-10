@@ -278,6 +278,7 @@ public class NekoConfig {
     public static float liquidGlassIntensity = 0.75f;
     public static int liquidGlassThickness = 11;
     public static boolean useAdvancedLiquidGlass = false;
+    public static boolean usePrismGlass = false;
     
     // Advanced liquid glass parameters (separate from standard)
     public static int advancedGlassAlpha = DEFAULT_ADVANCED_GLASS_ALPHA;
@@ -479,6 +480,7 @@ public class NekoConfig {
             liquidGlassIntensity = preferences.getFloat("liquidGlassIntensity", 0.75f);
             liquidGlassThickness = preferences.getInt("liquidGlassThickness", 11);
             useAdvancedLiquidGlass = preferences.getBoolean("useAdvancedLiquidGlass", false);
+            usePrismGlass = preferences.getBoolean("usePrismGlass", false);
             advancedGlassAlpha = preferences.getInt("advancedGlassAlpha", DEFAULT_ADVANCED_GLASS_ALPHA);
             advancedGlassBlur = preferences.getInt("advancedGlassBlur", DEFAULT_ADVANCED_GLASS_BLUR);
             blurStrength = preferences.getInt("blurStrength", DEFAULT_BLUR_STRENGTH);
@@ -1873,6 +1875,15 @@ public class NekoConfig {
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("useAdvancedLiquidGlass", useAdvancedLiquidGlass);
         editor.apply();
+    }
+
+    public static void toggleUsePrismGlass() {
+        usePrismGlass = !usePrismGlass;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        preferences.edit().putBoolean("usePrismGlass", usePrismGlass).apply();
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            org.telegram.ui.Components.blur3.LiquidGlassEffect.prewarmShaders();
+        }
     }
 
     public static void setAdvancedGlassAlpha(int value) {

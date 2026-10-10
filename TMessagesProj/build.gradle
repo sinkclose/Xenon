@@ -253,7 +253,7 @@ android {
         buildConfig true
     }
 
-    sourceSets.main.jniLibs.srcDirs = ['./jni/']
+    sourceSets.main.jniLibs.srcDirs = ['./jniLibs/']
 
     externalNativeBuild {
         cmake {

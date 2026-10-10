@@ -100,23 +100,28 @@ public class WallpaperRefreshHarness {
 '''.replace("METHODS", methods.replace("zxc.iconic.xenon.NekoConfig", "NekoConfig"))
         run_java(self, "WallpaperRefreshHarness", harness)
 
-    def test_chat_defers_idle_source_updates_until_interaction(self):
+    def test_chat_animates_sources_without_capture_feedback(self):
         source = (ROOT / "org/telegram/ui/ChatActivity.java").read_text()
         methods = "\n".join(method(source, signature) for signature in (
             "public void onDescendantInvalidated(",
             "public void drawWallpaperForGlass(", "private void drawWallpaperImpl(",
             "public void drawList("))
         wallpaper_source = method(source[source.index("private final BlurredBackgroundSource glassWallpaperSource"):], "public void draw(")
-        callback = method(source, "private void invalidateMergedVisibleBlurredPositionsAndSourcesImpl(int flags)")
+        callback = "\n".join(method(source, signature) for signature in (
+            "private void invalidateMergedVisibleBlurredPositionsAndSourcesImpl(int flags)",
+            "private void captureMergedVisibleBlurredPositionsAndSources(int flags)",
+            "private void invalidateAllGlassAttachedViews()"))
         invalidate = method(source, "private void invalidateMergedVisibleBlurredPositionsAndSources(int flags)")
+        capture = method(source, "private final IBlur3Capture glassListCapture = new IBlur3Capture()") + ";"
         harness = r'''
 public class ChatGlassRefreshHarness {
     static void check(boolean value) { if (!value) throw new AssertionError(); }
     static class View {
         static final int VISIBLE = 0;
         int visibility, pixels;
+        Runnable duringInvalidate;
         int getVisibility() { return visibility; }
-        void invalidate() {}
+        void invalidate() { if (duringInvalidate != null) duringInvalidate.run(); }
     }
     static class ViewGroup extends View {
         int superclassCalls;
@@ -134,6 +139,12 @@ public class ChatGlassRefreshHarness {
         void clipRect(RectF r) {} void restoreToCount(int count) { depth = count - 1; }
     }
     interface Capture { void capture(Canvas c, RectF r); }
+    interface IBlur3Capture extends Capture { void captureCalculateHash(IBlur3Hash hash, RectF r); }
+    static class IBlur3Hash {
+        long value;
+        void add(long v) { value = value * 31 + v; }
+        void add(Object v) { add(System.identityHashCode(v)); }
+    }
     static class Blur3Utils {
         static ViewGroup lastParent;
         static void captureRelativeParent(Capture capture, Canvas c, RectF r, View v, ViewGroup parent) {
@@ -151,10 +162,15 @@ public class ChatGlassRefreshHarness {
         void invalidateDisplayListForDrawables() { contentUpdates++; }
     }
     static class Suppressor {
-        int captures;
+        int captures, pixels;
+        long lastHash;
+        boolean recorded;
         void setupRenderNodes(Object positions, int count) {}
-        boolean invalidateResultRenderNodes(Capture capture, int w, int h) {
-            captures++; capture.capture(new Canvas(), new RectF()); return true;
+        boolean invalidateResultRenderNodes(IBlur3Capture capture, int w, int h) {
+            IBlur3Hash hash = new IBlur3Hash(); capture.captureCalculateHash(hash, new RectF());
+            if (recorded && lastHash == hash.value) return false;
+            lastHash = hash.value; recorded = true;
+            captures++; Canvas c = new Canvas(); capture.capture(c, new RectF()); pixels = c.pixels; return true;
         }
     }
     static class Chat {
@@ -165,7 +181,10 @@ public class ChatGlassRefreshHarness {
         Suppressor scrollableViewNoiseSuppressor = new Suppressor();
         GlassSource glassBackgroundSourceRenderNode = new GlassSource(), glassBackgroundSourceFrostedRenderNode = new GlassSource();
         int requestedFlags, redraws, glassDrawablesPositionsCount, pendingGlassSourceFlags, glassSourceCaptureDepth;
+        long glassListContentVersion;
+        CAPTURE_SOURCE
         int fadeInvalidations;
+        java.util.List<View> glassAttachedViews = new java.util.ArrayList<>();
         Object glassDrawablesPositionsMerged;
         Runnable feedContentChangedCallback;
         class Observer { void invalidate(int flags) { requestedFlags |= flags; } }
@@ -174,10 +193,14 @@ public class ChatGlassRefreshHarness {
         INVALIDATION_METHOD
         void invalidateClipRectForBackgroundAndChatList() {}
         int getMergedVisibleBlurredPositions(Object positions) { return 1; }
-        void invalidateAllGlassAttachedViews() { redraws++; }
+        void flush() {
+            int flags = requestedFlags; requestedFlags = 0;
+            invalidateMergedVisibleBlurredPositionsAndSourcesImpl(flags);
+        }
         class Content extends ViewGroup {
             View backgroundView = new View(); RectF glassWallpaperCaptureRect = new RectF();
             int width = 360, height = 800;
+            @Override void invalidate() { redraws++; super.invalidate(); }
             int getWidth() { return width; } int getHeight() { return height; }
             long getDrawingTime() { return 1; }
             boolean failCapture;
@@ -186,6 +209,7 @@ public class ChatGlassRefreshHarness {
                 onDescendantInvalidated(chatListView, chatListView);
                 invalidateMergedVisibleBlurredPositionsAndSources(BLUR_INVALIDATE_FLAG_SCROLL);
                 if (failCapture) throw new IllegalStateException();
+                c.pixels = chatListView.pixels;
             }
             METHODS
         }
@@ -198,42 +222,70 @@ public class ChatGlassRefreshHarness {
     }
     public static void main(String[] args) {
         Chat chat = new Chat(); Chat.Content content = chat.contentView;
+        View surface = new View(); chat.glassAttachedViews.add(surface);
+        surface.duringInvalidate = () -> content.onDescendantInvalidated(chat.chatListView, surface);
+        chat.actionBar.duringInvalidate = surface.duringInvalidate;
         content.onDescendantInvalidated(chat.chatListView, new View());
-        check(chat.requestedFlags == 0 && chat.pendingGlassSourceFlags == 1 && content.superclassCalls == 1);
+        check(chat.requestedFlags == 1 && chat.pendingGlassSourceFlags == 1 && content.superclassCalls == 1);
         content.onDescendantInvalidated(new View(), new View()); // glass-only redraw
         content.onDescendantInvalidated(chat.searchViewPager, new View()); // nested glass must not create feedback
-        check(chat.requestedFlags == 0);
-        content.onDescendantInvalidated(chat.messagesSearchListContainer, new View()); check(chat.requestedFlags == 0);
-        for (int frame = 0; frame < 1000; frame++) {
+        check(chat.requestedFlags == 1);
+        content.onDescendantInvalidated(chat.messagesSearchListContainer, new View()); check(chat.requestedFlags == 1);
+        // Many source mutations before one traversal must coalesce.
+        for (int change = 0; change < 1000; change++) {
             content.onDescendantInvalidated(content.backgroundView, content.backgroundView);
             content.onDescendantInvalidated(chat.chatListView, new View());
-            chat.invalidateMergedVisibleBlurredPositionsAndSourcesImpl(0);
         }
-        check(chat.requestedFlags == 0 && chat.pendingGlassSourceFlags == 9);
-        check(chat.scrollableViewNoiseSuppressor.captures == 0 && chat.redraws == 0 && chat.fadeInvalidations == 0);
+        check(chat.requestedFlags == 9 && chat.pendingGlassSourceFlags == 9);
+        check(chat.scrollableViewNoiseSuppressor.captures == 0 && chat.redraws == 0);
         // Opening before layout must retain dirty sources without capturing empty nodes.
         content.width = 0;
-        chat.invalidateMergedVisibleBlurredPositionsAndSourcesImpl(2);
+        chat.flush();
         check(chat.pendingGlassSourceFlags == 9 && chat.scrollableViewNoiseSuppressor.captures == 0);
         content.width = 360;
-        chat.invalidateMergedVisibleBlurredPositionsAndSources(1);
-        check(chat.requestedFlags == 1);
-        chat.requestedFlags = 0;
-        chat.invalidateMergedVisibleBlurredPositionsAndSourcesImpl(1);
+        chat.flush(); // retained changes must survive the pre-layout callback
         check(chat.redraws == 1 && chat.scrollableViewNoiseSuppressor.captures == 1);
         check(chat.pendingGlassSourceFlags == 0 && chat.requestedFlags == 0 && chat.glassSourceCaptureDepth == 0);
         check(chat.glassBackgroundSourceRenderNode.contentUpdates == 0);
+        int fadeInvalidations = chat.fadeInvalidations;
+        for (int frame = 0; frame < 1000; frame++) chat.flush();
+        check(chat.scrollableViewNoiseSuppressor.captures == 1 && chat.redraws == 1);
+        check(chat.fadeInvalidations == fadeInvalidations);
+        // A stationary list still has to show each new animation frame under glass.
+        for (int frame = 1; frame <= 20; frame++) {
+            chat.chatListView.pixels = frame;
+            content.onDescendantInvalidated(chat.chatListView, chat.chatListView);
+            content.onDescendantInvalidated(chat.chatListView, chat.chatListView);
+            chat.flush();
+            check(chat.scrollableViewNoiseSuppressor.pixels == frame);
+            check(chat.scrollableViewNoiseSuppressor.captures == frame + 1);
+            check(chat.requestedFlags == 0 && chat.pendingGlassSourceFlags == 0 && chat.glassSourceCaptureDepth == 0);
+        }
+        chat.invalidateAllGlassAttachedViews(); // output-only redraw outside a capture
+        check(chat.requestedFlags == 0 && chat.pendingGlassSourceFlags == 0);
+        int captures = chat.scrollableViewNoiseSuppressor.captures;
+        int redraws = chat.redraws;
         // A wallpaper-only update must not recapture messages.
-        chat.invalidateMergedVisibleBlurredPositionsAndSourcesImpl(8);
-        check(chat.redraws == 2 && chat.scrollableViewNoiseSuppressor.captures == 1);
+        content.onDescendantInvalidated(content.backgroundView, content.backgroundView);
+        chat.flush();
+        check(chat.redraws == redraws + 1 && chat.scrollableViewNoiseSuppressor.captures == captures);
         check(chat.glassBackgroundSourceRenderNode.wallpaperUpdates == 2 && chat.glassBackgroundSourceFrostedRenderNode.wallpaperUpdates == 2);
         chat.invalidateMergedVisibleBlurredPositionsAndSourcesImpl(1 | 8);
-        check(chat.redraws == 3 && chat.scrollableViewNoiseSuppressor.captures == 2);
+        check(chat.redraws == redraws + 2 && chat.scrollableViewNoiseSuppressor.captures == captures + 1);
         check(chat.glassBackgroundSourceRenderNode.contentUpdates == 0);
-        // Liquid deformation changes capture regions and must rebuild surface commands.
+        // Repeated geometry notifications must update surfaces without recapturing the same scene.
         chat.invalidateMergedVisibleBlurredPositionsAndSourcesImpl(2);
-        check(chat.redraws == 4 && chat.scrollableViewNoiseSuppressor.captures == 3);
+        check(chat.redraws == redraws + 3 && chat.scrollableViewNoiseSuppressor.captures == captures + 1);
         check(chat.glassBackgroundSourceRenderNode.contentUpdates == 1 && chat.glassBackgroundSourceFrostedRenderNode.contentUpdates == 1);
+        for (int frame = 0; frame < 1000; frame++) chat.invalidateMergedVisibleBlurredPositionsAndSourcesImpl(2);
+        check(chat.scrollableViewNoiseSuppressor.captures == captures + 1);
+        // Keyboard/inset clipping affects both the messages and their wallpaper.
+        int wallpaperUpdates = chat.glassBackgroundSourceRenderNode.wallpaperUpdates;
+        chat.invalidateMergedVisibleBlurredPositionsAndSources(4);
+        chat.flush();
+        check(chat.scrollableViewNoiseSuppressor.captures == captures + 2);
+        check(chat.glassBackgroundSourceRenderNode.wallpaperUpdates == wallpaperUpdates + 1);
+        check(chat.requestedFlags == 0 && chat.glassSourceCaptureDepth == 0);
         Canvas canvas = new Canvas(); Chat.LiveWallpaper wallpaper = chat.new LiveWallpaper();
         content.duringDraw = () -> {
             content.onDescendantInvalidated(content.backgroundView, content.backgroundView);
@@ -257,7 +309,7 @@ public class ChatGlassRefreshHarness {
         content.backgroundView = null; wallpaper.draw(canvas, 0, 0, 360, 800); check(canvas.pixels == -1);
     }
 }
-'''.replace("METHODS", methods).replace("WALLPAPER_SOURCE", wallpaper_source).replace("CALLBACK", callback).replace("INVALIDATION_METHOD", invalidate)
+'''.replace("METHODS", methods).replace("WALLPAPER_SOURCE", wallpaper_source).replace("CALLBACK", callback).replace("INVALIDATION_METHOD", invalidate).replace("CAPTURE_SOURCE", capture)
         run_java(self, "ChatGlassRefreshHarness", harness)
 
     def test_invalidations_during_capture_survive_to_next_frame(self):

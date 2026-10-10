@@ -120,6 +120,12 @@ public class DownscaleScrollableNoiseSuppressor {
         private final RenderNode[] renderNodeDownsampled;
         private final RenderNode[] renderNodeRestored;
         private final boolean simpleMode;
+        private final RenderEffect[] secondaryEffects;
+        private RenderEffect primaryEffect;
+        private boolean primaryEffectSet;
+        private boolean primaryBlurCached;
+        private float primaryBlurRadiusX, primaryBlurRadiusY;
+        private RenderEffect primaryBlurSecondEffect;
 
         private int scaleX, scaleY;
         private float scrollX, scrollY;
@@ -129,6 +135,7 @@ public class DownscaleScrollableNoiseSuppressor {
         }
 
         public DownscaledRenderNode(String name, int subeffects, boolean simpleModeNotAllowed) {
+            secondaryEffects = new RenderEffect[subeffects];
             renderNodeDownsampled = new RenderNode[1 + subeffects];
             for (int a = 0; a < (subeffects + 1); a++) {
                 renderNodeDownsampled[a] = new RenderNode(name + "_down_" + subeffects);
@@ -146,40 +153,44 @@ public class DownscaleScrollableNoiseSuppressor {
         }
 
         public void setPrimaryEffect(RenderEffect renderEffect) {
-            renderNodeDownsampled[0].setRenderEffect(renderEffect);
+            primaryBlurCached = false;
+            if (!primaryEffectSet || primaryEffect != renderEffect) {
+                primaryEffectSet = true;
+                primaryEffect = renderEffect;
+                renderNodeDownsampled[0].setRenderEffect(renderEffect);
+            }
         }
 
         public void setPrimaryEffectBlur(float radius) {
-            if (radius <= 0) {
-                setPrimaryEffect(null);
-                return;
-            }
-            final float downsampledRadiusX = downscaleRadius(radius, scaleX);
-            final float downsampledRadiusY = downscaleRadius(radius, scaleY);
-            setPrimaryEffect(RenderEffect.createBlurEffect(
-                downsampledRadiusX,
-                downsampledRadiusY,
-                Shader.TileMode.CLAMP
-            ));
+            setPrimaryEffectBlur(radius, null);
         }
 
         public void setPrimaryEffectBlur(float radius, RenderEffect secondEffect) {
-            if (radius <= 0) {
-                setPrimaryEffect(secondEffect);
+            final float downsampledRadiusX = radius <= 0 ? 0 : downscaleRadius(radius, scaleX);
+            final float downsampledRadiusY = radius <= 0 ? 0 : downscaleRadius(radius, scaleY);
+            if (primaryBlurCached && primaryBlurRadiusX == downsampledRadiusX
+                    && primaryBlurRadiusY == downsampledRadiusY && primaryBlurSecondEffect == secondEffect) {
                 return;
             }
-            final float downsampledRadiusX = downscaleRadius(radius, scaleX);
-            final float downsampledRadiusY = downscaleRadius(radius, scaleY);
-
-            setPrimaryEffect(RenderEffect.createChainEffect(RenderEffect.createBlurEffect(
-                downsampledRadiusX,
-                downsampledRadiusY,
-                Shader.TileMode.CLAMP
-            ), secondEffect));
+            RenderEffect effect = secondEffect;
+            if (radius > 0) {
+                effect = RenderEffect.createBlurEffect(downsampledRadiusX, downsampledRadiusY, Shader.TileMode.CLAMP);
+                if (secondEffect != null) {
+                    effect = RenderEffect.createChainEffect(effect, secondEffect);
+                }
+            }
+            setPrimaryEffect(effect);
+            primaryBlurRadiusX = downsampledRadiusX;
+            primaryBlurRadiusY = downsampledRadiusY;
+            primaryBlurSecondEffect = secondEffect;
+            primaryBlurCached = true;
         }
 
         public void setSecondaryEffect(int index, RenderEffect renderEffect) {
-            renderNodeDownsampled[1 + index].setRenderEffect(renderEffect);
+            if (secondaryEffects[index] != renderEffect) {
+                secondaryEffects[index] = renderEffect;
+                renderNodeDownsampled[1 + index].setRenderEffect(renderEffect);
+            }
         }
 
         long lastHash;
@@ -224,12 +235,6 @@ public class DownscaleScrollableNoiseSuppressor {
             canvas = renderNodeOriginalWithOffset.beginRecording(originalWidth, originalHeight);
             canvas.drawRenderNode(renderNode);
             renderNodeOriginalWithOffset.endRecording();
-
-            renderNodeDownsampled[0].setPosition(0, 0, downsampledWidth, downsampledHeight);
-            canvas = renderNodeDownsampled[0].beginRecording(downsampledWidth, downsampledHeight);
-            canvas.scale(scaleX, scaleY);
-            canvas.drawRenderNode(renderNodeOriginalWithOffset);
-            renderNodeDownsampled[0].endRecording();
 
             for (int a = 0; a < renderNodeDownsampled.length; a++) {
                 renderNodeDownsampled[a].setPosition(0, 0, downsampledWidth, downsampledHeight);
@@ -401,13 +406,27 @@ public class DownscaleScrollableNoiseSuppressor {
 
             builder.start();
             capture.captureCalculateHash(builder, tmpRectF);
-            // Re-record static scenes when blur strength or capture resolution changes.
+            // A cached scene still needs new pixels when a capture region moves.
+            builder.add(position.left);
+            builder.add(position.top);
+            builder.add(position.right);
+            builder.add(position.bottom);
+            // Source pixels depend on capture scale, not on downstream materials.
+            // Prism updates the blur graph independently when only settings change.
             builder.add(k);
-            builder.add(zxc.iconic.xenon.NekoConfig.blurStrength);
-            builder.add(zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass);
+            final boolean prism = android.os.Build.VERSION.SDK_INT >= 33 && zxc.iconic.xenon.NekoConfig.usePrismGlass;
+            builder.add(prism);
+            if (!prism) {
+                builder.add(zxc.iconic.xenon.NekoConfig.blurStrength);
+                builder.add(zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass);
+            }
             final long hash = builder.get();
 
             if (!builder.isUnsupported() && sourcePart.lastHash == hash && sourcePart.renderNode.hasDisplayList()) {
+                if (prism && sourcePart.materialChanged()) {
+                    sourcePart.invalidate();
+                    updatedCount++;
+                }
                 continue;
             }
 
@@ -439,6 +458,14 @@ public class DownscaleScrollableNoiseSuppressor {
         final @Nullable DownscaledRenderNode renderNodesForGlass;
         final Rect position = new Rect();
         long lastHash;
+
+        private int materialBlurStrength = Integer.MIN_VALUE;
+        private boolean materialAdvanced;
+
+        private boolean materialChanged() {
+            return materialBlurStrength != zxc.iconic.xenon.NekoConfig.blurStrength
+                    || materialAdvanced != zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass;
+        }
 
         private SourcePart() {
             if (isLiquidGlassEnabled) {
@@ -505,6 +532,8 @@ public class DownscaleScrollableNoiseSuppressor {
             // Frosted blur samples the original scene, not the already blurred
             // glass result, so the two blur radii never accumulate.
             renderNodesForBlur.invalidateRenderNodes(renderNode);
+            materialBlurStrength = zxc.iconic.xenon.NekoConfig.blurStrength;
+            materialAdvanced = zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass;
         }
     }
 

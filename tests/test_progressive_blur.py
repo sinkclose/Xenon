@@ -131,7 +131,9 @@ public class ProgressiveBlurHarness {
             'private void scheduleUpdate(long delay)', 'public void startContinuousUpdates()',
             'public void stopContinuousUpdates()', 'public void invalidate()',
             'private long captureTransform()', 'private static long viewTransform(View view)',
-            'private void drawCapturedView(Canvas c, View view)'))
+            'private void drawCapturedView(Canvas c, View view)',
+            'private boolean hasActiveEdgeEffects()',
+            'private static boolean hasActiveEdgeEffects(View view)'))
         runnable = source[source.index('    private final Runnable updateRunnable'):source.index('    private void scheduleUpdate')]
         listener = source[source.index('    private final ViewTreeObserver.OnPreDrawListener'):source.index('    private boolean updatePending;')]
         harness = r"""
@@ -158,10 +160,12 @@ public class CaptureHarness {
     static class SizeNotifierFrameLayout { static boolean drawingBlur; }
     static class FileLog { static void e(Exception e) { throw new AssertionError(e); } }
     static class Canvas {
+        boolean isHardwareAccelerated() { return true; }
         void drawColor(int c) {} void save() {} void restore() {}
         void translate(float x, float y) {} void scale(float x, float y, float px, float py) {}
     }
     static class View {
+        static final int OVER_SCROLL_NEVER = 2;
         boolean dirty, attached = true;
         float x, y, sx = 1, sy = 1;
         int redraws, posts;
@@ -169,6 +173,7 @@ public class CaptureHarness {
         long delay;
         int getWidth() { return 101; } int getHeight() { return 203; }
         int getLeft() { return 0; } int getTop() { return 0; }
+        int getOverScrollMode() { return 0; }
         float getTranslationX() { return x; } float getTranslationY() { return y; }
         float getScaleX() { return sx; } float getScaleY() { return sy; }
         float getPivotX() { return 0; } float getPivotY() { return 0; }
@@ -179,6 +184,16 @@ public class CaptureHarness {
         void removeCallbacks(Runnable r) { if (pending == r) pending = null; }
         void runPending() { Runnable r = pending; pending = null; if (r != null) r.run(); }
         void setDim(int dim) {} void setDimColor(int color) {}
+    }
+    static class ViewGroup extends View {
+        int getChildCount() { return 0; }
+        View getChildAt(int index) { throw new AssertionError(); }
+    }
+    static class RecyclerListView extends ViewGroup {
+        boolean hasActiveEdgeEffects() { return false; }
+    }
+    static class CaptureLayout {
+        void capture(Canvas c, View v) { v.draw(c); }
     }
     static class Source {
         int records;
@@ -191,9 +206,10 @@ public class CaptureHarness {
     static class ColorSource { void setColor(int c) {} }
     static class Controller {
         Source source = new Source(); ColorSource underSource = new ColorSource();
+        CaptureLayout captureLayout = new CaptureLayout();
         View fadeView = new View(), captureView = new View();
         List<View> additionalCaptureViews = new ArrayList<>();
-        boolean continuousUpdating, updateAtScreenRefreshRate, updatePending, capturePending, dimEnabled = true;
+        boolean continuousUpdating, updateAtScreenRefreshRate, updatePending, capturePending, lastCaptureHadEdgeEffects, dimEnabled = true;
         long lastCaptureTransform, lastUpdateTime;
         int drawCount, lastProcessedDrawCount = -1, background, lastBackgroundColor;
         int fadeZoneTop = 96, fadeZoneBottom = 48;
@@ -264,6 +280,8 @@ public class CaptureHarness {
     def test_chat_idle_and_final_throttled_frame(self):
         source = (ROOT / 'org/telegram/ui/ChatActivity.java').read_text()
         code = source[source.index('    private long lastFadeBlurUpdateTime;'):source.index('    private boolean fadeBlurStockApplied;')]
+        capture = "\n".join(method(source, signature) for signature in (
+            'private void invalidateFadeBlurImpl()', 'private void captureFadeBlur()'))
         harness = r"""
 public class ChatCaptureHarness {
     static void check(boolean condition) { if (!condition) throw new AssertionError(); }
@@ -272,10 +290,13 @@ public class ChatCaptureHarness {
         static class VERSION_CODES { static final int TIRAMISU = 33; }
     }
     static class NekoConfig {
-        static boolean enabled = true;
+        static boolean enabled = true, progressive;
         static int progressiveFadeBlurRefreshRate = 60;
+        static int blurredFadePixelation = 3, progressiveFadeBlurMaxRadius = 20;
+        static int progressiveFadeBlurSamples = 11, blurredFadeBlurStrength = 10, blurredFadeDimStrength = 20;
+        static boolean blurredFadeDimming = true;
         static boolean blurredFadeViewEnabled() { return enabled; }
-        static boolean progressiveFadeBlurEnabled() { return enabled; }
+        static boolean progressiveFadeBlurEnabled() { return progressive; }
     }
     static class SystemClock { static long now = 1000; static long uptimeMillis() { return now; } }
     static class Choreographer {
@@ -286,41 +307,125 @@ public class ChatCaptureHarness {
     }
     static class CaptureView {
         int draws, requests;
+        boolean pending;
         int getPreDrawCount() { return draws; }
-        void invalidate(int flags) { requests++; }
+        void invalidate(int flags) { requests++; pending = true; }
     }
-    static class ListView { boolean dirty; boolean isDirty() { return dirty; } }
+    static class RectF { void set(int l, int t, int r, int b) {} }
+    static class Canvas {
+        int pixels;
+        void drawColor(int color) {} void save() {} void restore() {} void translate(float x, float y) {}
+    }
+    static class Color { static int alpha(int color) { return color >>> 24; } }
+    static class ColorUtils { static int setAlphaComponent(int color, int alpha) { return color | alpha << 24; } }
+    static class Theme { static final int key_chat_wallpaper = 1; }
+    static class AndroidUtilities { static float dpf2(float dp) { return dp; } }
+    interface BlurredBackgroundSource { void draw(Canvas c, int l, int t, int r, int b); }
+    static class Source implements BlurredBackgroundSource {
+        int records, pixels;
+        Canvas canvas;
+        BlurredBackgroundSource underSource;
+        boolean inRecording() { return canvas != null; }
+        void setPixelation(int value) {} void setBlur(float value) {}
+        void setProgressiveBlur(float radius, int w, int h, float top, float bottom, int samples) {}
+        void setUnderSource(BlurredBackgroundSource value) { underSource = value; }
+        void invalidateDisplayListForDrawables() {}
+        Canvas beginRecording(int w, int h) { records++; return canvas = new Canvas(); }
+        void endRecording() { pixels = canvas.pixels; canvas = null; }
+        public void draw(Canvas c, int l, int t, int r, int b) {}
+    }
     static class Chat {
         CaptureView fadeBlurCaptureView = new CaptureView();
-        ListView chatListView = new ListView();
+        Source fadeBlurSource = new Source(), fadeWallpaperSource = new Source();
+        Source navbarContentSourceWallpaper = new Source(), navbarContentSourceWallpaperSharp = new Source();
+        RectF fadeBlurCaptureRect = new RectF();
+        int glassSourceCaptureDepth, generation = 1;
+        boolean failCapture;
+        class Background {
+            int getWidth() { return 360; }
+            float getX() { return 0; } float getY() { return 0; }
+            void draw(Canvas c) { invalidateFadeBlur(); } // invalidation during recording
+        }
+        class Content {
+            Background backgroundView = new Background();
+            int width = 360;
+            int getWidth() { return width; } int getHeight() { return 800; }
+            void drawList(Canvas c, RectF rect) {
+                invalidateFadeBlur();
+                if (failCapture) throw new IllegalStateException();
+                c.pixels = generation;
+            }
+        }
+        class Fade {
+            int getFadeZoneTop() { return 96; } int getFadeZoneBottom() { return 48; }
+            void setDimColor(int c) {} void setDim(int dim) {}
+            void invalidate() { invalidateFadeBlur(); } // output must not feed back
+        }
+        Content contentView = new Content(); Fade chatActivityFadeView = new Fade();
+        int dp(int value) { return value; }
+        int getThemedColor(int key) { return 0xFF123456; }
         void syncFadeBlurEnabledState() {}
+        void frame(long elapsed) {
+            SystemClock.now += elapsed;
+            // Android runs animation callbacks BEFORE traversal/pre-draw.
+            fadeBlurFrameCallback.doFrame(0);
+            fadeBlurCaptureView.draws++;
+            if (fadeBlurCaptureView.pending) {
+                fadeBlurCaptureView.pending = false;
+                invalidateFadeBlurImpl();
+            }
+        }
         CODE
+        CAPTURE
     }
     public static void main(String[] args) {
-        Chat c = new Chat();
-        c.startFadeBlurContinuousUpdates();
-        for (int i = 0; i < 100; i++) c.fadeBlurFrameCallback.doFrame(0);
-        check(c.fadeBlurCaptureView.requests == 0);
-        c.fadeBlurCaptureView.draws = 1;
-        c.fadeBlurFrameCallback.doFrame(0); check(c.fadeBlurCaptureView.requests == 1);
-        // Simulate a completed recording and its extra fade redraw.
-        c.lastFadeBlurCaptureDrawCount = 2; c.fadeBlurCaptureView.draws = 2;
-        c.chatListView.dirty = true;
-        c.fadeBlurFrameCallback.doFrame(0);
-        check(c.fadeBlurCapturePending && c.fadeBlurCaptureView.requests == 1);
-        c.chatListView.dirty = false;
-        SystemClock.now += 20;
-        c.fadeBlurFrameCallback.doFrame(0);
-        check(!c.fadeBlurCapturePending && c.fadeBlurCaptureView.requests == 2);
-        c.lastFadeBlurCaptureDrawCount = 3; c.fadeBlurCaptureView.draws = 3;
-        SystemClock.now += 20;
-        for (int i = 0; i < 100; i++) c.fadeBlurFrameCallback.doFrame(0);
-        check(c.fadeBlurCaptureView.requests == 2);
-        NekoConfig.enabled = false;
-        c.fadeBlurFrameCallback.doFrame(0); check(!c.fadeBlurContinuousUpdating);
+        for (int api : new int[]{31, 33}) for (boolean progressive : new boolean[]{false, true}) {
+            Build.VERSION.SDK_INT = api; NekoConfig.progressive = progressive; NekoConfig.enabled = true;
+            Chat c = new Chat(); c.startFadeBlurContinuousUpdates(); c.frame(17);
+            check(c.fadeBlurSource.records == 1 && c.fadeWallpaperSource.records == 1);
+            for (int i = 0; i < 120; i++) c.frame(17);
+            check(c.fadeBlurCaptureView.requests == 1 && c.fadeBlurSource.records == 1);
+            // All changes before a traversal share one capture of the latest state.
+            for (int change = 2; change <= 1000; change++) {
+                c.generation = change; c.invalidateFadeBlur();
+            }
+            c.frame(1);
+            check(c.fadeBlurSource.records == 2 && c.fadeBlurSource.pixels == 1000);
+            c.generation = 1001; c.invalidateFadeBlur();
+            c.generation = 1002; c.invalidateFadeBlur();
+            if (api >= 33 && progressive) {
+                check(c.fadeBlurCapturePending && c.fadeBlurCaptureView.requests == 2);
+                c.frame(1); check(c.fadeBlurSource.records == 2);
+            }
+            // No more source events: the trailing callback must still capture the final state.
+            c.frame(20);
+            check(c.fadeBlurSource.records == 3 && c.fadeBlurSource.pixels == 1002);
+            check(!c.fadeBlurCapturePending && !c.fadeBlurCaptureScheduled && c.glassSourceCaptureDepth == 0);
+            for (int i = 0; i < 120; i++) c.frame(17);
+            check(c.fadeBlurSource.records == 3 && c.fadeBlurCaptureView.requests == 3);
+            if (api >= 33 && progressive) {
+                c.generation++; c.invalidateFadeBlur(); c.frame(1);
+                c.generation++; c.invalidateFadeBlur(); check(c.fadeBlurCapturePending);
+                NekoConfig.enabled = false; c.frame(20);
+                check(!c.fadeBlurContinuousUpdating && !c.fadeBlurCapturePending);
+                check(c.fadeBlurSource.records == 4);
+            }
+            NekoConfig.enabled = true;
+            c.failCapture = true;
+            try { c.invalidateFadeBlurImpl(); throw new AssertionError(); }
+            catch (IllegalStateException expected) {
+                check(c.glassSourceCaptureDepth == 0 && !c.fadeBlurCaptureScheduled && !c.fadeBlurSource.inRecording());
+            }
+        }
+        Chat beforeLayout = new Chat(); beforeLayout.contentView.width = 0;
+        beforeLayout.startFadeBlurContinuousUpdates(); beforeLayout.frame(17);
+        for (int i = 0; i < 60; i++) beforeLayout.frame(17);
+        check(beforeLayout.fadeBlurCaptureView.requests == 1 && beforeLayout.fadeBlurSource.records == 0);
+        beforeLayout.contentView.width = 360; beforeLayout.invalidateFadeBlur(); beforeLayout.frame(17);
+        check(beforeLayout.fadeBlurSource.records == 1);
     }
 }
-""".replace('        CODE\n', code)
+""".replace('        CODE\n', code).replace('        CAPTURE\n', capture)
         with tempfile.TemporaryDirectory(prefix='chat-capture-') as directory:
             java = Path(directory) / 'ChatCaptureHarness.java'
             java.write_text(harness)

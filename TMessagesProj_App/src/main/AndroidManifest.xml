@@ -4,5 +4,6 @@
     android:installLocation="auto">
 
     <application android:name="org.telegram.messenger.ApplicationLoaderImpl" tools:replace="name">
+        <profileable android:shell="true" />
     </application>
 </manifest>

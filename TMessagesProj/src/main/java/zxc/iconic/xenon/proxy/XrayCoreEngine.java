@@ -24,7 +24,6 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -107,14 +106,6 @@ final class XrayCoreEngine {
     private static volatile Method startLoopMethod;
     private static volatile boolean unsupportedAbiLogged;
     private static volatile ProcessFinder processFinder;
-
-    /**
-     * Locally accumulated traffic counters, keyed {@code "tag>>>direction"}.
-     * Newer libv2ray builds report counters with reset-on-read semantics via
-     * {@code queryAllOutboundTrafficStats()}, so deltas are summed here to keep
-     * exposing monotonic cumulative values. Cleared on core stop.
-     */
-    private static final Map<String, Long> TRAFFIC_TOTALS = new HashMap<>();
 
     private XrayCoreEngine() {
     }
@@ -291,7 +282,6 @@ final class XrayCoreEngine {
                 if (controller == null || !isControllerRunning(controller)) {
                     running = false;
                     currentConfigJson = null;
-                    resetTrafficTotals();
                     addLog("stop skipped: already stopped");
                     notifyStop(callback, true, "Already stopped");
                     return;
@@ -300,7 +290,6 @@ final class XrayCoreEngine {
                 controller.stopLoop();
                 running = false;
                 currentConfigJson = null;
-                resetTrafficTotals();
                 addLog("stop success");
                 notifyStateChanged(false, "engine_stop");
                 notifyStop(callback, true, "Stopped");
@@ -403,11 +392,6 @@ final class XrayCoreEngine {
      * Queries traffic statistics for the given outbound tag. Returns 0 when the core is not running
      * or libv2ray is unavailable. Mirrors v2rayNG's {@code V2RayServiceManager.queryStats}.
      *
-     * <p>Current libv2ray builds expose {@code queryAllOutboundTrafficStats()} instead of the
-     * removed {@code queryStats(tag, link)}. It returns all outbound counters as
-     * {@code "tag,direction,value;..."} text and resets them on read, so deltas are accumulated
-     * in {@link #TRAFFIC_TOTALS} to keep returning cumulative counters.
-     *
      * @param tag  outbound tag (e.g. {@code "proxy"})
      * @param link stat name (e.g. {@code "uplink"} or {@code "downlink"})
      * @return cumulative byte counter or 0 when unavailable
@@ -420,49 +404,15 @@ final class XrayCoreEngine {
         if (controller == null || !isControllerRunning(controller)) {
             return 0L;
         }
-        final String key = safe(tag) + ">>>" + safe(link);
-        synchronized (TRAFFIC_TOTALS) {
-            try {
-                accumulateTrafficDeltas(controller.queryAllOutboundTrafficStats());
-            } catch (Throwable t) {
-                FileLog.e(TAG + ": queryStats failed for tag=" + tag + " link=" + link, t);
-                return 0L;
-            }
-            Long total = TRAFFIC_TOTALS.get(key);
-            return total == null ? 0L : total;
+        try {
+            return controller.queryStats(tag, link);
+        } catch (Throwable t) {
+            FileLog.e(TAG + ": queryStats failed for tag=" + tag + " link=" + link, t);
+            return 0L;
         }
     }
 
-    private static void accumulateTrafficDeltas(String stats) {
-        if (TextUtils.isEmpty(stats)) {
-            return;
-        }
-        // Format: "tag,direction,value;tag,direction,value;"
-        for (String entry : stats.split(";")) {
-            String[] parts = entry.split(",", -1);
-            if (parts.length != 3) {
-                continue;
-            }
-            final long value;
-            try {
-                value = Long.parseLong(parts[2].trim());
-            } catch (NumberFormatException nfe) {
-                continue;
-            }
-            if (value <= 0) {
-                continue;
-            }
-            final String entryKey = parts[0] + ">>>" + parts[1];
-            Long current = TRAFFIC_TOTALS.get(entryKey);
-            TRAFFIC_TOTALS.put(entryKey, (current == null ? 0L : current) + value);
-        }
-    }
 
-    private static void resetTrafficTotals() {
-        synchronized (TRAFFIC_TOTALS) {
-            TRAFFIC_TOTALS.clear();
-        }
-    }
 
     /**
      * Stops then starts the core with a fresh config. Mirrors v2rayNG's {@code MSG_STATE_RESTART}

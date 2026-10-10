@@ -288,6 +288,10 @@ public class ApplicationLoader extends Application {
         }
         BillingController.getInstance().startConnection();
         zxc.iconic.xenon.helpers.AutoBackupService.initialize();
+        if (Build.VERSION.SDK_INT >= 33) {
+            // This only queues background compilation. Start before a quick chat tap.
+            org.telegram.ui.Components.blur3.LiquidGlassEffect.prewarmShaders();
+        }
     }
 
     public ApplicationLoader() {
