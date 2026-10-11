@@ -1151,6 +1151,7 @@ public class ChatActivity extends BaseFragment implements
     private boolean fakePostponedScroll;
     private boolean postponedScrollIsCanceled;
     private ChatActivityTextSelectionHelper textSelectionHelper;
+    private ChatActivityTextSelectionHelper messagePopupTextSelectionHelper;
     private View slidingView;
     // Xenon: swipe bubbles vertical menu (Reply/Edit/Delete)
     private int swipeBubbleSelected = OPTION_REPLY;
@@ -3882,7 +3883,7 @@ if (feedIntegration != null) {
                     selectedView.getMessageObject() != null && selectedView.getMessageObject().type != MessageObject.TYPE_STORY &&
                     !selectedView.getMessageObject().isVoiceTranscriptionOpen() && !selectedView.getMessageObject().isInvoice() &&
                     selectedView.getMessageObject().richLayout == null &&
-                    !chatActivity.textSelectionHelper.isDescription
+                    !isDescription
                 ) &&
                 !chatActivity.getMessagesController().getTranslateController().isTranslatingDialog(chatActivity.dialog_id) &&
                 !UserObject.isService(chatActivity.dialog_id) &&
@@ -3907,6 +3908,9 @@ if (feedIntegration != null) {
                 return;
             }
             if (chatActivity != null) {
+                if (this == chatActivity.messagePopupTextSelectionHelper) {
+                    chatActivity.closeMenu();
+                }
                 end = Math.min(end, start + chatActivity.getMessagesController().quoteLengthMax);
                 if (messageObject.getGroupId() != 0) {
                     MessageObject.GroupedMessages group = chatActivity.getGroup(messageObject.getGroupId());
@@ -33045,6 +33049,39 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             private final HashMap<ChatMessageCell, Float> avatarOffsets = new HashMap<>();
             private final HashMap<ChatMessageCell, Boolean> avatarVisibility = new HashMap<>();
             private final Rect visibleFrame = new Rect();
+            private ChatMessageCell textTouchCell;
+
+            @Override
+            public void onTextTouchEvent(MotionEvent event) {
+                if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                    textTouchCell = null;
+                    for (ChatMessageCell cell : cells) {
+                        cell.getLocationOnScreen(position);
+                        float x = (event.getX() - position[0]) / cell.getScaleX();
+                        float y = (event.getY() - position[1]) / cell.getScaleY();
+                        if (y >= cell.getBackgroundDrawableTop() && y <= cell.getBackgroundDrawableBottom()
+                                && cell.isInsideBackground(x, y)) {
+                            textTouchCell = cell;
+                            break;
+                        }
+                    }
+                }
+                if (textTouchCell == null) return;
+                if (!cells.contains(textTouchCell) || textTouchCell.getParent() != chatListView) {
+                    messagePopupTextSelectionHelper.cancelTextSelectionRunnable();
+                    textTouchCell = null;
+                    return;
+                }
+                textTouchCell.getLocationOnScreen(position);
+                MotionEvent local = MotionEvent.obtain(event);
+                local.setLocation((event.getX() - position[0]) / textTouchCell.getScaleX(),
+                        (event.getY() - position[1]) / textTouchCell.getScaleY());
+                textTouchCell.checkTextSelectionInPreview(local);
+                local.recycle();
+                if (event.getActionMasked() == MotionEvent.ACTION_UP || event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+                    textTouchCell = null;
+                }
+            }
 
             @Override
             public boolean getBounds(RectF bounds) {
@@ -33183,6 +33220,59 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 }
             }
         };
+    }
+
+    private void setupMessagePopupTextSelection(MessagePopupPreviewLayout preview) {
+        messagePopupTextSelectionHelper = new ChatActivityTextSelectionHelper() {
+            private final int[] selectionPosition = new int[2];
+
+            @Override
+            public boolean onTouchEvent(MotionEvent event) {
+                if (maybeSelectedView == null) return false;
+                MotionEvent textEvent = MotionEvent.obtain(event);
+                textEvent.offsetLocation(0, -maybeSelectedView.getPaddingTop());
+                boolean handled = super.onTouchEvent(textEvent);
+                textEvent.recycle();
+                return handled;
+            }
+
+            @Override
+            protected int[] getCoordsInParent() {
+                if (selectedView == null) return super.getCoordsInParent();
+                preview.getSelectionPosition(selectedView, selectionPosition);
+                return selectionPosition;
+            }
+
+            @Override
+            public int getParentTopPadding() {
+                return preview.getSelectionTopPadding();
+            }
+
+            @Override
+            public int getParentBottomPadding() {
+                return preview.getSelectionBottomPadding();
+            }
+        };
+        messagePopupTextSelectionHelper.setChatActivity(this);
+        messagePopupTextSelectionHelper.setCallback(new TextSelectionHelper.Callback() {
+            @Override
+            public void onStateChanged(boolean selected) {
+                preview.onTextSelectionChanged(selected);
+            }
+
+            @Override
+            public void onTextCopied() {
+                closeMenu();
+                createUndoView();
+                undoView.showWithAction(0, UndoView.ACTION_TEXT_COPIED, null);
+            }
+
+            @Override
+            public void onTextTranslated() {
+                closeMenu();
+            }
+        });
+        preview.setTextSelectionHelper(messagePopupTextSelectionHelper);
     }
 
     public static CharSequence getMessageCaption(MessageObject messageObject, MessageObject.GroupedMessages group, int[] msgId) {
@@ -34844,6 +34934,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                         createMessagePopupPreviewSource(message), 0, 0, this::closeMenu);
                 messagePopupPreviewLayout = previewLayout;
                 messagePopupPreviewMessage = message;
+                setupMessagePopupTextSelection(previewLayout);
             } else {
                 previewLayout = null;
             }
@@ -34870,6 +34961,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     if (previewLayout != null) {
                         previewLayout.dispose();
                         if (messagePopupPreviewLayout == previewLayout) {
+                            messagePopupTextSelectionHelper = null;
                             messagePopupPreviewLayout = null;
                             messagePopupPreviewMessage = null;
                             setScrimView(null);
@@ -45649,6 +45741,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
         @Override
         public TextSelectionHelper.ChatListTextSelectionHelper getTextSelectionHelper() {
+            if (messagePopupTextSelectionHelper != null) return messagePopupTextSelectionHelper;
             return holdPopupView != null ? null : textSelectionHelper;
         }
 

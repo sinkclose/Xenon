@@ -263,7 +263,11 @@ public final class FloatingActionMode extends ActionMode {
     }
 
     private boolean isViewStillActive() {
-        return mOriginatingView.getWindowVisibility() == View.VISIBLE && mOriginatingView.isShown();
+        return mOriginatingView.isAttachedToWindow()
+                && mOriginatingView.getWindowToken() != null
+                && AndroidUtilities.isSafeToShow(mOriginatingView.getContext())
+                && mOriginatingView.getWindowVisibility() == View.VISIBLE
+                && mOriginatingView.isShown();
     }
 
     private static final class FloatingToolbarVisibilityHelper {

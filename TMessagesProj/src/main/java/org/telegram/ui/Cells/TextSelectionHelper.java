@@ -40,6 +40,7 @@ import android.view.ViewParent;
 import android.view.animation.Interpolator;
 import android.view.animation.OvershootInterpolator;
 import android.widget.Magnifier;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -119,6 +120,7 @@ public abstract class TextSelectionHelper<Cell extends TextSelectionHelper.Selec
 
     protected RecyclerListView parentRecyclerView;
     protected NestedScrollView parentNestedScrollView;
+    protected ScrollView parentScrollView;
     protected ViewGroup parentView;
     private Magnifier magnifier;
     private float magnifierYanimated;
@@ -161,7 +163,7 @@ public abstract class TextSelectionHelper<Cell extends TextSelectionHelper.Selec
     private Runnable scrollRunnable = new Runnable() {
         @Override
         public void run() {
-            if (scrolling && (parentRecyclerView != null || parentNestedScrollView != null)) {
+            if (scrolling && (parentRecyclerView != null || parentNestedScrollView != null || parentScrollView != null)) {
                 int dy;
                 if (multiselect && selectedView == null) {
                     dy = dp(8);
@@ -187,6 +189,9 @@ public abstract class TextSelectionHelper<Cell extends TextSelectionHelper.Selec
                 }
                 if (parentNestedScrollView != null) {
                     parentNestedScrollView.setScrollY(parentNestedScrollView.getScrollY() + (scrollDown ? dy : -dy));
+                }
+                if (parentScrollView != null) {
+                    parentScrollView.scrollBy(0, scrollDown ? dy : -dy);
                 }
                 AndroidUtilities.runOnUIThread(this);
             }
@@ -343,6 +348,8 @@ public abstract class TextSelectionHelper<Cell extends TextSelectionHelper.Selec
     public void setScrollingParent(View scrollingParent) {
         if (scrollingParent instanceof NestedScrollView) {
             parentNestedScrollView = (NestedScrollView) scrollingParent;
+        } else if (scrollingParent instanceof ScrollView) {
+            parentScrollView = (ScrollView) scrollingParent;
         }
     }
 
@@ -990,9 +997,9 @@ public abstract class TextSelectionHelper<Cell extends TextSelectionHelper.Selec
                         y -= coordsInParent[1];
                         x -= coordsInParent[0];
 
-                        final boolean hasScrollableParent = parentRecyclerView != null || parentNestedScrollView != null;
+                        final boolean hasScrollableParent = parentRecyclerView != null || parentNestedScrollView != null || parentScrollView != null;
                         boolean canScrollDown = hasScrollableParent && ey - touchSlop > parentView.getMeasuredHeight() - getParentBottomPadding() && (allowScrollPrentRelative || multiselect || selectedView.getBottom() > parentView.getMeasuredHeight() - getParentBottomPadding());
-                        boolean canScrollUp = hasScrollableParent && ey < ((View) parentView.getParent()).getTop() + getParentTopPadding() && (multiselect || selectedView.getTop() < getParentTopPadding());
+                        boolean canScrollUp = hasScrollableParent && ey < ((View) parentView.getParent()).getTop() + getParentTopPadding() && (parentScrollView != null || multiselect || selectedView.getTop() < getParentTopPadding());
                         if (canScrollDown || canScrollUp) {
                             if (!scrolling) {
                                 scrolling = true;
@@ -1001,9 +1008,9 @@ public abstract class TextSelectionHelper<Cell extends TextSelectionHelper.Selec
                             scrollDown = canScrollDown;
 
                             if (canScrollDown) {
-                                y = (int) (parentView.getMeasuredHeight() - selectedView.getTop() + movingOffsetY);
+                                y = (int) (parentView.getMeasuredHeight() - (parentScrollView != null ? getParentBottomPadding() + coordsInParent[1] : selectedView.getTop()) + movingOffsetY);
                             } else {
-                                y = (int) (-selectedView.getTop() + movingOffsetY);
+                                y = (int) ((parentScrollView != null ? getParentTopPadding() - coordsInParent[1] : -selectedView.getTop()) + movingOffsetY);
                             }
                         } else {
                             if (scrolling) {
@@ -1457,7 +1464,7 @@ public abstract class TextSelectionHelper<Cell extends TextSelectionHelper.Selec
         }
     }
 
-    private int[] getCoordsInParent() {
+    protected int[] getCoordsInParent() {
         View child = (View) selectedView;
         int yOffset = 0;
         int xOffset = 0;

@@ -21,6 +21,8 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.OverScroller;
 
+import org.telegram.ui.Cells.TextSelectionHelper;
+
 /** A message and its menu in one viewport, rendered in the popup window above the chat blur. */
 public class MessagePopupPreviewLayout extends FrameLayout {
     public interface Source {
@@ -28,6 +30,7 @@ public class MessagePopupPreviewLayout extends FrameLayout {
         boolean contains(float screenX, float screenY);
         void getViewport(RectF bounds);
         void draw(Canvas canvas);
+        default void onTextTouchEvent(MotionEvent event) { }
     }
 
     private final Source source;
@@ -51,6 +54,11 @@ public class MessagePopupPreviewLayout extends FrameLayout {
     private boolean transitionClosing;
     private ValueAnimator overscrollAnimator;
     private float overscrollOffset;
+    private TextSelectionHelper.ChatListTextSelectionHelper textSelectionHelper;
+    private TextSelectionHelper.TextSelectionOverlay selectionOverlay;
+    private final Runnable selectionScrollStopped = () -> {
+        if (textSelectionHelper != null) textSelectionHelper.stopScrolling();
+    };
 
     public MessagePopupPreviewLayout(Context context, View menu, Source source,
                                      float preferredX, float preferredY, Runnable dismiss) {
@@ -157,6 +165,17 @@ public class MessagePopupPreviewLayout extends FrameLayout {
             }
 
             @Override
+            protected void onScrollChanged(int x, int y, int oldX, int oldY) {
+                super.onScrollChanged(x, y, oldX, oldY);
+                if (textSelectionHelper != null) {
+                    textSelectionHelper.onParentScrolled();
+                    MessagePopupPreviewLayout.this.removeCallbacks(selectionScrollStopped);
+                    MessagePopupPreviewLayout.this.postDelayed(selectionScrollStopped, 150);
+                }
+                invalidate();
+            }
+
+            @Override
             protected boolean overScrollBy(int deltaX, int deltaY, int scrollX, int scrollY,
                                            int scrollRangeX, int scrollRangeY,
                                            int maxOverScrollX, int maxOverScrollY, boolean isTouchEvent) {
@@ -209,6 +228,50 @@ public class MessagePopupPreviewLayout extends FrameLayout {
         requestLayout();
     }
 
+    public void setTextSelectionHelper(TextSelectionHelper.ChatListTextSelectionHelper helper) {
+        textSelectionHelper = helper;
+        helper.setParentView(this);
+        helper.setScrollingParent(scroll);
+        helper.allowScrollPrentRelative = true;
+        selectionOverlay = helper.getOverlayView(getContext());
+        selectionOverlay.setVisibility(GONE);
+        addView(selectionOverlay, new FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+    }
+
+    public int getSelectionTopPadding() {
+        return scroll.getTop();
+    }
+
+    public int getSelectionBottomPadding() {
+        return getHeight() - scroll.getBottom();
+    }
+
+    /** Convert a live cell's screen position to its translated position in this window. */
+    public void getSelectionPosition(View cell, int[] position) {
+        cell.getLocationOnScreen(position);
+        position[0] += Math.round(drawnBounds.left - sourceBounds.left);
+        position[1] += Math.round(drawnBounds.top - sourceBounds.top) + cell.getPaddingTop();
+    }
+
+    public void onTextSelectionChanged(boolean selected) {
+        menu.setVisibility(selected ? INVISIBLE : VISIBLE);
+        if (selected) {
+            MotionEvent cancel = MotionEvent.obtain(0, SystemClock.uptimeMillis(), MotionEvent.ACTION_CANCEL, 0, 0, 0);
+            scroll.dispatchTouchEvent(cancel);
+            cancel.recycle();
+        }
+        scroll.requestDisallowInterceptTouchEvent(selected);
+        invalidate();
+    }
+
+    private void clearTextSelection() {
+        if (textSelectionHelper != null) {
+            textSelectionHelper.clear(true);
+            textSelectionHelper.hideActionsMenu();
+            textSelectionHelper.cancelAllAnimators();
+        }
+    }
+
     @Override
     protected void onMeasure(int widthSpec, int heightSpec) {
         int width = MeasureSpec.getSize(widthSpec), height = MeasureSpec.getSize(heightSpec);
@@ -259,6 +322,7 @@ public class MessagePopupPreviewLayout extends FrameLayout {
     public void close(Runnable afterReturn) {
         if (closing) return;
         closing = true;
+        clearTextSelection();
         releaseOverscroll();
         afterClose = afterReturn;
         scroll.setEnabled(false);
@@ -269,6 +333,7 @@ public class MessagePopupPreviewLayout extends FrameLayout {
     public void closeForTransition(Runnable afterReturn) {
         if (transitionClosing) return;
         transitionClosing = true;
+        clearTextSelection();
         cancelOverscrollAnimation();
         if (!closing) afterClose = afterReturn;
         closing = true;
@@ -380,6 +445,12 @@ public class MessagePopupPreviewLayout extends FrameLayout {
     }
 
     @Override
+    protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
+        // The live message is drawn after the menu; selection handles belong above both.
+        return child == selectionOverlay || super.drawChild(canvas, child, drawingTime);
+    }
+
+    @Override
     protected void dispatchDraw(Canvas canvas) {
         if (opening && !closing) {
             opening = false;
@@ -426,6 +497,9 @@ public class MessagePopupPreviewLayout extends FrameLayout {
         canvas.translate(x - sourceBounds.left, y - sourceBounds.top);
         source.draw(canvas);
         canvas.restoreToCount(saved);
+        if (selectionOverlay != null && selectionOverlay.getVisibility() == VISIBLE) {
+            super.drawChild(canvas, selectionOverlay, getDrawingTime());
+        }
         // Resolve both the live chat position and the scroll destination on every frame.
         postInvalidateOnAnimation();
         int top = Math.max(0, Math.round(viewport.top - location[1]));
@@ -439,6 +513,20 @@ public class MessagePopupPreviewLayout extends FrameLayout {
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
         if (closing) return true;
+        if (textSelectionHelper != null && progress == 1f) {
+            boolean wasMovingHandle = textSelectionHelper.isTouched();
+            boolean handled = selectionOverlay.onTouchEvent(event);
+            if (wasMovingHandle || handled) return true;
+            if (selectionOverlay.checkOnTap(event)) {
+                textSelectionHelper.cancelTextSelectionRunnable();
+                outsideDown = false;
+                return true;
+            }
+            MotionEvent textEvent = MotionEvent.obtain(event);
+            textEvent.offsetLocation(sourceBounds.left - drawnBounds.left, sourceBounds.top - drawnBounds.top);
+            source.onTextTouchEvent(textEvent);
+            textEvent.recycle();
+        }
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
             cancelOverscrollAnimation();
             source.getViewport(viewport);
@@ -449,7 +537,7 @@ public class MessagePopupPreviewLayout extends FrameLayout {
             downX = event.getX();
             downY = event.getY();
             dragged = false;
-            if (outsideDown && !overflow) {
+            if (outsideDown && !overflow && (textSelectionHelper == null || !textSelectionHelper.isInSelectionMode())) {
                 dismiss.run();
                 return true;
             }
@@ -486,13 +574,18 @@ public class MessagePopupPreviewLayout extends FrameLayout {
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (event.getKeyCode() == KeyEvent.KEYCODE_BACK) {
-            if (event.getAction() == KeyEvent.ACTION_UP) dismiss.run();
+            if (event.getAction() == KeyEvent.ACTION_UP) {
+                if (textSelectionHelper != null && textSelectionHelper.isInSelectionMode()) clearTextSelection();
+                else dismiss.run();
+            }
             return true;
         }
         return super.dispatchKeyEvent(event);
     }
 
     public void dispose() {
+        clearTextSelection();
+        removeCallbacks(selectionScrollStopped);
         cancelOverscrollAnimation();
         setOverscrollOffset(0f);
         opening = false;
