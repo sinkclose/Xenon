@@ -53,6 +53,7 @@ import android.view.View;
 import android.view.View.MeasureSpec;
 import android.view.View.OnLayoutChangeListener;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.view.animation.Animation;
 import android.view.animation.AnimationSet;
 import android.view.animation.AnimationUtils;
@@ -75,6 +76,7 @@ import androidx.appcompat.view.menu.MenuItemImpl;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BotWebViewVibrationEffect;
+import org.telegram.messenger.FileLog;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
@@ -234,6 +236,11 @@ public final class FloatingToolbar {
     private static final int TRANSLATE = 16908353; // android.R.id.textAssist;
     private static final int TRANSLATE2 = 16909808;
     private void doShow() {
+        if (!mWindowView.isAttachedToWindow() || mWindowView.getWindowToken() == null
+                || !AndroidUtilities.isSafeToShow(mWindowView.getContext())) {
+            dismiss();
+            return;
+        }
         List<MenuItem> menuItems = getVisibleAndEnabledMenuItems(mMenu);
         Collections.sort(menuItems, mMenuItemComparator);
         if (!isCurrentlyShowing(menuItems) || mWidthChanged) {
@@ -242,7 +249,10 @@ public final class FloatingToolbar {
             mShowingMenuItems = menuItems;
         }
         if (!mPopup.isShowing()) {
-            mPopup.show(mContentRect);
+            if (!mPopup.show(mContentRect)) {
+                unregisterOrientationHandler();
+                return;
+            }
         } else if (!mPreviousContentRect.equals(mContentRect)) {
             mPopup.updateCoordinates(mContentRect);
         }
@@ -556,9 +566,9 @@ public final class FloatingToolbar {
             updatePopupSize();
         }
 
-        public void show(Rect contentRectOnScreen) {
+        public boolean show(Rect contentRectOnScreen) {
             if (isShowing()) {
-                return;
+                return true;
             }
             mHidden = false;
             mDismissed = false;
@@ -566,9 +576,21 @@ public final class FloatingToolbar {
             cancelOverflowAnimations();
             refreshCoordinatesAndOverflowDirection(contentRectOnScreen);
             preparePopupContent();
-            mPopupWindow.showAtLocation(mParent, Gravity.NO_GRAVITY, mCoordsOnWindow.x, mCoordsOnWindow.y);
+            try {
+                mPopupWindow.showAtLocation(mParent, Gravity.NO_GRAVITY, mCoordsOnWindow.x, mCoordsOnWindow.y);
+            } catch (WindowManager.BadTokenException e) {
+                // The window can be invalidated after the lifecycle checks in doShow().
+                mDismissed = true;
+                mHidden = false;
+                mContentContainer.removeCallbacks(mPreparePopupContentRTLHelper);
+                mPopupWindow.dismiss();
+                setZeroTouchableSurface();
+                FileLog.e(e);
+                return false;
+            }
             setTouchableSurfaceInsetsComputer();
             runShowAnimation();
+            return true;
         }
 
         public void dismiss() {
