@@ -113,12 +113,22 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     private static final int ANIMATOR_ID_TABS_VISIBLE = 0;
     private final BoolAnimator animatorTabsVisible = new BoolAnimator(ANIMATOR_ID_TABS_VISIBLE,
         this, CubicBezierInterpolator.EASE_OUT_QUINT, 380, true);
+    private static final int ANIMATOR_ID_IOS_SEARCH_VISIBLE = 1;
+    private final BoolAnimator animatorIosSearchVisible = new BoolAnimator(ANIMATOR_ID_IOS_SEARCH_VISIBLE,
+        this, CubicBezierInterpolator.EASE_OUT_QUINT, 300, false);
 
 
     private IUpdateLayout updateLayout;
     private UpdateLayoutWrapper updateLayoutWrapper;
     private FrameLayout tabsViewWrapper;
     private MainTabsLayout tabsView;
+    private zxc.iconic.xenon.helpers.IosBottomSearchView iosBottomSearch;
+    private DialogsActivity iosSearchOwner;
+    private BlurredBackgroundDrawableViewFactory iosSearchFactory;
+    private int iosSearchImeInset;
+    private int iosSearchImeTargetInset;
+    private int iosSearchImeAnimationCount;
+    private boolean pendingIosSearchOpen;
     private BlurredBackgroundDrawable tabsViewBackground;
     private View fadeView;
 
@@ -329,6 +339,33 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     public View createView(Context context) {
         super.createView(context);
         tabletLayout = false;
+        androidx.core.view.ViewCompat.setWindowInsetsAnimationCallback(contentView,
+                new androidx.core.view.WindowInsetsAnimationCompat.Callback(
+                        androidx.core.view.WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                    @Override
+                    public void onPrepare(androidx.core.view.WindowInsetsAnimationCompat animation) {
+                        if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) != 0) {
+                            iosSearchImeAnimationCount++;
+                        }
+                    }
+
+                    @Override
+                    public void onEnd(androidx.core.view.WindowInsetsAnimationCompat animation) {
+                        if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) != 0) {
+                            finishIosSearchImeAnimation();
+                        }
+                    }
+
+                    @Override
+                    public WindowInsetsCompat onProgress(WindowInsetsCompat insets,
+                            java.util.List<androidx.core.view.WindowInsetsAnimationCompat> running) {
+                        if (iosSearchImeAnimationCount > 0) {
+                            iosSearchImeInset = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom;
+                            checkUi_tabsPosition();
+                        }
+                        return insets;
+                    }
+                });
 
         tabsView = new MainTabsLayout(context, resourceProvider);
         tabsView.setClipChildren(false);
@@ -337,7 +374,8 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
             tabsView.setMaxWidth(0);
             tabsView.setSwipeSelectionEnabled(false);
         } else {
-            tabsView.setPadding(dp(DialogsActivity.MAIN_TABS_MARGIN + 4), dp(DialogsActivity.MAIN_TABS_MARGIN + 4), dp(DialogsActivity.MAIN_TABS_MARGIN + 4), dp(DialogsActivity.MAIN_TABS_MARGIN + 4));
+            int padding = dp(DialogsActivity.MAIN_TABS_MARGIN + 4);
+            tabsView.setPadding(padding, padding, padding, padding);
             tabsView.setMaxWidth(dp(328 + DialogsActivity.MAIN_TABS_MARGIN * 2));
         }
 
@@ -352,6 +390,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         BlurredBackgroundDrawableViewFactory iBlur3FactoryGlass = new BlurredBackgroundDrawableViewFactory(iBlur3SourceTabGlass != null ? iBlur3SourceTabGlass : iBlur3SourceColor);
         iBlur3FactoryGlass.setSourceRootView(viewPositionWatcher, contentView);
         iBlur3FactoryGlass.setLiquidGlassEffectAllowed(!zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar());
+        iosSearchFactory = iBlur3FactoryGlass;
 
         tabsViewBackground = iBlur3FactoryGlass.create(tabsView, BlurredBackgroundProviderImpl.mainTabs(resourceProvider));
         if (!zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar()) {
@@ -404,6 +443,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
         updateLayout();
         checkUnreadCount(false);
+        ensureIosSearchButton();
         return contentView;
     }
 
@@ -761,6 +801,8 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         }
         blur3_invalidateBlur();
         checkSystemBarColors();
+        if (iosBottomSearch != null && getCurrentVisibleFragment() != iosSearchOwner) iosBottomSearch.closeSearch();
+        checkUi_tabsPosition();
     }
 
     @Override
@@ -778,6 +820,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         checkUi_fadeView();
         blur3_invalidateBlur();
         contentView.invalidate();
+        checkUi_tabsPosition();
     }
 
 
@@ -978,6 +1021,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         insetRight = systemInsets.right;
 
         navigationBarHeight = systemInsets.bottom;
+        updateIosSearchImeTarget(insets.getInsets(WindowInsetsCompat.Type.ime()).bottom);
         final boolean isUpdateLayoutVisible = updateLayoutWrapper.isUpdateLayoutVisible();
         final int updateLayoutHeight = isUpdateLayoutVisible ? dp(UpdateLayoutWrapper.HEIGHT) : 0;
         updateLayoutWrapper.setPadding(0, 0, 0, bottomInset);
@@ -1105,6 +1149,12 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
     @Override
     public void onFragmentDestroy() {
+        animatorIosSearchVisible.cancel();
+        if (iosBottomSearch != null) {
+            iosBottomSearch.dispose();
+            iosBottomSearch = null;
+            iosSearchOwner = null;
+        }
         if (observersGroup != null) {
             observersGroup.removeAllObservers();
             observersGroup = null;
@@ -1114,10 +1164,23 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     }
 
     @Override
+    public void clearViews() {
+        animatorIosSearchVisible.cancel();
+        if (iosBottomSearch != null) {
+            iosBottomSearch.dispose();
+            iosBottomSearch = null;
+            iosSearchOwner = null;
+        }
+        super.clearViews();
+    }
+
+    @Override
     public void onFactorChanged(int id, float factor, float fraction, FactorAnimator callee) {
         if (id == ANIMATOR_ID_TABS_VISIBLE) {
             checkUi_tabsPosition();
             checkUi_fadeView();
+        } else if (id == ANIMATOR_ID_IOS_SEARCH_VISIBLE) {
+            checkUi_tabsPosition();
         }
     }
 
@@ -1151,8 +1214,10 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     }
 
     private void checkUi_tabsPosition() {
+        if (tabsView == null || updateLayoutWrapper == null) return;
         if (isTabsHidden()) {
             tabsView.setVisibility(View.GONE);
+            if (iosBottomSearch != null) iosBottomSearch.setVisibility(View.GONE);
             return;
         }
         final boolean isUpdateLayoutVisible = updateLayoutWrapper.isUpdateLayoutVisible();
@@ -1170,6 +1235,92 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         tabsView.setEnabled(factor >= 1f);
         tabsView.setAlpha(factor);
         tabsView.setVisibility(factor > 0 ? View.VISIBLE : View.GONE);
+        updateIosBottomSearchPosition(factor);
+    }
+
+    private void updateIosSearchImeTarget(int inset) {
+        iosSearchImeTargetInset = inset;
+        // onApplyWindowInsets precedes the animation with its final height.
+        if (iosSearchImeAnimationCount == 0) iosSearchImeInset = inset;
+    }
+
+    private void finishIosSearchImeAnimation() {
+        iosSearchImeAnimationCount = Math.max(0, iosSearchImeAnimationCount - 1);
+        if (iosSearchImeAnimationCount == 0) {
+            iosSearchImeInset = iosSearchImeTargetInset;
+            checkUi_tabsPosition();
+        }
+    }
+
+    private boolean isIosSearchDestinationDialogs() {
+        if (viewPager == null) return getCurrentVisibleFragment() instanceof DialogsActivity;
+        FragmentState destination = fragmentsArr.get(viewPager.getTransitionTargetPosition());
+        return destination != null && destination.fragment instanceof DialogsActivity;
+    }
+
+    private float updateIosSearchVisibility(float visibility) {
+        boolean enabled = NekoConfig.iosBottomBar && NekoConfig.showMainTabs;
+        boolean onDialogs = isIosSearchDestinationDialogs();
+        animatorIosSearchVisible.setValue(enabled && onDialogs, contentView.isAttachedToWindow());
+        float presence = enabled ? animatorIosSearchVisible.getFloatValue() : 0f;
+        float alpha = visibility * presence;
+        iosBottomSearch.setAlpha(alpha);
+        iosBottomSearch.setVisibility(alpha > 0f ? View.VISIBLE : View.GONE);
+        iosBottomSearch.setEnabled(enabled && onDialogs && visibility >= 1f);
+        if (Build.VERSION.SDK_INT >= 31) {
+            float blur = dp(10) * (1f - presence);
+            iosBottomSearch.setRenderEffect(blur > .01f ? android.graphics.RenderEffect.createBlurEffect(
+                    blur, blur, android.graphics.Shader.TileMode.CLAMP) : null);
+        }
+        return presence;
+    }
+
+    private void updateIosBottomSearchPosition(float visibility) {
+        if (iosBottomSearch == null) return;
+        boolean enabled = NekoConfig.iosBottomBar && NekoConfig.showMainTabs;
+        float presence = updateIosSearchVisibility(visibility);
+        float p = enabled ? iosBottomSearch.getProgress() : 0f;
+        float barProgress = p * presence;
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) tabsView.getLayoutParams();
+        int reserved = enabled ? dp(52) : 0;
+        int left = reserved;
+        int right = reserved;
+        int gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        if (lp.leftMargin != left || lp.rightMargin != right || lp.gravity != gravity) {
+            lp.leftMargin = left; lp.rightMargin = right; lp.gravity = gravity;
+            tabsView.setLayoutParams(lp);
+        }
+        tabsView.setPanelBaseTranslationX(zxc.iconic.xenon.helpers.IosBottomSearchView.barOffset(
+                tabsView.getWidth(), p, presence, LocaleController.isRTL, AndroidUtilities.density));
+        float collapsedWidth = contentView.getWidth() - insetLeft - insetRight - dp(40);
+        iosBottomSearch.setCollapsedOffset(zxc.iconic.xenon.helpers.IosBottomSearchView.collapsedOffset(
+                collapsedWidth, tabsView.getWidth(), LocaleController.isRTL, AndroidUtilities.density));
+        float scale = lerp(.85f, 1f, visibility) * (1f - .3f * barProgress);
+        tabsView.setScaleX(scale);
+        tabsView.setScaleY(scale);
+        tabsView.setAlpha(visibility * (1f - barProgress));
+        tabsView.setEnabled(barProgress < .01f && visibility >= 1f);
+        if (Build.VERSION.SDK_INT >= 31) {
+            float blur = dp(10) * barProgress;
+            tabsView.setRenderEffect(blur > .01f ? android.graphics.RenderEffect.createBlurEffect(
+                    blur, blur, android.graphics.Shader.TileMode.CLAMP) : null);
+        }
+        FrameLayout.LayoutParams searchLp = (FrameLayout.LayoutParams) iosBottomSearch.getLayoutParams();
+        int margin = navigationBarHeight + (int) lerp(0, dp(4), p);
+        int sideMargin = (int) lerp(dp(20), dp(12), p);
+        int searchLeft = sideMargin + insetLeft, searchRight = sideMargin + insetRight;
+        if (searchLp.bottomMargin != margin || searchLp.leftMargin != searchLeft || searchLp.rightMargin != searchRight) {
+            searchLp.leftMargin = searchLeft;
+            searchLp.rightMargin = searchRight;
+            searchLp.bottomMargin = margin;
+            iosBottomSearch.setLayoutParams(searchLp);
+        }
+        float keyboardOffset = Math.max(0, iosSearchImeInset - navigationBarHeight) * p;
+        int updateHeight = updateLayoutWrapper.isUpdateLayoutVisible() ? dp(UpdateLayoutWrapper.HEIGHT) : 0;
+        iosBottomSearch.setTranslationY(-keyboardOffset - updateHeight * (1f - p));
+        if (iosSearchOwner != null) {
+            iosSearchOwner.updateIosBottomSearchInset(navigationBarHeight + Math.round(keyboardOffset));
+        }
     }
 
     @Override
@@ -1185,7 +1336,58 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
     /* * */
 
+    private void ensureIosSearchButton() {
+        if (!NekoConfig.iosBottomBar || !NekoConfig.showMainTabs || iosBottomSearch != null
+                || iosSearchFactory == null || contentView == null) return;
+        new MainTabsActivityControllerImpl().attachIosBottomSearch(null,
+                new org.telegram.ui.Components.FragmentSearchField(getContext(), resourceProvider), () -> {}, () -> {});
+    }
+
     private class MainTabsActivityControllerImpl implements MainTabsActivityController {
+        @Override
+        public void attachIosBottomSearch(DialogsActivity owner, org.telegram.ui.Components.FragmentSearchField field, Runnable open, Runnable close) {
+            if (!NekoConfig.iosBottomBar || iosSearchFactory == null || contentView == null) return;
+            if (iosBottomSearch != null && iosBottomSearch.getField() == field) return;
+            if (iosBottomSearch != null) {
+                iosBottomSearch.dispose();
+                AndroidUtilities.removeFromParent(iosBottomSearch);
+            }
+            iosSearchOwner = owner;
+            iosBottomSearch = new zxc.iconic.xenon.helpers.IosBottomSearchView(getContext(), resourceProvider,
+                    field, iosSearchFactory, () -> {
+                        int chats = MainTabsManager.getPosition(MainTabsManager.TabType.CHATS);
+                        if (owner == null) pendingIosSearchOpen = true;
+                        if (chats >= 0 && getCurrentVisibleFragment() != owner) viewPager.setPosition(chats);
+                        if (owner != null) open.run();
+                    }, close, progress -> checkUi_tabsPosition());
+            contentView.addView(iosBottomSearch, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 72,
+                    Gravity.BOTTOM, 20, 0, 20, 0));
+            checkUi_tabsPosition();
+            if (owner != null && pendingIosSearchOpen) {
+                pendingIosSearchOpen = false;
+                open.run();
+            }
+        }
+
+        @Override
+        public void setIosBottomSearchActive(boolean active, boolean animated) {
+            if (iosBottomSearch != null) iosBottomSearch.setActive(active, animated);
+        }
+
+        @Override
+        public void detachIosBottomSearch(org.telegram.ui.Components.FragmentSearchField field) {
+            if (iosBottomSearch != null && iosBottomSearch.getField() == field) {
+                iosBottomSearch.dispose();
+                AndroidUtilities.removeFromParent(iosBottomSearch);
+                iosBottomSearch = null;
+                iosSearchOwner = null;
+                if (tabsView != null) {
+                    tabsView.setPanelBaseTranslationX(0);
+                    if (Build.VERSION.SDK_INT >= 31) tabsView.setRenderEffect(null);
+                }
+                ensureIosSearchButton();
+            }
+        }
         @Override
         public void invalidateTabsBackground() {
             if (tabsView != null) {

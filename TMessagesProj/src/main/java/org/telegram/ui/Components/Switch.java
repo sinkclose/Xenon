@@ -28,6 +28,10 @@ import android.graphics.drawable.RippleDrawable;
 import android.os.Build;
 import android.util.StateSet;
 import android.view.View;
+import android.view.ViewParent;
+import android.view.ViewGroup;
+import android.view.MotionEvent;
+import android.view.ViewConfiguration;
 import android.view.accessibility.AccessibilityNodeInfo;
 
 import androidx.annotation.Keep;
@@ -42,6 +46,171 @@ public class Switch extends View {
     private final BoolAnimator animatorIconVisibility = new BoolAnimator(this, CubicBezierInterpolator.EASE_OUT_QUINT, 380L, true);
 
     private RectF rectF;
+    private zxc.iconic.xenon.helpers.IosSwitchHelper iosSwitchHelper;
+    private Runnable iosToggleAction;
+    private int renderedStyle = switchStyle();
+
+    private static int switchStyle() {
+        return zxc.iconic.xenon.NekoConfig.iosSwitches ? 2 : zxc.iconic.xenon.NekoConfig.material3Switches ? 1 : 0;
+    }
+
+    /** Diff updates can leave unchanged cells' display lists and measurements intact. */
+    public static void invalidateAllSwitches(View root) {
+        if (root instanceof Switch) ((Switch) root).refreshStyle();
+        if (root instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) root;
+            for (int i = 0; i < group.getChildCount(); i++) invalidateAllSwitches(group.getChildAt(i));
+        }
+    }
+
+    private void refreshStyle() {
+        int style = switchStyle();
+        if (renderedStyle != style) {
+            renderedStyle = style;
+            cancelCheckAnimator();
+            if (iosSwitchHelper != null) iosSwitchHelper.release();
+            iosPointerId = -1;
+            iosDragging = false;
+            if (iosGestureParent != null) iosGestureParent.requestDisallowInterceptTouchEvent(false);
+            iosGestureParent = null;
+            drawRipple = false;
+            setProgress(isChecked ? 1f : 0f);
+        }
+        requestLayout();
+        invalidate();
+    }
+
+    private int iosPointerId = -1;
+    private ViewParent iosGestureParent;
+    private float iosDownX, iosDownY, iosStartFraction, iosDragFraction;
+    private boolean iosDragging, iosGestureCommit;
+
+    private zxc.iconic.xenon.helpers.IosSwitchHelper iosHelper() {
+        if (iosSwitchHelper == null) iosSwitchHelper = new zxc.iconic.xenon.helpers.IosSwitchHelper(this);
+        return iosSwitchHelper;
+    }
+
+    /** Uses the same settings callback for a switch tap, drag and accessibility click. */
+    public void setIosToggleAction(Runnable action) {
+        iosToggleAction = action;
+    }
+
+    @Override
+    public boolean isClickable() {
+        return super.isClickable() || zxc.iconic.xenon.NekoConfig.iosSwitches && isEnabled();
+    }
+
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        if (zxc.iconic.xenon.NekoConfig.iosSwitches) {
+            setMeasuredDimension(AndroidUtilities.dp(zxc.iconic.xenon.helpers.IosSwitchDynamics.VIEW_WIDTH),
+                    AndroidUtilities.dp(zxc.iconic.xenon.helpers.IosSwitchDynamics.VIEW_HEIGHT));
+        } else {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        }
+    }
+
+    @Override
+    public boolean performClick() {
+        if (!zxc.iconic.xenon.NekoConfig.iosSwitches) return super.performClick();
+        if (!isEnabled()) return false;
+        if (super.performClick()) return true;
+        if (iosToggleAction != null) {
+            iosToggleAction.run();
+            return true;
+        }
+        View row = this;
+        ViewParent parent = getParent();
+        while (parent instanceof View) {
+            if (parent instanceof RecyclerListView) {
+                RecyclerListView list = (RecyclerListView) parent;
+                int position = list.getChildAdapterPosition(row);
+                if (position >= 0) {
+                    list.clickItem(row, position);
+                    return true;
+                }
+                return false;
+            }
+            row = (View) parent;
+            if (row.hasOnClickListeners()) return row.performClick();
+            parent = row.getParent();
+        }
+        setChecked(!isChecked, true);
+        return true;
+    }
+
+    private void cancelIosGesture() {
+        iosPointerId = -1;
+        iosDragging = false;
+        iosHelper().setChecked(isChecked, true, true);
+        iosHelper().releasePress();
+        if (iosGestureParent != null) iosGestureParent.requestDisallowInterceptTouchEvent(false);
+        iosGestureParent = null;
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        if (!zxc.iconic.xenon.NekoConfig.iosSwitches) return super.onTouchEvent(event);
+        if (!isEnabled()) { if (iosPointerId != -1) cancelIosGesture(); return false; }
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                iosPointerId = event.getPointerId(0);
+                iosGestureParent = getParent();
+                iosDownX = event.getX();
+                iosDownY = event.getY();
+                iosStartFraction = iosDragFraction = isChecked ? 1f : 0f;
+                iosDragging = false;
+                cancelCheckAnimator();
+                iosHelper().press();
+                return true;
+            case MotionEvent.ACTION_MOVE:
+                int index = event.findPointerIndex(iosPointerId);
+                if (index < 0) { cancelIosGesture(); return false; }
+                float dx = event.getX(index) - iosDownX, dy = event.getY(index) - iosDownY;
+                if (!iosDragging && Math.abs(dy) > ViewConfiguration.get(getContext()).getScaledTouchSlop()
+                        && Math.abs(dy) > Math.abs(dx)) {
+                    cancelIosGesture();
+                    return false;
+                }
+                if (!iosDragging && Math.abs(dx) > AndroidUtilities.dp(2f) && Math.abs(dx) > Math.abs(dy)) {
+                    iosDragging = true;
+                    if (iosGestureParent != null) iosGestureParent.requestDisallowInterceptTouchEvent(true);
+                }
+                if (iosDragging) {
+                    iosDragFraction = zxc.iconic.xenon.helpers.IosSwitchDynamics.dragFraction(
+                            iosStartFraction, dx, AndroidUtilities.density, org.telegram.messenger.LocaleController.isRTL);
+                    iosHelper().dragTo(iosDragFraction);
+                }
+                return true;
+            case MotionEvent.ACTION_UP:
+                if (iosPointerId == -1) return false;
+                boolean checked = zxc.iconic.xenon.helpers.IosSwitchDynamics.releaseChecked(
+                        isChecked, iosDragging, iosDragFraction);
+                iosPointerId = -1;
+                iosGestureCommit = true;
+                try {
+                    if (checked != isChecked) performClick();
+                    // Callbacks may reject a change (locked options): settle to the actual setting.
+                    iosHelper().setChecked(isChecked, true, true);
+                    iosHelper().releasePress();
+                } finally {
+                    iosGestureCommit = false;
+                    iosDragging = false;
+                    if (iosGestureParent != null) iosGestureParent.requestDisallowInterceptTouchEvent(false);
+                    iosGestureParent = null;
+                }
+                return true;
+            case MotionEvent.ACTION_POINTER_DOWN:
+            case MotionEvent.ACTION_CANCEL:
+                if (iosPointerId != -1) cancelIosGesture();
+                return true;
+            case MotionEvent.ACTION_POINTER_UP:
+                if (event.getPointerId(event.getActionIndex()) == iosPointerId) cancelIosGesture();
+                return true;
+        }
+        return iosPointerId != -1;
+    }
+
 
     private float progress;
     private ObjectAnimator checkAnimator;
@@ -159,6 +328,10 @@ public class Switch extends View {
             return;
         }
         drawRipple = value;
+        if (zxc.iconic.xenon.NekoConfig.iosSwitches) {
+            if (value) iosHelper().press(); else iosHelper().releasePress();
+            return;
+        }
 
         if (rippleDrawable == null) {
             ripplePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -234,6 +407,11 @@ public class Switch extends View {
     }
 
     private void animateToCheckedState(boolean newCheckedState) {
+        if (zxc.iconic.xenon.NekoConfig.iosSwitches) {
+            cancelCheckAnimator();
+            iosHelper().setChecked(newCheckedState, true, iosGestureCommit || iosPointerId != -1);
+            return;
+        }
         checkAnimator = ObjectAnimator.ofFloat(this, "progress", newCheckedState ? 1 : 0);
         checkAnimator.setDuration(200);
         if (zxc.iconic.xenon.NekoConfig.material3Switches) {
@@ -264,12 +442,18 @@ public class Switch extends View {
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         attachedToWindow = true;
+        refreshStyle();
     }
 
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         attachedToWindow = false;
+        if (iosGestureParent != null) iosGestureParent.requestDisallowInterceptTouchEvent(false);
+        iosGestureParent = null;
+        iosPointerId = -1;
+        iosDragging = false;
+        if (iosSwitchHelper != null) iosSwitchHelper.release();
     }
 
     public void setOnCheckedChangeListener(OnCheckedChangeListener listener) {
@@ -292,6 +476,9 @@ public class Switch extends View {
             if (onCheckedChangeListener != null) {
                 onCheckedChangeListener.onCheckedChanged(this, checked);
             }
+        }
+        if (zxc.iconic.xenon.NekoConfig.iosSwitches && (!attachedToWindow || !animated)) {
+            iosHelper().setChecked(checked, false, false);
         }
         setDrawIconType(iconType, animated);
     }
@@ -377,6 +564,13 @@ public class Switch extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         if (getVisibility() != VISIBLE) {
+            return;
+        }
+
+        if (zxc.iconic.xenon.NekoConfig.iosSwitches) {
+            iosHelper().draw(canvas, this, progress, drawRipple || isPressed(),
+                    org.telegram.messenger.LocaleController.isRTL, iconDrawable,
+                    animatorIconVisibility.getFloatValue(), resourcesProvider);
             return;
         }
 

@@ -105,6 +105,7 @@ public class SeekBarView extends FrameLayout {
 
     public SeekBarView(Context context, boolean inPercents, Theme.ResourcesProvider resourcesProvider) {
         super(context);
+        setClipChildren(false);
         this.resourcesProvider = resourcesProvider;
         setWillNotDraw(false);
         innerPaint1 = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -141,6 +142,7 @@ public class SeekBarView extends FrameLayout {
         setAccessibilityDelegate(seekBarAccessibilityDelegate = new FloatSeekBarAccessibilityDelegate(inPercents) {
             @Override
             public float getProgress() {
+        if (renderedSliderStyle > 0) return styledProgress;
                 return SeekBarView.this.getProgress();
             }
 
@@ -169,8 +171,115 @@ public class SeekBarView extends FrameLayout {
         });
     }
 
+    private int renderedSliderStyle = -1;
+    private com.google.android.material.slider.Slider materialSlider;
+    private zxc.iconic.xenon.helpers.IosSliderView iosSlider;
+    private float styledProgress;
+    private boolean syncingStyledSlider;
+
+    public void updateStyle() {
+        int style = zxc.iconic.xenon.helpers.SliderStyleHelper.style();
+        if (style == renderedSliderStyle) { syncStyledSlider(false); return; }
+        float value = getProgress();
+        if (value < 0f || !Float.isFinite(value)) value = 0f;
+        if (pressed && delegate != null) delegate.onSeekBarPressed(false);
+        pressed = pressedDelayed = captured = false;
+        if (hoverDrawable != null) hoverDrawable.setState(StateSet.NOTHING);
+        if (iosSlider != null) { iosSlider.release(); removeView(iosSlider); iosSlider = null; }
+        if (materialSlider != null) { removeView(materialSlider); materialSlider = null; }
+        renderedSliderStyle = style;
+        styledProgress = Math.max(0f, Math.min(1f, value));
+        if (style == 2) {
+            iosSlider = new zxc.iconic.xenon.helpers.IosSliderView(getContext(), resourcesProvider,
+                    new zxc.iconic.xenon.helpers.IosSliderView.Listener() {
+                        @Override public void onPressed(boolean value) { styledPressed(value); }
+                        @Override public void onValue(float value, boolean stop) { styledDrag(value, stop); }
+                    });
+            addView(iosSlider, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+            iosSlider.setEnabled(isEnabled());
+        } else if (style == 1) {
+            materialSlider = zxc.iconic.xenon.settings.MaterialSliderUiHelper.create(getContext());
+            materialSlider.setValueFrom(0f);
+            materialSlider.setValueTo(1f);
+            materialSlider.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+            materialSlider.addOnChangeListener((slider, valueFromUser, fromUser) -> {
+                if (fromUser && !syncingStyledSlider) styledDrag(valueFromUser, false);
+            });
+            materialSlider.addOnSliderTouchListener(new com.google.android.material.slider.Slider.OnSliderTouchListener() {
+                @Override public void onStartTrackingTouch(com.google.android.material.slider.Slider slider) { styledPressed(true); }
+                @Override public void onStopTrackingTouch(com.google.android.material.slider.Slider slider) {
+                    styledDrag(slider.getValue(), true);
+                    styledPressed(false);
+                }
+            });
+            addView(materialSlider, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+            materialSlider.setEnabled(isEnabled());
+        }
+        thumbX = (int) Math.ceil(styledProgress * Math.max(0, getMeasuredWidth() - selectorWidth));
+        syncStyledSlider(false);
+        requestLayout();
+        invalidate();
+    }
+
+    private void styledPressed(boolean value) {
+        if (pressed == value) return;
+        pressed = value;
+        if (delegate != null) delegate.onSeekBarPressed(value);
+    }
+
+    private void styledDrag(float value, boolean stop) {
+        styledProgress = Math.max(Math.max(0f, minProgress), Math.min(1f, value));
+        thumbX = (int) Math.ceil(styledProgress * Math.max(0, getMeasuredWidth() - selectorWidth));
+        if (reportChanges || stop) {
+            float result = twoSided ? (styledProgress >= .5f ? 2f * styledProgress - 1f
+                    : -Math.max(.01f, 2f * styledProgress)) : styledProgress;
+            setSeekBarDrag(stop, result);
+        }
+        invalidate();
+    }
+
+    private void syncStyledSlider(boolean animated) {
+        if (iosSlider != null) {
+            iosSlider.setMinimum(minProgress);
+            iosSlider.setBuffered(bufferedProgress);
+            iosSlider.setValue(styledProgress, animated);
+        }
+        if (materialSlider != null && !syncingStyledSlider) {
+            syncingStyledSlider = true;
+            try {
+                int count = separatorsCount > 1 ? separatorsCount
+                        : delegate != null && delegate.needVisuallyDivideSteps() ? delegate.getStepsCount() : 0;
+                float step = count > 1 ? 1f / (count - 1) : 0f;
+                if (materialSlider.getStepSize() != step) materialSlider.setStepSize(step);
+                if (count > 1) zxc.iconic.xenon.settings.MaterialSliderUiHelper.applyDiscreteStyle(materialSlider, count);
+                else zxc.iconic.xenon.settings.MaterialSliderUiHelper.applyContinuousStyle(materialSlider);
+                zxc.iconic.xenon.settings.MaterialSliderUiHelper.applyColors(materialSlider,
+                        outerPaint1.getColor(), getThemedColor(Theme.key_player_progressBackground));
+                float value = Math.max(0f, Math.min(1f, styledProgress));
+                if (count > 1) value = Math.round(value * (count - 1)) / (float) (count - 1);
+                materialSlider.setValue(value);
+            } finally { syncingStyledSlider = false; }
+        }
+    }
+
+    @Override protected void onAttachedToWindow() { super.onAttachedToWindow(); updateStyle(); }
+    @Override protected void onDetachedFromWindow() {
+        if (iosSlider != null) iosSlider.release();
+        styledPressed(false);
+        super.onDetachedFromWindow();
+    }
+    @Override public boolean isClickable() {
+        return super.isClickable() || renderedSliderStyle > 0;
+    }
+    @Override public void setEnabled(boolean enabled) {
+        super.setEnabled(enabled);
+        if (iosSlider != null) iosSlider.setEnabled(enabled);
+        if (materialSlider != null) materialSlider.setEnabled(enabled);
+    }
+
     public void setSeparatorsCount(int separatorsCount) {
         this.separatorsCount = separatorsCount;
+        syncStyledSlider(false);
     }
 
     public void setColors(int inner, int outer) {
@@ -202,12 +311,12 @@ public class SeekBarView extends FrameLayout {
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent ev) {
-        return onTouch(ev);
+        return renderedSliderStyle > 0 ? false : onTouch(ev);
     }
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        return onTouch(event);
+        return renderedSliderStyle > 0 ? false : onTouch(event);
     }
 
     public void setReportChanges(boolean value) {
@@ -216,6 +325,7 @@ public class SeekBarView extends FrameLayout {
 
     public void setMinProgress(float progress) {
         minProgress = progress;
+        syncStyledSlider(false);
         if (getProgress() < minProgress) {
             setProgress(minProgress, false);
         }
@@ -224,6 +334,7 @@ public class SeekBarView extends FrameLayout {
 
     public void setDelegate(SeekBarViewDelegate seekBarViewDelegate) {
         delegate = seekBarViewDelegate;
+        syncStyledSlider(false);
     }
 
     boolean captured;
@@ -357,6 +468,7 @@ public class SeekBarView extends FrameLayout {
     }
 
     public float getProgress() {
+        if (renderedSliderStyle > 0) return styledProgress;
         if (getMeasuredWidth() == 0) {
             return progressToSet;
         }
@@ -368,6 +480,9 @@ public class SeekBarView extends FrameLayout {
     }
 
     public void setProgress(float progress, boolean animated) {
+        styledProgress = Math.max(Math.max(0f, minProgress), Math.min(1f, twoSided
+                ? progress < 0f ? -progress / 2f : .5f + progress / 2f : progress));
+        syncStyledSlider(animated);
         if (getMeasuredWidth() == 0) {
             progressToSet = progress;
             return;
@@ -407,6 +522,7 @@ public class SeekBarView extends FrameLayout {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        if (renderedSliderStyle != zxc.iconic.xenon.helpers.SliderStyleHelper.style()) updateStyle();
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         lastTimestampLabelWidth = getTimestampLabelWidth();
         textViewSwitcher.measure(MeasureSpec.makeMeasureSpec(lastTimestampLabelWidth, MeasureSpec.EXACTLY), 0);
@@ -436,6 +552,11 @@ public class SeekBarView extends FrameLayout {
 
     @Override
     protected void onDraw(Canvas canvas) {
+        if (renderedSliderStyle > 0) {
+            if (materialSlider != null) syncStyledSlider(false);
+            drawTimestampLabel(canvas);
+            return;
+        }
         int thumbX = this.thumbX;
         if (!twoSided && separatorsCount > 1) {
             float step = (getMeasuredWidth() - selectorWidth) / ((float) separatorsCount - 1f);

@@ -48,6 +48,7 @@ public class AltSeekbar extends FrameLayout {
     private final TextView rightTextView;
     private SeekBarView seekBarView;
     private Slider slider;
+    private int renderedSliderStyle = -1;
     private final Theme.ResourcesProvider resourcesProvider;
     private final OnDrag onDrag;
     private java.util.function.Function<Integer, String> valueFormatter;
@@ -160,6 +161,7 @@ if (subtitle != null) {
     }
 
     private void initSlider() {
+        renderedSliderStyle = zxc.iconic.xenon.helpers.SliderStyleHelper.style();
         if (NekoConfig.materialSliders) {
             Slider materialSlider = MaterialSliderUiHelper.create(getContext());
             this.slider = materialSlider;
@@ -349,6 +351,8 @@ if (subtitle != null) {
     }
 
     public void updateStyle() {
+        if (renderedSliderStyle == zxc.iconic.xenon.helpers.SliderStyleHelper.style()) return;
+        setDragging(false);
         if (slider != null) {
             removeView(slider);
             slider = null;

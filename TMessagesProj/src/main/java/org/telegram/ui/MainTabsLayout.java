@@ -595,8 +595,7 @@ public class MainTabsLayout extends AnimatedLinearLayout {
 
         @Override
         public void setValue(MainTabsLayout object, float value) {
-            object.animatedLongSelectedViewOffsetX = value;
-            object.setTranslationX(value);
+            object.setLiquidPanelOffsetX(value);
             object.invalidate();
         }
     });
@@ -631,6 +630,17 @@ public class MainTabsLayout extends AnimatedLinearLayout {
 
     private float animatedLongSelectedViewCenterX;
     private float animatedLongSelectedViewOffsetX;
+    private float panelBaseTranslationX;
+
+    public void setPanelBaseTranslationX(float value) {
+        panelBaseTranslationX = value;
+        setTranslationX(panelBaseTranslationX + animatedLongSelectedViewOffsetX);
+    }
+
+    private void setLiquidPanelOffsetX(float value) {
+        animatedLongSelectedViewOffsetX = value;
+        setTranslationX(panelBaseTranslationX + animatedLongSelectedViewOffsetX);
+    }
 
     private boolean isInLongPress;
     private View lastLongSelectedView;
@@ -822,7 +832,7 @@ public class MainTabsLayout extends AnimatedLinearLayout {
         isInLongPress = false;
         lastLongSelectedView = gestureInitialTab = null;
         liquidTouchDown = false;
-        setTranslationX(0f);
+        setLiquidPanelOffsetX(0f);
         setSkipDrawSelector(false);
     }
 

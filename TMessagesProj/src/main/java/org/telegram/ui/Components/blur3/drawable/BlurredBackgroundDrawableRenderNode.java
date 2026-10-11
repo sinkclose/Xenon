@@ -137,7 +137,7 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
 
     @Override
     public boolean hasDisplayList() {
-        return renderNode.hasDisplayList();
+        return renderNode.hasDisplayList() && renderNodeFill.hasDisplayList();
     }
 
     @Override
@@ -297,7 +297,9 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
             if (prismPipeline != null) prismPipeline.invalidateAll();
         }
         source.prepareToDraw();
-        if (!renderNode.hasDisplayList()) {
+        // The fill node can lose its display list independently during memory
+        // trimming. A surviving outer node then only draws its translucent tint.
+        if (!hasDisplayList()) {
             source.dispatchOnDrawablesRelativePositionChange();
             updateDisplayList();
         } else if (prismActive) {

@@ -46,6 +46,7 @@ public class TextCheckCell2 extends FrameLayout {
     private AnimatedTextView animatedTextView;
     private View collapsedArrow;
     private View checkBoxClickArea;
+    private Runnable iosCheckClick;
 
     public void setCollapseArrow(String text, boolean collapsed, Runnable onCheckClick) {
         if (collapseViewContainer == null) {
@@ -78,16 +79,24 @@ public class TextCheckCell2 extends FrameLayout {
             checkBoxClickArea.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector), 2));
             addView(checkBoxClickArea, LayoutHelper.createFrame(76, LayoutHelper.MATCH_PARENT, LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT));
         }
+        collapseViewContainer.setVisibility(View.VISIBLE);
+        checkBoxClickArea.setVisibility(View.VISIBLE);
         animatedTextView.setText(text);
         collapsedArrow.animate().cancel();
         collapsedArrow.animate().rotation(collapsed ? 0 : 180).setDuration(340).setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT).start();
+        iosCheckClick = onCheckClick;
+        checkBox.setIosToggleAction(onCheckClick);
         checkBoxClickArea.setOnClickListener(v -> onCheckClick.run());
+        if (zxc.iconic.xenon.NekoConfig.iosSwitches) checkBox.bringToFront();
     }
 
     public void hideCollapseArrow() {
         if (collapseViewContainer != null) {
             collapseViewContainer.setVisibility(View.GONE);
         }
+        iosCheckClick = null;
+        checkBox.setIosToggleAction(null);
+        if (checkBoxClickArea != null) checkBoxClickArea.setVisibility(View.GONE);
     }
 
     public TextCheckCell2(Context context) {
@@ -118,13 +127,42 @@ public class TextCheckCell2 extends FrameLayout {
         valueTextView.setEllipsize(TextUtils.TruncateAt.END);
         addView(valueTextView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 64 : 21, 35, LocaleController.isRTL ? 21 : 64, 0));
 
-        checkBox = new Switch(context);
+        setClipChildren(false);
+        setClipToPadding(false);
+        checkBox = new Switch(context, resourcesProvider);
         checkBox.setDrawIconType(1);
         addView(checkBox, LayoutHelper.createFrame(37, 40, (LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT) | Gravity.CENTER_VERTICAL, 22, 0, 22, 0));
     }
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        boolean ios = zxc.iconic.xenon.NekoConfig.iosSwitches;
+        LayoutParams switchParams = (LayoutParams) checkBox.getLayoutParams();
+        switchParams.width = AndroidUtilities.dp(ios ? 84 : 37);
+        switchParams.height = AndroidUtilities.dp(ios ? 48 : 40);
+        switchParams.leftMargin = switchParams.rightMargin = AndroidUtilities.dp(ios ? 12 : 22);
+        int switchSpace = AndroidUtilities.dp(ios ? 108 : 64);
+        LayoutParams labelParams = (LayoutParams) textView.getLayoutParams();
+        LayoutParams valueParams = (LayoutParams) valueTextView.getLayoutParams();
+        if (LocaleController.isRTL) {
+            labelParams.leftMargin = valueParams.leftMargin = switchSpace;
+        } else {
+            labelParams.rightMargin = valueParams.rightMargin = switchSpace;
+        }
+        if (checkBoxClickArea != null) {
+            LayoutParams clickParams = (LayoutParams) checkBoxClickArea.getLayoutParams();
+            clickParams.width = AndroidUtilities.dp(ios ? 108 : 76);
+            checkBox.setIosToggleAction(iosCheckClick);
+            if (ios && getChildAt(getChildCount() - 1) != checkBox) checkBox.bringToFront();
+        }
+
+        if (ios && collapseViewContainer != null && collapseViewContainer.getVisibility() == VISIBLE) {
+            measureChild(collapseViewContainer, widthMeasureSpec, heightMeasureSpec);
+            textView.setMaxWidth(Math.max(0, MeasureSpec.getSize(widthMeasureSpec)
+                    - AndroidUtilities.dp(21 + 108 + 8) - collapseViewContainer.getMeasuredWidth()));
+        } else {
+            textView.setMaxWidth(Integer.MAX_VALUE);
+        }
         if (isMultiline) {
             super.onMeasure(MeasureSpec.makeMeasureSpec(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
         } else {

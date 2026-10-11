@@ -21,6 +21,8 @@ public class LiquidGlassEffect {
     private final boolean advanced;
     private final boolean prism;
     private final boolean refractionEnabled;
+    private final boolean customOptics;
+    private final float customRefraction, customDispersion;
     private final Runnable onShadersReady;
     private boolean uniformsInvalidated = true;
 
@@ -50,12 +52,25 @@ public class LiquidGlassEffect {
     }
 
     public LiquidGlassEffect(RenderNode node, boolean fixedRefraction, Runnable onShadersReady) {
+        this(node, fixedRefraction, onShadersReady, Float.NaN, Float.NaN);
+    }
+
+    /** Local advanced-glass optics; never reads or writes the global optical sliders. */
+    public LiquidGlassEffect(RenderNode node, float refraction, float dispersion, Runnable onShadersReady) {
+        this(node, false, onShadersReady, refraction, dispersion);
+    }
+
+    private LiquidGlassEffect(RenderNode node, boolean fixedRefraction, Runnable onShadersReady,
+                              float refraction, float dispersion) {
+        customOptics = !Float.isNaN(refraction) && !Float.isNaN(dispersion);
+        customRefraction = Math.max(0f, Math.min(2f, refraction));
+        customDispersion = Math.max(0f, Math.min(1f, dispersion));
         this.node = node;
         this.fixedRefraction = fixedRefraction;
         this.onShadersReady = onShadersReady;
         prism = zxc.iconic.xenon.NekoConfig.usePrismGlass;
-        advanced = fixedRefraction || zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass;
-        refractionEnabled = org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS);
+        advanced = customOptics || fixedRefraction || zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass;
+        refractionEnabled = customOptics || org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS);
         // Refraction (the liquid-glass distortion) only runs when liquid glass is on.
         // The highlight (glare) is always created so it can be drawn over the frosted blur too.
         node.setRenderEffect(null);
@@ -107,8 +122,8 @@ public class LiquidGlassEffect {
 
     public boolean isConfigurationCurrent() {
         return prism == zxc.iconic.xenon.NekoConfig.usePrismGlass
-                && advanced == (fixedRefraction || zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass)
-                && refractionEnabled == org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS);
+                && (customOptics || advanced == (fixedRefraction || zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass)
+                    && refractionEnabled == org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS));
     }
 
     public void update(
@@ -130,14 +145,18 @@ public class LiquidGlassEffect {
         float sX = (right - left) / 2f;
         float sY = (bottom - top) / 2f;
 
+        final float refractionSetting = customOptics ? customRefraction
+                : zxc.iconic.xenon.NekoConfig.advancedGlassFresnel;
+        final float dispersionSetting = customOptics ? customDispersion
+                : zxc.iconic.xenon.NekoConfig.advancedGlassDispersion;
         final float angleDeg = zxc.iconic.xenon.NekoConfig.advancedGlassGlareAngle;
         final boolean refractionChanged = this.resolutionX != resX || this.resolutionY != resY
                 || this.centerX != cX || this.centerY != cY || this.sizeX != sX || this.sizeY != sY
                 || this.radiusLeftTop != rLT || this.radiusRightTop != rRT
                 || this.radiusRightBottom != rRB || this.radiusLeftBottom != rLB
                 || (advanced
-                    ? (!fixedRefraction && this.cachedFresnel != zxc.iconic.xenon.NekoConfig.advancedGlassFresnel)
-                        || this.cachedDispersion != zxc.iconic.xenon.NekoConfig.advancedGlassDispersion
+                    ? (!fixedRefraction && this.cachedFresnel != refractionSetting)
+                        || this.cachedDispersion != dispersionSetting
                     : this.thickness != thickness || this.intensity != intensity || this.index != index
                         || this.foregroundColor != foregroundColor);
 
@@ -148,8 +167,8 @@ public class LiquidGlassEffect {
                 this.radiusRightBottom != rRB || this.radiusLeftBottom != rLB ||
                 this.thickness != thickness || this.intensity != intensity || this.index != index ||
                 this.glareAngle != angleDeg ||
-                this.cachedFresnel != zxc.iconic.xenon.NekoConfig.advancedGlassFresnel ||
-                this.cachedDispersion != zxc.iconic.xenon.NekoConfig.advancedGlassDispersion ||
+                this.cachedFresnel != refractionSetting ||
+                this.cachedDispersion != dispersionSetting ||
                 this.cachedGlare != zxc.iconic.xenon.NekoConfig.advancedGlassGlare ||
                 this.foregroundColor != foregroundColor) {
 
@@ -160,8 +179,8 @@ public class LiquidGlassEffect {
             this.radiusRightBottom = rRB; this.radiusLeftBottom = rLB;
             this.thickness = thickness; this.intensity = intensity; this.index = index;
             this.glareAngle = angleDeg;
-            this.cachedFresnel = zxc.iconic.xenon.NekoConfig.advancedGlassFresnel;
-            this.cachedDispersion = zxc.iconic.xenon.NekoConfig.advancedGlassDispersion;
+            this.cachedFresnel = refractionSetting;
+            this.cachedDispersion = dispersionSetting;
             this.cachedGlare = zxc.iconic.xenon.NekoConfig.advancedGlassGlare;
             this.foregroundColor = foregroundColor;
 
@@ -174,10 +193,10 @@ public class LiquidGlassEffect {
                 if (advanced) {
                     // The navigation capsule uses the settings slider's 50 value.
                     final float fresnel = fixedRefraction ? 0.5f
-                            : Math.max(0.25f, zxc.iconic.xenon.NekoConfig.advancedGlassFresnel);
+                            : Math.max(0.25f, refractionSetting);
                     final float refractionHeight = AndroidUtilities.dp(16f) * fresnel;
                     final float refractionAmount = -AndroidUtilities.dp(32f) * fresnel;
-                    final float dispersion = Math.max(0.0f, Math.min(1.0f, zxc.iconic.xenon.NekoConfig.advancedGlassDispersion));
+                    final float dispersion = Math.max(0.0f, Math.min(1.0f, dispersionSetting));
 
                     shader.setFloatUniform("size", sX * 2f, sY * 2f);
                     shader.setFloatUniform("center", cX, cY);

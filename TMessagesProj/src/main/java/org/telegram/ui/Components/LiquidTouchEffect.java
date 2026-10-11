@@ -38,6 +38,8 @@ public final class LiquidTouchEffect {
     private SpringAnimation returnX;
     private SpringAnimation returnY;
     private float dragStrength = 1f;
+    private float pressStrength = 1f;
+    private float pressDamping = .5f, pressStiffness = 300f;
     private final Paint glowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path glowClip = new Path();
     private final RectF glowBounds = new RectF();
@@ -53,6 +55,7 @@ public final class LiquidTouchEffect {
     private void ensureSprings() {
         if (press != null) return;
         press = spring(value -> progress = value);
+        press.getSpring().setDampingRatio(pressDamping).setStiffness(pressStiffness);
         returnX = spring(value -> offsetX = value);
         returnY = spring(value -> offsetY = value);
     }
@@ -60,6 +63,27 @@ public final class LiquidTouchEffect {
     /** Changes drag deformation without changing press enlargement. */
     public void setDragStrength(float strength) {
         dragStrength = Math.max(0f, strength);
+    }
+
+    public void setPressStrength(float strength) {
+        pressStrength = Math.max(0f, strength);
+    }
+
+    public void setPressSpring(float damping, float stiffness) {
+        pressDamping = Math.max(.01f, damping);
+        pressStiffness = Math.max(1f, stiffness);
+        if (press != null) press.getSpring().setDampingRatio(pressDamping).setStiffness(pressStiffness);
+    }
+
+    /** Carry the tap's spring into a surface morph, including a newly revealed sibling. */
+    public void pulsePress() {
+        ensureSprings();
+        if (pointerId != -1) return;
+        downX = bounds.centerX();
+        downY = bounds.centerY();
+        startPress();
+        releasePending = true;
+        AndroidUtilities.runOnUIThread(releasePress, 180);
     }
 
     public void setContentView(View view) {
@@ -199,7 +223,7 @@ public final class LiquidTouchEffect {
         float width = bounds.width(), height = bounds.height();
         float min = Math.min(width, height), max = Math.max(width, height);
         float dragScale = Math.min(0.12f, AndroidUtilities.dpf2(4f) / height);
-        float scale = 1f + dragScale * progress;
+        float scale = 1f + dragScale * pressStrength * progress;
         dragScale *= dragStrength;
         double angle = Math.atan2(offsetY, offsetX);
         scaleX = scale + dragScale * (float) Math.abs(Math.cos(angle) * offsetX / max) * Math.min(width / height, 1f);

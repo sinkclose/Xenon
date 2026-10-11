@@ -32,6 +32,10 @@ import org.telegram.ui.Components.LayoutHelper;
 import java.util.ArrayList;
 
 public class HeaderCell extends FrameLayout {
+    private Integer sectionBackgroundColor;
+    private final int textColorKey;
+    private Integer explicitTextColor;
+    private boolean iosHeaderColorApplied;
 
     public int id;
 
@@ -75,6 +79,7 @@ public class HeaderCell extends FrameLayout {
 
     public HeaderCell(Context context, int textColorKey, int padding, int topMargin, int bottomMargin, boolean text2, boolean animated, Theme.ResourcesProvider resourcesProvider) {
         super(context);
+        this.textColorKey = textColorKey;
         this.resourcesProvider = resourcesProvider;
         this.padding = padding;
         this.bottomMargin = bottomMargin;
@@ -158,6 +163,7 @@ public class HeaderCell extends FrameLayout {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        if (sectionBackgroundColor != null) setBackgroundColor(sectionBackgroundColor);
         super.onMeasure(MeasureSpec.makeMeasureSpec(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
     }
 
@@ -170,12 +176,31 @@ public class HeaderCell extends FrameLayout {
     }
 
     public void setTextColor(int color) {
+        explicitTextColor = color;
+        applyTextColor(color);
+    }
+
+    private void applyTextColor(int color) {
         if (textView != null) {
-            textView.setTextColor(color);
+            if (textView.getCurrentTextColor() != color) textView.setTextColor(color);
         }
         if (animatedTextView != null) {
-            animatedTextView.setTextColor(color);
+            if (animatedTextView.getTextColor() != color) animatedTextView.setTextColor(color);
         }
+    }
+
+    @Override
+    protected void dispatchDraw(android.graphics.Canvas canvas) {
+        boolean ios = textColorKey == Theme.key_windowBackgroundWhiteBlueHeader
+                && zxc.iconic.xenon.helpers.IosListItemsHelper.isEnabled();
+        if (ios) {
+            // Telegram iOS sectionHeaderTextColor is a secondary text color, independent of the accent.
+            applyTextColor(getThemedColor(Theme.key_windowBackgroundWhiteGrayText));
+        } else if (iosHeaderColorApplied) {
+            applyTextColor(explicitTextColor != null ? explicitTextColor : getThemedColor(textColorKey));
+        }
+        iosHeaderColorApplied = ios;
+        super.dispatchDraw(canvas);
     }
 
     public void setText(CharSequence text) {
@@ -223,7 +248,8 @@ public class HeaderCell extends FrameLayout {
 
     @Override
     public void setBackgroundColor(int color) {
-        super.setBackgroundColor(zxc.iconic.xenon.helpers.M3SectionsHelper.isEnabled() ? android.graphics.Color.TRANSPARENT : color);
+        sectionBackgroundColor = color;
+        super.setBackgroundColor((zxc.iconic.xenon.helpers.M3SectionsHelper.isEnabled() || zxc.iconic.xenon.helpers.IosListItemsHelper.isEnabled()) ? android.graphics.Color.TRANSPARENT : color);
     }
 
     private int getThemedColor(int key) {

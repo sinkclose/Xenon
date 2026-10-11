@@ -213,9 +213,13 @@ public class NekoConfig {
     public static int alternativeTransitionSpeed = DEFAULT_IOS_DURATION;
     public static String alternativeTransitionEase = DEFAULT_IOS_EASE;
     public static boolean material3Switches = false;
+    public static boolean iosSwitches = false;
+    public static boolean iosListItems = false;
     public static boolean m3SectionsStyle = false;
     public static boolean material3ChatHeaders = false;
     public static boolean materialSliders = false;
+    public static boolean iosSliders = false;
+    public static boolean iosBottomBar = false;
     public static boolean centerChatHeader = false;
     public static boolean centerTitle = false;
     public static boolean biggerAvatar = false;
@@ -502,10 +506,13 @@ public class NekoConfig {
             textAnimBlurDuration = preferences.getInt("textAnimBlurDuration", 350);
             alternativeTransitionSpeed = preferences.getInt("alternativeTransitionSpeed", DEFAULT_IOS_DURATION);
             alternativeTransitionEase = preferences.getString("alternativeTransitionEase", DEFAULT_IOS_EASE);
-            material3Switches = preferences.getBoolean("material3Switches", false);
-            m3SectionsStyle = preferences.getBoolean("m3SectionsStyle", false);
+            iosSwitches = preferences.getBoolean("iosSwitches", false);
+            material3Switches = preferences.getBoolean("material3Switches", false) && !iosSwitches;
+            iosListItems = preferences.getBoolean("iosListItems", false);
+            m3SectionsStyle = preferences.getBoolean("m3SectionsStyle", false) && !iosListItems;
             material3ChatHeaders = preferences.getBoolean("material3ChatHeaders", false);
-            materialSliders = preferences.getBoolean("materialSliders", false);
+            iosSliders = preferences.getBoolean("iosSliders", false);
+            materialSliders = preferences.getBoolean("materialSliders", false) && !iosSliders;
             centerChatHeader = preferences.getBoolean("centerChatHeader", false);
             centerTitle = preferences.getBoolean("centerTitle", false);
             avatarPlacement = preferences.getInt("avatarPlacement", AVATAR_PLACEMENT_LEFT);
@@ -547,7 +554,8 @@ public class NekoConfig {
                 glassGlareMode = GLASS_GLARE_FULL;
             }
             disableScrimBlur = preferences.getBoolean("disableScrimBlur", false);
-            material3BottomNavigationBar = preferences.getBoolean("material3BottomNavigationBar", false);
+            iosBottomBar = preferences.getBoolean("iosBottomBar", false);
+            material3BottomNavigationBar = preferences.getBoolean("material3BottomNavigationBar", false) && !iosBottomBar;
             md3Folders = preferences.getBoolean("md3Folders", false);
             avatarShape = preferences.getInt("avatarShape", 0);
             avatarShapeInChatList = preferences.getBoolean("avatarShapeInChatList", true);
@@ -834,16 +842,36 @@ public class NekoConfig {
         material3Switches = !material3Switches;
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
+        if (material3Switches) iosSwitches = false;
         editor.putBoolean("material3Switches", material3Switches);
+        editor.putBoolean("iosSwitches", iosSwitches);
         editor.apply();
+    }
+
+    public static void toggleIosSwitches() {
+        iosSwitches = !iosSwitches;
+        if (iosSwitches) material3Switches = false;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        preferences.edit().putBoolean("iosSwitches", iosSwitches)
+                .putBoolean("material3Switches", material3Switches).apply();
     }
 
     public static void toggleM3SectionsStyle() {
         m3SectionsStyle = !m3SectionsStyle;
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
+        if (m3SectionsStyle) iosListItems = false;
+        editor.putBoolean("iosListItems", iosListItems);
         editor.putBoolean("m3SectionsStyle", m3SectionsStyle);
         editor.apply();
+    }
+
+    public static void toggleIosListItems() {
+        iosListItems = !iosListItems;
+        if (iosListItems) m3SectionsStyle = false;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        preferences.edit().putBoolean("iosListItems", iosListItems)
+                .putBoolean("m3SectionsStyle", m3SectionsStyle).apply();
     }
 
     public static void toggleMaterial3ChatHeaders() {
@@ -858,8 +886,18 @@ public class NekoConfig {
         materialSliders = !materialSliders;
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
+        if (materialSliders) iosSliders = false;
+        editor.putBoolean("iosSliders", iosSliders);
         editor.putBoolean("materialSliders", materialSliders);
         editor.apply();
+    }
+
+    public static void toggleIosSliders() {
+        iosSliders = !iosSliders;
+        if (iosSliders) materialSliders = false;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        preferences.edit().putBoolean("iosSliders", iosSliders)
+                .putBoolean("materialSliders", materialSliders).apply();
     }
 
     public static void toggleCenterChatHeader() {
@@ -2091,10 +2129,20 @@ public class NekoConfig {
 
     public static void toggleMaterial3BottomNavigationBar() {
         material3BottomNavigationBar = !material3BottomNavigationBar;
+        if (material3BottomNavigationBar) iosBottomBar = false;
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("material3BottomNavigationBar", material3BottomNavigationBar);
+        editor.putBoolean("iosBottomBar", iosBottomBar);
         editor.apply();
+    }
+
+    public static void toggleIosBottomBar() {
+        iosBottomBar = !iosBottomBar;
+        if (iosBottomBar) material3BottomNavigationBar = false;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        preferences.edit().putBoolean("iosBottomBar", iosBottomBar)
+                .putBoolean("material3BottomNavigationBar", material3BottomNavigationBar).apply();
     }
 
     public static void toggleMd3Folders() {

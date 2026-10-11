@@ -31796,6 +31796,12 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         super.onResume();
         // Wallpaper render nodes may need recording again after a long pause.
         fadeWallpaperDirty = true;
+        if (fadeWallpaperSource != null) {
+            fadeWallpaperSource.invalidateDisplayListForDrawables();
+        }
+        if (fadeBlurSource != null) {
+            fadeBlurSource.invalidateDisplayListForDrawables();
+        }
         syncFadeBlurEnabledState();
         if (fadeBlurSource != null && NekoConfig.blurredFadeViewEnabled()) startFadeBlurContinuousUpdates();
         invalidateFadeBlur();
@@ -31831,6 +31837,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
         if (contentView != null) {
             contentView.onResume();
+            // Restore the same clip/wallpaper state refreshed by stretch
+            // overscroll, after the background has left its paused state.
+            invalidateClipRectForBackgroundAndChatList();
+            invalidateMergedVisibleBlurredPositionsAndSources(BLUR_INVALIDATE_FLAG_POSITIONS
+                    | BLUR_INVALIDATE_FLAG_SCROLL | BLUR_INVALIDATE_FLAG_CLIP | BLUR_INVALIDATE_FLAG_WALLPAPER);
         }
         checkChecksHint();
 
@@ -51220,7 +51231,8 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
         // Capture the actual chat background separately, preserving patterns and
         // custom drawables that the wallpaper bitmap provider cannot reproduce.
-        if (NekoConfig.blurredFadeDimming && (fadeWallpaperDirty || fadeWallpaperWidth != fw || fadeWallpaperHeight != fh)) {
+        if (NekoConfig.blurredFadeDimming && (fadeWallpaperDirty || fadeWallpaperWidth != fw || fadeWallpaperHeight != fh
+                || fadeWallpaperSource.needUpdateDisplayList(fw, fh))) {
             Canvas wallpaperCanvas = fadeWallpaperSource.beginRecording(fw, fh);
             try {
                 wallpaperCanvas.drawColor(wallpaperColor);
@@ -51238,6 +51250,10 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             fadeWallpaperDirty = false;
             fadeWallpaperWidth = fw;
             fadeWallpaperHeight = fh;
+            // Rebuild both consumers after recording: their cached display lists
+            // can survive while a nested wallpaper/fill node is discarded.
+            fadeWallpaperSource.invalidateDisplayListForDrawables();
+            fadeBlurSource.invalidateDisplayListForDrawables();
         }
         // Only messages pass through the blur effect in dimming mode. Their
         // background is drawn underneath, outside that effect.

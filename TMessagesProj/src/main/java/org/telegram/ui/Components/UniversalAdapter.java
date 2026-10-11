@@ -598,6 +598,8 @@ public class UniversalAdapter extends AdapterWithDiffUtils {
         }
         UItem item = getItem(position);
         UItem nextItem = getItem(position + 1);
+        if (zxc.iconic.xenon.helpers.IosListItemsHelper.isEnabled() && nextItem != null
+                && M3SectionsHelper.isHeaderViewType(nextItem.viewType)) return false;
         return item != null && !item.hideDivider && nextItem != null && isShadow(nextItem.viewType) == isShadow(item.viewType);
     }
 

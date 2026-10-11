@@ -67,6 +67,14 @@ public class FragmentSearchField extends FrameLayout implements FactorAnimator.T
     public final TextAnimationEditText editText;
     private BlurredBackgroundDrawable blurredBackgroundDrawable;
     public zxc.iconic.xenon.helpers.BlurBehindHelper blurHelper;
+    private boolean externalSearchContainer;
+
+    public void setExternalSearchContainer(boolean external) {
+        externalSearchContainer = external;
+        searchIcon.setVisibility(external ? GONE : VISIBLE);
+        checkCloseButtonVisible();
+        invalidate();
+    }
 
     public FragmentSearchField(Context context, Theme.ResourcesProvider resourcesProvider) {
         super(context);
@@ -188,6 +196,10 @@ public class FragmentSearchField extends FrameLayout implements FactorAnimator.T
 
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
+        if (externalSearchContainer) {
+            super.dispatchDraw(canvas);
+            return;
+        }
         canvas.save();
         if (blurHelper != null) blurHelper.draw(canvas);
         if (blurHelper == null && bg != null) {
@@ -332,7 +344,7 @@ public class FragmentSearchField extends FrameLayout implements FactorAnimator.T
     }
 
     private void checkCloseButtonVisible() {
-        animatorCloseIconVisible.setValue(closeButtonForcedVisible || editText.length() > 0, true);
+        animatorCloseIconVisible.setValue((!externalSearchContainer && closeButtonForcedVisible) || editText.length() > 0, true);
     }
 
     @Override
@@ -341,7 +353,8 @@ public class FragmentSearchField extends FrameLayout implements FactorAnimator.T
             FragmentFloatingButton.setAnimatedVisibility(closeIcon, factor);
             closeIcon.setRotation((1 - factor) * 90);
         } else if (id == ANIMATOR_ID_SEARCH_ICON_VISIBLE) {
-            FragmentFloatingButton.setAnimatedVisibility(searchIcon, factor);
+            if (externalSearchContainer) searchIcon.setVisibility(GONE);
+            else FragmentFloatingButton.setAnimatedVisibility(searchIcon, factor);
         } else if (id == ANIMATOR_ID_SEARCH_FILTERS_WIDTH) {
             checkUi_editTextPaddings();
         }

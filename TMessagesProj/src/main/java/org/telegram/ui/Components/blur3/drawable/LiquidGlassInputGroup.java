@@ -52,6 +52,11 @@ public final class LiquidGlassInputGroup {
         merges[a * 8 + b] = merges[b * 8 + a] = Math.max(1f, distance);
     }
 
+    public void release() {
+        node.setRenderEffect(null);
+        node.discardDisplayList();
+    }
+
     public void draw(Canvas canvas, BlurredBackgroundDrawable[] members, RectF[] bounds, float[] alpha,
                      LiquidTouchEffect[] effects) {
         draw(canvas, members, bounds, alpha, effects, null);

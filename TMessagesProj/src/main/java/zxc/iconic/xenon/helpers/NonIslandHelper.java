@@ -106,6 +106,7 @@ public class NonIslandHelper {
     }
 
     public static void updateGlobalSearchBarInsets(FragmentSearchField field) {
+        if (field == null || field.getParent() instanceof IosBottomSearchView) return;
         if (!globalSearch()) return;
         int extraTopPadding = AndroidUtilities.statusBarHeight + AndroidUtilities.dp(8f);
         field.setPadding(0, extraTopPadding, 0, 0);

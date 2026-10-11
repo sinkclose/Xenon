@@ -45,6 +45,14 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
     private ProfileGooeyView gooeyOffsetPreview;
     private final int material3Row = rowId++;
     private boolean material3Expanded;
+    private final int ios26Row = rowId++;
+    private final int iosLikeInputFieldRow = rowId++;
+    private final int liquidChatElementsRow = rowId++;
+    private final int iosSwitchesRow = rowId++;
+    private final int iosListItemsRow = rowId++;
+    private final int iosSlidersRow = rowId++;
+    private final int iosBottomBarRow = rowId++;
+    private boolean ios26Expanded;
 
     @Override
     public View createView(Context context) {
@@ -155,12 +163,12 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
     @Override
     protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
         items.add(UItem.asHeader(LocaleController.getString(R.string.BlurAndLiquidGlass)));
-        items.add(TextSettingsCellFactory.of(blurSettingsRow, LocaleController.getString(R.string.BlurSettings), "›").slug("blurSettings"));
-        items.add(TextSettingsCellFactory.of(liquidGlassRow, LocaleController.getString(R.string.BlurAndLiquidGlass), "›").slug("liquidGlass"));
+        items.add(TextSettingsCellFactory.of(blurSettingsRow, LocaleController.getString(R.string.BlurSettings), "\u203A").slug("blurSettings"));
+        items.add(TextSettingsCellFactory.of(liquidGlassRow, LocaleController.getString(R.string.BlurAndLiquidGlass), "\u203A").slug("liquidGlass"));
         items.add(UItem.asShadow(null));
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.Navigation)));
-        items.add(TextSettingsCellFactory.of(navigationSettingsRow, LocaleController.getString(R.string.NavigationSettings), "›").slug("navigationSettings"));
+        items.add(TextSettingsCellFactory.of(navigationSettingsRow, LocaleController.getString(R.string.NavigationSettings), "\u203A").slug("navigationSettings"));
         items.add(UItem.asShadow(null));
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.ChangeChannelNameColor2)));
@@ -204,11 +212,22 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         }
         items.add(InfoCheckboxCellFactory.of(material3DialogsRow, LocaleController.getString(R.string.Material3Dialogs), NekoConfig.material3Dialogs, this::showDialogsInfo).slug("material3Dialogs"));
         }
-        items.add(TextSettingsCellFactory.of(avatarShapeRow, LocaleController.getString(R.string.Avatars), "›").slug("avatarShape"));
+        items.add(UItem.asExpandableSwitch(ios26Row, "iOS 26 design", ios26Count() + "/6")
+                .setChecked(ios26Count() > 0).setCollapsed(!ios26Expanded)
+                .setClickCallback(v -> setIos26Enabled(ios26Count() == 0)).slug("ios26"));
+        if (ios26Expanded) {
+            items.add(UItem.asRoundCheckbox(iosLikeInputFieldRow, LocaleController.getString(R.string.IosLikeInputField)).setChecked(NekoConfig.iosLikeInputField).slug("iosLikeInputField"));
+            items.add(UItem.asRoundCheckbox(liquidChatElementsRow, LocaleController.getString(R.string.LiquidChatElements)).setChecked(NekoConfig.liquidChatElements).slug("liquidChatElements"));
+            items.add(UItem.asRoundCheckbox(iosSwitchesRow, LocaleController.getString(R.string.Switches)).setChecked(NekoConfig.iosSwitches).slug("iosSwitches"));
+            items.add(UItem.asRoundCheckbox(iosListItemsRow, LocaleController.getString(R.string.ListItems)).setChecked(NekoConfig.iosListItems).slug("iosListItems"));
+            items.add(UItem.asRoundCheckbox(iosSlidersRow, LocaleController.getString(R.string.MaterialSliders)).setChecked(NekoConfig.iosSliders).slug("iosSliders"));
+            items.add(UItem.asRoundCheckbox(iosBottomBarRow, LocaleController.getString(R.string.BottomNavigationBar)).setChecked(NekoConfig.iosBottomBar).slug("iosBottomBar"));
+        }
+        items.add(TextSettingsCellFactory.of(avatarShapeRow, LocaleController.getString(R.string.Avatars), "\u203A").slug("avatarShape"));
         items.add(UItem.asShadow(null));
 
         items.add(UItem.asHeader("Chat Header"));
-        items.add(TextSettingsCellFactory.of(chatHeaderSettingsRow, LocaleController.getString(R.string.ChatHeaderSettings), "›").slug("chatHeaderSettings"));
+        items.add(TextSettingsCellFactory.of(chatHeaderSettingsRow, LocaleController.getString(R.string.ChatHeaderSettings), "\u203A").slug("chatHeaderSettings"));
         items.add(InfoCheckCellFactory.of(centeredTitleRow, LocaleController.getString(R.string.CenteredTitle), NekoConfig.centerTitle, () -> showCenteredTitleInfo()).slug("centeredTitle"));
         items.add(UItem.asShadow(null));
 
@@ -219,7 +238,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         items.add(UItem.asShadow(LocaleController.getString(R.string.InuNonIslandHint)));
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.TextAnimation)));
-        items.add(TextSettingsCellFactory.of(textAnimationSettingsRow, LocaleController.getString(R.string.TextAnimation), "›").slug("textAnimationSettings"));
+        items.add(TextSettingsCellFactory.of(textAnimationSettingsRow, LocaleController.getString(R.string.TextAnimation), "\u203A").slug("textAnimationSettings"));
         items.add(UItem.asShadow(null));
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.SavedDialogsTab)));
@@ -241,6 +260,41 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
 
     }
 
+    private void refreshActivitySwitches() {
+        View root = getParentActivity() != null ? getParentActivity().getWindow().getDecorView() : fragmentView;
+        if (root == null) return;
+        org.telegram.ui.Components.Switch.invalidateAllSwitches(root);
+        zxc.iconic.xenon.helpers.SliderStyleHelper.invalidateAll(root);
+        // Also catch rows attached by the pending adapter/layout update.
+        root.post(() -> {
+            org.telegram.ui.Components.Switch.invalidateAllSwitches(root);
+            zxc.iconic.xenon.helpers.SliderStyleHelper.invalidateAll(root);
+        });
+    }
+
+    private void refreshListStyle() {
+        listView.adapter.update(false);
+        listView.adapter.notifyDataSetChanged();
+        listView.invalidateItemDecorations();
+        parentLayout.rebuildAllFragmentViews(false, false);
+        refreshActivitySwitches();
+    }
+
+    private int ios26Count() {
+        return (NekoConfig.iosLikeInputField ? 1 : 0) + (NekoConfig.liquidChatElements ? 1 : 0) + (NekoConfig.iosSwitches ? 1 : 0) + (NekoConfig.iosListItems ? 1 : 0) + (NekoConfig.iosSliders ? 1 : 0) + (NekoConfig.iosBottomBar ? 1 : 0);
+    }
+
+    private void setIos26Enabled(boolean enabled) {
+        if (NekoConfig.iosLikeInputField != enabled) NekoConfig.toggleIosLikeInputField();
+        if (NekoConfig.liquidChatElements != enabled) NekoConfig.toggleLiquidChatElements();
+        if (NekoConfig.iosSwitches != enabled) NekoConfig.toggleIosSwitches();
+        if (NekoConfig.iosListItems != enabled) NekoConfig.toggleIosListItems();
+        if (NekoConfig.iosSliders != enabled) NekoConfig.toggleIosSliders();
+        if (NekoConfig.iosBottomBar != enabled) NekoConfig.toggleIosBottomBar();
+        NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.mainTabsConfigUpdated);
+        refreshListStyle();
+    }
+
     private int material3Count() {
         return (NekoConfig.material3Switches ? 1 : 0) + (NekoConfig.m3SectionsStyle ? 1 : 0) + (NekoConfig.materialSliders ? 1 : 0) + (NekoConfig.material3BottomNavigationBar ? 1 : 0) + (NekoConfig.md3Folders ? 1 : 0) + (NekoConfig.wavyEnabled ? 1 : 0) + (NekoConfig.wavyProgressEnabled ? 1 : 0) + (NekoConfig.material3Dialogs ? 1 : 0);
     }
@@ -255,8 +309,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         if (NekoConfig.wavyEnabled != enabled) NekoConfig.toggleWavyEnabled();
         if (NekoConfig.wavyProgressEnabled != enabled) NekoConfig.toggleWavyProgressEnabled();
         if (NekoConfig.material3Dialogs != enabled) NekoConfig.toggleMaterial3Dialogs();
-        listView.adapter.update(true);
-        parentLayout.rebuildAllFragmentViews(false, false);
+        refreshListStyle();
         showRestartBulletin();
     }
 
@@ -266,6 +319,32 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         if (id == material3Row) {
             material3Expanded = !material3Expanded;
             listView.adapter.update(true);
+        } else if (id == ios26Row) {
+            ios26Expanded = !ios26Expanded;
+            listView.adapter.update(true);
+        } else if (id == iosLikeInputFieldRow) {
+            NekoConfig.toggleIosLikeInputField();
+            listView.adapter.update(true);
+        } else if (id == liquidChatElementsRow) {
+            NekoConfig.toggleLiquidChatElements();
+            listView.adapter.update(true);
+        } else if (id == iosSwitchesRow) {
+            NekoConfig.toggleIosSwitches();
+            listView.adapter.update(true);
+            parentLayout.rebuildAllFragmentViews(false, false);
+            refreshActivitySwitches();
+        } else if (id == iosListItemsRow) {
+            NekoConfig.toggleIosListItems();
+            refreshListStyle();
+        } else if (id == iosSlidersRow) {
+            NekoConfig.toggleIosSliders();
+            listView.adapter.update(true);
+            parentLayout.rebuildAllFragmentViews(false, false);
+            refreshActivitySwitches();
+        } else if (id == iosBottomBarRow) {
+            NekoConfig.toggleIosBottomBar();
+            NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.mainTabsConfigUpdated);
+            refreshListStyle();
         } else if (id == textAnimationSettingsRow) {
             presentFragment(new NekoTextAnimationSettingsActivity());
         } else if (id == navigationSettingsRow) {
@@ -374,15 +453,17 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.material3Switches);
             }
-            showRestartBulletin();
+            parentLayout.rebuildAllFragmentViews(false, false);
+            refreshActivitySwitches();
         } else if (id == m3SectionsStyleRow) {
             NekoConfig.toggleM3SectionsStyle();
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.m3SectionsStyle);
             }
-            showRestartBulletin();
+            refreshListStyle();
         } else if (id == materialSlidersRow) {
             NekoConfig.toggleMaterialSliders();
+            refreshActivitySwitches();
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.materialSliders);
             }
@@ -463,6 +544,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
             presentFragment(new NekoChatHeaderSettingsActivity());
         } else if (id == centeredTitleRow) {
             NekoConfig.toggleCenterTitle();
+            item.checked = NekoConfig.centerTitle;
             if (view instanceof InfoCheckCell) {
                 ((InfoCheckCell) view).setChecked(NekoConfig.centerTitle);
             }
@@ -796,7 +878,9 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
     public void onResume() {
         super.onResume();
         if (listView == null) return;
+        listView.adapter.update(true);
         notifyItemChanged(emojiSetsRow);
+        refreshActivitySwitches();
     }
 
     private static class EmojiSetCellFactory extends UItem.UItemFactory<EmojiSetCell> {

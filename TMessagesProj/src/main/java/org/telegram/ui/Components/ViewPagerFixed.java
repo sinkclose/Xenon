@@ -1118,6 +1118,15 @@ public class ViewPagerFixed extends FrameLayout {
         return currentPosition;
     }
 
+    /** Destination is known before currentPosition is committed at the end of a transition. */
+    public int getTransitionTargetPosition() {
+        if (viewPages[1] != null && (manualScrolling != null || startedTracking
+                || (tabsAnimationInProgress && !backAnimation))) {
+            return nextPosition;
+        }
+        return currentPosition;
+    }
+
     public void cancelTouches() {
         if (velocityTracker != null) {
             velocityTracker.computeCurrentVelocity(1000, maximumVelocity);

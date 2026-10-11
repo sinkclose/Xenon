@@ -146,6 +146,20 @@ public class TextCheckCell extends FrameLayout {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        boolean ios = zxc.iconic.xenon.NekoConfig.iosSwitches;
+        LayoutParams switchParams = (LayoutParams) checkBox.getLayoutParams();
+        switchParams.width = AndroidUtilities.dp(ios ? 84 : 37);
+        switchParams.height = AndroidUtilities.dp(ios ? 48 : 20);
+        switchParams.leftMargin = switchParams.rightMargin = AndroidUtilities.dp(ios ? 12 : 22);
+        int switchSpace = AndroidUtilities.dp(ios ? 108 : 70);
+        LayoutParams labelParams = (LayoutParams) textView.getLayoutParams();
+        LayoutParams valueParams = (LayoutParams) valueTextView.getLayoutParams();
+        if (LocaleController.isRTL) {
+            labelParams.leftMargin = valueParams.leftMargin = switchSpace;
+        } else {
+            labelParams.rightMargin = valueParams.rightMargin = switchSpace;
+        }
+
         if (isMultiline) {
             super.onMeasure(MeasureSpec.makeMeasureSpec(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
         } else {

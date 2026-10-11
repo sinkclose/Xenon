@@ -1230,6 +1230,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
                         currentChildView = v;
                     }
                 }
+                if (zxc.iconic.xenon.NekoConfig.iosSwitches && hasIosSwitchAt(currentChildView,
+                        event.getX() - (currentChildView == null ? 0 : currentChildView.getX()),
+                        event.getY() - (currentChildView == null ? 0 : currentChildView.getY()))) {
+                    currentChildView = null;
+                }
                 if (currentChildView instanceof ViewGroup) {
                     float x = event.getX() - currentChildView.getLeft();
                     float y = event.getY() - currentChildView.getTop();
@@ -1965,6 +1970,20 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
 
     public OnItemClickListener getOnItemClickListener() {
         return onItemClickListener;
+    }
+
+    private static boolean hasIosSwitchAt(View view, float x, float y) {
+        if (view == null || view.getVisibility() != View.VISIBLE || x < 0 || y < 0
+                || x > view.getWidth() || y > view.getHeight()) return false;
+        if (view instanceof Switch) return view.isEnabled();
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = group.getChildCount() - 1; i >= 0; i--) {
+                View child = group.getChildAt(i);
+                if (hasIosSwitchAt(child, x - child.getX(), y - child.getY())) return true;
+            }
+        }
+        return false;
     }
 
     public void clickItem(View item, int position) {
@@ -3264,6 +3283,15 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
     private Utilities.Callback5<Canvas, RectF, Float, Float, Float> drawSectionBackground;
     public ArrayList<Long> forcedSections;
     public float sectionRadius;
+    private float originalSectionRadius;
+
+    private void updateSectionRadius() {
+        float radius = zxc.iconic.xenon.helpers.IosListItemsHelper.radius(originalSectionRadius);
+        if (sectionRadius == radius || sectionRadiusTop == null) return;
+        sectionRadius = radius;
+        sectionRadiusTop[0] = sectionRadiusTop[1] = sectionRadiusTop[2] = sectionRadiusTop[3] = radius;
+        sectionRadiusBottom[4] = sectionRadiusBottom[5] = sectionRadiusBottom[6] = sectionRadiusBottom[7] = radius;
+    }
     public float[] sectionRadiusTop, sectionRadiusBottom;
     public boolean applyPaddingToSections = false;
 
@@ -3306,7 +3334,8 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
                     final boolean isSection = isSectionView.run(view);
                     final ViewHolder viewHolder = listView.getChildViewHolder(view);
                     if (viewHolder != null) {
-                        cache.put(viewHolder.getItemViewType(), isSection ? 1 : 0);
+                        cache.put(viewHolder.getItemViewType(), isSection
+                                ? (view instanceof org.telegram.ui.Cells.HeaderCell ? 2 : 1) : 0);
                     }
                     return isSection;
                 } catch (Exception e) {
@@ -3316,7 +3345,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
             (viewType) -> {
                 int cached = cache.get(viewType, -1);
                 if (cached == -1) return true;
-                return cached == 1;
+                return cached == 1 || cached == 2 && !zxc.iconic.xenon.helpers.IosListItemsHelper.isEnabled();
             }
         );
     }
@@ -3339,7 +3368,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
         boolean topPadding
     ) {
         setSelectorDrawableColor(getThemedColor(Theme.key_settings_listSelector));
-        this.isViewTypeSection = isViewTypeSection;
+        this.isViewTypeSection = isViewTypeSection == null ? null
+                : type -> zxc.iconic.xenon.helpers.IosListItemsHelper.isSection(
+                        isViewTypeSection.run(type), getAdapter() instanceof UniversalAdapter && M3SectionsHelper.isHeaderViewType(type));
+        this.originalSectionRadius = roundRadius;
+        roundRadius = zxc.iconic.xenon.helpers.IosListItemsHelper.radius(roundRadius);
         this.sectionRadius = roundRadius;
         this.sectionRadiusTop = new float[] {
             roundRadius, roundRadius,
@@ -3357,7 +3390,8 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
         if (sectionsItemDecoration != null) {
             removeItemDecoration(sectionsItemDecoration);
         }
-        addItemDecoration(sectionsItemDecoration = new ListSectionsDecoration(this, isSectionView, padding, topPadding));
+        addItemDecoration(sectionsItemDecoration = new ListSectionsDecoration(this, view -> zxc.iconic.xenon.helpers.IosListItemsHelper.isSection(
+                isSectionView.run(view), view instanceof org.telegram.ui.Cells.HeaderCell), padding, topPadding));
 //        if (getItemAnimator() != null) {
 //            getItemAnimator().listenToAnimationUpdates(this::invalidate);
 //        }
@@ -3392,7 +3426,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
             @NonNull RecyclerView parent,
             @NonNull RecyclerView.State state
         ) {
-            if (M3SectionsHelper.isEnabled() && view instanceof org.telegram.ui.Cells.HeaderCell) {
+            if ((M3SectionsHelper.isEnabled() || zxc.iconic.xenon.helpers.IosListItemsHelper.isEnabled()) && view instanceof org.telegram.ui.Cells.HeaderCell) {
                 outRect.left = outRect.right = padding;
             }
             if (isSectionItem.run(view)) {
@@ -3491,6 +3525,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
         return false;
     }
     public void drawSectionsBackgrounds(Canvas canvas) {
+        updateSectionRadius();
         if (M3SectionsHelper.isEnabled()) {
             M3SectionsHelper.drawSectionsBackgrounds(canvas, this);
             return;
@@ -3640,6 +3675,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
 
     private final Path clipPath = new Path();
     private void clipChild(Canvas canvas, View child) {
+        updateSectionRadius();
         if (M3SectionsHelper.isEnabled()) {
             M3SectionsHelper.clipChild(canvas, child, this);
             return;
@@ -3654,8 +3690,10 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
         } else {
             final View prevChild = findViewByPosition(position - 1);
             final View nextChild = findViewByPosition(position + 1);
-            prev = prevChild != null && sectionsItemDecoration.isSectionItem.run(prevChild);
-            next = nextChild != null && sectionsItemDecoration.isSectionItem.run(nextChild);
+            prev = zxc.iconic.xenon.helpers.IosListItemsHelper.isEnabled() ? isSectionPosition(position - 1)
+                    : prevChild != null && sectionsItemDecoration.isSectionItem.run(prevChild);
+            next = zxc.iconic.xenon.helpers.IosListItemsHelper.isEnabled() ? isSectionPosition(position + 1)
+                    : nextChild != null && sectionsItemDecoration.isSectionItem.run(nextChild);
         }
 
         AndroidUtilities.rectTmp.set(
@@ -3708,6 +3746,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
     }
 
     public Drawable getClipBackground(View child, boolean forceRound) {
+        updateSectionRadius();
         if (child.getParent() != this || !hasSections() || !sectionsItemDecoration.isSectionItem.run(child)) return null;
 
         boolean prev, next;
@@ -3717,8 +3756,10 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
         } else {
             final View prevChild = findViewByPosition(position - 1);
             final View nextChild = findViewByPosition(position + 1);
-            prev = prevChild != null && sectionsItemDecoration.isSectionItem.run(prevChild);
-            next = nextChild != null && sectionsItemDecoration.isSectionItem.run(nextChild);
+            prev = zxc.iconic.xenon.helpers.IosListItemsHelper.isEnabled() ? isSectionPosition(position - 1)
+                    : prevChild != null && sectionsItemDecoration.isSectionItem.run(prevChild);
+            next = zxc.iconic.xenon.helpers.IosListItemsHelper.isEnabled() ? isSectionPosition(position + 1)
+                    : nextChild != null && sectionsItemDecoration.isSectionItem.run(nextChild);
         }
 
         final RectF rect = new RectF();

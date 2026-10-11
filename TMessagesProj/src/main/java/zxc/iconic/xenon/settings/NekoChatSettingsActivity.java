@@ -269,6 +269,12 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        if (listView != null) listView.adapter.update(true);
+    }
+
+    @Override
     protected void onItemClick(UItem item, View view, int position, float x, float y) {
         var id = item.id;
         if (id == iosLikeInputFieldRow) {

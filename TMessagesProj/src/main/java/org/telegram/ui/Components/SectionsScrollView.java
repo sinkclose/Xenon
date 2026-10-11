@@ -39,7 +39,7 @@ public class SectionsScrollView extends ScrollView {
 
     public static boolean isSectionView(View view) {
         return !Objects.equals(view.getTag(), RecyclerListView.TAG_NOT_SECTION) && !(
-            (M3SectionsHelper.isEnabled() && view instanceof HeaderCell) ||
+            ((M3SectionsHelper.isEnabled() || zxc.iconic.xenon.helpers.IosListItemsHelper.isEnabled()) && view instanceof HeaderCell) ||
             view instanceof TextInfoPrivacyCell ||
             view instanceof ShadowSectionCell ||
             view instanceof FiltersSetupActivity.HintInnerCell
@@ -143,6 +143,9 @@ public class SectionsScrollView extends ScrollView {
     }
 
     private void drawSectionsBackgrounds(Canvas canvas) {
+        sectionRadius = zxc.iconic.xenon.helpers.IosListItemsHelper.radius(dp(16));
+        sectionRadiusTop[0] = sectionRadiusTop[1] = sectionRadiusTop[2] = sectionRadiusTop[3] = sectionRadius;
+        sectionRadiusBottom[4] = sectionRadiusBottom[5] = sectionRadiusBottom[6] = sectionRadiusBottom[7] = sectionRadius;
         children.clear();
         gatherChildren(contentView, 0, 0);
 
@@ -208,7 +211,7 @@ public class SectionsScrollView extends ScrollView {
             Math.min(getHeight() + dp(16) + getScrollY(), contentView.getY() + getChildY(to) + to.getHeight() + toBottomMargin)
         );
         if (AndroidUtilities.rectTmp.bottom < AndroidUtilities.rectTmp.top) return;
-        RecyclerListView.drawBackgroundRect(canvas, AndroidUtilities.rectTmp, dp(16), dp(16), from.getAlpha(), resourcesProvider);
+        RecyclerListView.drawBackgroundRect(canvas, AndroidUtilities.rectTmp, sectionRadius, sectionRadius, from.getAlpha(), resourcesProvider);
     }
 
     @Override
@@ -227,12 +230,13 @@ public class SectionsScrollView extends ScrollView {
         if (child == null || !isSectionView(child))
             return;
 
-        if (M3SectionsHelper.isEnabled()) {
+        if (M3SectionsHelper.isEnabled() || zxc.iconic.xenon.helpers.IosListItemsHelper.isEnabled()) {
             int index = children.indexOf(child);
             if (index < 0) return; // Flattened containers are clipped by their own layout.
-            float[] radii = M3SectionsHelper.scrollRadii(child,
-                index > 0 && isSectionView(children.get(index - 1)),
-                index + 1 < children.size() && isSectionView(children.get(index + 1)));
+            boolean prev = index > 0 && isSectionView(children.get(index - 1));
+            boolean next = index + 1 < children.size() && isSectionView(children.get(index + 1));
+            float[] radii = M3SectionsHelper.isEnabled() ? M3SectionsHelper.scrollRadii(child, prev, next)
+                    : new float[]{prev ? 0 : sectionRadius, next ? 0 : sectionRadius};
             AndroidUtilities.rectTmp.set(child.getX(), child.getY(),
                 child.getX() + child.getWidth(), child.getY() + child.getHeight());
             clipPath.rewind();
@@ -284,12 +288,12 @@ public class SectionsScrollView extends ScrollView {
 
         @Override
         public void setBackgroundColor(int color) {
-            super.setBackgroundColor(M3SectionsHelper.isEnabled() ? android.graphics.Color.TRANSPARENT : color);
+            super.setBackgroundColor((M3SectionsHelper.isEnabled() || zxc.iconic.xenon.helpers.IosListItemsHelper.isEnabled()) ? android.graphics.Color.TRANSPARENT : color);
         }
 
         @Override
         protected boolean drawChild(@NonNull Canvas canvas, View child, long drawingTime) {
-            if (M3SectionsHelper.isEnabled()) {
+            if (M3SectionsHelper.isEnabled() || zxc.iconic.xenon.helpers.IosListItemsHelper.isEnabled()) {
                 for (android.view.ViewParent parent = getParent(); parent != null; parent = parent.getParent()) {
                     if (parent instanceof SectionsScrollView) {
                         canvas.save();
