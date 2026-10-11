@@ -305,8 +305,7 @@ public class MainTabsLayout extends AnimatedLinearLayout {
         for (int a = 0, N = getChildCount(); a < N; a++) {
             final View child = getChildAt(a);
             if (child instanceof GlassTabView) {
-                ((GlassTabView) child).setSelected(child == tab,
-                        animated && !(drawCustomSelector && !MainTabsUiHelper.isMaterial3NavigationBar()));
+                ((GlassTabView) child).setSelected(child == tab, animated);
             }
         }
     }

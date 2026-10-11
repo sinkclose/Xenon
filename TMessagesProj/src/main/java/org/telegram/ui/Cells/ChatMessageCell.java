@@ -5439,6 +5439,14 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     }
 
     private boolean checkTextSelection(MotionEvent event) {
+        return checkTextSelection(event, false);
+    }
+
+    public boolean checkTextSelectionInPreview(MotionEvent event) {
+        return checkTextSelection(event, true);
+    }
+
+    private boolean checkTextSelection(MotionEvent event, boolean inMessagePreview) {
         if (delegate == null) return false;
         TextSelectionHelper.ChatListTextSelectionHelper textSelectionHelper = delegate.getTextSelectionHelper();
         if (textSelectionHelper == null || textSelectionHelper.isMenuEmpty()) {
@@ -5450,7 +5458,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             return false;
         }
 
-        if ((!drawSelectionBackground && currentMessagesGroup == null) || (currentMessagesGroup != null && !delegate.hasSelectedMessages())) {
+        if (!inMessagePreview && ((!drawSelectionBackground && currentMessagesGroup == null) || (currentMessagesGroup != null && !delegate.hasSelectedMessages()))) {
             return false;
         }
 

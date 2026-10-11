@@ -515,8 +515,10 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
             return;
         }
 
+        boolean update = lastIsSelected != isSelected;
         if (imageView.getAnimatedDrawable() == null) {
             imageView.setAnimation(tabAnimation.iconToFilled, 24, 24);
+            update = true;
         }
 
         final RLottieDrawable drawable = imageView.getAnimatedDrawable();
@@ -524,18 +526,19 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
             return;
         }
 
-        if (lastIsSelected != isSelected) {
+        if (update || !animated) {
             lastIsSelected = isSelected;
-            if (isSelected) {
-                drawable.setPlayInDirectionOfCustomEndFrame(false);
-                drawable.setCurrentFrame(0);
-                drawable.setCustomEndFrame(drawable.getFramesCount());
+            // Keep the decoded icon and reverse from its current frame when a
+            // sliding gesture changes direction before the animation finishes.
+            drawable.setPlayInDirectionOfCustomEndFrame(true);
+            drawable.setCustomEndFrame(isSelected ? drawable.getFramesCount() : 0);
+            if (animated) {
+                drawable.setCurrentFrame(drawable.getCurrentFrame(), true, true);
+                imageView.playAnimation();
             } else {
-                drawable.setPlayInDirectionOfCustomEndFrame(true);
-                drawable.setCurrentFrame(drawable.getFramesCount());
-                drawable.setCustomEndFrame(0);
+                imageView.stopAnimation();
+                drawable.setCurrentFrame(isSelected ? Math.max(0, drawable.getFramesCount() - 1) : 0);
             }
-            imageView.playAnimation();
         }
     }
 
@@ -746,6 +749,7 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
         CALLS(R.raw.tab_calls),
         CHATS(R.raw.tab_chats),
         SETTINGS(R.raw.tab_settings),
+        FEED(R.raw.tab_article),
 
         CHECKLIST(R.raw.tab_checklist, R.raw.tab_checklist_reverse),
         COLORS(R.raw.tab_colors, R.raw.tab_colors_reverse),
