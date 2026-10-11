@@ -562,7 +562,12 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
         } else if (message != null) builder.setMessage(message);
         if (customView != null) {
             AndroidUtilities.removeFromParent(customView);
-            builder.setView(customView);
+            // Legacy custom content supplies its own horizontal insets, but
+            // Material does not add the legacy dialog's top/bottom spacing.
+            FrameLayout customContainer = new FrameLayout(context);
+            customContainer.setPadding(0, title == null && message == null && subtitle == null ? dp(24) : 0, 0, dp(8));
+            customContainer.addView(customView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, customViewHeight));
+            builder.setView(customContainer);
         }
         if (items != null) {
             builder.setItems(items, (d, which) -> {
@@ -656,34 +661,19 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
                 if (button != null) button.setTextColor(buttonColor);
             }
         }
-        // Keep legacy AlertDialog API working in material mode to avoid NPEs in
-        // callers that access getButtonsLayout()/getButton() after show().
-        FrameLayout compatButtonsLayout = new FrameLayout(context);
-        compatButtonsLayout.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        if (positiveButtonText != null) {
-            TextView tv = new TextView(context);
-            tv.setTag(Dialog.BUTTON_POSITIVE);
-            tv.setText(positiveButtonText);
-            compatButtonsLayout.addView(tv);
+        // Expose the visible Material buttons to legacy callers so that color,
+        // text and enabled-state updates affect the dialog itself.
+        buttonsLayout = null;
+        int[] materialButtonIds = {DialogInterface.BUTTON_POSITIVE, DialogInterface.BUTTON_NEGATIVE, DialogInterface.BUTTON_NEUTRAL};
+        for (int buttonId : materialButtonIds) {
+            TextView button = dialog.getButton(buttonId);
+            if (button == null) continue;
+            button.setTag(buttonId == DialogInterface.BUTTON_NEUTRAL && neutralButtonText == null && negative2ButtonText != null
+                    ? AlertDialog.BUTTON_NEGATIVE_2 : buttonId);
+            if (button.getParent() instanceof ViewGroup) {
+                buttonsLayout = (ViewGroup) button.getParent();
+            }
         }
-        if (negativeButtonText != null) {
-            TextView tv = new TextView(context);
-            tv.setTag(Dialog.BUTTON_NEGATIVE);
-            tv.setText(negativeButtonText);
-            compatButtonsLayout.addView(tv);
-        }
-        if (neutralButtonText != null) {
-            TextView tv = new TextView(context);
-            tv.setTag(Dialog.BUTTON_NEUTRAL);
-            tv.setText(neutralButtonText);
-            compatButtonsLayout.addView(tv);
-        } else if (negative2ButtonText != null) {
-            TextView tv = new TextView(context);
-            tv.setTag(AlertDialog.BUTTON_NEGATIVE_2);
-            tv.setText(negative2ButtonText);
-            compatButtonsLayout.addView(tv);
-        }
-        buttonsLayout = compatButtonsLayout;
         return true;
     }
 
