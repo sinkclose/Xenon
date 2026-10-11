@@ -254,8 +254,10 @@ public class MessagePopupPreviewLayout extends FrameLayout {
     }
 
     public void onTextSelectionChanged(boolean selected) {
-        menu.setVisibility(selected ? INVISIBLE : VISIBLE);
+        menu.setVisibility(VISIBLE);
         if (selected) {
+            outsideDown = false;
+            dragged = true;
             MotionEvent cancel = MotionEvent.obtain(0, SystemClock.uptimeMillis(), MotionEvent.ACTION_CANCEL, 0, 0, 0);
             scroll.dispatchTouchEvent(cancel);
             cancel.recycle();
@@ -514,6 +516,7 @@ public class MessagePopupPreviewLayout extends FrameLayout {
     public boolean dispatchTouchEvent(MotionEvent event) {
         if (closing) return true;
         if (textSelectionHelper != null && progress == 1f) {
+            boolean wasSelecting = textSelectionHelper.isInSelectionMode();
             boolean wasMovingHandle = textSelectionHelper.isTouched();
             boolean handled = selectionOverlay.onTouchEvent(event);
             if (wasMovingHandle || handled) return true;
@@ -526,6 +529,10 @@ public class MessagePopupPreviewLayout extends FrameLayout {
             textEvent.offsetLocation(sourceBounds.left - drawnBounds.left, sourceBounds.top - drawnBounds.top);
             source.onTextTouchEvent(textEvent);
             textEvent.recycle();
+            if (wasSelecting || textSelectionHelper.isInSelectionMode()) {
+                outsideDown = false;
+                return true;
+            }
         }
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
             cancelOverscrollAnimation();

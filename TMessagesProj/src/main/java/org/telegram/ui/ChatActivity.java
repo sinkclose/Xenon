@@ -33227,6 +33227,13 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             private final int[] selectionPosition = new int[2];
 
             @Override
+            protected View getFloatingToolbarWindowView() {
+                // A popup's token cannot host another application-panel window.
+                // Keep selection coordinates in the preview, but host Telegram's menu on the activity.
+                return contentView.getRootView();
+            }
+
+            @Override
             public boolean onTouchEvent(MotionEvent event) {
                 if (maybeSelectedView == null) return false;
                 MotionEvent textEvent = MotionEvent.obtain(event);
@@ -33258,6 +33265,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             @Override
             public void onStateChanged(boolean selected) {
                 preview.onTextSelectionChanged(selected);
+                if (messagePopupPreviewLayout == preview && scrimPopupWindow != null) {
+                    scrimPopupWindow.setOutsideTouchable(!selected);
+                }
             }
 
             @Override

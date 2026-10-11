@@ -541,7 +541,7 @@ public abstract class TextSelectionHelper<Cell extends TextSelectionHelper.Selec
             if (!movingHandle && isInSelectionMode() && canShowActions()) {
                 if (!actionsIsShowing) {
                     if (actionMode == null) {
-                        FloatingToolbar floatingToolbar = new FloatingToolbar(textSelectionOverlay.getContext(), textSelectionOverlay, STYLE_THEME, getResourcesProvider());
+                        FloatingToolbar floatingToolbar = new FloatingToolbar(textSelectionOverlay.getContext(), getFloatingToolbarWindowView(), STYLE_THEME, getResourcesProvider());
                         actionMode = new FloatingActionMode(textSelectionOverlay.getContext(), (ActionMode.Callback2) textSelectActionCallback, textSelectionOverlay, floatingToolbar);
                         textSelectActionCallback.onCreateActionMode(actionMode, actionMode.getMenu());
                     }
@@ -643,6 +643,10 @@ public abstract class TextSelectionHelper<Cell extends TextSelectionHelper.Selec
                 }
             }
         }
+    }
+
+    protected View getFloatingToolbarWindowView() {
+        return textSelectionOverlay;
     }
 
     protected boolean canShowActions() {

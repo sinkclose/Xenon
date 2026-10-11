@@ -128,6 +128,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     private int iosSearchImeInset;
     private int iosSearchImeTargetInset;
     private int iosSearchImeAnimationCount;
+    private android.animation.ValueAnimator iosSearchImeFallback;
     private boolean pendingIosSearchOpen;
     private BlurredBackgroundDrawable tabsViewBackground;
     private View fadeView;
@@ -360,6 +361,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
                     public WindowInsetsCompat onProgress(WindowInsetsCompat insets,
                             java.util.List<androidx.core.view.WindowInsetsAnimationCompat> running) {
                         if (iosSearchImeAnimationCount > 0) {
+                            cancelIosSearchImeFallback();
                             iosSearchImeInset = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom;
                             checkUi_tabsPosition();
                         }
@@ -1149,6 +1151,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
     @Override
     public void onFragmentDestroy() {
+        cancelIosSearchImeFallback();
         animatorIosSearchVisible.cancel();
         if (iosBottomSearch != null) {
             iosBottomSearch.dispose();
@@ -1165,6 +1168,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
     @Override
     public void clearViews() {
+        cancelIosSearchImeFallback();
         animatorIosSearchVisible.cancel();
         if (iosBottomSearch != null) {
             iosBottomSearch.dispose();
@@ -1239,15 +1243,41 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     }
 
     private void updateIosSearchImeTarget(int inset) {
+        if (iosSearchImeTargetInset == inset && (iosSearchImeInset == inset || iosSearchImeFallback != null)) return;
         iosSearchImeTargetInset = inset;
-        // onApplyWindowInsets precedes the animation with its final height.
-        if (iosSearchImeAnimationCount == 0) iosSearchImeInset = inset;
+        cancelIosSearchImeFallback();
+        if (iosBottomSearch == null || !iosBottomSearch.isAttachedToWindow() || !NekoConfig.iosBottomBar) {
+            iosSearchImeInset = inset;
+            return;
+        }
+        // ActionBarLayout forwards insets manually, so some hosts deliver no IME animation frames.
+        // Start from the current visual height; native frames take over when they are available.
+        iosSearchImeFallback = android.animation.ValueAnimator.ofInt(iosSearchImeInset, inset);
+        iosSearchImeFallback.setDuration(org.telegram.ui.ActionBar.AdjustPanLayoutHelper.keyboardDuration);
+        iosSearchImeFallback.setInterpolator(org.telegram.ui.ActionBar.AdjustPanLayoutHelper.keyboardInterpolator);
+        iosSearchImeFallback.addUpdateListener(animation -> {
+            iosSearchImeInset = (int) animation.getAnimatedValue();
+            checkUi_tabsPosition();
+        });
+        iosSearchImeFallback.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator animation) {
+                if (iosSearchImeFallback == animation) iosSearchImeFallback = null;
+            }
+        });
+        iosSearchImeFallback.start();
+    }
+
+    private void cancelIosSearchImeFallback() {
+        if (iosSearchImeFallback == null) return;
+        iosSearchImeFallback.removeAllListeners();
+        iosSearchImeFallback.cancel();
+        iosSearchImeFallback = null;
     }
 
     private void finishIosSearchImeAnimation() {
         iosSearchImeAnimationCount = Math.max(0, iosSearchImeAnimationCount - 1);
         if (iosSearchImeAnimationCount == 0) {
-            iosSearchImeInset = iosSearchImeTargetInset;
+            updateIosSearchImeTarget(iosSearchImeTargetInset);
             checkUi_tabsPosition();
         }
     }
