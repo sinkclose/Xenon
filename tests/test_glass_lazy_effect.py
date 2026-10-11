@@ -20,13 +20,15 @@ public class LazyGlassHarness {
         static int creations, configuration;
         final int createdConfiguration = configuration;
         final boolean fixed;
-        LiquidGlassEffect(RenderNode node, boolean fixed) { creations++; this.fixed = fixed; }
+        boolean ensureShaders() { return false; }
+        LiquidGlassEffect(RenderNode node, boolean fixed, Runnable onReady) { creations++; this.fixed = fixed; }
         boolean isConfigurationCurrent() { return createdConfiguration == configuration; }
     }
     static class Surface {
         boolean liquidGlassEffectAllowed, fixedRefraction, renderNodeInvalidated;
         LiquidGlassEffect liquidGlassEffect;
         RenderNode renderNodeFill = new RenderNode();
+        Runnable onShadersReady;
         int alpha = 255;
         int getAlpha() { return alpha; }
         METHODS

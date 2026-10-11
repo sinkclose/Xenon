@@ -121,7 +121,8 @@ public class GlassDeformationHarness {
         static float liquidGlassIntensity=1; static boolean useAdvancedLiquidGlass, usePrismGlass;
     }
     static class Effect {
-        Effect() {} Effect(RenderNode node, boolean fixed) {}
+        Effect() {} Effect(RenderNode node, boolean fixed, Runnable onReady) {}
+        boolean ensureShaders() { return false; } boolean hasRefractionShader() { return true; }
         int updates; Object[] lastUpdate;
         void update(Object... args) { updates++; lastUpdate = args; } void drawHighlight(Canvas c,float a) {}
         boolean current = true, configuredPrism = NekoConfig.usePrismGlass;
@@ -138,7 +139,7 @@ public class GlassDeformationHarness {
     static class Glass extends BlurredBackgroundDrawable {
         Source source = new Source(); RenderNode renderNode=new RenderNode(), renderNodeFill=new RenderNode();
         boolean renderNodeInvalidated, fixedRefraction, liquidGlassEnabled, inAppKeyboardOptimization;
-        boolean liquidGlassEffectAllowed = true;
+        boolean liquidGlassEffectAllowed = true; Runnable onShadersReady;
         boolean prismPipelineActive; PrismGlassPipeline prismPipeline;
         Effect liquidGlassEffect=new Effect(); int backgroundColor, strokeColorTop, strokeColorBottom, shadowColor;
         float shadowAlpha=1, shadowLayerRadius, shadowLayerDx, shadowLayerDy;

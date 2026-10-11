@@ -24,6 +24,7 @@ class GlassChatRefreshTest(unittest.TestCase):
         source = (ROOT / "org/telegram/ui/Components/blur3/source/BlurredBackgroundSourceRenderNode.java").read_text()
         methods = "\n".join(method(source, signature) for signature in (
             "public void setWallpaperSize(", "public void invalidateWallpaper()",
+            "public void shareWallpaperWith(", "public void setUnderSource(",
             "private void recordWallpaperIfNeeded()", "private void drawWallpaper(",
             "public void prepareToDraw()"))
         harness = r'''
@@ -59,7 +60,7 @@ public class WallpaperRefreshHarness {
         boolean glassBlurEnabled, wallpaperDirty = true, wallpaperRecording, noClip, raw;
         int wallpaperParentW, wallpaperParentH, invalidatedDrawables;
         RenderNode wallpaperNode = new RenderNode();
-        BlurredBackgroundSource underSource;
+        BlurredBackgroundSource underSource; Source wallpaperOwner;
         void syncGlassBlur() {} void syncWallpaperEffect() {}
         void invalidateDisplayListForDrawables() { invalidatedDrawables++; }
         boolean isUnblurredCanvas(Canvas canvas) { return raw; }
@@ -95,9 +96,20 @@ public class WallpaperRefreshHarness {
         s.wallpaperRecording = true; s.invalidateWallpaper(); recordings = s.wallpaperNode.recordings;
         s.prepareToDraw(); check(s.wallpaperNode.recordings == recordings && s.wallpaperDirty);
         s.wallpaperRecording = false; s.prepareToDraw(); check(!s.wallpaperDirty);
+        s.raw = false;
+        Source companion = new Source(); companion.setUnderSource(s.underSource);
+        companion.shareWallpaperWith(s); companion.setWallpaperSize(800, 360);
+        recordings = s.wallpaperNode.recordings;
+        s.invalidateWallpaper(); companion.invalidateWallpaper();
+        s.prepareToDraw(); companion.prepareToDraw(); companion.draw(canvas, 0, 0, 800, 360);
+        check(s.wallpaperNode.recordings == recordings + 1 && companion.wallpaperNode.recordings == 0);
+        check(canvas.pixels == 44);
+        Wallpaper separate = new Wallpaper(); separate.pixels = 99;
+        companion.setUnderSource(separate); companion.prepareToDraw(); companion.draw(canvas, 0, 0, 800, 360);
+        check(companion.wallpaperOwner == null && companion.wallpaperNode.recordings == 1 && canvas.pixels == 99);
     }
 }
-'''.replace("METHODS", methods.replace("zxc.iconic.xenon.NekoConfig", "NekoConfig"))
+'''.replace("METHODS", methods.replace("zxc.iconic.xenon.NekoConfig", "NekoConfig").replace("BlurredBackgroundSourceRenderNode", "Source"))
         run_java(self, "WallpaperRefreshHarness", harness)
 
     def test_chat_animates_sources_without_capture_feedback(self):
@@ -183,7 +195,7 @@ public class ChatGlassRefreshHarness {
         int requestedFlags, redraws, glassDrawablesPositionsCount, pendingGlassSourceFlags, glassSourceCaptureDepth;
         long glassListContentVersion;
         CAPTURE_SOURCE
-        int fadeInvalidations;
+        int fadeInvalidations; boolean fadeWallpaperDirty;
         java.util.List<View> glassAttachedViews = new java.util.ArrayList<>();
         Object glassDrawablesPositionsMerged;
         Runnable feedContentChangedCallback;

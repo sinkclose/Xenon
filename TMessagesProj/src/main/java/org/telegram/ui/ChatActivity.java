@@ -497,6 +497,7 @@ public class ChatActivity extends BaseFragment implements
     private ActionBarMenuItem headerItem;
     private final java.util.List<ActionBarMenuItem.Item> pluginMenuItems = new java.util.ArrayList<>();
     private java.io.File pendingPluginCacheFile;
+    private boolean pluginMenuItemsBuilt;
     private ActionBarMenu.LazyItem editTextItem;
     protected ActionBarMenuItem searchItem;
     protected ActionBarMenuItem topicCreateItem;
@@ -2966,6 +2967,7 @@ public class ChatActivity extends BaseFragment implements
                 glassBackgroundSourceRenderNode.setOnDrawablesRelativePositionChangeListener(this::invalidateMergedVisibleBlurredPositionsAndSourcesPositions);
                 glassBackgroundSourceRenderNode.setScrollableNoiseSuppressor(scrollableViewNoiseSuppressor, DownscaleScrollableNoiseSuppressor.DRAW_GLASS);
                 glassBackgroundSourceRenderNode.setUnderSource(glassWallpaperSource);
+                glassBackgroundSourceRenderNode.shareWallpaperWith(glassBackgroundSourceFrostedRenderNode);
                 glassBackgroundDrawableFactory = new BlurredBackgroundDrawableViewFactory(glassBackgroundSourceRenderNode);
                 glassBackgroundDrawableFactory.setLiquidGlassEffectAllowed(!NonIslandHelper.chatElements());
             } else {
@@ -2991,6 +2993,7 @@ public class ChatActivity extends BaseFragment implements
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && NekoConfig.blurredFadeViewEnabled()) {
             fadeBlurSource = new BlurredBackgroundSourceRenderNode(null);
+            fadeBlurSource.setOnProgressiveBlurReadyListener(this::invalidateFadeBlur);
             fadeBlurSource.setUnderSource(NekoConfig.blurredFadeDimming
                     ? fadeWallpaperSource : navbarContentSourceWallpaper);
             fadeBlurFactory = new BlurredBackgroundDrawableViewFactory(fadeBlurSource);
@@ -4976,26 +4979,9 @@ if (feedIntegration != null) {
             headerItem.lazilyAddSubItem(888, R.drawable.menu_download_round, "Dump Canvas");
         }
 
-        // --- Plugin menu items ---
-        if (NekoConfig.pluginsEnabled && headerItem != null) {
-            org.luaj.vm2.LuaValue ctx = org.luaj.vm2.LuaValue.tableOf(new org.luaj.vm2.LuaValue[]{
-                    org.luaj.vm2.LuaValue.valueOf("peer"), org.luaj.vm2.LuaValue.valueOf(dialog_id)
-            });
-            pluginMenuItems.clear();
-            org.luaj.vm2.LuaValue res = zxc.iconic.xenon.plugins.PluginManager.getInstance().fireReturn("onChatMenuBuild", ctx);
-            if (res != null && res.istable()) {
-                int len = res.length();
-                for (int i = 0; i < len; i++) {
-                    org.luaj.vm2.LuaValue item = res.get(i + 1);
-                    if (!item.istable()) continue;
-                    String text = item.get("text").optjstring("Plugin");
-                    String iconName = item.get("icon").optjstring("");
-                    int iconRes = zxc.iconic.xenon.plugins.PluginApi.getIconDrawable(iconName);
-                    ActionBarMenuItem.Item mi = headerItem.lazilyAddSubItem(10000 + i, iconRes, text);
-                    if (mi != null) pluginMenuItems.add(mi);
-                }
-            }
-        }
+        pluginMenuItems.clear();
+        pluginMenuItemsBuilt = false;
+        if (headerItem != null) headerItem.setOnPrepareSubMenuListener(this::ensurePluginMenuItems);
 
         actionModeViews.clear();
         selectedMessagesCountTextView = null;
@@ -8146,6 +8132,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
         contentView.addView(chatListView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
         chatActivityFadeView = new ChatActivityFadeView(context);
+        fadeBlurStockApplied = false;
         if (fadeBlurFactory != null) {
             chatActivityFadeView.setup(fadeBlurFactory, dimWallpaperDrawableFactory);
             chatActivityFadeView.setDim(NekoConfig.blurredFadeDimming ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
@@ -8157,6 +8144,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
             chatActivityFadeView.setup(navbarContentDrawableFactory);
             chatActivityFadeView.setFadeHeightTop(dp(48));
             chatActivityFadeView.setFadeHeightBottom(dp(48));
+            fadeBlurStockApplied = fadeBlurFactory != null;
         }
         contentView.addView(chatActivityFadeView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
         if (fadeBlurSource != null) {
@@ -12035,6 +12023,32 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
     public ActionBarMenuItem getHeaderItem() {
         return headerItem;
+    }
+
+    private void ensurePluginMenuItems() {
+        if (!NekoConfig.pluginsEnabled || headerItem == null || pluginMenuItemsBuilt) return;
+        pluginMenuItemsBuilt = true;
+        try {
+            org.luaj.vm2.LuaValue ctx = org.luaj.vm2.LuaValue.tableOf(new org.luaj.vm2.LuaValue[]{
+                    org.luaj.vm2.LuaValue.valueOf("peer"), org.luaj.vm2.LuaValue.valueOf(dialog_id)
+            });
+            pluginMenuItems.clear();
+            org.luaj.vm2.LuaValue res = zxc.iconic.xenon.plugins.PluginManager.getInstance().fireReturn("onChatMenuBuild", ctx);
+            if (res != null && res.istable()) {
+                int len = res.length();
+                for (int i = 0; i < len; i++) {
+                    org.luaj.vm2.LuaValue item = res.get(i + 1);
+                    if (!item.istable()) continue;
+                    String text = item.get("text").optjstring("Plugin");
+                    String iconName = item.get("icon").optjstring("");
+                    int iconRes = zxc.iconic.xenon.plugins.PluginApi.getIconDrawable(iconName);
+                    ActionBarMenuItem.Item mi = headerItem.lazilyAddSubItem(10000 + i, iconRes, text);
+                    if (mi != null) pluginMenuItems.add(mi);
+                }
+            }
+        } catch (Exception e) {
+            FileLog.e(e);
+        }
     }
 
     private void rebuildPluginMenuItems(long dialogId) {
@@ -18660,7 +18674,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                         if (!drawable.hasDisplayList()) drawable.updateDisplayList();
                     }
                     if (headerGlassGroup == null) {
-                        headerGlassGroup = new LiquidGlassInputGroup();
+                        headerGlassGroup = new LiquidGlassInputGroup(headerGlassMembers.length);
                         // Header/pinned gap is 7 dp; keep it open at rest, join on deformation.
                         headerGlassGroup.setMergeDistance(dp(6));
                         headerGlassGroup.setPairMergeDistance(0, 1, dp(6));
@@ -18854,6 +18868,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         @Override
         public void onUpdateBackgroundDrawable(Drawable drawable) {
             super.onUpdateBackgroundDrawable(drawable);
+            fadeWallpaperDirty = true;
             if (drawable instanceof MotionBackgroundDrawable) {
                 ((MotionBackgroundDrawable) drawable).setFastRenderAllowed();
             }
@@ -23200,34 +23215,6 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     scrollToMessagePosition = -10000;
                     scrolledToUnread = true;
                     newRowsCount++;
-                }
-            }
-            checkGroupMessagesOrder();
-            if (createUnreadLoading) {
-                createUnreadMessageAfterId = 0;
-            }
-            if (load_type == 0 && newRowsCount == 0) {
-                loadsCount--;
-            }
-
-            if (forwardEndReached[loadIndex] && loadIndex != 1) {
-                first_unread_id = 0;
-                last_message_id = 0;
-                createUnreadMessageAfterId = 0;
-            }
-
-            if (load_type == 1) {
-                if (!chatWasReset && messArr.size() != count && (!isCache || currentEncryptedChat != null || forwardEndReached[loadIndex])) {
-                    forwardEndReached[loadIndex] = true;
-                    if (loadIndex != 1) {
-                        first_unread_id = 0;
-                        last_message_id = 0;
-                        createUnreadMessageAfterId = 0;
-                        if (!universalNotify && !chatAdapter.isFiltered) {
-                            chatAdapter.notifyItemRemoved(chatAdapter.loadingDownRow);
-                        }
-                    }
-                    startLoadFromMessageId = 0;
                 }
             } else if ((load_type == 3 || load_type == 4) && (startLoadFromMessageId < 0 && messageId == startLoadFromMessageId || startLoadFromMessageId > 0 && messageId > 0 && messageId <= startLoadFromMessageId) && !fakePostponedScroll) {
                 final Integer taskId = highlightTaskId;
@@ -29264,6 +29251,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (isOpen) {
             checkShowBlur(false);
             openAnimationEnded = true;
+            invalidateFadeBlur();
             getNotificationCenter().onAnimationFinish(transitionAnimationIndex);
             NotificationCenter.getGlobalInstance().onAnimationFinish(transitionAnimationGlobalIndex);
 //            if (Build.VERSION.SDK_INT >= 21) {
@@ -31796,6 +31784,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     @Override
     public void onResume() {
         super.onResume();
+        if (fadeBlurSource != null && NekoConfig.blurredFadeViewEnabled()) startFadeBlurContinuousUpdates();
         if (actionBar != null) actionBar.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
         if (chatInputViewsContainer != null) chatInputViewsContainer.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
         if (sideControlsButtonsLayout != null) sideControlsButtonsLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
@@ -32018,6 +32007,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         cancelHold();
         holdPopupOpened = false;
         super.onPause();
+        stopFadeBlurContinuousUpdates();
         scrolling = false;
         if (isFeedSearch()) {
             saveFeedScrollPosition();
@@ -50985,7 +50975,12 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             parentChatActivity.invalidateMergedVisibleBlurredPositionsAndSources(flags);
         }
 
-        invalidateFadeBlur();
+        if (BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_WALLPAPER | BLUR_INVALIDATE_FLAG_CLIP)) {
+            fadeWallpaperDirty = true;
+        }
+        if (BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_SCROLL | BLUR_INVALIDATE_FLAG_CLIP | BLUR_INVALIDATE_FLAG_WALLPAPER)) {
+            invalidateFadeBlur();
+        }
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || scrollableViewNoiseSuppressor == null || invalidateBlurredSourcesView == null) {
             return;
@@ -51062,6 +51057,8 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     private long lastFadeBlurUpdateTime;
+    private boolean fadeWallpaperDirty = true;
+    private int fadeWallpaperWidth, fadeWallpaperHeight;
     private boolean fadeBlurContinuousUpdating;
     private boolean fadeBlurCapturePending;
     private boolean fadeBlurCaptureScheduled;
@@ -51107,6 +51104,8 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (glassSourceCaptureDepth != 0 || !NekoConfig.blurredFadeViewEnabled()) {
             return;
         }
+        // Capture on pre-draw during opening too, so the first visible frame
+        // already contains messages at both edges. Requests still coalesce.
         if (fadeBlurCaptureView != null && !fadeBlurCaptureScheduled) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurEnabled()) {
                 final long now = SystemClock.uptimeMillis();
@@ -51177,6 +51176,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         final int fw = contentView.getWidth();
         final int fh = contentView.getHeight();
         if (fw <= 0 || fh <= 0) {
+            fadeBlurCapturePending = true;
             return;
         }
         lastFadeBlurUpdateTime = SystemClock.uptimeMillis();
@@ -51202,19 +51202,24 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
         // Capture the actual chat background separately, preserving patterns and
         // custom drawables that the wallpaper bitmap provider cannot reproduce.
-        Canvas wallpaperCanvas = fadeWallpaperSource.beginRecording(fw, fh);
-        try {
-            wallpaperCanvas.drawColor(wallpaperColor);
-            if (contentView.backgroundView != null && contentView.backgroundView.getWidth() > 0) {
-                wallpaperCanvas.save();
-                wallpaperCanvas.translate(contentView.backgroundView.getX(), contentView.backgroundView.getY());
-                contentView.backgroundView.draw(wallpaperCanvas);
-                wallpaperCanvas.restore();
-            } else {
-                navbarContentSourceWallpaperSharp.draw(wallpaperCanvas, 0, 0, fw, fh);
+        if (NekoConfig.blurredFadeDimming && (fadeWallpaperDirty || fadeWallpaperWidth != fw || fadeWallpaperHeight != fh)) {
+            Canvas wallpaperCanvas = fadeWallpaperSource.beginRecording(fw, fh);
+            try {
+                wallpaperCanvas.drawColor(wallpaperColor);
+                if (contentView.backgroundView != null && contentView.backgroundView.getWidth() > 0) {
+                    wallpaperCanvas.save();
+                    wallpaperCanvas.translate(contentView.backgroundView.getX(), contentView.backgroundView.getY());
+                    contentView.backgroundView.draw(wallpaperCanvas);
+                    wallpaperCanvas.restore();
+                } else {
+                    navbarContentSourceWallpaperSharp.draw(wallpaperCanvas, 0, 0, fw, fh);
+                }
+            } finally {
+                fadeWallpaperSource.endRecording();
             }
-        } finally {
-            fadeWallpaperSource.endRecording();
+            fadeWallpaperDirty = false;
+            fadeWallpaperWidth = fw;
+            fadeWallpaperHeight = fh;
         }
         // Only messages pass through the blur effect in dimming mode. Their
         // background is drawn underneath, outside that effect.

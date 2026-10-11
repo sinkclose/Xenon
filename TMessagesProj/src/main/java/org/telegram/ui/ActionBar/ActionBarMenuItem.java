@@ -775,6 +775,7 @@ public class ActionBarMenuItem extends FrameLayout {
 
     public void toggleSubMenu(View topView, View fromView) {
         if (popupWindow == null || !popupWindow.isShowing()) {
+            if (onPrepareSubMenuListener != null) onPrepareSubMenuListener.run();
             layoutLazyItems();
         }
         if (popupLayout == null || parentMenu != null && parentMenu.isActionMode && parentMenu.parentActionBar != null && !parentMenu.parentActionBar.isActionModeShowed()) {
@@ -906,6 +907,12 @@ public class ActionBarMenuItem extends FrameLayout {
 
     public void toggleSubMenu() {
         toggleSubMenu(null, null);
+    }
+
+    private Runnable onPrepareSubMenuListener;
+
+    public void setOnPrepareSubMenuListener(Runnable listener) {
+        onPrepareSubMenuListener = listener;
     }
 
     public void setOnMenuDismiss(Utilities.Callback<Boolean> onMenuDismiss) {

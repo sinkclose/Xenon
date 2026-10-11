@@ -21,7 +21,8 @@ import java.util.Arrays;
 @RequiresApi(33)
 public final class LiquidGlassInputGroup {
     private final RenderNode node = new RenderNode("LiquidInputUnion");
-    private final RuntimeShader shader = new RuntimeShader(AndroidUtilities.readRes(R.raw.liquid_glass_input_union));
+    private final RuntimeShader shader;
+    private final int shapeCount;
     private final float[] shapes = new float[32];
     private final float[] radii = new float[8];
     private final float[] cornerRadii = new float[32];
@@ -32,6 +33,14 @@ public final class LiquidGlassInputGroup {
     private final float[] merges = new float[64];
 
     public LiquidGlassInputGroup() {
+        this(8);
+    }
+
+    public LiquidGlassInputGroup(int shapeCount) {
+        if (shapeCount < 1 || shapeCount > 8) throw new IllegalArgumentException("Invalid glass group size");
+        this.shapeCount = shapeCount;
+        shader = new RuntimeShader(AndroidUtilities.readRes(R.raw.liquid_glass_input_union)
+                .replace("const int SHAPE_COUNT = 8;", "const int SHAPE_COUNT = " + shapeCount + ";"));
         Arrays.fill(merges, AndroidUtilities.dp(8));
     }
 
@@ -56,6 +65,7 @@ public final class LiquidGlassInputGroup {
 
     public void draw(Canvas canvas, BlurredBackgroundDrawable[] members, RectF[] bounds, float[] alpha,
                      LiquidTouchEffect[] effects, float[] origins, float[] sourceOrigins) {
+        if (members.length > shapeCount) throw new IllegalArgumentException("Glass group exceeds shader slots");
         int sourceIndex = members.length > 1 && members[1] != null ? 1 : 0;
         while (sourceIndex < members.length && members[sourceIndex] == null) sourceIndex++;
         if (sourceIndex >= members.length) return;
@@ -74,6 +84,7 @@ public final class LiquidGlassInputGroup {
         int x = (int) Math.floor(left) - margin, y = (int) Math.floor(top) - margin;
         int width = (int) Math.ceil(right) - x + margin, height = (int) Math.ceil(bottom) - y + margin;
         if (width <= 0 || height <= 0) return;
+        boolean touchActive = false;
         for (int i = 0; i < members.length; i++) {
             if (members[i] == null || bounds[i].isEmpty()) continue;
             RectF b = bounds[i];
@@ -105,6 +116,7 @@ public final class LiquidGlassInputGroup {
             if (effects != null && effects[i] != null) effects[i].writeGlow(glows, j,
                     x - (origins == null ? 0f : origins[i * 2]), y - (origins == null ? 0f : origins[i * 2 + 1]));
             else glows[j + 3] = 0f;
+            touchActive |= glows[j + 3] > 0f;
         }
         shader.setFloatUniform("shapes", shapes);
         shader.setFloatUniform("cornerRadii", cornerRadii);
@@ -113,13 +125,16 @@ public final class LiquidGlassInputGroup {
         shader.setFloatUniform("merges", merges);
         shader.setFloatUniform("refractive", refractive ? 1f : 0f);
         Arrays.fill(links, 0f);
-        for (int i = 0; i < members.length; i++) {
-            links[i * 8 + i] = opacity[i] > 0 ? 1f : 0f;
-            for (int j = i + 1; j < members.length; j++) {
-                links[i * 8 + j] = links[j * 8 + i] = connection(i, j, merges[i * 8 + j]);
+        if (touchActive) {
+            for (int i = 0; i < members.length; i++) {
+                links[i * 8 + i] = opacity[i] > 0 ? 1f : 0f;
+                for (int j = i + 1; j < members.length; j++) {
+                    links[i * 8 + j] = links[j * 8 + i] = connection(i, j, merges[i * 8 + j]);
+                }
             }
+            propagateLight(links, members.length);
         }
-        propagateLight(links, members.length);
+        shader.setFloatUniform("touchActive", touchActive ? 1f : 0f);
         shader.setFloatUniform("links", links);
         shader.setFloatUniform("glows", glows);
         shader.setFloatUniform("advanced", refractive && NekoConfig.useAdvancedLiquidGlass ? 1f : 0f);

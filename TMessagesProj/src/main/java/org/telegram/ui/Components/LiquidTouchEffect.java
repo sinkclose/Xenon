@@ -34,9 +34,9 @@ public final class LiquidTouchEffect {
     private long pressStartedAt, minimumPressDuration;
     private boolean releasePending;
     private final Runnable releasePress = this::finishRelease;
-    private final SpringAnimation press;
-    private final SpringAnimation returnX;
-    private final SpringAnimation returnY;
+    private SpringAnimation press;
+    private SpringAnimation returnX;
+    private SpringAnimation returnY;
     private float dragStrength = 1f;
     private final Paint glowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path glowClip = new Path();
@@ -47,10 +47,14 @@ public final class LiquidTouchEffect {
 
     public LiquidTouchEffect(View host) {
         this.host = host;
+        glowPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.ADD));
+    }
+
+    private void ensureSprings() {
+        if (press != null) return;
         press = spring(value -> progress = value);
         returnX = spring(value -> offsetX = value);
         returnY = spring(value -> offsetY = value);
-        glowPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.ADD));
     }
 
     /** Changes drag deformation without changing press enlargement. */
@@ -104,6 +108,7 @@ public final class LiquidTouchEffect {
                 if (!hit) {
                     return;
                 }
+                ensureSprings();
                 returnX.cancel();
                 returnY.cancel();
                 offsetX = offsetY = 0f;
@@ -298,12 +303,15 @@ public final class LiquidTouchEffect {
         AndroidUtilities.cancelRunOnUIThread(releasePress);
         releasePending = false;
         minimumPressDuration = 0;
-        press.cancel();
-        returnX.cancel();
-        returnY.cancel();
+        if (press != null) {
+            press.cancel();
+            returnX.cancel();
+            returnY.cancel();
+            press.setStartValue(0f);
+        }
+        boolean changed = progress != 0f || offsetX != 0f || offsetY != 0f;
         pointerId = -1;
         progress = offsetX = offsetY = 0f;
-        press.setStartValue(0f);
-        invalidateHost();
+        if (changed) invalidateHost();
     }
 }

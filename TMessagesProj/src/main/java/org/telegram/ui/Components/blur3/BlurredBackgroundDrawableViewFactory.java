@@ -14,6 +14,7 @@ import org.telegram.ui.Components.chat.ViewPositionWatcher;
 import org.telegram.utils.glass.GlassEngine;
 
 import me.vkryl.core.reference.ReferenceList;
+import java.lang.ref.WeakReference;
 
 public class BlurredBackgroundDrawableViewFactory {
 
@@ -95,6 +96,13 @@ public class BlurredBackgroundDrawableViewFactory {
 
     public BlurredBackgroundDrawable create(View view, BlurredBackgroundColorProvider provider, boolean multiwindow) {
         final BlurredBackgroundDrawable drawable = source.createDrawable();
+        if (view != null && drawable instanceof BlurredBackgroundDrawableRenderNode) {
+            WeakReference<View> target = new WeakReference<>(view);
+            ((BlurredBackgroundDrawableRenderNode) drawable).setEffectReadyListener(() -> {
+                View current = target.get();
+                if (current != null) current.invalidate();
+            });
+        }
         if (isLiquidGlassEffectAllowed && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (drawable instanceof BlurredBackgroundDrawableRenderNode) {
                 ((BlurredBackgroundDrawableRenderNode) drawable).setLiquidGlassEffectAllowed();

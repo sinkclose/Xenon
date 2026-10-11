@@ -21,6 +21,8 @@ public class LiquidGlassEffect {
     private final boolean advanced;
     private final boolean prism;
     private final boolean refractionEnabled;
+    private final Runnable onShadersReady;
+    private boolean uniformsInvalidated = true;
 
     // Highlight (edge glare)
     private RuntimeShader highlightShader;
@@ -44,22 +46,20 @@ public class LiquidGlassEffect {
     }
 
     public LiquidGlassEffect(RenderNode node, boolean fixedRefraction) {
+        this(node, fixedRefraction, null);
+    }
+
+    public LiquidGlassEffect(RenderNode node, boolean fixedRefraction, Runnable onShadersReady) {
         this.node = node;
         this.fixedRefraction = fixedRefraction;
+        this.onShadersReady = onShadersReady;
         prism = zxc.iconic.xenon.NekoConfig.usePrismGlass;
         advanced = fixedRefraction || zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass;
         refractionEnabled = org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS);
         // Refraction (the liquid-glass distortion) only runs when liquid glass is on.
         // The highlight (glare) is always created so it can be drawn over the frosted blur too.
-        if (org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS)) {
-            shader = GlassShaderCache.acquireRefraction(advanced, prism);
-            node.setRenderEffect(RenderEffect.createRuntimeShaderEffect(shader, "img"));
-        } else {
-            shader = null;
-            node.setRenderEffect(null);
-        }
-
-        highlightShader = GlassShaderCache.acquireHighlight();
+        node.setRenderEffect(null);
+        ensureShaders();
         highlightPaint.setStyle(Paint.Style.STROKE);
         highlightPaint.setStrokeWidth(AndroidUtilities.dp(0.35f) * 2f);
         // Intentionally NOT using BlurMaskFilter on the stroke. A
@@ -73,6 +73,27 @@ public class LiquidGlassEffect {
         highlightPaint.setBlendMode(BlendMode.PLUS);
         highlightPaint.setColor(Color.WHITE);
         highlightPaint.setAlpha(42);
+    }
+
+    public boolean ensureShaders() {
+        boolean changed = false;
+        if (refractionEnabled && shader == null) {
+            shader = GlassShaderCache.acquireRefraction(advanced, prism, onShadersReady);
+            if (shader != null) {
+                refractionUniformsInitialized = false;
+                changed = true;
+            }
+        }
+        if (highlightShader == null) {
+            highlightShader = GlassShaderCache.acquireHighlight(onShadersReady);
+            changed |= highlightShader != null;
+        }
+        uniformsInvalidated |= changed;
+        return changed;
+    }
+
+    public boolean hasRefractionShader() {
+        return shader != null;
     }
 
     private float resolutionX, resolutionY;
@@ -120,7 +141,7 @@ public class LiquidGlassEffect {
                     : this.thickness != thickness || this.intensity != intensity || this.index != index
                         || this.foregroundColor != foregroundColor);
 
-        if (this.resolutionX != resX || this.resolutionY != resY ||
+        if (uniformsInvalidated || this.resolutionX != resX || this.resolutionY != resY ||
                 this.centerX != cX || this.centerY != cY ||
                 this.sizeX != sX || this.sizeY != sY ||
                 this.radiusLeftTop != rLT || this.radiusRightTop != rRT ||
@@ -209,6 +230,7 @@ public class LiquidGlassEffect {
                     highlightGeometryInitialized = true;
                 }
             }
+            uniformsInvalidated = false;
         }
     }
 

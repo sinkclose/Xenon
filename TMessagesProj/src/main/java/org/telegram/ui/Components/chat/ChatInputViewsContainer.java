@@ -499,7 +499,7 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
                 if (!drawable.hasDisplayList()) drawable.updateDisplayList();
                 iosGroupAlpha[i] = i == 1 ? 1f : visibility * (i == 2 ? 1f - iosComposer.getIosInputProgress() : 1f);
             }
-            if (iosGlassGroup == null) iosGlassGroup = new LiquidGlassInputGroup();
+            if (iosGlassGroup == null) iosGlassGroup = new LiquidGlassInputGroup(iosGroupMembers.length);
             iosGlassGroup.draw(canvas, iosGroupMembers, iosGroupBounds, iosGroupAlpha,
                     liquidTouchAllowed() ? iosLiquidEffects : null);
             return true;
