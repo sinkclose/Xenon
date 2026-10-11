@@ -671,6 +671,18 @@ public class ChatActivityEnterView extends FrameLayout implements
         return iosInputProgress;
     }
 
+    public float getIosRecordButtonRestingCenterX(View ancestor) {
+        // Ignore the recording button's keyboard slide and press deformation.
+        float x = audioVideoButtonContainer.getWidth() * .5f;
+        View view = audioVideoButtonContainer;
+        while (view != ancestor) {
+            x += view.getLeft();
+            if (!(view.getParent() instanceof View)) return Float.NaN;
+            view = (View) view.getParent();
+        }
+        return x;
+    }
+
     public void getIosInputSurfaceBounds(RectF[] bounds, float originX, float originY, float top, float bottom) {
         float x = originX + textFieldContainer.getX();
         float y = originY + textFieldContainer.getY();

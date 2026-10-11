@@ -191,6 +191,14 @@ public class ChatActivitySideControlsButtonsLayout extends FrameLayout implement
     }
 
     private int gravity = Gravity.LEFT | Gravity.BOTTOM;
+    /** Called after the host lays us out, so disabling iOS input restores gravity. */
+    public void setInputButtonCenterX(float centerX) {
+        if (!Float.isNaN(centerX)) {
+            // Move the column's hit area along with its 56 dp buttons.
+            offsetLeftAndRight(Math.round(centerX - dp(56) * .5f));
+        }
+    }
+
     public void setGravity(int gravity) {
         this.gravity = gravity;
     }

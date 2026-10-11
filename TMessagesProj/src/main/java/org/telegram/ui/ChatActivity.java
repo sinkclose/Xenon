@@ -20296,6 +20296,14 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 child.layout(childLeft, childTop, childLeft + width, childTop + height);
             }
 
+            if (sideControlsButtonsLayout != null) {
+                float centerX = chatActivityEnterView != null && chatActivityEnterView.isIosLikeInputField()
+                        ? chatActivityEnterView.getIosRecordButtonRestingCenterX(this)
+                            - sideControlsButtonsLayout.getLeft()
+                        : Float.NaN;
+                sideControlsButtonsLayout.setInputButtonCenterX(centerX);
+            }
+
             if (floatingTopicSeparator != null) {
                 floatingTopicSeparator.setBackgroundHeight(getMeasuredHeight());
             }

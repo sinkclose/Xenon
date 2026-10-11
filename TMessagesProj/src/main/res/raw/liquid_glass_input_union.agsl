@@ -140,7 +140,10 @@ half4 main(float2 p) {
     }
     float2 grad = float2(surface(p + float2(0.5, 0.0)).d - surface(p - float2(0.5, 0.0)).d,
                         surface(p + float2(0.0, 0.5)).d - surface(p - float2(0.0, 0.5)).d);
-    grad /= max(length(grad), 0.0001);
+    // A smooth union is not a unit-distance field at the neck. Preserve its
+    // slope: normalizing a vanishing gradient creates a full-strength prism
+    // and flips the refraction abruptly across the saddle between members.
+    grad /= max(length(grad), 1.0);
     float2 displacement;
     if (refractive < 0.5) {
         displacement = float2(0.0);
@@ -151,7 +154,8 @@ half4 main(float2 p) {
     } else {
         float sd = min(s.d, 0.0);
         float nc = clamp((thickness + sd) / thickness, 0.0, 1.0);
-        float3 normal = float3(grad * nc, sqrt(max(0.0001, 1.0 - nc * nc)));
+        float2 slope = grad * nc;
+        float3 normal = float3(slope, sqrt(max(0.0001, 1.0 - dot(slope, slope))));
         normal /= max(length(normal), 0.0001);
         float3 ray = refract(float3(0.0, 0.0, -1.0), normal, 1.0 / index);
         float height = sd < -thickness ? thickness : sqrt(max(0.0, sd * (-2.0 * thickness - sd)));
