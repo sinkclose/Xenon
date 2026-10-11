@@ -2668,8 +2668,14 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
                 left = (rightDefault + leftDefault - width) / 2;
             }
             right = left + width;
+            // The header can be drawn before the avatar container is attached
+            // (for example while opening a report). LayoutParams may be null.
+            final ViewGroup.LayoutParams containerParams = chatAvatarContainer.getLayoutParams();
+            final int containerLeft = containerParams instanceof MarginLayoutParams
+                    ? ((MarginLayoutParams) containerParams).leftMargin
+                    : chatAvatarContainer.getLeft();
             final float containerTrans = left
-                - ((MarginLayoutParams)(chatAvatarContainer.getLayoutParams())).leftMargin
+                - containerLeft
                 - chatAvatarContainer.getLeftPadding()
                 + p + dp(3);
             chatPillWidth = width;
