@@ -19,7 +19,6 @@ package org.telegram.ui.ActionBar;
 import android.accounts.AccountManager;
 import android.annotation.TargetApi;
 import android.content.Context;
-import android.graphics.Point;
 import android.graphics.Rect;
 import android.util.Log;
 import android.view.ActionMode;
@@ -29,7 +28,6 @@ import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.ViewParent;
-import android.view.WindowManager;
 import android.widget.PopupMenu;
 import android.widget.PopupWindow;
 
@@ -58,7 +56,6 @@ public final class FloatingActionMode extends ActionMode {
     private final Rect mPreviousViewRectOnScreen;
     private final Rect mScreenRect;
     private final View mOriginatingView;
-    private final Point mDisplaySize;
     private final int mBottomAllowance;
 
     private final Runnable mMovingOff = new Runnable() {
@@ -102,7 +99,6 @@ public final class FloatingActionMode extends ActionMode {
         mOriginatingView = originatingView;
         mOriginatingView.getLocationOnScreen(mViewPositionOnScreen);
         mBottomAllowance = AndroidUtilities.dp(20);
-        mDisplaySize = new Point();
         setFloatingToolbar(floatingToolbar);
     }
 
@@ -189,8 +185,9 @@ public final class FloatingActionMode extends ActionMode {
     }
 
     private boolean isContentRectWithinBounds() {
-        mContext.getSystemService(WindowManager.class).getDefaultDisplay().getRealSize(mDisplaySize);
-        mScreenRect.set(0, 0, mDisplaySize.x, mDisplaySize.y);
+        // Content coordinates include the window origin (including WSA/freeform offsets).
+        // Display dimensions alone describe a different coordinate space.
+        mOriginatingView.getWindowVisibleDisplayFrame(mScreenRect);
         return intersectsClosed(mContentRectOnScreen, mScreenRect) && intersectsClosed(mContentRectOnScreen, mViewRectOnScreen);
     }
 

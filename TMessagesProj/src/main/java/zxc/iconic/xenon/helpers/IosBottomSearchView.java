@@ -86,10 +86,10 @@ public final class IosBottomSearchView extends FrameLayout {
         closeButton.setOnClickListener(v -> closeAction.run());
         addView(closeButton, LayoutHelper.createFrame(48, 48, Gravity.TOP));
         closeTouch.setContentView(closeButton);
-        fieldTouch.setPressStrength(2.1f);
-        closeTouch.setPressStrength(2.1f);
-        fieldTouch.setPressSpring(.44f, 260f);
-        closeTouch.setPressSpring(.44f, 260f);
+        fieldTouch.setPressStrength(1.7f);
+        closeTouch.setPressStrength(1.7f);
+        fieldTouch.setPressSpring(.56f, 260f);
+        closeTouch.setPressSpring(.56f, 260f);
         fieldTouch.setDragStrength(1.2f);
         closeTouch.setDragStrength(1.2f);
         applyProgress(0f);
