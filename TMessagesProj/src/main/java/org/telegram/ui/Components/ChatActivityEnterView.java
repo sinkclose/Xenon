@@ -671,6 +671,12 @@ public class ChatActivityEnterView extends FrameLayout implements
         return iosInputProgress;
     }
 
+    public static float getIosCollapsedRecordButtonRightInset(int availableWidth) {
+        int restingFieldWidth = availableWidth - dp(50) - dp(IOS_INPUT_SIDE_SPACE);
+        int collapsedInset = Math.max(0, Math.round(restingFieldWidth * .1f) / 2);
+        return dp(DEFAULT_HEIGHT) * .5f + collapsedInset;
+    }
+
     public float getIosRecordButtonRestingCenterX(View ancestor) {
         // Ignore the recording button's keyboard slide and press deformation.
         float x = audioVideoButtonContainer.getWidth() * .5f;

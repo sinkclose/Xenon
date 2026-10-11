@@ -20312,10 +20312,19 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             }
 
             if (sideControlsButtonsLayout != null) {
-                float centerX = chatActivityEnterView != null && chatActivityEnterView.isIosLikeInputField()
-                        ? chatActivityEnterView.getIosRecordButtonRestingCenterX(this)
-                            - sideControlsButtonsLayout.getLeft()
-                        : Float.NaN;
+                float centerX = Float.NaN;
+                if (isFeedSearch() && NekoConfig.iosLikeInputField) {
+                    // Feed has no laid-out composer anchor. Use the collapsed
+                    // input geometry regardless of keyboard/search visibility.
+                    int inputMargin = NonIslandHelper.chatElements() ? 0 : dp(7);
+                    int inputWidth = selfWidthWithoutInsets - inputMargin * 2;
+                    centerX = selfWidth - insetSystemRight - inputMargin
+                            - ChatActivityEnterView.getIosCollapsedRecordButtonRightInset(inputWidth)
+                            - sideControlsButtonsLayout.getLeft();
+                } else if (chatActivityEnterView != null && chatActivityEnterView.isIosLikeInputField()) {
+                    centerX = chatActivityEnterView.getIosRecordButtonRestingCenterX(this)
+                            - sideControlsButtonsLayout.getLeft();
+                }
                 sideControlsButtonsLayout.setInputButtonCenterX(centerX);
             }
 
@@ -30063,11 +30072,12 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         bottomOverlayChatText.setTextColorKey(accentTextButton ? Theme.key_featuredStickers_buttonText : Theme.key_glass_defaultText);
 
         CharSequence overlayLabel = bottomOverlayChatText.getContentDescription();
-        boolean compactMute = NekoConfig.iosLikeInputField && ChatObject.isChannelAndNotMegaGroup(currentChat)
+        boolean compactChannelAction = NekoConfig.iosLikeInputField && ChatObject.isChannelAndNotMegaGroup(currentChat)
                 && (TextUtils.equals(overlayLabel, getString(R.string.ChannelMuteNoCaps))
-                    || TextUtils.equals(overlayLabel, getString(R.string.ChannelUnmuteNoCaps)));
+                    || TextUtils.equals(overlayLabel, getString(R.string.ChannelUnmuteNoCaps))
+                    || TextUtils.equals(overlayLabel, getString(R.string.ChannelJoinNoCaps)));
         bottomChannelButtonsLayout.setIosInputLayout(NekoConfig.iosLikeInputField);
-        bottomChannelButtonsLayout.setCenterUsesAvailableWidth(compactMute);
+        bottomChannelButtonsLayout.setCenterUsesAvailableWidth(compactChannelAction);
 
         bottomChannelButtonsLayout.setCenterAccentBackground(accentTextButton, animated);
         bottomChannelButtonsLayout.updateWrappingVisible(animated);
@@ -31784,7 +31794,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     @Override
     public void onResume() {
         super.onResume();
+        // Wallpaper render nodes may need recording again after a long pause.
+        fadeWallpaperDirty = true;
+        syncFadeBlurEnabledState();
         if (fadeBlurSource != null && NekoConfig.blurredFadeViewEnabled()) startFadeBlurContinuousUpdates();
+        invalidateFadeBlur();
         if (actionBar != null) actionBar.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
         if (chatInputViewsContainer != null) chatInputViewsContainer.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
         if (sideControlsButtonsLayout != null) sideControlsButtonsLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
@@ -51149,6 +51163,10 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             stopFadeBlurContinuousUpdates();
             checkUi_topFade();
             chatActivityFadeView.invalidate();
+        }
+        if (enabled) {
+            // Restore settings even when no new content capture is needed.
+            chatActivityFadeView.setDim(NekoConfig.blurredFadeDimming ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
         }
     }
 
