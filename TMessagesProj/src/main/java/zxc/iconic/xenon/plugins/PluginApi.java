@@ -40,6 +40,7 @@ import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -83,9 +84,6 @@ import org.telegram.ui.DialogsActivity;
  */
 public class PluginApi {
 
-    static volatile String currentPluginFileName;
-    static volatile String currentPluginId;
-
     private static class TimerEntry {
         Runnable runnable;
         String pluginFileName;
@@ -97,11 +95,22 @@ public class PluginApi {
     private static final java.util.concurrent.atomic.AtomicInteger nextTimerId = new java.util.concurrent.atomic.AtomicInteger(1);
 
     static int setTimeout(String plugin, double seconds, LuaValue callback) {
+        if (!Double.isFinite(seconds) || seconds < 0 || seconds > 31_536_000) {
+            throw new org.luaj.vm2.LuaError("Timer delay must be between 0 and 31536000 seconds");
+        }
+        long pending = timers.values().stream().filter(entry -> plugin.equals(entry.pluginFileName)).count();
+        if (pending >= 256) throw new org.luaj.vm2.LuaError("Too many pending timers");
+        final PluginLuaRuntime runtime = PluginManager.getRuntime(plugin);
         int id = nextTimerId.getAndIncrement();
         Runnable runnable = () -> {
             TimerEntry entry = timers.remove(id);
-            if (entry != null && isPluginValid(entry.pluginFileName)) {
-                callback.call();
+            if (entry != null && isPluginValid(entry.pluginFileName) && PluginManager.isRuntimeCurrent(plugin, runtime)) {
+                try { PluginManager.invokeCallback(plugin, runtime, callback, LuaValue.NONE); }
+                catch (Throwable error) {
+                    if (PluginManager.isRuntimeCurrent(plugin, runtime)) {
+                        PluginManager.getInstance().quarantineFile(plugin, "timer", error);
+                    }
+                }
             }
         };
         timers.put(id, new TimerEntry(runnable, plugin));
@@ -123,12 +132,17 @@ public class PluginApi {
         int interval;
         int threshold;
         LuaValue callback;
+        PluginLuaRuntime runtime;
         int timerId;
-        Map<Long, Integer> lastIds = new HashMap<>();
-        boolean running;
+        Map<Long, Integer> lastIds = new ConcurrentHashMap<>();
+        volatile boolean running;
     }
 
     private static final Map<String, MessageWatcher> watchers = new ConcurrentHashMap<>();
+
+    private static String watcherKey(String owner, String key) {
+        return "watcher:" + owner.length() + ":" + owner + ":" + key;
+    }
 
     // Active Pine hooks per plugin, so they can be unhooked when a plugin stops.
     private static final Map<String, List<MethodHook.Unhook>> pineHooks = new ConcurrentHashMap<>();
@@ -155,27 +169,29 @@ public class PluginApi {
         w.interval = interval;
         w.threshold = threshold;
         w.callback = callback;
-        w.lastIds = loadWatcherIds(key);
+        w.runtime = PluginManager.getRuntime(owner);
+        w.lastIds.putAll(loadWatcherIds(key));
         w.running = true;
         watchers.put(key, w);
         Log.d("XenonPlugin", "startMessageWatcher: key=" + key + " chats=" + chats.length + " interval=" + interval + " threshold=" + threshold + " savedIds=" + w.lastIds.size());
         initWatcherBaseline(w);
     }
 
+    private static boolean watcherAllowed(MessageWatcher w) {
+        return w.running && watchers.get(w.key) == w
+                && actionGuard(w.pluginFileName, w.runtime, "startMessageWatcher").getAsBoolean();
+    }
+
     private static void initWatcherBaseline(MessageWatcher w) {
+        if (!watcherAllowed(w)) return;
         int total = w.chats.length;
-        int[] done = {0};
+        java.util.concurrent.atomic.AtomicInteger done = new java.util.concurrent.atomic.AtomicInteger();
         if (total == 0) return;
         for (long chatId : w.chats) {
             int account = UserConfig.selectedAccount;
             long cid = chatId;
             ensurePeerLoaded(account, cid, () -> {
-                if (!w.running) {
-                    // Stopped while loading — still finish the round so nothing
-                    // hangs.
-                    finishWatcherBaselineRound(w, done, total);
-                    return;
-                }
+                if (!watcherAllowed(w)) return;
                 MessagesController mc = MessagesController.getInstance(account);
                 TLRPC.InputPeer peer = mc.getInputPeer(cid);
                 if (peer == null) {
@@ -193,7 +209,9 @@ public class PluginApi {
                 req.offset_id = 0;
                 req.offset_date = 0;
                 req.add_offset = 0;
+                if (!watcherAllowed(w)) return;
                 ConnectionsManager.getInstance(account).sendRequest(req, (response, error) -> {
+                    if (!watcherAllowed(w)) return;
                     try {
                         if (error != null) {
                             Log.e("XenonPlugin", "watcher init: chat=" + cid + " error=" + error.text);
@@ -215,8 +233,9 @@ public class PluginApi {
         }
     }
 
-    private static void finishWatcherBaselineRound(MessageWatcher w, int[] done, int total) {
-        int n = ++done[0];
+    private static void finishWatcherBaselineRound(MessageWatcher w, java.util.concurrent.atomic.AtomicInteger done, int total) {
+        if (!watcherAllowed(w)) return;
+        int n = done.incrementAndGet();
         saveWatcherIds(w.key, w.lastIds);
         if (n == total) {
             scheduleWatcher(w);
@@ -234,33 +253,35 @@ public class PluginApi {
     }
 
     private static void scheduleWatcher(MessageWatcher w) {
-        if (!w.running) return;
-        w.timerId = setTimeout(w.pluginFileName, w.interval, new ZeroArgFunction() {
-            @Override
-            public LuaValue call() {
-                runWatcherCheck(w);
-                return LuaValue.NIL;
+        if (!watcherAllowed(w)) return;
+        try {
+            w.timerId = setTimeout(w.pluginFileName, w.interval, new ZeroArgFunction() {
+                @Override
+                public LuaValue call() {
+                    runWatcherCheck(w);
+                    return LuaValue.NIL;
+                }
+            });
+        } catch (Throwable error) {
+            w.running = false;
+            if (PluginManager.isRuntimeCurrent(w.pluginFileName, w.runtime)) {
+                PluginManager.getInstance().quarantineFile(w.pluginFileName, "watcher timer", error);
             }
-        });
+        }
     }
 
     private static void runWatcherCheck(MessageWatcher w) {
-        if (!w.running || w.chats.length == 0) return;
+        if (!watcherAllowed(w) || w.chats.length == 0) return;
         Log.d("XenonPlugin", "runWatcherCheck: key=" + w.key + " total=" + w.chats.length);
         int total = w.chats.length;
-        int[] done = {0};
+        java.util.concurrent.atomic.AtomicInteger done = new java.util.concurrent.atomic.AtomicInteger();
         LuaTable triggered = new LuaTable();
         int[] idx = {1};
         for (long chatId : w.chats) {
             int account = UserConfig.selectedAccount;
             long cid = chatId;
             ensurePeerLoaded(account, cid, () -> {
-                if (!w.running) {
-                    // Watcher was stopped while we were loading the peer. Still
-                    // bump done so nothing hangs, then bail.
-                    bumpWatcherDone(w, done, total, idx, triggered, 0);
-                    return;
-                }
+                if (!watcherAllowed(w)) return;
                 MessagesController mc = MessagesController.getInstance(account);
                 TLRPC.InputPeer peer = mc.getInputPeer(cid);
                 if (peer == null) {
@@ -278,7 +299,9 @@ public class PluginApi {
                 req.offset_id = 0;
                 req.offset_date = 0;
                 req.add_offset = 0;
+                if (!watcherAllowed(w)) return;
                 ConnectionsManager.getInstance(account).sendRequest(req, (response, error) -> {
+                    if (!watcherAllowed(w)) return;
                     try {
                         if (error != null) {
                             Log.e("XenonPlugin", "watcher: " + w.key + " chat=" + cid + " error=" + error.text);
@@ -303,7 +326,9 @@ public class PluginApi {
                                         LuaTable entry = new LuaTable();
                                         entry.set("chatId", cid);
                                         entry.set("new_count", incomingCount);
-                                        triggered.set(idx[0]++, entry);
+                                        synchronized (triggered) {
+                                            triggered.set(idx[0]++, entry);
+                                        }
                                     }
                                     w.lastIds.put(cid, latestAnyId);
                                 }
@@ -323,12 +348,13 @@ public class PluginApi {
         }
     }
 
-    private static void bumpWatcherDone(MessageWatcher w, int[] done, int total, int[] idx, LuaTable triggered, int unused) {
-        int n = ++done[0];
+    private static void bumpWatcherDone(MessageWatcher w, java.util.concurrent.atomic.AtomicInteger done, int total, int[] idx, LuaTable triggered, int unused) {
+        if (!watcherAllowed(w)) return;
+        int n = done.incrementAndGet();
         if (n == total) {
             saveWatcherIds(w.key, w.lastIds);
             AndroidUtilities.runOnUIThread(() -> {
-                if (!w.running) return;
+                if (!watcherAllowed(w)) return;
                 if (!isPluginValid(w.pluginFileName)) {
                     w.running = false;
                     return;
@@ -336,7 +362,7 @@ public class PluginApi {
                 boolean triggeredAny = idx[0] > 1;
                 Log.d("XenonPlugin", "runWatcherCheck: key=" + w.key + " done. triggered=" + triggeredAny + " triggeredCount=" + (idx[0] - 1));
                 if (triggeredAny && w.callback != null && !w.callback.isnil()) {
-                    try { PluginManager.invokeCallback(w.pluginFileName, w.callback, triggered); }
+                    try { PluginManager.invokeCallback(w.pluginFileName, w.runtime, w.callback, triggered); }
                     catch (Throwable error) { PluginManager.getInstance().quarantineFile(w.pluginFileName, "watcher", error); }
                 }
                 scheduleWatcher(w);
@@ -404,7 +430,7 @@ public class PluginApi {
         List<MethodHook.Unhook> hooks = pineHooks.remove(pluginFileName);
         if (hooks != null) {
             for (MethodHook.Unhook hook : hooks) {
-                hook.unhook();
+                try { hook.unhook(); } catch (Throwable error) { FileLog.e(error); }
             }
             Log.d("XenonPlugin", "Removed " + hooks.size() + " Pine hooks for " + pluginFileName);
         }
@@ -412,7 +438,8 @@ public class PluginApi {
         List<NcObserver> obs = ncObservers.remove(pluginFileName);
         if (obs != null) {
             for (NcObserver o : obs) {
-                NotificationCenter.getInstance(o.account).removeObserver(o.delegate, o.id);
+                try { NotificationCenter.getInstance(o.account).removeObserver(o.delegate, o.id); }
+                catch (Throwable error) { FileLog.e(error); }
             }
             Log.d("XenonPlugin", "Removed " + obs.size() + " NC observers for " + pluginFileName);
         }
@@ -428,44 +455,31 @@ public class PluginApi {
         // Unhook all Pine hooks
         for (List<MethodHook.Unhook> hooks : pineHooks.values()) {
             for (MethodHook.Unhook hook : hooks) {
-                hook.unhook();
+                try { hook.unhook(); } catch (Throwable error) { FileLog.e(error); }
             }
         }
         pineHooks.clear();
         // Remove all NC observers
         for (List<NcObserver> obs : ncObservers.values()) {
             for (NcObserver o : obs) {
-                NotificationCenter.getInstance(o.account).removeObserver(o.delegate, o.id);
+                try { NotificationCenter.getInstance(o.account).removeObserver(o.delegate, o.id); }
+                catch (Throwable error) { FileLog.e(error); }
             }
         }
         ncObservers.clear();
     }
 
-    static void setCurrentPluginFileName(String name) {
-        currentPluginFileName = name;
-    }
-
-    static void setCurrentPluginId(String id) {
-        currentPluginId = id;
-    }
-
     /**
      * Check the {@code MESSAGING} scope for the plugin that's currently
-     * loading/calling. Protected API methods call this and silently bail
-     * (return nil) when it's false, so a plugin without the scope — or without
-     * God Mode — can't send/delete/react/read messages or run message queries.
-     * The {@code currentPluginFileName} is captured by the API closures at
-     * creation time, so it stays correct even though it's a mutable static.
+     * loading/calling. This is an additional legacy master-switch check; the
+     * public API wrapper checks granular permissions and raises LuaError on denial.
+     * The owning filename is captured by each API closure at creation time.
      */
     static boolean hasMessagingScope(String fileName) {
         return PluginManager.hasScope(fileName, PluginManager.SCOPE_MESSAGING);
     }
 
-    static LuaTable[] createApiTable(Globals globals) {
-        // Capture the owning plugin's file name once; every API closure below
-        // binds this, so it stays tied to the right plugin even though
-        // currentPluginFileName is a shared mutable static.
-        final String pluginFileName = currentPluginFileName;
+    static LuaTable[] createApiTable(Globals globals, final String pluginFileName, String pluginId) {
         final PluginLuaRuntime apiRuntime = PluginManager.getRuntime(pluginFileName);
         LuaTable hooks = new LuaTable();
         globals.set("xenon_hooks", hooks);
@@ -503,7 +517,7 @@ public class PluginApi {
                         senderId = (long) uargs.arg(5).todouble();
                     }
                     Log.d("XenonPlugin", "xenon.sendMessage called: peer=" + peer + " replyTo=" + replyTo + " hasCb=" + (cb != null) + " senderId=" + senderId);
-                    sendMessage(text, peer, replyTo, cb, senderId);
+                    sendMessage(actionGuard(pluginFileName, apiRuntime, "sendMessage"), text, peer, replyTo, cb, senderId);
                 }
                 return LuaValue.NIL;
             }
@@ -517,7 +531,7 @@ public class PluginApi {
                     long chatId = (long) uargs.arg(1).todouble();
                     int msgId = (int) uargs.arg(2).todouble();
                     Log.d("XenonPlugin", "xenon.deleteMessage called: chatId=" + chatId + " msgId=" + msgId);
-                    deleteMessage(chatId, msgId);
+                    deleteMessage(actionGuard(pluginFileName, apiRuntime, "deleteMessage"), chatId, msgId);
                 }
                 return LuaValue.NIL;
             }
@@ -532,7 +546,7 @@ public class PluginApi {
                     int msgId = (int) uargs.arg(2).todouble();
                     int replyTo = uargs.narg() >= 3 && uargs.arg(3).isnumber() ? (int) uargs.arg(3).todouble() : 0;
                     Log.d("XenonPlugin", "xenon.sendMedia called: chatId=" + chatId + " msgId=" + msgId + " replyTo=" + replyTo);
-                    sendMedia(chatId, msgId, replyTo);
+                    sendMedia(actionGuard(pluginFileName, apiRuntime, "sendMedia"), chatId, msgId, replyTo);
                 }
                 return LuaValue.NIL;
             }
@@ -547,7 +561,7 @@ public class PluginApi {
                     int msgId = (int) uargs.arg(2).todouble();
                     String reaction = uargs.arg(3).optjstring("");
                     Log.d("XenonPlugin", "xenon.setReaction: chatId=" + chatId + " msgId=" + msgId + " reaction=" + reaction);
-                    setReaction(chatId, msgId, reaction);
+                    setReaction(actionGuard(pluginFileName, apiRuntime, "setReaction"), chatId, msgId, reaction);
                 }
                 return LuaValue.NIL;
             }
@@ -558,7 +572,7 @@ public class PluginApi {
                 if (!hasMessagingScope(pluginFileName)) return LuaValue.NIL;
                 long cid = (long) chatId.todouble();
                 Log.d("XenonPlugin", "xenon.readHistory: chatId=" + cid);
-                readHistory(cid);
+                readHistory(actionGuard(pluginFileName, apiRuntime, "readHistory"), cid);
                 return LuaValue.NIL;
             }
         });
@@ -602,14 +616,14 @@ public class PluginApi {
                 int threshold = Math.max(1, (int) t.get("threshold").optdouble(3));
                 LuaValue callback = t.get("callback");
                 if (!callback.isfunction()) return LuaValue.NIL;
-                startMessageWatcher(pluginFileName, pluginFileName + ":" + key, chats, interval, threshold, callback);
+                startMessageWatcher(pluginFileName, watcherKey(pluginFileName, key), chats, interval, threshold, callback);
                 return LuaValue.TRUE;
             }
         });
         api.set("stopMessageWatcher", new OneArgFunction() {
             @Override
             public LuaValue call(LuaValue key) {
-                stopMessageWatcher(pluginFileName + ":" + key.optjstring(""));
+                stopMessageWatcher(watcherKey(pluginFileName, key.optjstring("")));
                 return LuaValue.NIL;
             }
         });
@@ -617,7 +631,7 @@ public class PluginApi {
             @Override
             public LuaValue call(LuaValue arg) {
                 Log.d("XenonPlugin", "xenon.toast called: " + arg.tojstring());
-                showToast(arg.checkjstring());
+                showToast(actionGuard(pluginFileName, apiRuntime, "toast"), arg.checkjstring());
                 return LuaValue.NIL;
             }
         });
@@ -625,7 +639,7 @@ public class PluginApi {
             @Override
             public LuaValue call(LuaValue arg) {
                 Log.d("XenonPlugin", "xenon.bulletin called: " + arg.tojstring());
-                showBulletin(arg.checkjstring());
+                showBulletin(actionGuard(pluginFileName, apiRuntime, "bulletin"), arg.checkjstring());
                 return LuaValue.NIL;
             }
         });
@@ -638,7 +652,7 @@ public class PluginApi {
                     String button = uargs.arg(2).checkjstring();
                     LuaValue cb = uargs.arg(3).isfunction() ? uargs.arg(3) : null;
                     Log.d("XenonPlugin", "xenon.bulletinButton called: text=" + text + " button=" + button);
-                    showBulletinButton(text, button, cb);
+                    showBulletinButton(actionGuard(pluginFileName, apiRuntime, "bulletinButton"), text, button, cb);
                 }
                 return LuaValue.NIL;
             }
@@ -649,7 +663,7 @@ public class PluginApi {
         android.content.SharedPreferences settingsPrefs = ApplicationLoader.applicationContext.getSharedPreferences("xenon_plugins", android.content.Context.MODE_PRIVATE);
         String migrationKey = "plugin_settings_v3_" + pluginFileName;
         if (!settingsPrefs.getBoolean(migrationKey, false) && PluginManager.hasScope(pluginFileName, PluginManager.SCOPE_JAVA)) {
-            String legacyPrefix = (currentPluginId != null ? currentPluginId : pluginFileName) + "_";
+            String legacyPrefix = (pluginId != null ? pluginId : pluginFileName) + "_";
             android.content.SharedPreferences.Editor migration = settingsPrefs.edit();
             for (java.util.Map.Entry<String, ?> entry : settingsPrefs.getAll().entrySet()) {
                 if (entry.getKey().startsWith(legacyPrefix) && entry.getValue() instanceof String) {
@@ -697,7 +711,7 @@ public class PluginApi {
             @Override
             public LuaValue call(LuaValue arg) {
                 String name = arg.checkjstring();
-                openActivity(name);
+                openActivity(actionGuard(pluginFileName, apiRuntime, "openActivity"), name);
                 return LuaValue.NIL;
             }
         });
@@ -707,12 +721,12 @@ public class PluginApi {
                 return LuaValue.NIL;
             }
         });
-        final String capturedFileName = currentPluginFileName;
+        final String capturedFileName = pluginFileName;
         api.set("openPluginSettings", new ZeroArgFunction() {
             @Override
             public LuaValue call() {
                 if (capturedFileName != null) {
-                    openPluginSettingsFor(capturedFileName);
+                    openPluginSettingsFor(actionGuard(pluginFileName, apiRuntime, "openPluginSettings"), capturedFileName);
                 }
                 return LuaValue.NIL;
             }
@@ -726,7 +740,7 @@ public class PluginApi {
                 String hint = n > 1 ? uargs.arg(2).optjstring("") : "";
                 LuaValue cb = n > 2 ? uargs.arg(3) : LuaValue.NIL;
                 if (cb.isfunction()) {
-                    promptText(title, hint, cb);
+                    promptText(actionGuard(pluginFileName, apiRuntime, "promptText"), title, hint, cb);
                 }
                 return LuaValue.NIL;
             }
@@ -739,14 +753,14 @@ public class PluginApi {
                 String title = n > 0 ? uargs.arg(1).optjstring("") : "";
                 String message = n > 1 ? uargs.arg(2).optjstring("") : "";
                 LuaValue buttons = n > 2 ? uargs.arg(3) : LuaValue.NIL;
-                createDialog(title, message, buttons);
+                createDialog(actionGuard(pluginFileName, apiRuntime, "createDialog"), title, message, buttons);
                 return LuaValue.NIL;
             }
         });
         api.set("createBottomSheet", new TwoArgFunction() {
             @Override
             public LuaValue call(LuaValue title, LuaValue items) {
-                createBottomSheet(title.optjstring(""), items);
+                createBottomSheet(actionGuard(pluginFileName, apiRuntime, "createBottomSheet"), title.optjstring(""), items);
                 return LuaValue.NIL;
             }
         });
@@ -765,7 +779,7 @@ public class PluginApi {
                 LuaValue callback = uargs.arg(1);
                 String filter = n >= 2 ? uargs.arg(2).tojstring() : null;
                 if (callback.isfunction()) {
-                    openChatPicker(callback, filter);
+                    openChatPicker(actionGuard(pluginFileName, apiRuntime, "openChatPicker"), callback, filter);
                 }
                 return LuaValue.NIL;
             }
@@ -774,7 +788,9 @@ public class PluginApi {
             @Override
             public LuaValue call() {
                 org.telegram.messenger.AndroidUtilities.runOnUIThread(() -> {
-                    zxc.iconic.xenon.settings.PluginSettingsActivity.refreshCurrent();
+                    if (actionGuard(pluginFileName, apiRuntime, "refreshSettings").getAsBoolean()) {
+                        zxc.iconic.xenon.settings.PluginSettingsActivity.refreshCurrent();
+                    }
                 });
                 return LuaValue.NIL;
             }
@@ -786,7 +802,7 @@ public class PluginApi {
                 Varargs uargs = args.subargs(1);
                 int n = uargs.narg();
                 if (n >= 3 && uargs.arg(1).isnumber() && uargs.arg(2).isnumber() && uargs.arg(3).isfunction()) {
-                    getMessageById((long) uargs.arg(1).todouble(), (int) uargs.arg(2).todouble(), uargs.arg(3));
+                    getMessageById(actionGuard(pluginFileName, apiRuntime, "getMessageById"), (long) uargs.arg(1).todouble(), (int) uargs.arg(2).todouble(), uargs.arg(3));
                 }
                 return LuaValue.NIL;
             }
@@ -798,7 +814,7 @@ public class PluginApi {
                 Varargs uargs = args.subargs(1);
                 int n = uargs.narg();
                 if (n >= 3 && uargs.arg(1).isnumber() && uargs.arg(2).isnumber() && uargs.arg(3).isfunction()) {
-                    getRecentMessages((long) uargs.arg(1).todouble(), (int) uargs.arg(2).todouble(), uargs.arg(3));
+                    getRecentMessages(actionGuard(pluginFileName, apiRuntime, "getRecentMessages"), (long) uargs.arg(1).todouble(), (int) uargs.arg(2).todouble(), uargs.arg(3));
                 }
                 return LuaValue.NIL;
             }
@@ -810,7 +826,7 @@ public class PluginApi {
                 Varargs uargs = args.subargs(1);
                 int n = uargs.narg();
                 if (n >= 4 && uargs.arg(1).isnumber() && uargs.arg(2).isnumber() && uargs.arg(3).isnumber() && uargs.arg(4).isfunction()) {
-                    getMessagesFromUser((long) uargs.arg(1).todouble(), (int) uargs.arg(2).todouble(), (int) uargs.arg(3).todouble(), uargs.arg(4));
+                    getMessagesFromUser(actionGuard(pluginFileName, apiRuntime, "getMessagesFromUser"), (long) uargs.arg(1).todouble(), (int) uargs.arg(2).todouble(), (int) uargs.arg(3).todouble(), uargs.arg(4));
                 }
                 return LuaValue.NIL;
             }
@@ -906,7 +922,7 @@ public class PluginApi {
                     return new ZeroArgFunction() {
                         @Override
                         public LuaValue call() {
-                            hook.unhook();
+                            try { hook.unhook(); } catch (Throwable error) { FileLog.e(error); }
                             List<MethodHook.Unhook> list = pineHooks.get(pluginFileName);
                             if (list != null) list.remove(hook);
                             return LuaValue.NIL;
@@ -1017,8 +1033,9 @@ public class PluginApi {
                     if (!allowsApi(pluginFileName, apiName)) throw new org.luaj.vm2.LuaError("Permission denied: " + apiName);
                     LuaValue[] values = new LuaValue[args.narg()];
                     java.util.IdentityHashMap<LuaValue, LuaValue> copied = new java.util.IdentityHashMap<>();
+                    int[] remaining = {4096};
                     for (int i = 0; i < values.length; i++) values[i] = guardCallbacks(pluginFileName, apiRuntime,
-                            apiName, args.arg(i + 1), copied, 0);
+                            apiName, args.arg(i + 1), copied, remaining, 0);
                     return function.invoke(LuaValue.varargsOf(values));
                 }
             });
@@ -1026,13 +1043,22 @@ public class PluginApi {
         return new LuaTable[]{scopedApi, hooks};
     }
 
+    private static BooleanSupplier actionGuard(String owner, PluginLuaRuntime runtime, String api) {
+        return () -> PluginManager.isRuntimeCurrent(owner, runtime)
+                && PluginManager.getInstance().isEnabled()
+                && getPrefs().getBoolean("plugin_enabled_" + owner, true)
+                && allowsApi(owner, api);
+    }
+
     private static LuaValue guardCallbacks(String owner, PluginLuaRuntime runtime, String api, LuaValue value,
-            java.util.IdentityHashMap<LuaValue, LuaValue> copied, int depth) {
+            java.util.IdentityHashMap<LuaValue, LuaValue> copied, int[] remaining, int depth) {
+        if (--remaining[0] < 0) throw new org.luaj.vm2.LuaError("API arguments contain too many values");
         if (value.isfunction()) {
             return new VarArgFunction() {
                 @Override public Varargs invoke(Varargs args) {
-                    if (!isPluginValid(owner) || !PluginManager.isRuntimeCurrent(owner, runtime)) return LuaValue.NIL;
-                    try { return PluginManager.invokeCallback(owner, value, args); }
+                    if (!isPluginValid(owner) || !PluginManager.isRuntimeCurrent(owner, runtime)
+                            || !allowsApi(owner, api)) return LuaValue.NIL;
+                    try { return PluginManager.invokeCallback(owner, runtime, value, args); }
                     catch (Throwable error) {
                         if (PluginManager.isRuntimeCurrent(owner, runtime)) PluginManager.getInstance().quarantineFile(owner, "callback " + api, error);
                         return LuaValue.NIL;
@@ -1044,7 +1070,13 @@ public class PluginApi {
         if (copied.containsKey(value)) return copied.get(value);
         if (depth > 32) throw new org.luaj.vm2.LuaError("Callback table is too deeply nested");
         LuaTable table = new LuaTable(); copied.put(value, table);
-        for (LuaValue key : value.checktable().keys()) table.set(key, guardCallbacks(owner, runtime, api, value.get(key), copied, depth + 1));
+        LuaValue key = LuaValue.NIL;
+        while (true) {
+            Varargs next = value.next(key);
+            key = next.arg1();
+            if (key.isnil()) break;
+            table.rawset(key, guardCallbacks(owner, runtime, api, next.arg(2), copied, remaining, depth + 1));
+        }
         return table;
     }
 
@@ -1071,22 +1103,18 @@ public class PluginApi {
             case "openPluginSettings": case "promptText": case "createDialog": case "createBottomSheet":
                 scope = PluginManager.SCOPE_UI; break;
             case "openChatPicker": return PluginManager.hasScope(owner, PluginManager.SCOPE_UI) && PluginManager.hasScope(owner, PluginManager.SCOPE_READ);
-            case "finish": scope = PluginManager.SCOPE_UI; break;
-            default: return true;
+            case "refreshSettings": case "finish": scope = PluginManager.SCOPE_UI; break;
+            case "hasPermission": case "on": case "setTimeout": case "clearTimeout":
+            case "getSetting": case "setSetting": case "stopMessageWatcher": return true;
+            default: return false;
         }
         return PluginManager.hasScope(owner, scope);
     }
 
-    static void sendMessage(final String text, final long peerId, final int replyToMsgId) {
-        sendMessage(text, peerId, replyToMsgId, null, 0);
-    }
-
-    static void sendMessage(final String text, final long peerId, final int replyToMsgId, final LuaValue callback) {
-        sendMessage(text, peerId, replyToMsgId, callback, 0);
-    }
-
-    static void sendMessage(final String text, final long peerId, final int replyToMsgId, final LuaValue callback, final long senderId) {
+    static void sendMessage(BooleanSupplier allowed, final String text, final long peerId, final int replyToMsgId, final LuaValue callback, final long senderId) {
+        if (!allowed.getAsBoolean()) return;
         org.telegram.messenger.AndroidUtilities.runOnUIThread(() -> {
+            if (!allowed.getAsBoolean()) return;
             try {
                 int acc = UserConfig.selectedAccount;
                 if (senderId > 0 && senderId != UserConfig.getInstance(acc).getClientUserId()) {
@@ -1102,7 +1130,7 @@ public class PluginApi {
                 // dialogId convention: positive = user, negative = chat/channel.
                 final long dialogId = peerId;
                 if (mc.getInputPeer(dialogId) != null) {
-                    doSendMessage(account, mc, dialogId, text, replyToMsgId, callback);
+                    doSendMessage(allowed, account, mc, dialogId, text, replyToMsgId, callback);
                     return;
                 }
                 // Peer not in memory (common for private chats we haven't
@@ -1115,7 +1143,7 @@ public class PluginApi {
                         }
                         return;
                     }
-                    doSendMessage(account, mc, dialogId, text, replyToMsgId, callback);
+                    doSendMessage(allowed, account, mc, dialogId, text, replyToMsgId, callback);
                 });
             } catch (Exception e) {
                 FileLog.e("Plugin sendMessage failed", e);
@@ -1164,7 +1192,8 @@ public class PluginApi {
         });
     }
 
-    private static void doSendMessage(int account, MessagesController mc, long dialogId, String text, int replyToMsgId, LuaValue callback) {
+    private static void doSendMessage(BooleanSupplier allowed, int account, MessagesController mc, long dialogId, String text, int replyToMsgId, LuaValue callback) {
+        if (!allowed.getAsBoolean()) return;
         TLRPC.InputPeer inputPeer = mc.getInputPeer(dialogId);
         if (inputPeer == null) {
             Log.e("XenonPlugin", "doSendMessage: getInputPeer returned null for dialogId=" + dialogId);
@@ -1184,6 +1213,7 @@ public class PluginApi {
             req.reply_to = replyTo;
             req.flags |= 1;
         }
+        if (!allowed.getAsBoolean()) return;
         ConnectionsManager.getInstance(account).sendRequest(req, (response, error) -> {
             int sentMsgId = 0;
             if (error != null) {
@@ -1198,6 +1228,7 @@ public class PluginApi {
             if (callback != null && callback.isfunction()) {
                 final int finalId = sentMsgId;
                 org.telegram.messenger.AndroidUtilities.runOnUIThread(() -> {
+                    if (!allowed.getAsBoolean()) return;
                     if (finalId > 0) {
                         callback.call(LuaValue.valueOf(finalId));
                     } else {
@@ -1234,14 +1265,16 @@ public class PluginApi {
         return 0;
     }
 
-    static void sendMedia(final long chatId, final int msgId, final int replyToMsgId) {
+    static void sendMedia(BooleanSupplier allowed, final long chatId, final int msgId, final int replyToMsgId) {
+        if (!allowed.getAsBoolean()) return;
         org.telegram.messenger.AndroidUtilities.runOnUIThread(() -> {
+            if (!allowed.getAsBoolean()) return;
             try {
                 int account = UserConfig.selectedAccount;
                 final MessagesController mc = MessagesController.getInstance(account);
                 final long dialogId = chatId;
                 if (mc.getInputPeer(dialogId) != null) {
-                    fetchMessageAndSendMedia(account, mc, dialogId, chatId, msgId, replyToMsgId);
+                    fetchMessageAndSendMedia(allowed, account, mc, dialogId, chatId, msgId, replyToMsgId);
                     return;
                 }
                 ensurePeerLoaded(account, dialogId, () -> {
@@ -1249,7 +1282,7 @@ public class PluginApi {
                         Log.e("XenonPlugin", "sendMedia: could not resolve peer " + dialogId);
                         return;
                     }
-                    fetchMessageAndSendMedia(account, mc, dialogId, chatId, msgId, replyToMsgId);
+                    fetchMessageAndSendMedia(allowed, account, mc, dialogId, chatId, msgId, replyToMsgId);
                 });
             } catch (Exception e) {
                 FileLog.e("Plugin sendMedia failed", e);
@@ -1258,7 +1291,8 @@ public class PluginApi {
         });
     }
 
-    private static void fetchMessageAndSendMedia(int account, MessagesController mc, long dialogId, long sourceChatId, int sourceMsgId, int replyToMsgId) {
+    private static void fetchMessageAndSendMedia(BooleanSupplier allowed, int account, MessagesController mc, long dialogId, long sourceChatId, int sourceMsgId, int replyToMsgId) {
+        if (!allowed.getAsBoolean()) return;
         TLRPC.Chat chat = null;
         if (sourceChatId < 0) {
             chat = mc.getChat(-sourceChatId);
@@ -1275,13 +1309,14 @@ public class PluginApi {
             r.id.add(sourceMsgId);
             req = r;
         }
+        if (!allowed.getAsBoolean()) return;
         ConnectionsManager.getInstance(account).sendRequest(req, (response, error) -> {
             if (error == null && response instanceof TLRPC.messages_Messages) {
                 TLRPC.messages_Messages msgs = (TLRPC.messages_Messages) response;
                 if (!msgs.messages.isEmpty()) {
                     TLRPC.Message msg = msgs.messages.get(0);
                     if (msg.media != null) {
-                        doSendMedia(account, mc, dialogId, msg, replyToMsgId);
+                        doSendMedia(allowed, account, mc, dialogId, msg, replyToMsgId);
                         return;
                     }
                 }
@@ -1290,7 +1325,8 @@ public class PluginApi {
         });
     }
 
-    private static void doSendMedia(int account, MessagesController mc, long dialogId, TLRPC.Message msg, int replyToMsgId) {
+    private static void doSendMedia(BooleanSupplier allowed, int account, MessagesController mc, long dialogId, TLRPC.Message msg, int replyToMsgId) {
+        if (!allowed.getAsBoolean()) return;
         TLRPC.InputPeer inputPeer = mc.getInputPeer(dialogId);
         if (inputPeer == null) {
             Log.e("XenonPlugin", "doSendMedia: getInputPeer returned null for dialogId=" + dialogId);
@@ -1336,6 +1372,7 @@ public class PluginApi {
             req.reply_to = replyTo;
             req.flags |= 1;
         }
+        if (!allowed.getAsBoolean()) return;
         ConnectionsManager.getInstance(account).sendRequest(req, (response, error) -> {
             if (error != null) {
                 FileLog.e("Plugin sendMedia error: " + error.text);
@@ -1346,8 +1383,10 @@ public class PluginApi {
         });
     }
 
-    static void setReaction(long chatId, int msgId, String reaction) {
+    static void setReaction(BooleanSupplier allowed, long chatId, int msgId, String reaction) {
+        if (!allowed.getAsBoolean()) return;
         AndroidUtilities.runOnUIThread(() -> {
+            if (!allowed.getAsBoolean()) return;
             try {
                 int account = UserConfig.selectedAccount;
                 MessagesController mc = MessagesController.getInstance(account);
@@ -1364,6 +1403,7 @@ public class PluginApi {
                     req.reaction.add(r);
                     req.flags |= 1;
                 }
+                if (!allowed.getAsBoolean()) return;
                 ConnectionsManager.getInstance(account).sendRequest(req, (response, error) -> {
                     if (error != null) {
                         FileLog.e("Plugin setReaction error: " + error.text);
@@ -1379,8 +1419,10 @@ public class PluginApi {
         });
     }
 
-    static void readHistory(long chatId) {
+    static void readHistory(BooleanSupplier allowed, long chatId) {
+        if (!allowed.getAsBoolean()) return;
         AndroidUtilities.runOnUIThread(() -> {
+            if (!allowed.getAsBoolean()) return;
             try {
                 int account = UserConfig.selectedAccount;
                 MessagesController mc = MessagesController.getInstance(account);
@@ -1394,6 +1436,7 @@ public class PluginApi {
                 req.peer = peer;
                 req.max_id = maxId;
                 Log.d("XenonPlugin", "readHistory: sending for chatId=" + chatId + " peer=" + peer);
+                if (!allowed.getAsBoolean()) return;
                 ConnectionsManager.getInstance(account).sendRequest(req, (response, error) -> {
                     if (error != null) {
                         Log.e("XenonPlugin", "readHistory error: " + error.text + " (code=" + error.code + ")");
@@ -1408,8 +1451,10 @@ public class PluginApi {
         });
     }
 
-    static void deleteMessage(final long chatId, final int msgId) {
+    static void deleteMessage(BooleanSupplier allowed, final long chatId, final int msgId) {
+        if (!allowed.getAsBoolean()) return;
         AndroidUtilities.runOnUIThread(() -> {
+            if (!allowed.getAsBoolean()) return;
             try {
                 int account = UserConfig.selectedAccount;
                 final MessagesController mc = MessagesController.getInstance(account);
@@ -1428,6 +1473,7 @@ public class PluginApi {
                         TLRPC.TL_channels_deleteMessages req = new TLRPC.TL_channels_deleteMessages();
                         req.channel = channel;
                         req.id.add(msgId);
+                        if (!allowed.getAsBoolean()) return;
                         ConnectionsManager.getInstance(account).sendRequest(req, (response, error) -> {
                             if (error != null) {
                                 Log.e("XenonPlugin", "deleteMessage error: " + error.text);
@@ -1444,6 +1490,7 @@ public class PluginApi {
                         TLRPC.TL_messages_deleteMessages req = new TLRPC.TL_messages_deleteMessages();
                         req.id.add(msgId);
                         req.revoke = true;
+                        if (!allowed.getAsBoolean()) return;
                         ConnectionsManager.getInstance(account).sendRequest(req, (response, error) -> {
                             if (error != null) {
                                 Log.e("XenonPlugin", "deleteMessage error: " + error.text);
@@ -1490,8 +1537,10 @@ public class PluginApi {
         return null;
     }
 
-    static void openActivity(final String name) {
+    static void openActivity(BooleanSupplier allowed, final String name) {
+        if (!allowed.getAsBoolean()) return;
         org.telegram.messenger.AndroidUtilities.runOnUIThread(() -> {
+            if (!allowed.getAsBoolean()) return;
             try {
                 Activity a = PluginManager.getCurrentActivity();
                 if (a == null) return;
@@ -1516,8 +1565,10 @@ public class PluginApi {
         });
     }
 
-    private static void openPluginSettingsFor(final String fileName) {
+    private static void openPluginSettingsFor(BooleanSupplier allowed, final String fileName) {
+        if (!allowed.getAsBoolean()) return;
         org.telegram.messenger.AndroidUtilities.runOnUIThread(() -> {
+            if (!allowed.getAsBoolean()) return;
             try {
                 Activity a = PluginManager.getCurrentActivity();
                 if (!(a instanceof org.telegram.ui.LaunchActivity)) return;
@@ -1532,8 +1583,10 @@ public class PluginApi {
         });
     }
 
-    static void promptText(final String title, final String hint, final LuaValue callback) {
+    static void promptText(BooleanSupplier allowed, final String title, final String hint, final LuaValue callback) {
+        if (!allowed.getAsBoolean()) return;
         org.telegram.messenger.AndroidUtilities.runOnUIThread(() -> {
+            if (!allowed.getAsBoolean()) return;
             try {
                 Activity a = PluginManager.getCurrentActivity();
                 if (a == null) return;
@@ -1571,8 +1624,10 @@ public class PluginApi {
         });
     }
 
-    static void createDialog(final String title, final String message, final LuaValue buttons) {
+    static void createDialog(BooleanSupplier allowed, final String title, final String message, final LuaValue buttons) {
+        if (!allowed.getAsBoolean()) return;
         org.telegram.messenger.AndroidUtilities.runOnUIThread(() -> {
+            if (!allowed.getAsBoolean()) return;
             try {
                 Activity a = PluginManager.getCurrentActivity();
                 if (a == null) return;
@@ -1680,8 +1735,10 @@ public class PluginApi {
         sheetRef[0] = builder.show();
     }
 
-    static void createBottomSheet(final String title, final LuaValue items) {
+    static void createBottomSheet(BooleanSupplier allowed, final String title, final LuaValue items) {
+        if (!allowed.getAsBoolean()) return;
         org.telegram.messenger.AndroidUtilities.runOnUIThread(() -> {
+            if (!allowed.getAsBoolean()) return;
             try {
                 Activity a = PluginManager.getCurrentActivity();
                 if (a == null) return;
@@ -1735,8 +1792,10 @@ public class PluginApi {
         });
     }
 
-    private static void openChatPicker(LuaValue callback, String filter) {
+    private static void openChatPicker(BooleanSupplier allowed, LuaValue callback, String filter) {
+        if (!allowed.getAsBoolean()) return;
         org.telegram.messenger.AndroidUtilities.runOnUIThread(() -> {
+            if (!allowed.getAsBoolean()) return;
             try {
                 Activity a = PluginManager.getCurrentActivity();
                 Log.d("XenonPlugin", "openChatPicker: activity=" + a + " filter=" + filter);
@@ -1779,7 +1838,8 @@ public class PluginApi {
         });
     }
 
-    private static void getMessageById(long chatId, int messageId, LuaValue callback) {
+    private static void getMessageById(BooleanSupplier allowed, long chatId, int messageId, LuaValue callback) {
+        if (!allowed.getAsBoolean()) return;
         int account = UserConfig.selectedAccount;
         MessagesController mc = MessagesController.getInstance(account);
         TLRPC.Chat chat = null;
@@ -1798,17 +1858,18 @@ public class PluginApi {
                         failCallback(callback, "chat not loaded");
                         return;
                     }
-                    fetchMessagesById(account, true, ic, chatId, messageId, callback);
+                    fetchMessagesById(allowed, account, true, ic, chatId, messageId, callback);
                 });
                 return;
             }
-            fetchMessagesById(account, true, inputChannel, chatId, messageId, callback);
+            fetchMessagesById(allowed, account, true, inputChannel, chatId, messageId, callback);
         } else {
-            fetchMessagesById(account, false, null, chatId, messageId, callback);
+            fetchMessagesById(allowed, account, false, null, chatId, messageId, callback);
         }
     }
 
-    private static void fetchMessagesById(int account, boolean isChannel, TLRPC.InputChannel inputChannel, long chatId, int messageId, LuaValue callback) {
+    private static void fetchMessagesById(BooleanSupplier allowed, int account, boolean isChannel, TLRPC.InputChannel inputChannel, long chatId, int messageId, LuaValue callback) {
+        if (!allowed.getAsBoolean()) return;
         try {
             TLObject req;
             if (isChannel) {
@@ -1821,6 +1882,7 @@ public class PluginApi {
                 r.id.add(messageId);
                 req = r;
             }
+            if (!allowed.getAsBoolean()) return;
             ConnectionsManager.getInstance(account).sendRequest(req, (response, error) -> {
                 LuaValue result;
                 if (response instanceof TLRPC.messages_Messages) {
@@ -1832,6 +1894,7 @@ public class PluginApi {
                 final LuaValue resultFinal = result;
                 final LuaValue errFinal = err;
                 org.telegram.messenger.AndroidUtilities.runOnUIThread(() -> {
+                    if (!allowed.getAsBoolean()) return;
                     if (callback.isfunction()) callback.call(resultFinal, errFinal);
                 });
             });
@@ -1848,7 +1911,8 @@ public class PluginApi {
         org.telegram.messenger.AndroidUtilities.runOnUIThread(() -> callback.call(LuaValue.NIL, LuaValue.valueOf(msg)));
     }
 
-    private static void getRecentMessages(long chatId, int count, LuaValue callback) {
+    private static void getRecentMessages(BooleanSupplier allowed, long chatId, int count, LuaValue callback) {
+        if (!allowed.getAsBoolean()) return;
         int account = UserConfig.selectedAccount;
         MessagesController mc = MessagesController.getInstance(account);
         TLRPC.InputPeer peer = mc.getInputPeer(chatId);
@@ -1856,13 +1920,14 @@ public class PluginApi {
             // Peer not in memory. Try to load it so the request actually goes
             // out instead of dying on a null peer (which gives the silent
             // "callback never fires" failure).
-            ensurePeerLoaded(account, chatId, () -> doFetchRecentMessages(account, chatId, count, callback));
+            ensurePeerLoaded(account, chatId, () -> doFetchRecentMessages(allowed, account, chatId, count, callback));
             return;
         }
-        doFetchRecentMessages(account, chatId, count, callback);
+        doFetchRecentMessages(allowed, account, chatId, count, callback);
     }
 
-    private static void doFetchRecentMessages(int account, long chatId, int count, LuaValue callback) {
+    private static void doFetchRecentMessages(BooleanSupplier allowed, int account, long chatId, int count, LuaValue callback) {
+        if (!allowed.getAsBoolean()) return;
         try {
             MessagesController mc = MessagesController.getInstance(account);
             TLRPC.InputPeer peer = mc.getInputPeer(chatId);
@@ -1876,6 +1941,7 @@ public class PluginApi {
             req.offset_id = 0;
             req.offset_date = 0;
             req.add_offset = 0;
+            if (!allowed.getAsBoolean()) return;
             ConnectionsManager.getInstance(account).sendRequest(req, (response, error) -> {
                 LuaValue result;
                 if (response instanceof TLRPC.messages_Messages) {
@@ -1888,6 +1954,7 @@ public class PluginApi {
                 final LuaValue resultFinal = result;
                 final LuaValue errFinal = err;
                 org.telegram.messenger.AndroidUtilities.runOnUIThread(() -> {
+                    if (!allowed.getAsBoolean()) return;
                     if (callback.isfunction()) callback.call(resultFinal, errFinal);
                 });
             });
@@ -1979,17 +2046,19 @@ public class PluginApi {
         return t;
     }
 
-    private static void getMessagesFromUser(long chatId, int userId, int count, LuaValue callback) {
+    private static void getMessagesFromUser(BooleanSupplier allowed, long chatId, int userId, int count, LuaValue callback) {
+        if (!allowed.getAsBoolean()) return;
         int account = UserConfig.selectedAccount;
         MessagesController mc = MessagesController.getInstance(account);
         if (mc.getInputPeer(chatId) == null) {
-            ensurePeerLoaded(account, chatId, () -> doFetchMessagesFromUser(account, chatId, userId, count, callback));
+            ensurePeerLoaded(account, chatId, () -> doFetchMessagesFromUser(allowed, account, chatId, userId, count, callback));
             return;
         }
-        doFetchMessagesFromUser(account, chatId, userId, count, callback);
+        doFetchMessagesFromUser(allowed, account, chatId, userId, count, callback);
     }
 
-    private static void doFetchMessagesFromUser(int account, long chatId, int userId, int count, LuaValue callback) {
+    private static void doFetchMessagesFromUser(BooleanSupplier allowed, int account, long chatId, int userId, int count, LuaValue callback) {
+        if (!allowed.getAsBoolean()) return;
         try {
             MessagesController mc = MessagesController.getInstance(account);
             TLRPC.InputPeer peer = mc.getInputPeer(chatId);
@@ -2003,6 +2072,7 @@ public class PluginApi {
             req.offset_id = 0;
             req.offset_date = 0;
             req.add_offset = 0;
+            if (!allowed.getAsBoolean()) return;
             ConnectionsManager.getInstance(account).sendRequest(req, (response, error) -> {
                 LuaValue result;
                 if (response instanceof TLRPC.messages_Messages) {
@@ -2044,6 +2114,7 @@ public class PluginApi {
                 final LuaValue resultFinal = result;
                 final LuaValue errFinal = err;
                 org.telegram.messenger.AndroidUtilities.runOnUIThread(() -> {
+                    if (!allowed.getAsBoolean()) return;
                     if (callback.isfunction()) callback.call(resultFinal, errFinal);
                 });
             });
@@ -2126,8 +2197,10 @@ public class PluginApi {
         getPrefs().edit().remove(key).apply();
     }
 
-    static void showBulletin(final String text) {
+    static void showBulletin(BooleanSupplier allowed, final String text) {
+        if (!allowed.getAsBoolean()) return;
         org.telegram.messenger.AndroidUtilities.runOnUIThread(() -> {
+            if (!allowed.getAsBoolean()) return;
             try {
                 BulletinFactory.global().createSimpleBulletin(R.raw.chats_infotip, text).show();
             } catch (Exception e) {
@@ -2141,8 +2214,10 @@ public class PluginApi {
      * the Lua callback is invoked (no args). Use it for actionable feedback
      * like "Plugin updated. [Undo]" or "Done. [Open]".
      */
-    static void showBulletinButton(final String text, final String button, final LuaValue callback) {
+    static void showBulletinButton(BooleanSupplier allowed, final String text, final String button, final LuaValue callback) {
+        if (!allowed.getAsBoolean()) return;
         org.telegram.messenger.AndroidUtilities.runOnUIThread(() -> {
+            if (!allowed.getAsBoolean()) return;
             try {
                 Runnable action = null;
                 if (callback != null && callback.isfunction()) {
@@ -2183,8 +2258,10 @@ public class PluginApi {
         });
     }
 
-    static void showToast(final String text) {
+    static void showToast(BooleanSupplier allowed, final String text) {
+        if (!allowed.getAsBoolean()) return;
         org.telegram.messenger.AndroidUtilities.runOnUIThread(() -> {
+            if (!allowed.getAsBoolean()) return;
             try {
                 android.widget.Toast.makeText(
                         ApplicationLoader.applicationContext, text, android.widget.Toast.LENGTH_SHORT).show();

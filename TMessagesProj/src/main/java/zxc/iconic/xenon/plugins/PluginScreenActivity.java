@@ -23,14 +23,20 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class PluginScreenActivity extends BaseFragment {
     private static final CopyOnWriteArrayList<PluginScreenActivity> screens = new CopyOnWriteArrayList<>();
     private final String owner;
+    private final PluginLuaRuntime runtime;
     private final LuaTable options;
     private boolean failed;
     private final java.util.List<RecyclerView> lists = new java.util.ArrayList<>();
 
     public PluginScreenActivity(String owner, LuaTable options) {
         this.owner = owner;
+        this.runtime = PluginManager.getRuntime(owner);
         this.options = options;
-        setCurrentAccount(options.get("account").optint(org.telegram.messenger.UserConfig.selectedAccount));
+        int account = options.rawget("account").optint(org.telegram.messenger.UserConfig.selectedAccount);
+        if (account < 0 || account >= org.telegram.messenger.UserConfig.MAX_ACCOUNT_COUNT) {
+            throw new org.luaj.vm2.LuaError("Invalid plugin screen account");
+        }
+        setCurrentAccount(account);
     }
 
     public static void open(String owner, LuaTable options) {
@@ -39,36 +45,60 @@ public class PluginScreenActivity extends BaseFragment {
             if (!PluginManager.isRuntimeCurrent(owner, generation) || !PluginManager.hasScope(owner, PluginManager.SCOPE_UI)
                     || !PluginManager.hasScope(owner, PluginManager.SCOPE_JAVA)) return;
             BaseFragment parent = LaunchActivity.getSafeLastFragment();
-            if (parent != null) parent.presentFragment(new PluginScreenActivity(owner, options));
+            try {
+                if (parent != null) parent.presentFragment(new PluginScreenActivity(owner, options));
+            } catch (Throwable error) {
+                PluginManager.getInstance().quarantineFile(owner, "screen open", error);
+            }
         });
     }
 
     public static void closeAll() {
-        AndroidUtilities.runOnUIThread(() -> { for (PluginScreenActivity screen : screens) screen.removeSelfFromStack(true); });
+        java.util.List<PluginScreenActivity> closing = new java.util.ArrayList<>(screens);
+        AndroidUtilities.runOnUIThread(() -> { for (PluginScreenActivity screen : closing) screen.removeSelfFromStack(true); });
     }
 
     public static void closeForPlugin(String owner) {
+        java.util.List<PluginScreenActivity> closing = new java.util.ArrayList<>(screens);
         AndroidUtilities.runOnUIThread(() -> {
-            for (PluginScreenActivity screen : screens) {
+            for (PluginScreenActivity screen : closing) {
                 if (screen.owner.equals(owner)) screen.removeSelfFromStack(true);
             }
         });
     }
 
     private LuaValue call(LuaTable callbacks, String name, LuaValue... args) {
-        if (failed) return LuaValue.NIL;
-        LuaValue callback = callbacks.get(name);
+        if (failed || !PluginManager.isRuntimeCurrent(owner, runtime)
+                || !PluginManager.hasScope(owner, PluginManager.SCOPE_UI)
+                || !PluginManager.hasScope(owner, PluginManager.SCOPE_JAVA)) return LuaValue.NIL;
+        LuaValue callback = callbacks.rawget(name);
         if (!callback.isfunction()) return LuaValue.NIL;
         PluginManager.markHookStart("screen_" + name);
         try {
-            return PluginManager.invokeCallback(owner, callback, LuaValue.varargsOf(args)).arg1();
+            return PluginManager.invokeCallback(owner, runtime, callback, LuaValue.varargsOf(args)).arg1();
         } catch (Throwable error) {
-            failed = true;
-            PluginManager.getInstance().quarantineFile(owner, "screen " + name, error);
+            fail(name, error);
             return LuaValue.NIL;
         } finally {
             PluginManager.markHookEnd();
         }
+    }
+
+    private void fail(String stage, Throwable error) {
+        failed = true;
+        if (PluginManager.isRuntimeCurrent(owner, runtime)) {
+            PluginManager.getInstance().quarantineFile(owner, "screen " + stage, error);
+        }
+    }
+
+    private View detachedView(LuaValue value) {
+        if (!value.isuserdata(View.class)) return null;
+        View view = (View) CoerceLuaToJava.coerce(value, View.class);
+        if (view.getParent() != null) {
+            fail("createView", new org.luaj.vm2.LuaError("Plugin view already has a parent"));
+            return null;
+        }
+        return view;
     }
 
     private LuaValue self() { return CoerceJavaToLua.coerce(this); }
@@ -84,15 +114,20 @@ public class PluginScreenActivity extends BaseFragment {
     @Override public View createView(Context context) {
         actionBar.setBackButtonImage(R.drawable.ic_ab_back);
         actionBar.setAllowOverlayTitle(true);
-        actionBar.setTitle(options.get("title").optjstring("Plugin"));
-        String subtitle = options.get("subtitle").optjstring("");
+        LuaValue title = options.rawget("title");
+        actionBar.setTitle(title.isstring() ? title.tojstring() : "Plugin");
+        LuaValue subtitleValue = options.rawget("subtitle");
+        String subtitle = subtitleValue.isstring() ? subtitleValue.tojstring() : "";
         if (!subtitle.isEmpty()) actionBar.setSubtitle(subtitle);
-        LuaValue menu = options.get("menu");
+        LuaValue menu = options.rawget("menu");
         if (menu.istable()) {
-            for (int i = 1; i <= menu.length(); i++) {
-                LuaValue item = menu.get(i);
-                if (item.istable()) actionBar.createMenu().addItem(item.get("id").optint(i),
-                        PluginApi.getIconDrawable(item.get("icon").optjstring("msg_info")));
+            for (int i = 1; i <= Math.min(menu.rawlen(), 32); i++) {
+                LuaValue item = menu.rawget(i);
+                if (item.istable()) {
+                    LuaValue id = item.rawget("id"), icon = item.rawget("icon");
+                    actionBar.createMenu().addItem(id.isnumber() ? id.toint() : i,
+                            PluginApi.getIconDrawable(icon.isstring() ? icon.tojstring() : "msg_info"));
+                }
             }
         }
         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
@@ -102,7 +137,8 @@ public class PluginScreenActivity extends BaseFragment {
             }
         });
         LuaValue content = call(options, "createView", CoerceJavaToLua.coerce(context), self());
-        if (content.isuserdata(View.class)) fragmentView = (View) CoerceLuaToJava.coerce(content, View.class);
+        View pluginView = detachedView(content);
+        if (pluginView != null) fragmentView = pluginView;
         else {
             TextView empty = new TextView(context);
             empty.setText(failed ? "Plugin screen failed. See plugin diagnostics." : "createView must return an Android View.");
@@ -138,17 +174,21 @@ public class PluginScreenActivity extends BaseFragment {
         lists.add(list);
         list.setPadding(0, 0, 0, getBottomInset());
         LinearLayoutManager layout = new LinearLayoutManager(context);
-        layout.setStackFromEnd(callbacks.get("stackFromEnd").toboolean());
+        layout.setStackFromEnd(callbacks.rawget("stackFromEnd").toboolean());
         list.setLayoutManager(layout);
         list.setClipToPadding(false);
         list.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundGray));
         list.setAdapter(new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
-            @Override public int getItemCount() { return Math.max(0, call(callbacks, "getCount").optint(0)); }
+            @Override public int getItemCount() {
+                LuaValue count = call(callbacks, "getCount");
+                return count.isnumber() ? Math.max(0, Math.min(100_000, count.toint())) : 0;
+            }
             @Override public RecyclerView.ViewHolder onCreateViewHolder(ViewGroup parent, int type) {
                 FrameLayout holder = new FrameLayout(parent.getContext());
                 holder.setLayoutParams(new RecyclerView.LayoutParams(-1, -2));
                 LuaValue value = call(callbacks, "createView", CoerceJavaToLua.coerce(parent.getContext()));
-                if (value.isuserdata(View.class)) holder.addView((View) CoerceLuaToJava.coerce(value, View.class));
+                View child = detachedView(value);
+                if (child != null) holder.addView(child);
                 RecyclerView.ViewHolder result = new RecyclerView.ViewHolder(holder) {};
                 holder.setOnClickListener(v -> {
                     int position = result.getAdapterPosition();

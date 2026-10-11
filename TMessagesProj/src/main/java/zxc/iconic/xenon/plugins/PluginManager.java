@@ -56,9 +56,8 @@ public class PluginManager {
      * Security scopes a plugin can request via its manifest. {@link #SCOPE_GENERAL}
      * is always granted; {@link #SCOPE_MESSAGING} gates the messaging/query API
      * (sendMessage, deleteMessage, setReaction, readHistory, message queries,
-     * watchers). Used by {@link PluginApi} to silently refuse protected calls
-     * from plugins that lack the scope. God Mode ({@code NekoConfig.pluginGodMode})
-     * bypasses the check.
+     * watchers). The API checks both this master switch and the specific scope.
+     * God Mode only enables explicitly granted unrestricted Java access.
      */
     public static final String SCOPE_GENERAL = "GENERAL";
     public static final String SCOPE_MESSAGING = "MESSAGING";
@@ -304,7 +303,9 @@ public class PluginManager {
      * settings schema), but it is NOT added to the active plugins list — so it
      * won't receive hooks until properly enabled. Returns null if loading failed.
      */
-    public LoadedPlugin loadPluginForSettings(String fileName) {
+    public synchronized LoadedPlugin loadPluginForSettings(String fileName) {
+        LoadedPlugin active = findPlugin(fileName);
+        if (active != null) return active;
         File dir = getPluginsDir();
         File file = new File(dir, fileName);
         if (!file.exists()) return null;
@@ -339,7 +340,7 @@ public class PluginManager {
      * plugins toggle flips. Reacts immediately: loads plugins when enabled,
      * unloads them all when disabled (no zombie Globals kept around).
      */
-    public void onEnabledChanged() {
+    public synchronized void onEnabledChanged() {
         Log.d(TAG, "onEnabledChanged: " + isEnabled());
         if (isEnabled()) {
             reloadAll();
@@ -355,7 +356,7 @@ public class PluginManager {
      * previously loaded plugins first. Safe to call repeatedly (e.g. after the
      * user adds/removes a plugin). No-op when plugins are disabled.
      */
-    public void reloadAll() {
+    public synchronized void reloadAll() {
         PluginApi.stopAll();
         plugins.clear();
         zxc.iconic.xenon.helpers.CustomBadgeController.getInstance().init();
@@ -407,7 +408,7 @@ public class PluginManager {
      * file picker). Copies it into the plugins directory and loads it. Returns
      * the installed plugin, or {@code null} on failure.
      */
-    public LoadedPlugin installFrom(File source) {
+    public synchronized LoadedPlugin installFrom(File source) {
         lastInstallEngineOff = false;
         if (source == null || !source.exists()) {
             lastParseError = "source file is null or doesn't exist";
@@ -438,15 +439,17 @@ public class PluginManager {
             Log.e(TAG, "installFrom: " + lastParseError);
             return null;
         }
+        if (dest.exists()) {
+            String[] installed = parseMetadata(dest);
+            if (installed == null || !meta[2].equals(installed[2])) {
+                lastParseError = "This filename belongs to another plugin; use a different filename";
+                return null;
+            }
+        }
         // If source is already inside the plugins dir, copy would truncate itself
         if (!source.getAbsolutePath().equals(dest.getAbsolutePath())) {
-            try (FileInputStream in = new FileInputStream(source);
-                 FileOutputStream out = new FileOutputStream(dest)) {
-                byte[] buffer = new byte[8192];
-                int read;
-                while ((read = in.read(buffer)) != -1) {
-                    out.write(buffer, 0, read);
-                }
+            try {
+                copyPluginFile(source, dest);
                 Log.d(TAG, "installFrom: copied to " + dest.getAbsolutePath());
             } catch (IOException e) {
                 FileLog.e(e);
@@ -485,17 +488,33 @@ public class PluginManager {
         return plugin;
     }
 
+    private static void copyPluginFile(File source, File destination) throws IOException {
+        File temporary = File.createTempFile("install-", ".tmp", destination.getParentFile());
+        try {
+            try (FileInputStream in = new FileInputStream(source);
+                 FileOutputStream out = new FileOutputStream(temporary)) {
+                byte[] buffer = new byte[8192];
+                int read, total = 0;
+                while ((read = in.read(buffer)) != -1) {
+                    if ((total += read) > 2 * 1024 * 1024) throw new IOException("Plugin exceeds 2 MiB");
+                    out.write(buffer, 0, read);
+                }
+                out.getFD().sync();
+            }
+            if (!temporary.renameTo(destination)) throw new IOException("Cannot replace plugin file");
+        } finally { temporary.delete(); }
+    }
+
     private void removeByPluginId(String pluginId) {
         removeByPluginId(pluginId, null);
     }
 
     private void removeByPluginId(String pluginId, String keepFileName) {
         if (pluginId == null) return;
-        for (int i = plugins.size() - 1; i >= 0; i--) {
-            LoadedPlugin p = plugins.get(i);
+        for (LoadedPlugin p : plugins) {
             if (pluginId.equals(p.pluginId)) {
                 PluginApi.stopAllForPlugin(p.fileName);
-                plugins.remove(i);
+                plugins.remove(p);
                 File oldFile = new File(getPluginsDir(), p.fileName);
                 if (p.fileName.equals(keepFileName)) {
                     Log.d(TAG, "removeByPluginId: unloaded " + p.fileName + " (id=" + pluginId + ")");
@@ -530,36 +549,58 @@ public class PluginManager {
     }
 
     private void deletePluginFile(File file, String fileName) {
-        if (file.exists()) file.delete();
-        getPrefs().edit().remove("plugin_enabled_" + fileName).apply();
+        if (file.exists() && !file.delete()) {
+            FileLog.e("Cannot delete plugin " + fileName);
+            return;
+        }
+        PluginApi.stopAllForPlugin(fileName);
+        clearPluginState(fileName);
         Log.d(TAG, "removeByPluginId: removed " + fileName);
+    }
+
+    private static void clearPluginState(String fileName) {
+        SharedPreferences prefs = getPrefs();
+        SharedPreferences.Editor editor = prefs.edit().remove("plugin_enabled_" + fileName)
+                .remove("plugin_permissions_v2_" + fileName).remove("plugin_settings_v3_" + fileName);
+        editor.remove("plugin_scope_" + fileName + "_" + SCOPE_GENERAL);
+        for (String scope : OPTIONAL_SCOPES) editor.remove("plugin_scope_" + fileName + "_" + scope);
+        String settingsPrefix = "settings:" + fileName.length() + ":" + fileName + ":";
+        String watcherPrefix = "mw_watcher:" + fileName.length() + ":" + fileName + ":";
+        for (String key : prefs.getAll().keySet()) {
+            if (key.startsWith(settingsPrefix) || key.startsWith(watcherPrefix)) editor.remove(key);
+        }
+        editor.commit();
+        // Mediated file storage is flat. Delete entries without following symlinks.
+        try {
+            File root = new File(ApplicationLoader.applicationContext.getFilesDir(), "plugin_data").getCanonicalFile();
+            File data = new File(root, fileName);
+            if (!data.getCanonicalFile().equals(data.getAbsoluteFile())) {
+                data.delete();
+                return;
+            }
+            if (root.equals(data.getCanonicalFile().getParentFile())) {
+                File[] entries = data.listFiles();
+                if (entries != null) for (File entry : entries) entry.delete();
+                data.delete();
+            }
+        } catch (IOException error) { FileLog.e(error); }
     }
 
     /**
      * Remove a plugin by its file name. Unloads it from memory and deletes the
      * underlying {@code .xplugin} file.
      */
-    public boolean remove(String fileName) {
+    public synchronized boolean remove(String fileName) {
         PluginApi.stopAllForPlugin(fileName);
-        boolean removed = false;
-        for (int i = 0; i < plugins.size(); i++) {
-            LoadedPlugin p = plugins.get(i);
-            if (p.fileName.equals(fileName)) {
-                plugins.remove(i);
-                removed = true;
-                break;
-            }
-        }
+        boolean removed = plugins.removeIf(plugin -> plugin.fileName.equals(fileName));
         File file = new File(getPluginsDir(), fileName);
-        if (file.exists()) {
-            file.delete();
-            Log.d(TAG, "remove: deleted file " + fileName);
-        }
+        if (file.exists() && !file.delete()) return false;
+        clearPluginState(fileName);
         Log.d(TAG, "remove: " + fileName + " removed=" + removed);
-        return removed;
+        return true;
     }
 
-    private LoadedPlugin loadFile(File file) {
+    private synchronized LoadedPlugin loadFile(File file) {
         Log.d(TAG, "loadFile: loading " + file.getName() + " (" + file.length() + " bytes)");
         String source;
         try (InputStream in = new FileInputStream(file)) {
@@ -580,14 +621,15 @@ public class PluginManager {
         }
         grantScopes(file.getName(), file);
         Globals globals = createSandboxGlobals(file.getName());
+        PluginApi.stopAllForPlugin(file.getName());
+        plugins.removeIf(plugin -> file.getName().equals(plugin.fileName));
         runtimes.put(file.getName(), PluginLuaRuntime.attach(globals));
-        PluginApi.setCurrentPluginFileName(file.getName());
         // Pre-parse metadata so plugin_id is available before Lua execution
         // for settings keying, scope gating, etc.
         String[] pluginMeta = parseMetadata(file);
-        PluginApi.setCurrentPluginId(pluginMeta != null && pluginMeta.length > 2 ? pluginMeta[2] : null);
         // Scope migration/grants above run before the sandbox and top-level code.
-        LuaTable[] tables = PluginApi.createApiTable(globals);
+        LuaTable[] tables = PluginApi.createApiTable(globals, file.getName(),
+                pluginMeta != null && pluginMeta.length > 2 ? pluginMeta[2] : null);
         globals.set("xenon", tables[0]);
         LuaTable hooks = tables[1];
         Log.d(TAG, "loadFile: hooks@" + System.identityHashCode(hooks) + " initialSize=" + hooks.length());
@@ -617,104 +659,33 @@ public class PluginManager {
         String pluginName = null;
         String pluginDesc = null;
         String pluginId = null;
-        LuaValue nameVal = globals.get("plugin_name");
+        LuaValue nameVal = globals.rawget("plugin_name");
         if (!nameVal.isnil()) {
             pluginName = nameVal.tojstring();
             if (pluginName.trim().isEmpty()) pluginName = null;
         }
-        LuaValue descVal = globals.get("plugin_description");
+        LuaValue descVal = globals.rawget("plugin_description");
         if (!descVal.isnil()) {
             pluginDesc = descVal.tojstring();
             if (pluginDesc.trim().isEmpty()) pluginDesc = null;
         }
-        LuaValue idVal = globals.get("plugin_id");
+        LuaValue idVal = globals.rawget("plugin_id");
         if (!idVal.isnil()) {
             String s = idVal.tojstring().trim();
             if (!s.isEmpty()) pluginId = s;
         }
         String pluginAuthor = null;
-        LuaValue authorVal = globals.get("plugin_author");
+        LuaValue authorVal = globals.rawget("plugin_author");
         if (!authorVal.isnil()) {
             pluginAuthor = authorVal.tojstring().trim();
             if (pluginAuthor.isEmpty()) pluginAuthor = null;
         }
         String pluginVersion = null;
-        LuaValue versionVal = globals.get("plugin_version");
+        LuaValue versionVal = globals.rawget("plugin_version");
         if (!versionVal.isnil()) {
             pluginVersion = sanitizeVersion(versionVal.tojstring());
         }
-        // Read settings from Lua globals
-        List<LoadedPlugin.PluginSetting> settings = new ArrayList<>();
-        LuaValue settingsVal = globals.get("plugin_settings");
-        if (settingsVal.istable()) {
-            for (int i = 1; i <= settingsVal.length(); i++) {
-                LuaValue entry = settingsVal.get(i);
-                if (!entry.istable()) continue;
-                    try {
-                        LuaValue typeVal = entry.get("type");
-                        LuaValue keyVal = entry.get("key");
-                        LuaValue nameEntry = entry.get("name");
-                        if (typeVal.isnil() || keyVal.isnil() || nameEntry.isnil()) continue;
-                        String type = typeVal.tojstring();
-                        String skey = keyVal.tojstring();
-                        String sname = nameEntry.tojstring();
-                    LoadedPlugin.PluginSetting setting = null;
-                    switch (type) {
-                        case "toggle": {
-                            boolean def = entry.get("default").toboolean();
-                            setting = new LoadedPlugin.PluginSetting(LoadedPlugin.PluginSetting.Type.TOGGLE, skey, sname, def, 0, null, 0, 0, 0, null, null);
-                            break;
-                        }
-                        case "seekbar": {
-                            int min = (int) entry.get("min").checkdouble();
-                            int max = (int) entry.get("max").checkdouble();
-                            int step = (int) entry.get("step").checkdouble();
-                            if (step <= 0) step = 1;
-                            int def = entry.get("default").isnil() ? min : (int) entry.get("default").checkdouble();
-                            setting = new LoadedPlugin.PluginSetting(LoadedPlugin.PluginSetting.Type.SEEKBAR, skey, sname, false, def, null, min, max, step, null, null);
-                            break;
-                        }
-                        case "text": {
-                            LuaValue defVal = entry.get("default");
-                            String def = defVal.isnil() ? "" : defVal.tojstring();
-                            LuaValue hintVal = entry.get("hint");
-                            String hint = hintVal.isnil() ? "" : hintVal.tojstring();
-                            setting = new LoadedPlugin.PluginSetting(LoadedPlugin.PluginSetting.Type.TEXT, skey, sname, false, 0, def, 0, 0, 0, hint, null);
-                            break;
-                        }
-                        case "button": {
-                            LuaValue action = entry.get("action");
-                            setting = new LoadedPlugin.PluginSetting(LoadedPlugin.PluginSetting.Type.BUTTON, skey, sname, false, 0, null, 0, 0, 0, null, action != null && !action.isnil() ? action : null);
-                            break;
-                        }
-                        case "list": {
-                            // Parse the options array: { "Option A", "Option B", ... }
-                            LuaValue optsVal = entry.get("options");
-                            java.util.List<String> opts = new java.util.ArrayList<>();
-                            if (optsVal.istable()) {
-                                for (int oi = 1; oi <= optsVal.length(); oi++) {
-                                    LuaValue v = optsVal.get(oi);
-                                    if (!v.isnil()) opts.add(v.tojstring());
-                                }
-                            }
-                            String[] optionsArr = opts.toArray(new String[0]);
-                            // default is the index (0-based) of the selected option
-                            LuaValue defVal = entry.get("default");
-                            int defIdx = defVal.isnil() ? 0 : defVal.toint();
-                            if (defIdx < 0) defIdx = 0;
-                            if (optionsArr.length > 0 && defIdx >= optionsArr.length) defIdx = 0;
-                            setting = new LoadedPlugin.PluginSetting(LoadedPlugin.PluginSetting.Type.LIST, skey, sname, false, defIdx, null, 0, 0, 0, null, null, optionsArr);
-                            break;
-                        }
-                    }
-                    if (setting != null) {
-                        settings.add(setting);
-                    }
-                } catch (Exception e) {
-                    FileLog.e("Failed to parse plugin setting entry " + i + " in " + file.getName(), e);
-                }
-            }
-        }
+        List<LoadedPlugin.PluginSetting> settings = PluginSettingsParser.parse(globals.rawget("plugin_settings"));
         return new LoadedPlugin(file.getName(), pluginName, pluginDesc, pluginId, pluginAuthor, pluginVersion, settings, globals, hooks);
     }
 
@@ -875,12 +846,7 @@ public class PluginManager {
             getPrefs().edit().putBoolean("plugin_enabled_" + fileName, false).apply();
             FileLog.e("Plugin quarantined: " + fileName + " — " + stage, t);
             PluginApi.stopAllForPlugin(fileName);
-            for (int i = 0; i < plugins.size(); i++) {
-                if (plugins.get(i).fileName.equals(fileName)) {
-                    plugins.remove(i);
-                    break;
-                }
-            }
+            plugins.removeIf(plugin -> plugin.fileName.equals(fileName));
             String report = PluginSafeMode.buildPluginFailureReport(fileName, stage, t);
             android.app.Activity activity = getCurrentActivity();
             if (activity != null) {
@@ -1112,10 +1078,10 @@ public class PluginManager {
             java.util.regex.Matcher m = p.matcher(source);
             if (!m.find()) return scopes;
             String body = m.group(1);
-            java.util.regex.Pattern tok = java.util.regex.Pattern.compile("\"([^\"]*)\"");
+            java.util.regex.Pattern tok = java.util.regex.Pattern.compile("([\"'])([^\"']*)\\1");
             java.util.regex.Matcher tm = tok.matcher(body);
             while (tm.find()) {
-                String s = tm.group(1).trim().toUpperCase();
+                String s = tm.group(2).trim().toUpperCase(java.util.Locale.ROOT);
                 if (SCOPE_GENERAL.equals(s) || java.util.Arrays.asList(OPTIONAL_SCOPES).contains(s)) {
                     if (!scopes.contains(s)) scopes.add(s);
                 }
@@ -1216,9 +1182,8 @@ public class PluginManager {
 
     /**
      * Does {@code fileName} hold {@code scope}? {@link #SCOPE_GENERAL} is always
-     * granted. Other scopes read the persisted auto-grant flag
-     * ({@code plugin_scope_<file>_<SCOPE>}). God Mode
-     * ({@code NekoConfig.pluginGodMode}) short-circuits to true for every scope.
+     * granted. Other scopes read persisted flags ({@code plugin_scope_<file>_<SCOPE>})
+     * through {@link PluginPermissionPolicy}, including parent scope requirements.
      */
     public static boolean hasScope(String fileName, String scope) {
         if (fileName == null || scope == null) return false;
@@ -1235,7 +1200,7 @@ public class PluginManager {
     public boolean hasEditListeners() {
         if (!isEnabled()) return false;
         for (LoadedPlugin plugin : plugins) if (plugin.isEnabled() && hasScope(plugin.fileName, SCOPE_READ)
-                && plugin.hooks.get("onMessageEdited").isfunction()) return true;
+                && plugin.hooks.rawget("onMessageEdited").isfunction()) return true;
         return false;
     }
     public void emitMessageEdit(int account, long dialog, int messageId, byte[] previous, byte[] current) {
@@ -1252,10 +1217,19 @@ public class PluginManager {
     }
 
     public static org.luaj.vm2.Varargs invokeCallback(String owner, LuaValue callback, org.luaj.vm2.Varargs args) {
-        PluginLuaRuntime runtime = runtimes.get(owner);
+        return invokeCallback(owner, runtimes.get(owner), callback, args);
+    }
+
+    public static org.luaj.vm2.Varargs invokeCallback(String owner, PluginLuaRuntime runtime,
+            LuaValue callback, org.luaj.vm2.Varargs args) {
         if (runtime == null) return LuaValue.NIL;
         markHookStart("callback " + owner);
-        try { return runtime.invoke(callback, args); } finally { markHookEnd(); }
+        try {
+            synchronized (runtime) {
+                if (!isRuntimeCurrent(owner, runtime)) return LuaValue.NIL;
+                return runtime.invoke(callback, args);
+            }
+        } finally { markHookEnd(); }
     }
 
     static void stopAllRuntimes() {
@@ -1276,7 +1250,9 @@ public class PluginManager {
     }
 
     /**
-     * Auto-grant every scope a plugin declares in its manifest. {@link #SCOPE_GENERAL}
+     * Auto-grant compatible messaging/UI scopes declared in the manifest. Sensitive
+     * Java, hooks, file, network and link capabilities require an explicit grant.
+     * {@link #SCOPE_GENERAL}
      * is forced on unconditionally. Declared scopes are granted only on FIRST
      * install/encounter: once the pref key exists (true or false), the user's
      * explicit choice is preserved — so revoking a scope from the Permissions
@@ -1291,12 +1267,19 @@ public class PluginManager {
             String[] metadata = parseMetadata(file);
             if (metadata != null && metadata.length > 2 && metadata[2] != null) {
                 String legacy = "plugin_scope_" + metadata[2] + "_" + SCOPE_MESSAGING;
-                if (prefs.contains(legacy)) ed.putBoolean("plugin_scope_" + fileName + "_" + SCOPE_MESSAGING, prefs.getBoolean(legacy, false));
+                String current = "plugin_scope_" + fileName + "_" + SCOPE_MESSAGING;
+                if (prefs.contains(legacy) && !prefs.contains(current)) {
+                    ed.putBoolean(current, prefs.getBoolean(legacy, false));
+                }
             }
             // Preserve Java access for existing God Mode plugins; new plugins need
             // a separate explicit Java grant even when global God Mode is enabled.
-            if (NekoConfig.pluginGodMode && prefs.contains("plugin_scope_" + fileName + "_" + SCOPE_GENERAL)) {
+            if (NekoConfig.pluginGodMode && prefs.contains("plugin_scope_" + fileName + "_" + SCOPE_GENERAL)
+                    && !prefs.contains("plugin_scope_" + fileName + "_" + SCOPE_JAVA)) {
                 ed.putBoolean("plugin_scope_" + fileName + "_" + SCOPE_JAVA, true);
+                if (!prefs.contains("plugin_scope_" + fileName + "_" + SCOPE_HOOKS)) {
+                    ed.putBoolean("plugin_scope_" + fileName + "_" + SCOPE_HOOKS, true);
+                }
             }
             ed.putBoolean("plugin_permissions_v2_" + fileName, true);
         }
@@ -1418,102 +1401,46 @@ public class PluginManager {
             return isRuntimeCurrent(fileName, runtime) && PluginManager.getPrefs().getBoolean("plugin_enabled_" + fileName, true);
         }
 
+        public org.luaj.vm2.Varargs invokeCallback(LuaValue callback, org.luaj.vm2.Varargs args) {
+            return PluginManager.invokeCallback(fileName, runtime, callback, args);
+        }
+
         public void setEnabled(boolean enabled) {
             PluginManager.getPrefs().edit().putBoolean("plugin_enabled_" + fileName, enabled).apply();
         }
 
         public void refreshSettingsFromGlobals() {
-            this.settings.clear();
-            LuaValue settingsVal = globals.get("plugin_settings");
-            if (settingsVal.istable()) {
-                for (int i = 1; i <= settingsVal.length(); i++) {
-                    LuaValue entry = settingsVal.get(i);
-                    if (!entry.istable()) continue;
-                    try {
-                        LuaValue typeVal = entry.get("type");
-                        LuaValue keyVal = entry.get("key");
-                        LuaValue nameEntry = entry.get("name");
-                        if (typeVal.isnil() || keyVal.isnil() || nameEntry.isnil()) continue;
-                        String type = typeVal.tojstring();
-                        String skey = keyVal.tojstring();
-                        String sname = nameEntry.tojstring();
-                        PluginSetting setting = null;
-                        switch (type) {
-                            case "toggle": {
-                                boolean def = entry.get("default").toboolean();
-                                setting = new PluginSetting(PluginSetting.Type.TOGGLE, skey, sname, def, 0, null, 0, 0, 0, null, null);
-                                break;
-                            }
-                            case "seekbar": {
-                                int min = (int) entry.get("min").checkdouble();
-                                int max = (int) entry.get("max").checkdouble();
-                                int step = (int) entry.get("step").checkdouble();
-                                if (step <= 0) step = 1;
-                                int def = entry.get("default").isnil() ? min : (int) entry.get("default").checkdouble();
-                                setting = new PluginSetting(PluginSetting.Type.SEEKBAR, skey, sname, false, def, null, min, max, step, null, null);
-                                break;
-                            }
-                            case "text": {
-                                LuaValue defVal = entry.get("default");
-                                String def = defVal.isnil() ? "" : defVal.tojstring();
-                                LuaValue hintVal = entry.get("hint");
-                                String hint = hintVal.isnil() ? "" : hintVal.tojstring();
-                                setting = new PluginSetting(PluginSetting.Type.TEXT, skey, sname, false, 0, def, 0, 0, 0, hint, null);
-                                break;
-                            }
-                            case "button": {
-                                LuaValue action = entry.get("action");
-                                setting = new PluginSetting(PluginSetting.Type.BUTTON, skey, sname, false, 0, null, 0, 0, 0, null, action != null && !action.isnil() ? action : null);
-                                break;
-                            }
-                            case "header": {
-                                setting = new PluginSetting(PluginSetting.Type.HEADER, skey, sname, false, 0, null, 0, 0, 0, null, null);
-                                break;
-                            }
-                            case "list": {
-                                int def = (int) entry.get("default").checkdouble();
-                                LuaValue optsVal = entry.get("options");
-                                String[] opts = null;
-                                if (optsVal.istable()) {
-                                    opts = new String[optsVal.length()];
-                                    for (int o = 1; o <= optsVal.length(); o++) {
-                                        opts[o - 1] = optsVal.get(o).tojstring();
-                                    }
-                                }
-                                setting = new PluginSetting(PluginSetting.Type.LIST, skey, sname, false, def, null, 0, 0, 0, null, null, opts);
-                                break;
-                            }
-                        }
-                        if (setting != null) {
-                            this.settings.add(setting);
-                        }
-                    } catch (Exception e) {
-                        FileLog.e(e);
-                    }
-                }
+            synchronized (runtime) {
+                if (!isRuntimeCurrent(fileName, runtime)) return;
+                this.settings.clear();
+                this.settings.addAll(PluginSettingsParser.parse(globals.rawget("plugin_settings")));
             }
         }
 
         public void invokeHook(String hookName, LuaValue[] args) {
-            LuaValue handler = hooks.get(hookName);
+            LuaValue handler = hooks.rawget(hookName);
             if (handler.isnil()) {
                 Log.d(TAG, displayName + ": no handler for hook '" + hookName + "' (hooks table has " + hooks.keys().length + " entries)");
                 return;
             }
             Log.d(TAG, displayName + ": invoking hook '" + hookName + "'");
             if (!isEnabled() || !allowsHook(fileName, hookName)) return;
-            invokeCallback(fileName, handler, LuaValue.varargsOf(args));
+            invokeCallback(handler, LuaValue.varargsOf(args));
             Log.d(TAG, displayName + ": hook '" + hookName + "' completed");
         }
 
         LuaValue invokeHookReturn(String hookName, LuaValue[] args) {
-            LuaValue handler = hooks.get(hookName);
+            LuaValue handler = hooks.rawget(hookName);
             if (handler.isnil()) {
                 Log.d(TAG, displayName + ": no handler for hook '" + hookName + "'");
                 return null;
             }
             Log.d(TAG, displayName + ": invoking return-hook '" + hookName + "'");
-            LuaValue result = invokeCallback(fileName, handler, LuaValue.varargsOf(args)).arg1();
+            if (!isEnabled() || !allowsHook(fileName, hookName)) return null;
+            LuaValue result;
+            synchronized (runtime) {
+                result = PluginLuaValues.copyData(invokeCallback(handler, LuaValue.varargsOf(args)).arg1());
+            }
             Log.d(TAG, displayName + ": return-hook '" + hookName + "' returned " + (result.isnil() ? "nil" : result.toString()));
             return result;
         }

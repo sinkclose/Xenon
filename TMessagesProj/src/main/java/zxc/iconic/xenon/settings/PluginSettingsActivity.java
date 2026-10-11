@@ -59,8 +59,13 @@ public class PluginSettingsActivity extends BaseNekoSettingsActivity {
         rowIdCounter = rowId;
         settingRowIds.clear();
         if (plugin != null) {
-            plugin.invokeHook("onSettingsOpen", new LuaValue[0]);
-            plugin.refreshSettingsFromGlobals();
+            try {
+                plugin.invokeHook("onSettingsOpen", new LuaValue[0]);
+                plugin.refreshSettingsFromGlobals();
+            } catch (Throwable error) {
+                PluginManager.getInstance().quarantineFile(plugin.fileName, "settings open", error);
+                FileLog.e(error);
+            }
         }
         // Permissions section — always shown, even before plugin settings.
         permHeaderRow = rowIdCounter++;
@@ -190,7 +195,9 @@ public class PluginSettingsActivity extends BaseNekoSettingsActivity {
             getPrefs().edit().putBoolean("plugin_scope_" + owner + "_JAVA", access == 2)
                     .putBoolean("plugin_scope_" + owner + "_LIMITED_JAVA", access == 1).commit();
             PluginManager.getInstance().reloadAll();
-            plugin = PluginManager.getInstance().findPlugin(owner); updateRows(); return;
+            PluginManager.LoadedPlugin reloaded = PluginManager.getInstance().findPlugin(owner);
+            if (reloaded != null) plugin = reloaded;
+            updateRows(); return;
         }
         String scope = permissionRows.get(item.id);
         if (scope != null) {
@@ -199,7 +206,8 @@ public class PluginSettingsActivity extends BaseNekoSettingsActivity {
             getPrefs().edit().putBoolean("plugin_scope_" + owner + "_" + scope, enabled).commit();
             // Drop captured Java objects, registered callbacks and hooks on revocation.
             PluginManager.getInstance().reloadAll();
-            plugin = PluginManager.getInstance().findPlugin(owner);
+            PluginManager.LoadedPlugin reloaded = PluginManager.getInstance().findPlugin(owner);
+            if (reloaded != null) plugin = reloaded;
             updateRows();
             return;
         }
@@ -228,7 +236,7 @@ public class PluginSettingsActivity extends BaseNekoSettingsActivity {
             case BUTTON: {
                 if (s.action != null) {
                     try {
-                        PluginManager.invokeCallback(plugin.fileName, s.action, LuaValue.NONE);
+                        plugin.invokeCallback(s.action, LuaValue.NONE);
                     } catch (Throwable e) {
                         PluginManager.getInstance().quarantineFile(plugin.fileName, "settings", e);
                         FileLog.e(e);

@@ -38,6 +38,7 @@ final class PluginCapabilities {
         return url;
     }
     static void attach(LuaTable api, String owner) {
+        final PluginLuaRuntime runtime = PluginManager.getRuntime(owner);
         api.set("readFile", new VarArgFunction() { public Varargs invoke(Varargs a) {
             try (InputStream input = new FileInputStream(file(owner, a.arg1().checkjstring()))) { return LuaString.valueOf(read(input)); }
             catch (IOException error) { throw new LuaError(error.toString()); }
@@ -67,7 +68,7 @@ final class PluginCapabilities {
             try { destination = url(a.arg1().checkjstring()); } catch (IOException e) { throw new LuaError(e.toString()); }
             final LuaValue callback = a.arg(2).checkfunction();
             try { network.execute(() -> {
-                if (!PluginManager.hasScope(owner, PluginManager.SCOPE_INTERNET)) return;
+                if (!permitted(owner, runtime, PluginManager.SCOPE_INTERNET)) return;
                 HttpURLConnection connection = null; LuaTable response = new LuaTable();
                 try {
                     connection = (HttpURLConnection) destination.openConnection();
@@ -77,7 +78,9 @@ final class PluginCapabilities {
                     if (stream != null) try (InputStream input = stream) { response.set("body", LuaString.valueOf(read(input))); }
                 } catch (Exception e) { response.set("error", e.toString()); }
                 finally { if (connection != null) connection.disconnect(); }
-                if (PluginManager.hasScope(owner, PluginManager.SCOPE_INTERNET)) AndroidUtilities.runOnUIThread(() -> callback.call(response));
+                AndroidUtilities.runOnUIThread(() -> {
+                    if (permitted(owner, runtime, PluginManager.SCOPE_INTERNET)) callback.call(response);
+                });
             }); } catch (RejectedExecutionException e) { throw new LuaError("Too many queued HTTP requests"); }
             return LuaValue.NIL;
         }});
@@ -85,9 +88,14 @@ final class PluginCapabilities {
             final String address;
             try { address = url(a.arg1().checkjstring()).toString(); } catch (IOException e) { throw new LuaError(e.toString()); }
             AndroidUtilities.runOnUIThread(() -> {
-                if (PluginManager.hasScope(owner, PluginManager.SCOPE_LINKS)) Browser.openUrl(ApplicationLoader.applicationContext, address);
+                if (permitted(owner, runtime, PluginManager.SCOPE_LINKS)) Browser.openUrl(ApplicationLoader.applicationContext, address);
             });
             return LuaValue.NIL;
         }});
+    }
+
+    private static boolean permitted(String owner, PluginLuaRuntime runtime, String scope) {
+        return PluginManager.isRuntimeCurrent(owner, runtime) && PluginManager.getInstance().isEnabled()
+                && PluginManager.hasScope(owner, scope);
     }
 }

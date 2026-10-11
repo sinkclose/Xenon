@@ -16,7 +16,10 @@ TMessagesProj_AppHuawei/afat/
 google-services.json
 sentry.properties
 context/
-docs/
+docs/*
+!docs/plugins/
+docs/plugins/*
+!docs/plugins/security.md
 TMessagesProj/libs/libv2ray.aar
 TMessagesProj/jni/ffmpeg/build_android
 nul

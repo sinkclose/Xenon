@@ -73,7 +73,7 @@ public final class PluginLimitedJava {
     }
     private final class Handle extends LuaUserdata {
         final Class<?> type; final Object object;
-        Handle(Class<?> type, Object object) { super("restricted Java handle"); this.type = type; this.object = object; }
+        Handle(Class<?> type, Object object) { super(object != null ? object : type); this.type = type; this.object = object; }
         @Override public LuaValue get(LuaValue key) {
             check.run(); String method = key.checkjstring();
             if (method.equals("getClass") || method.equals("wait") || method.equals("notify") || method.equals("notifyAll")) throw new LuaError("Restricted Java method: " + method);

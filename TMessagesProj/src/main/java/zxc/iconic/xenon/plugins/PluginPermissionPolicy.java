@@ -7,7 +7,7 @@ public final class PluginPermissionPolicy {
         if ("GENERAL".equals(scope)) return true;
         boolean messaging = flags.get("MESSAGING", false);
         if ("JAVA".equals(scope)) return godMode && flags.get("JAVA", false);
-        if ("HOOKS".equals(scope)) return allows("JAVA", godMode, flags) && flags.get("HOOKS", true);
+        if ("HOOKS".equals(scope)) return allows("JAVA", godMode, flags) && flags.get("HOOKS", false);
         if ("UI".equals(scope)) return flags.get(scope, true);
         if ("LIMITED_JAVA".equals(scope) || "FILES".equals(scope) || "INTERNET".equals(scope) || "OPEN_LINKS".equals(scope)) return flags.get(scope, false);
         if ("READ_MESSAGES".equals(scope) || "SEND_MESSAGES".equals(scope) || "DELETE_MESSAGES".equals(scope)
