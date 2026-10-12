@@ -187,7 +187,7 @@ public class ChatGlassRefreshHarness {
     }
     static class Chat {
         static final int BLUR_INVALIDATE_FLAG_SCROLL = 1, BLUR_INVALIDATE_FLAG_POSITIONS = 2,
-            BLUR_INVALIDATE_FLAG_CLIP = 4, BLUR_INVALIDATE_FLAG_WALLPAPER = 8;
+            BLUR_INVALIDATE_FLAG_CLIP = 4, BLUR_INVALIDATE_FLAG_WALLPAPER = 8, BLUR_INVALIDATE_FLAG_CONTENT_REGION = 16;
         View chatListView = new View(), messagesSearchListContainer = new View(), searchViewPager = new View(), actionBar = new View();
         Content contentView = new Content(); Chat parentChatActivity;
         Suppressor scrollableViewNoiseSuppressor = new Suppressor();
@@ -202,6 +202,8 @@ public class ChatGlassRefreshHarness {
         class Observer { void invalidate(int flags) { requestedFlags |= flags; } }
         Observer invalidateBlurredSourcesView = new Observer();
         void invalidateFadeBlur() { fadeInvalidations++; }
+        // This lifecycle harness exercises the conservative global fallback.
+        boolean invalidateGlassMessageRegion(View target) { return false; }
         INVALIDATION_METHOD
         void invalidateClipRectForBackgroundAndChatList() {}
         int getMergedVisibleBlurredPositions(Object positions) { return 1; }

@@ -63,7 +63,7 @@ COMMON = r'''
         BASE_METHODS
     }
     static class LiquidTouchEffect {
-        RectF bounds = new RectF(); float progress, offsetX, offsetY, dragStrength=1;
+        RectF bounds = new RectF(); float progress, offsetX, offsetY, dragStrength=1, pressStrength=1;
         float scaleX=1, scaleY=1, translationX, translationY;
         void drawHighlight(Canvas c, float r, float i) {}
         EFFECT_METHODS
@@ -144,6 +144,7 @@ public class GlassDeformationHarness {
         Effect liquidGlassEffect=new Effect(); int backgroundColor, strokeColorTop, strokeColorBottom, shadowColor;
         float shadowAlpha=1, shadowLayerRadius, shadowLayerDx, shadowLayerDy;
         Paint paintShadow=new Paint(), paintStrokeTop=new Paint(), paintStrokeBottom=new Paint();
+        boolean hasDisplayList() { return renderNode.hasDisplayList() && renderNodeFill.hasDisplayList(); }
         void recreateLiquidGlassEffect() { liquidGlassEffect = new Effect(); renderNodeInvalidated = true; }
         void drawSource(Canvas c,Source s) {}
         void drawStroke(Object... a) {}
