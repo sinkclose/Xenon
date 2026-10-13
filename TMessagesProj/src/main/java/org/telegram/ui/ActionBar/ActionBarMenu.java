@@ -199,7 +199,7 @@ public class ActionBarMenu extends LinearLayout implements LiquidTouchDispatcher
                     menuItem.iconView.setImageDrawable(drawable);
                 }
             } else if (icon != 0) {
-                menuItem.iconView.setImageResource(icon);
+                menuItem.setIcon(icon);
             }
             addView(menuItem, index, new LinearLayout.LayoutParams(width, ViewGroup.LayoutParams.MATCH_PARENT));
         }

@@ -295,6 +295,10 @@ public class ActionBarMenuItem extends FrameLayout {
 
     @Override
     public void draw(Canvas canvas) {
+        if (iconViewResId == R.drawable.ic_ab_other && parentMenu != null
+                && !parentMenu.isActionMode && parentMenu.parentActionBar != null) {
+            parentMenu.parentActionBar.drawPlainButtonCircle(canvas, getWidth() / 2f, getHeight() / 2f);
+        }
         if (fixBackground) {
             getBackground().draw(canvas);
         }
