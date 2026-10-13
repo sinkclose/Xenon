@@ -101,18 +101,22 @@ public abstract class ViewPagerActivity extends BaseFragment {
                 }
 
                 FrameLayout container = (FrameLayout) view;
-                container.removeAllViews();
-
                 final View fragmentView = fragment.getFragmentView();
-                AndroidUtilities.removeFromParent(fragmentView);
-                if (!fragment.hasOwnBackground() && fragmentView.getBackground() == null) {
-                    fragmentView.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
-                }
-
-                container.addView(fragmentView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
-                if (fragment.getActionBar() != null && fragment.getActionBar().shouldAddToContainer()) {
-                    AndroidUtilities.removeFromParent(fragment.getActionBar());
-                    container.addView(fragment.getActionBar());
+                final ActionBar actionBar = fragment.getActionBar();
+                final boolean addActionBar = actionBar != null && actionBar.shouldAddToContainer();
+                if (fragmentView.getParent() != container
+                        || container.getChildCount() != (addActionBar ? 2 : 1)
+                        || addActionBar && actionBar.getParent() != container) {
+                    container.removeAllViews();
+                    AndroidUtilities.removeFromParent(fragmentView);
+                    if (!fragment.hasOwnBackground() && fragmentView.getBackground() == null) {
+                        fragmentView.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                    }
+                    container.addView(fragmentView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+                    if (addActionBar) {
+                        AndroidUtilities.removeFromParent(actionBar);
+                        container.addView(actionBar);
+                    }
                 }
 
                 ViewCompat.requestApplyInsets(container);
@@ -303,7 +307,7 @@ public abstract class ViewPagerActivity extends BaseFragment {
             final FragmentState state = fragmentsArr.valueAt(a);
             final int position = fragmentsArr.keyAt(a);
             if (state != null && state.fragment.fragmentView != null) {
-                state.setVisibility(viewPager.getPositionVisibility(position), isResumed ? visibilityByParent : 0, isFullyVisible, isResumed);
+                state.setVisibility(viewPager.getPageVisibility(position), isResumed ? visibilityByParent : 0, isFullyVisible, isResumed);
             }
         }
     }

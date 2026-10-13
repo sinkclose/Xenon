@@ -34,6 +34,15 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
     private boolean renderNodeInvalidated;
     private PrismGlassPipeline prismPipeline;
     private boolean prismPipelineActive;
+    private boolean retainSurfaceDisplayList;
+
+    /** Keep the outer surface while a live lens refreshes its captured contents. */
+    public void setRetainSurfaceDisplayList(boolean enabled) {
+        if (retainSurfaceDisplayList == enabled) return;
+        retainSurfaceDisplayList = enabled;
+        renderNodeInvalidated = true;
+        if (prismPipeline != null) prismPipeline.invalidateAll();
+    }
 
     public BlurredBackgroundDrawableRenderNode(BlurredBackgroundSource source) {
         this.renderNode = new RenderNode("BlurredNode");
@@ -149,8 +158,8 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
         if (Build.VERSION.SDK_INT >= 33) {
             ensureLiquidGlassEffect();
         }
-        if (Build.VERSION.SDK_INT >= 33 && liquidGlassEffect != null
-                && zxc.iconic.xenon.NekoConfig.usePrismGlass) {
+        if (Build.VERSION.SDK_INT >= 33 && (retainSurfaceDisplayList
+                || liquidGlassEffect != null && zxc.iconic.xenon.NekoConfig.usePrismGlass)) {
             // Explicit calls (including GlassEngine captures) must refresh source commands.
             updatePrismDisplayList(true);
             return;
@@ -289,10 +298,10 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
         if (Build.VERSION.SDK_INT >= 33) {
             ensureLiquidGlassEffect();
         }
-        final boolean prismActive = Build.VERSION.SDK_INT >= 33 && liquidGlassEffect != null
-                && zxc.iconic.xenon.NekoConfig.usePrismGlass;
-        if (prismPipelineActive != prismActive) {
-            prismPipelineActive = prismActive;
+        final boolean retainedPipeline = Build.VERSION.SDK_INT >= 33 && (retainSurfaceDisplayList
+                || liquidGlassEffect != null && zxc.iconic.xenon.NekoConfig.usePrismGlass);
+        if (prismPipelineActive != retainedPipeline) {
+            prismPipelineActive = retainedPipeline;
             renderNodeInvalidated = true;
             if (prismPipeline != null) prismPipeline.invalidateAll();
         }
@@ -302,7 +311,7 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
         if (!hasDisplayList()) {
             source.dispatchOnDrawablesRelativePositionChange();
             updateDisplayList();
-        } else if (prismActive) {
+        } else if (retainedPipeline) {
             updatePrismDisplayList(false);
         } else if (renderNodeInvalidated) {
             updateDisplayList();

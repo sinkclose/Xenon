@@ -123,6 +123,18 @@ public class ViewPagerFixed extends FrameLayout {
         }
     }
 
+    public float getPageVisibility(int position) {
+        if (getMeasuredWidth() == 0) {
+            return position == currentPosition ? 1f : 0f;
+        }
+        // A direct jump only displays these two pages, regardless of the tab
+        // indices traversed by the indicator. Keep that visual interpolation
+        // separate from lifecycle so hidden cached fragments stay paused.
+        if (position == currentPosition) return getCurrentPositionAlpha();
+        if (position == nextPosition) return getNextPositionAlpha();
+        return 0f;
+    }
+
     public float getPositionAnimated() {
         float position = 0;
         if (viewPages[0] != null && viewPages[0].getVisibility() == View.VISIBLE) {
@@ -458,10 +470,10 @@ public class ViewPagerFixed extends FrameLayout {
                 ViewGroup parent = (ViewGroup) v.getParent();
                 parent.removeView(v);
             }
-            addView(v);
             v.setTranslationX(getMeasuredWidth());
             viewPages[index] = v;
             adapter.bindView(viewPages[index], adapterPosition, viewTypes[index]);
+            addView(v);
             viewPages[index].setVisibility(View.VISIBLE);
         } else {
             if (viewTypes[index] == adapter.getItemViewType(adapterPosition)) {
@@ -478,10 +490,11 @@ public class ViewPagerFixed extends FrameLayout {
                 } else {
                     viewsByType.remove(viewTypes[index]);
                 }
-                addView(v);
                 viewPages[index] = v;
-                viewPages[index].setVisibility(View.VISIBLE);
+                v.setTranslationX(getMeasuredWidth());
                 adapter.bindView(viewPages[index], adapterPosition, adapter.getItemViewType(adapterPosition));
+                addView(v);
+                viewPages[index].setVisibility(View.VISIBLE);
             }
         }
     }
