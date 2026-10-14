@@ -71,8 +71,10 @@ public class ViewPagerFixed extends FrameLayout {
     protected SparseArray<View> viewsByType = new SparseArray<>();
 
     private int startedTrackingPointerId;
-    private int startedTrackingX;
-    private int startedTrackingY;
+    // Keep MotionEvent precision so slow drags and animation takeovers do not
+    // snap page translations to whole pixels.
+    private float startedTrackingX;
+    private float startedTrackingY;
     private VelocityTracker velocityTracker;
 
     private AnimatorSet tabsAnimation;
@@ -549,7 +551,7 @@ public class ViewPagerFixed extends FrameLayout {
         maybeStartTracking = false;
         startedTracking = true;
         onStartTracking();
-        startedTrackingX = (int) (ev.getX() + additionalOffset);
+        startedTrackingX = ev.getX() + additionalOffset;
         if (tabsView != null) {
             tabsView.setEnabled(false);
         }
@@ -611,7 +613,7 @@ public class ViewPagerFixed extends FrameLayout {
             startedTracking = true;
             onStartTracking();
             startedTrackingPointerId = ev.getPointerId(0);
-            startedTrackingX = (int) ev.getX();
+            startedTrackingX = ev.getX();
             if (animatingForward) {
                 if (startedTrackingX < viewPages[0].getMeasuredWidth() + viewPages[0].getTranslationX()) {
                     additionalOffset = viewPages[0].getTranslationX();
@@ -645,11 +647,11 @@ public class ViewPagerFixed extends FrameLayout {
         if (ev != null && ev.getAction() == MotionEvent.ACTION_DOWN && !startedTracking && !maybeStartTracking) {
             startedTrackingPointerId = ev.getPointerId(0);
             maybeStartTracking = true;
-            startedTrackingX = (int) ev.getX();
-            startedTrackingY = (int) ev.getY();
+            startedTrackingX = ev.getX();
+            startedTrackingY = ev.getY();
         } else if (ev != null && ev.getAction() == MotionEvent.ACTION_MOVE && ev.getPointerId(0) == startedTrackingPointerId) {
-            int dx = (int) (ev.getX() - startedTrackingX + additionalOffset);
-            int dy = Math.abs((int) ev.getY() - startedTrackingY);
+            float dx = ev.getX() - startedTrackingX + additionalOffset;
+            float dy = Math.abs(ev.getY() - startedTrackingY);
             if (startedTracking && (animatingForward && dx > 0 || !animatingForward && dx < 0)) {
                 if (!prepareForMoving(ev, dx < 0)) {
                     maybeStartTracking = true;
@@ -667,7 +669,7 @@ public class ViewPagerFixed extends FrameLayout {
                 }
             }
             if (maybeStartTracking && !startedTracking) {
-                int dxLocal = (int) (ev.getX() - startedTrackingX);
+                float dxLocal = ev.getX() - startedTrackingX;
                 if (Math.abs(dxLocal) >= touchSlop && Math.abs(dxLocal) > dy) {
                     prepareForMoving(ev, dx < 0);
                 }
