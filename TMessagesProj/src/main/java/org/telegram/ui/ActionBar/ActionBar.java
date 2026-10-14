@@ -230,6 +230,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
                 menu.getChildAt(i).invalidate();
             }
         }
+        requestLayout();
         invalidate();
     }
 
@@ -1743,6 +1744,19 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
         if (menu != null && menu.getVisibility() != GONE) {
             int menuLeft = menu.searchFieldVisible() ? dp(menuOccupyBack ? 0 : AndroidUtilities.isTablet() ? 74 : 66) : (getMeasuredWidth()) - menu.getMeasuredWidth();
+            if (plainBackCircle && !nonIsland && !menu.searchFieldVisible()) {
+                // Mirror the back circle's 35dp center inset for the rightmost icon.
+                for (int i = menu.getChildCount() - 1; i >= 0; i--) {
+                    View item = menu.getChildAt(i);
+                    if (item.getVisibility() != GONE) {
+                        MarginLayoutParams itemParams = (MarginLayoutParams) item.getLayoutParams();
+                        menuLeft -= Math.round(dp(35) - (menu.getPaddingRight()
+                                + itemParams.rightMargin + item.getMeasuredWidth() / 2f)
+                                + menu.getTranslationX());
+                        break;
+                    }
+                }
+            }
             menu.layout(menuLeft, additionalTop, menuLeft + menu.getMeasuredWidth(), additionalTop + menu.getMeasuredHeight());
         }
 
