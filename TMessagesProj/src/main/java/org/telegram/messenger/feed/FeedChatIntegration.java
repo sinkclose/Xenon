@@ -24,7 +24,6 @@ public class FeedChatIntegration {
     private boolean destroyed;
     private final Host host;
     private boolean initialScrollApplied;
-    private boolean pagedownShownByScroll;
     private boolean pendingDividerScroll;
     private long pendingHideDialogId;
     private ScrollAnchor pendingInitialScrollRestore;
@@ -33,14 +32,11 @@ public class FeedChatIntegration {
     private final boolean restoreDrawerScrollPosition;
     private boolean scrollPreservedNewerToUnread;
     private boolean settleAtNewestScheduled;
-    private int totalScrollDy;
     private MessageObject unreadDivider;
     private boolean viewportActive;
-    private static final int PAGEDOWN_SCROLL_THRESHOLD = AndroidUtilities.dp(100.0f);
     private static final int NEAR_NEWEST_THRESHOLD = AndroidUtilities.dp(160.0f);
     private int preserveScrollLoadIndex = -1;
     private int lastPagedownCount = -1;
-    private boolean pagedownJumpedToUnread;
     private final Runnable saveScrollRunnable = this::saveDrawerScrollPosition;
     private boolean readStateRefreshScheduled;
     private final Runnable readStateRefreshRunnable = this::refreshVisibleReadState;
@@ -208,9 +204,6 @@ public class FeedChatIntegration {
         this.preserveScrollLoadIndex = -1;
         this.unreadDivider = null;
         this.lastPagedownCount = -1;
-        this.pagedownShownByScroll = false;
-        this.pagedownJumpedToUnread = false;
-        this.totalScrollDy = 0;
         this.pendingHideDialogId = 0L;
         if (this.settleAtNewestScheduled) {
             AndroidUtilities.cancelRunOnUIThread(this.settleAtNewestRunnable);
@@ -309,7 +302,6 @@ public class FeedChatIntegration {
         }
         this.viewportActive = z;
         if (!z) {
-            this.pagedownJumpedToUnread = false;
             saveDrawerScrollPosition();
             FeedController.getInstance(this.currentAccount).flushPendingRead();
             if (this.settleAtNewestScheduled) {
@@ -620,19 +612,24 @@ public class FeedChatIntegration {
 
     public boolean onPageDownClicked(boolean skipUnread) {
         if (!this.host.isListReady() || this.host.isScrollAnimationRunning()) return true;
-        if (skipUnread || this.pagedownJumpedToUnread) {
-            this.pagedownJumpedToUnread = false;
-            return false;
+        if (skipUnread) return false;
+        int newestVisible = this.host.getNewestVisibleMessageIndex();
+        if (newestVisible == Integer.MIN_VALUE) return true;
+        ArrayList<MessageObject> messages = this.host.getMessages();
+        FeedController controller = FeedController.getInstance(this.currentAccount);
+        // Rows are newest first: walk down the feed from the visible posts,
+        // skipping read posts and service rows on every click.
+        for (int i = Math.min(newestVisible, messages.size()) - 1; i >= 0; i--) {
+            MessageObject post = messages.get(i);
+            if (!controller.isUnread(post)) continue;
+            // Start at the top of an album, and skip albums already on screen.
+            int index = findDividerInsertIndex(messages, i) - 1;
+            if (index >= newestVisible) continue;
+            this.host.scrollToMessageAnimated(index, AndroidUtilities.dp(48.0f));
+            this.host.invalidateVisiblePart();
+            return true;
         }
-        applyUnreadDivider(false);
-        int index = this.unreadDivider == null ? -1 : this.host.getMessages().indexOf(this.unreadDivider);
-        if (index < 0) return false;
-        // Reading visible posts moves the divider. Keep the second click aimed
-        // at the bottom instead of following that moving divider again.
-        this.pagedownJumpedToUnread = true;
-        this.host.scrollToMessageAnimated(index, AndroidUtilities.dp(48.0f));
-        this.host.invalidateVisiblePart();
-        return true;
+        return false;
     }
 
     private static int findDividerInsertIndex(ArrayList<MessageObject> arrayList, int i) {
@@ -702,57 +699,22 @@ public class FeedChatIntegration {
                 this.lastPagedownCount = iCountUnreadBelow;
                 this.host.setPagedownCount(iCountUnreadBelow);
             }
-            if (iCountUnreadBelow > 0) {
-                this.pagedownShownByScroll = false;
-                this.host.setPagedownButtonVisible(true);
-            } else {
-                if (this.host.canScrollToNewer()) {
-                    return;
-                }
-                this.pagedownShownByScroll = false;
-                this.host.setPagedownButtonVisible(false);
-            }
+            // Recompute after the initial layout/position restore too; no
+            // previous scroll gesture is required to reveal the button.
+            this.host.setPagedownButtonVisible(this.host.canScrollToNewer());
         }
     }
 
     public void onScrolled(int i) {
         if (this.viewportActive && this.host.isListReady() && !this.host.isScrollAnimationRunning()) {
+            updatePagedownCounter();
             if (!this.host.canScrollToNewer()) {
-                this.totalScrollDy = 0;
-                this.pagedownShownByScroll = false;
-                this.host.setPagedownButtonVisible(false);
                 if (i <= 0 || this.settleAtNewestScheduled) {
                     return;
                 }
                 this.settleAtNewestScheduled = true;
                 AndroidUtilities.runOnUIThread(this.settleAtNewestRunnable);
                 return;
-            }
-            if (this.lastPagedownCount > 0) {
-                return;
-            }
-            boolean zIsPagedownButtonVisible = this.host.isPagedownButtonVisible();
-            if (i > 0) {
-                if (zIsPagedownButtonVisible) {
-                    return;
-                }
-                int i2 = this.totalScrollDy + i;
-                this.totalScrollDy = i2;
-                if (i2 > PAGEDOWN_SCROLL_THRESHOLD) {
-                    this.totalScrollDy = 0;
-                    this.pagedownShownByScroll = true;
-                    this.host.setPagedownButtonVisible(true);
-                    return;
-                }
-                return;
-            }
-            if (i < 0 && this.pagedownShownByScroll && zIsPagedownButtonVisible) {
-                int i3 = this.totalScrollDy + i;
-                this.totalScrollDy = i3;
-                if (i3 < (-PAGEDOWN_SCROLL_THRESHOLD)) {
-                    this.totalScrollDy = 0;
-                    this.host.setPagedownButtonVisible(false);
-                }
             }
         }
     }

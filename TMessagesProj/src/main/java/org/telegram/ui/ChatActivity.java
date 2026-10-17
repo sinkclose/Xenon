@@ -38685,10 +38685,10 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     if (sideControlsButtonsLayout != null) sideControlsButtonsLayout.setButtonCount(1, i, true);
                 }
                 @Override public void setPagedownButtonVisible(boolean z) {
-                    if (z != canShowPagedownButton) {
-                        canShowPagedownButton = z;
-                        updatePagedownButtonVisibility(true);
-                    }
+                    canShowPagedownButton = z;
+                    // Container/selection state may have changed since the
+                    // same visibility was requested during feed creation.
+                    updatePagedownButtonVisibility(true);
                 }
                 @Override public boolean isPagedownButtonVisible() {
                     return sideControlsButtonsLayout != null && sideControlsButtonsLayout.isButtonVisible(1);
