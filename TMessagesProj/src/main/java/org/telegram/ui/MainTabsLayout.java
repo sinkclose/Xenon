@@ -11,6 +11,7 @@ import android.graphics.Path;
 import android.graphics.Matrix;
 import android.graphics.RectF;
 import android.graphics.RadialGradient;
+import android.graphics.RenderNode;
 import android.graphics.Shader;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
@@ -385,6 +386,8 @@ public class MainTabsLayout extends AnimatedLinearLayout {
             Color.WHITE, Color.TRANSPARENT, Shader.TileMode.CLAMP);
     private BlurredBackgroundDrawable liquidLens;
     private BlurredBackgroundDrawable liquidBackdrop;
+    private RenderNode liquidForegroundNode;
+    private float lastLiquidLensRadius = Float.NaN;
     private boolean liquidTouchDown;
     private float liquidPressProgress, liquidWidthScale = 1f, liquidHeightScale = 1f;
     private float liquidVelocity, gestureStartX;
@@ -393,6 +396,7 @@ public class MainTabsLayout extends AnimatedLinearLayout {
 
     public void setLiquidLens(BlurredBackgroundDrawable drawable) {
         if (liquidLens != null) liquidLens.setCallback(null);
+        lastLiquidLensRadius = Float.NaN;
         liquidBackdrop = drawable; // Its factory tracks the panel's position in the content source.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             BlurredBackgroundSource combined = new BlurredBackgroundSource() {
@@ -409,6 +413,7 @@ public class MainTabsLayout extends AnimatedLinearLayout {
             BlurredBackgroundDrawableRenderNode lens = new BlurredBackgroundDrawableRenderNode(combined);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 lens.setLiquidGlassEffectAllowed(true); // Fixed slider value of 50; still respects LiteMode.
+                lens.setRetainSurfaceDisplayList(true);
             }
             lens.setThickness(dp(10));
             lens.setIntensity(1f);
@@ -427,7 +432,7 @@ public class MainTabsLayout extends AnimatedLinearLayout {
         canvas.restore();
         // Sample the screen behind the bar. Capturing the dark panel here hides
         // that backdrop and makes the refracting capsule look like a flat fill.
-        drawLiquidForeground(canvas, LiquidNavigationMath.contentScale(liquidPressProgress));
+        drawLiquidForegroundFrame(canvas);
     }
 
     private void animateLiquidPress() {
@@ -510,15 +515,18 @@ public class MainTabsLayout extends AnimatedLinearLayout {
         final boolean glassEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
                 && canvas.isHardwareAccelerated() && liquidLens != null
                 && org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS);
+        if (glassEnabled) {
+            // Capture the live icons once; refraction and the sharp crossfade
+            // replay the same frame, with exactly the same content transform.
+            recordLiquidForegroundFrame(progress);
+        }
         // Neutral reference surface: no accent/white fill layered over the panel.
         boolean dark = Theme.isCurrentThemeDark();
         selectorPaint.setColor(dark ? Color.WHITE : Color.BLACK);
         selectorPaint.setAlpha(Math.round(25.5f * (glassEnabled ? 1f - progress : 1f)));
         canvas.drawRoundRect(liquidBounds, radius, radius, selectorPaint);
         if (glassEnabled && progress > 0.001f && width > 0 && height > 0) {
-            liquidLens.setBounds(Math.round(liquidBounds.left), Math.round(liquidBounds.top),
-                    Math.round(liquidBounds.right), Math.round(liquidBounds.bottom));
-            liquidLens.setRadius(radius);
+            updateLiquidLensBounds(radius);
             liquidLens.setAlpha(Math.round(255 * progress));
             if (liquidLens instanceof BlurredBackgroundDrawableRenderNode) {
                 ((BlurredBackgroundDrawableRenderNode) liquidLens).invalidateDisplayList();
@@ -542,9 +550,12 @@ public class MainTabsLayout extends AnimatedLinearLayout {
         canvas.clipPath(liquidClip);
         if (glassEnabled) {
             // Crossfade sharp contents into the captured contents without double drawing.
-            int layer = canvas.saveLayerAlpha(liquidBounds, Math.round(255f * (1f - progress)));
-            drawLiquidForeground(canvas, LiquidNavigationMath.contentScale(progress));
-            canvas.restoreToCount(layer);
+            int sharpAlpha = Math.round(255f * (1f - progress));
+            if (sharpAlpha > 0) {
+                int layer = canvas.saveLayerAlpha(liquidBounds, sharpAlpha);
+                drawLiquidForegroundFrame(canvas);
+                canvas.restoreToCount(layer);
+            }
         } else {
             drawLiquidForeground(canvas, LiquidNavigationMath.contentScale(progress));
         }
@@ -570,6 +581,39 @@ public class MainTabsLayout extends AnimatedLinearLayout {
             canvas.scale(scale, scale, getCenterX(child), child.getY() + child.getHeight() / 2f);
             drawChild(canvas, child, getDrawingTime());
             canvas.restore();
+        }
+    }
+
+    private void drawLiquidForegroundFrame(Canvas canvas) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && canvas.isHardwareAccelerated()
+                && liquidForegroundNode != null && liquidForegroundNode.hasDisplayList()) {
+            canvas.drawRenderNode(liquidForegroundNode);
+        } else {
+            drawLiquidForeground(canvas, LiquidNavigationMath.contentScale(liquidPressProgress));
+        }
+    }
+
+    private void updateLiquidLensBounds(float radius) {
+        liquidLens.setBounds(Math.round(liquidBounds.left), Math.round(liquidBounds.top),
+                Math.round(liquidBounds.right), Math.round(liquidBounds.bottom));
+        if (lastLiquidLensRadius != radius) {
+            liquidLens.setRadius(radius);
+            lastLiquidLensRadius = radius;
+        }
+    }
+
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.Q)
+    private void recordLiquidForegroundFrame(float progress) {
+        if (liquidForegroundNode == null) {
+            liquidForegroundNode = new RenderNode("MainTabsLiquidForeground");
+            liquidForegroundNode.setClipToBounds(false);
+        }
+        liquidForegroundNode.setPosition(0, 0, getWidth(), getHeight());
+        Canvas foreground = liquidForegroundNode.beginRecording();
+        try {
+            drawLiquidForeground(foreground, LiquidNavigationMath.contentScale(progress));
+        } finally {
+            liquidForegroundNode.endRecording();
         }
     }
 
@@ -837,6 +881,9 @@ public class MainTabsLayout extends AnimatedLinearLayout {
 
     @Override protected void onDetachedFromWindow() {
         resetLiquidGesture();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && liquidForegroundNode != null) {
+            liquidForegroundNode.discardDisplayList();
+        }
         super.onDetachedFromWindow();
     }
 

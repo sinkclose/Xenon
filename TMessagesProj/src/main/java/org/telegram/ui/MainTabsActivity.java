@@ -125,6 +125,8 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     private zxc.iconic.xenon.helpers.IosBottomSearchView iosBottomSearch;
     private DialogsActivity iosSearchOwner;
     private BlurredBackgroundDrawableViewFactory iosSearchFactory;
+    private float lastIosSearchBlur = Float.NaN;
+    private float lastTabsSearchBlur = Float.NaN;
     private int iosSearchImeInset;
     private int iosSearchImeTargetInset;
     private int iosSearchImeAnimationCount;
@@ -370,6 +372,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
                 });
 
         tabsView = new MainTabsLayout(context, resourceProvider);
+        lastTabsSearchBlur = Float.NaN;
         tabsView.setClipChildren(false);
         if (zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar()) {
             tabsView.setPadding(0, 0, 0, 0);
@@ -1299,8 +1302,11 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         iosBottomSearch.setEnabled(enabled && onDialogs && visibility >= 1f);
         if (Build.VERSION.SDK_INT >= 31) {
             float blur = dp(10) * (1f - presence);
-            iosBottomSearch.setRenderEffect(blur > .01f ? android.graphics.RenderEffect.createBlurEffect(
-                    blur, blur, android.graphics.Shader.TileMode.CLAMP) : null);
+            if (lastIosSearchBlur != blur) {
+                iosBottomSearch.setRenderEffect(blur > .01f ? android.graphics.RenderEffect.createBlurEffect(
+                        blur, blur, android.graphics.Shader.TileMode.CLAMP) : null);
+                lastIosSearchBlur = blur;
+            }
         }
         return presence;
     }
@@ -1332,8 +1338,11 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         tabsView.setEnabled(barProgress < .01f && visibility >= 1f);
         if (Build.VERSION.SDK_INT >= 31) {
             float blur = dp(10) * barProgress;
-            tabsView.setRenderEffect(blur > .01f ? android.graphics.RenderEffect.createBlurEffect(
-                    blur, blur, android.graphics.Shader.TileMode.CLAMP) : null);
+            if (lastTabsSearchBlur != blur) {
+                tabsView.setRenderEffect(blur > .01f ? android.graphics.RenderEffect.createBlurEffect(
+                        blur, blur, android.graphics.Shader.TileMode.CLAMP) : null);
+                lastTabsSearchBlur = blur;
+            }
         }
         FrameLayout.LayoutParams searchLp = (FrameLayout.LayoutParams) iosBottomSearch.getLayoutParams();
         int margin = navigationBarHeight + (int) lerp(0, dp(4), p);
@@ -1383,6 +1392,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
                 AndroidUtilities.removeFromParent(iosBottomSearch);
             }
             iosSearchOwner = owner;
+            lastIosSearchBlur = Float.NaN;
             iosBottomSearch = new zxc.iconic.xenon.helpers.IosBottomSearchView(getContext(), resourceProvider,
                     field, iosSearchFactory, () -> {
                         int chats = MainTabsManager.getPosition(MainTabsManager.TabType.CHATS);
@@ -1414,6 +1424,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
                 if (tabsView != null) {
                     tabsView.setPanelBaseTranslationX(0);
                     if (Build.VERSION.SDK_INT >= 31) tabsView.setRenderEffect(null);
+                    lastTabsSearchBlur = Float.NaN;
                 }
                 ensureIosSearchButton();
             }

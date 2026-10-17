@@ -381,6 +381,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Stack;
+import java.util.WeakHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -18706,7 +18707,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             }
             if (child == backgroundView) {
                 invalidateMergedVisibleBlurredPositionsAndSources(BLUR_INVALIDATE_FLAG_WALLPAPER);
-            } else if (child == chatListView || child == messagesSearchListContainer) {
+            } else if (child == chatListView) {
+                if (!invalidateGlassMessageRegion(target)) {
+                    invalidateMergedVisibleBlurredPositionsAndSources(BLUR_INVALIDATE_FLAG_SCROLL);
+                }
+            } else if (child == messagesSearchListContainer) {
                 invalidateMergedVisibleBlurredPositionsAndSources(BLUR_INVALIDATE_FLAG_SCROLL);
             }
             // Only source changes request captures. Redrawing a glass surface
@@ -51060,6 +51065,8 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     private int glassSourceCaptureDepth;
     private int pendingGlassSourceFlags;
     private long glassListContentVersion;
+    private final RectF glassMessageDirtyRect = new RectF();
+    private final WeakHashMap<View, RectF> glassMessageBounds = new WeakHashMap<>();
     private final IBlur3Capture glassListCapture = new IBlur3Capture() {
         @Override
         public void capture(Canvas canvas, RectF position) {
@@ -51080,6 +51087,59 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     private static final int BLUR_INVALIDATE_FLAG_POSITIONS = 1 << 1;
     private static final int BLUR_INVALIDATE_FLAG_CLIP = 1 << 2;
     private static final int BLUR_INVALIDATE_FLAG_WALLPAPER = 1 << 3;
+    private static final int BLUR_INVALIDATE_FLAG_CONTENT_REGION = 1 << 4;
+
+    /**
+     * Bound only stationary, independent message content. Anything that can move
+     * old pixels or draw outside its row keeps the full source invalidation path.
+     */
+    private boolean invalidateGlassMessageRegion(View target) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || scrollableViewNoiseSuppressor == null
+                || invalidateBlurredSourcesView == null || parentChatActivity != null
+                || chatListView == null || contentView == null
+                || chatListView.getScrollState() != RecyclerView.SCROLL_STATE_IDLE
+                || chatListView.isComputingLayout() || chatListView.isLayoutRequested()
+                || contentView.isLayoutRequested() || chatListView.hasActiveEdgeEffects()
+                || !chatListView.getMatrix().isIdentity() || !contentView.getMatrix().isIdentity()
+                || (chatListItemAnimator != null && chatListItemAnimator.isRunning())
+                || animatorSearchResultAsListVisibility.getFloatValue() != 0f) {
+            return false;
+        }
+        View row = target;
+        while (row != null && row != chatListView && row.getParent() != chatListView) {
+            row = row.getParent() instanceof View ? (View) row.getParent() : null;
+        }
+        if (!(row instanceof ChatMessageCell) || row.getParent() != chatListView) {
+            return false;
+        }
+        ChatMessageCell cell = (ChatMessageCell) row;
+        if (!cell.isAttachedToWindow() || cell.getVisibility() != View.VISIBLE
+                || cell.getWidth() <= 0 || cell.getHeight() <= 0 || cell.isLayoutRequested()
+                || !cell.getMatrix().isIdentity() || cell.getAnimation() != null || cell.getAlpha() != 1f
+                || cell.getCurrentMessagesGroup() != null || cell.hasOutboundsContent()
+                || cell.drawBackgroundInParent() || cell.getTransitionParams().animateChangeProgress != 1f
+                || !ViewPositionWatcher.computeRectInParent(cell, contentView, glassMessageDirtyRect)) {
+            return false;
+        }
+        RectF previousBounds = glassMessageBounds.get(cell);
+        if (previousBounds == null) {
+            glassMessageBounds.put(cell, new RectF(glassMessageDirtyRect));
+            return false;
+        }
+        if (!previousBounds.equals(glassMessageDirtyRect)) {
+            // The old footprint also needs new pixels; use the global fallback.
+            previousBounds.set(glassMessageDirtyRect);
+            return false;
+        }
+        // Include row decoration and filtering neighbours; keep the whole row width
+        // because avatars/time/background may be drawn by the list rather than the cell.
+        glassMessageDirtyRect.left = 0;
+        glassMessageDirtyRect.right = contentView.getWidth();
+        glassMessageDirtyRect.inset(0, -dp(48));
+        scrollableViewNoiseSuppressor.invalidateSourceRegion(glassMessageDirtyRect);
+        invalidateMergedVisibleBlurredPositionsAndSources(BLUR_INVALIDATE_FLAG_CONTENT_REGION);
+        return true;
+    }
 
     public void invalidatePhotoViewerTransition() {
         if (contentView != null) {
@@ -51106,7 +51166,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_WALLPAPER | BLUR_INVALIDATE_FLAG_CLIP)) {
             fadeWallpaperDirty = true;
         }
-        if (BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_SCROLL | BLUR_INVALIDATE_FLAG_CLIP | BLUR_INVALIDATE_FLAG_WALLPAPER)) {
+        if (BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_SCROLL | BLUR_INVALIDATE_FLAG_CLIP | BLUR_INVALIDATE_FLAG_WALLPAPER | BLUR_INVALIDATE_FLAG_CONTENT_REGION)) {
             invalidateFadeBlur();
         }
 
@@ -51164,7 +51224,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
 
         final boolean positionsChanged = BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_POSITIONS);
-        final boolean hasChanges = BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_POSITIONS | BLUR_INVALIDATE_FLAG_SCROLL | BLUR_INVALIDATE_FLAG_CLIP)
+        final boolean hasChanges = BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_POSITIONS | BLUR_INVALIDATE_FLAG_SCROLL | BLUR_INVALIDATE_FLAG_CLIP | BLUR_INVALIDATE_FLAG_CONTENT_REGION)
                 && scrollableViewNoiseSuppressor.invalidateResultRenderNodes(glassListCapture, contentView.getWidth(), contentView.getHeight());
         if (hasChanges || wallpaperChanged || positionsChanged) {
             // Content updates re-record child RenderNodes already referenced by

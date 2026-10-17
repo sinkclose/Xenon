@@ -63,7 +63,7 @@ COMMON = r'''
         BASE_METHODS
     }
     static class LiquidTouchEffect {
-        RectF bounds = new RectF(); float progress, offsetX, offsetY, dragStrength=1;
+        RectF bounds = new RectF(); float progress, offsetX, offsetY, dragStrength=1, pressStrength=1;
         float scaleX=1, scaleY=1, translationX, translationY;
         void drawHighlight(Canvas c, float r, float i) {}
         EFFECT_METHODS
@@ -140,10 +140,11 @@ public class GlassDeformationHarness {
         Source source = new Source(); RenderNode renderNode=new RenderNode(), renderNodeFill=new RenderNode();
         boolean renderNodeInvalidated, fixedRefraction, liquidGlassEnabled, inAppKeyboardOptimization;
         boolean liquidGlassEffectAllowed = true; Runnable onShadersReady;
-        boolean prismPipelineActive; PrismGlassPipeline prismPipeline;
+        boolean prismPipelineActive, retainSurfaceDisplayList; PrismGlassPipeline prismPipeline;
         Effect liquidGlassEffect=new Effect(); int backgroundColor, strokeColorTop, strokeColorBottom, shadowColor;
         float shadowAlpha=1, shadowLayerRadius, shadowLayerDx, shadowLayerDy;
         Paint paintShadow=new Paint(), paintStrokeTop=new Paint(), paintStrokeBottom=new Paint();
+        boolean hasDisplayList() { return renderNode.hasDisplayList() && renderNodeFill.hasDisplayList(); }
         void recreateLiquidGlassEffect() { liquidGlassEffect = new Effect(); renderNodeInvalidated = true; }
         void drawSource(Canvas c,Source s) {}
         void drawStroke(Object... a) {}
@@ -273,6 +274,34 @@ public class GlassDeformationHarness {
                 check(g.renderNode.recordings == surfaceRecordings + 1, "Toggle kept stale surface commands");
                 NekoConfig.usePrismGlass = prism;
             }
+        }
+        NekoConfig.usePrismGlass = false;
+        // A live navigation lens must update its source every frame without
+        // re-recording the unchanged outer surface or switching optical programs.
+        for (boolean prism : new boolean[]{false, true}) {
+            NekoConfig.usePrismGlass = prism;
+            Glass lens = new Glass(); lens.fixedRefraction = true;
+            lens.retainSurfaceDisplayList = true;
+            lens.draw(new Canvas());
+            Effect optics = lens.liquidGlassEffect;
+            int surfaceRecordings = lens.renderNode.recordings;
+            for (int frame = 0; frame < 120; frame++) {
+                lens.setAlpha(100 + frame);
+                lens.sourceOffsetX += 1;
+                lens.invalidateDisplayList();
+                lens.draw(new Canvas());
+                check(lens.source.recordings == frame + 2, "Lens captured stale contents");
+                check(lens.renderNode.recordings == surfaceRecordings, "Lens re-recorded unchanged surface");
+                near(lens.renderNode.getAlpha(), (100 + frame) / 255f);
+                near(lens.source.l, lens.boundProps.boundsWithPadding.left + lens.sourceOffsetX);
+                check(lens.liquidGlassEffect == optics, "Lens changed its refraction program");
+            }
+            lens.boundProps.boundsWithPadding.right += 10;
+            lens.draw(new Canvas());
+            check(lens.renderNode.recordings == surfaceRecordings + 1, "Lens retained obsolete geometry");
+            lens.strokeColorTop = 0xff123456;
+            lens.draw(new Canvas());
+            check(lens.renderNode.recordings == surfaceRecordings + 2, "Lens retained obsolete stroke");
         }
         NekoConfig.usePrismGlass = false;
         Glass explicit = new Glass(); explicit.draw(new Canvas());

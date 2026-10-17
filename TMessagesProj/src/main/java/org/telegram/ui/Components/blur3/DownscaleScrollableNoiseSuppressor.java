@@ -396,6 +396,22 @@ public class DownscaleScrollableNoiseSuppressor {
     private final RectF tmpRectF = new RectF();
     private final Blur3HashImpl builder = new Blur3HashImpl();
 
+    /**
+     * Invalidate only captures intersecting changed source pixels, in source coordinates.
+     * Positions already include the capture/filter padding supplied by the caller.
+     * Unknown bounds and scrolling must still invalidate the capture's global version.
+     */
+    public void invalidateSourceRegion(RectF dirty) {
+        for (int i = 0; i < rectRenderNodesCount; i++) {
+            final SourcePart part = rectRenderNodes.get(i);
+            final Rect bounds = part.position;
+            if (dirty.left < bounds.right && bounds.left < dirty.right
+                    && dirty.top < bounds.bottom && bounds.top < dirty.bottom) {
+                part.contentVersion++;
+            }
+        }
+    }
+
     public boolean invalidateResultRenderNodes(IBlur3Capture capture, int width, int height) {
         k = captureScale(isLiquidGlassEnabled, allowNoiseSuppress, zxc.iconic.xenon.NekoConfig.blurStrength);
         int updatedCount = 0;
@@ -406,6 +422,7 @@ public class DownscaleScrollableNoiseSuppressor {
 
             builder.start();
             capture.captureCalculateHash(builder, tmpRectF);
+            builder.add(sourcePart.contentVersion);
             // A cached scene still needs new pixels when a capture region moves.
             builder.add(position.left);
             builder.add(position.top);
@@ -458,6 +475,7 @@ public class DownscaleScrollableNoiseSuppressor {
         final @Nullable DownscaledRenderNode renderNodesForGlass;
         final Rect position = new Rect();
         long lastHash;
+        long contentVersion;
 
         private int materialBlurStrength = Integer.MIN_VALUE;
         private boolean materialAdvanced;

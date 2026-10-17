@@ -225,7 +225,21 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         if (backButtonImageView != null) {
             backButtonImageView.setTranslationX(enabled ? dp(8) : 0);
         }
+        if (menu != null) {
+            for (int i = 0; i < menu.getChildCount(); i++) {
+                menu.getChildAt(i).invalidate();
+            }
+        }
+        requestLayout();
         invalidate();
+    }
+
+    void drawPlainButtonCircle(Canvas canvas, float cx, float cy) {
+        if (!plainBackCircle || nonIsland) {
+            return;
+        }
+        plainBackCirclePaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider));
+        canvas.drawCircle(cx, cy, dp(23), plainBackCirclePaint);
     }
 
     public void setChatAvatarContainer(ChatAvatarContainer chatAvatarContainer) {
@@ -1730,6 +1744,19 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
         if (menu != null && menu.getVisibility() != GONE) {
             int menuLeft = menu.searchFieldVisible() ? dp(menuOccupyBack ? 0 : AndroidUtilities.isTablet() ? 74 : 66) : (getMeasuredWidth()) - menu.getMeasuredWidth();
+            if (plainBackCircle && !nonIsland && !menu.searchFieldVisible()) {
+                // Mirror the back circle's 35dp center inset for the rightmost icon.
+                for (int i = menu.getChildCount() - 1; i >= 0; i--) {
+                    View item = menu.getChildAt(i);
+                    if (item.getVisibility() != GONE) {
+                        MarginLayoutParams itemParams = (MarginLayoutParams) item.getLayoutParams();
+                        menuLeft -= Math.round(dp(35) - (menu.getPaddingRight()
+                                + itemParams.rightMargin + item.getMeasuredWidth() / 2f)
+                                + menu.getTranslationX());
+                        break;
+                    }
+                }
+            }
             menu.layout(menuLeft, additionalTop, menuLeft + menu.getMeasuredWidth(), additionalTop + menu.getMeasuredHeight());
         }
 
@@ -2762,9 +2789,8 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             if (save != -1) canvas.restoreToCount(save);
         }
         if (plainBackCircle && hasBackButton && !nonIsland) {
-            plainBackCirclePaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider));
             int save = beginLiquid(canvas, liquidBack);
-            canvas.drawCircle(dp(35), (t + b) / 2f, dp(23), plainBackCirclePaint);
+            drawPlainButtonCircle(canvas, dp(35), (t + b) / 2f);
             if (liquidTouchAllowed()) liquidBack.drawHighlight(canvas, dp(23), dp(6));
             if (save != -1) canvas.restoreToCount(save);
         }

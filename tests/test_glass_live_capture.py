@@ -12,6 +12,7 @@ class GlassLiveCaptureTest(unittest.TestCase):
     def test_content_updates_without_geometry_changes(self):
         source = (ROOT / "org/telegram/ui/Components/blur3/DownscaleScrollableNoiseSuppressor.java").read_text()
         capture_method = method(source, "public boolean invalidateResultRenderNodes(IBlur3Capture capture, int width, int height)")
+        region_method = method(source, "public void invalidateSourceRegion(RectF dirty)")
         harness = r'''
 import java.util.*;
 public class GlassLiveCaptureHarness {
@@ -22,10 +23,15 @@ public class GlassLiveCaptureHarness {
     static class Build { static class VERSION { static int SDK_INT = 33; } }
     static class Canvas { void save() {} void restore() {} void translate(float x, float y) {} }
     static class Rect { int left, top, right = 100, bottom = 100; }
-    static class RectF { void set(Rect rect) {} }
+    static class RectF {
+        float left, top, right, bottom;
+        void set(Rect rect) { left = rect.left; top = rect.top; right = rect.right; bottom = rect.bottom; }
+        RectF() {}
+        RectF(float l, float t, float r, float b) { left = l; top = t; right = r; bottom = b; }
+    }
     static class RenderNode { boolean recorded; boolean hasDisplayList() { return recorded; } }
     static class SourcePart {
-        Rect position = new Rect(); RenderNode renderNode = new RenderNode(); long lastHash;
+        Rect position = new Rect(); RenderNode renderNode = new RenderNode(); long lastHash, contentVersion;
         int materialBlurStrength, materialUpdates; boolean materialAdvanced;
         boolean materialChanged() { return materialBlurStrength != NekoConfig.blurStrength || materialAdvanced != NekoConfig.useAdvancedLiquidGlass; }
         void invalidate() { materialBlurStrength = NekoConfig.blurStrength; materialAdvanced = NekoConfig.useAdvancedLiquidGlass; materialUpdates++; }
@@ -51,16 +57,17 @@ public class GlassLiveCaptureHarness {
         }
     }
     static class Suppressor {
-        int k, rectRenderNodesCount = 1, compositionChecks;
+        int k, rectRenderNodesCount = 1, compositionChecks, recordingIndex;
         boolean isLiquidGlassEnabled = true, allowNoiseSuppress;
         RectF tmpRectF = new RectF(); Builder builder = new Builder();
-        List<SourcePart> rectRenderNodes = List.of(new SourcePart());
+        List<SourcePart> rectRenderNodes = new ArrayList<>(List.of(new SourcePart()));
         static int captureScale(boolean glass, boolean noise, int strength) { return 1; }
-        Canvas beginRecordingRect(int index) { return new Canvas(); }
-        void endRecordingRect() { rectRenderNodes.get(0).renderNode.recorded = true; rectRenderNodes.get(0).invalidate(); }
+        Canvas beginRecordingRect(int index) { recordingIndex = index; return new Canvas(); }
+        void endRecordingRect() { rectRenderNodes.get(recordingIndex).renderNode.recorded = true; rectRenderNodes.get(recordingIndex).invalidate(); }
         // Composition needs rebuilding only once: the same child node receives new content.
         boolean invalidateResultRenderNodes(int width, int height) { return compositionChecks++ == 0; }
         CAPTURE_METHOD
+        REGION_METHOD
     }
     public static void main(String[] args) {
         Suppressor s = new Suppressor(); Capture capture = new Capture();
@@ -111,9 +118,41 @@ public class GlassLiveCaptureHarness {
         check(!s.invalidateResultRenderNodes(capture, 100, 100), "Stationary region must settle");
         s.rectRenderNodesCount = 0;
         check(!s.invalidateResultRenderNodes(capture, 100, 100), "No visible regions must not notify");
+
+        // A local animation must refresh the affected capture and retain the other.
+        Suppressor regions = new Suppressor();
+        regions.rectRenderNodes.add(new SourcePart());
+        regions.rectRenderNodesCount = 2;
+        regions.rectRenderNodes.get(1).position.top = 900;
+        regions.rectRenderNodes.get(1).position.bottom = 1000;
+        Capture scene = new Capture();
+        check(regions.invalidateResultRenderNodes(scene, 100, 1000), "Initial regions");
+        check(scene.captures == 2, "Both initial regions must capture");
+        for (int frame = 0; frame < 20; frame++) {
+            // Notifications in one frame coalesce into one recording.
+            regions.invalidateSourceRegion(new RectF(0, 10, 100, 30));
+            regions.invalidateSourceRegion(new RectF(0, 20, 100, 40));
+            check(regions.invalidateResultRenderNodes(scene, 100, 1000), "Local animation froze");
+            check(scene.captures == frame + 3, "Unchanged region was recaptured");
+            check(!regions.invalidateResultRenderNodes(scene, 100, 1000), "Local update did not settle");
+        }
+        regions.invalidateSourceRegion(new RectF(0, 300, 100, 400));
+        check(!regions.invalidateResultRenderNodes(scene, 100, 1000), "Off-region animation recaptured glass");
+        regions.invalidateSourceRegion(new RectF(0, 100, 100, 900));
+        check(!regions.invalidateResultRenderNodes(scene, 100, 1000), "Touching bounds must not overlap");
+        regions.invalidateSourceRegion(new RectF(0, 950, 100, 970));
+        check(regions.invalidateResultRenderNodes(scene, 100, 1000), "Bottom animation froze");
+        check(scene.captures == 23, "Bottom animation updated wrong regions");
+        scene.generation++;
+        check(regions.invalidateResultRenderNodes(scene, 100, 1000), "Global scroll froze");
+        check(scene.captures == 25, "Global scroll must recapture both regions");
+        regions.rectRenderNodes.get(0).position.top = 300;
+        regions.rectRenderNodes.get(0).position.bottom = 400;
+        check(regions.invalidateResultRenderNodes(scene, 100, 1000), "Moved capture reused stale pixels");
+        check(scene.captures == 26, "Moved capture must update independently");
     }
 }
-'''.replace("CAPTURE_METHOD", capture_method.replace("zxc.iconic.xenon.NekoConfig", "NekoConfig").replace("android.os.Build", "Build"))
+'''.replace("CAPTURE_METHOD", capture_method.replace("zxc.iconic.xenon.NekoConfig", "NekoConfig").replace("android.os.Build", "Build")).replace("REGION_METHOD", region_method)
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "GlassLiveCaptureHarness.java"
             path.write_text(harness)
