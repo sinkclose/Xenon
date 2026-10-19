@@ -48,6 +48,7 @@ import zxc.iconic.xenon.helpers.WhisperHelper;
 public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implements NotificationCenter.NotificationCenterDelegate {
 
     private final int stickerSizeRow = rowId++;
+    private final int triangleBackgroundRow = rowId++;
     private final int stickerPreviewRow = rowId++;
     private final int hideTimeOnStickerRow = rowId++;
     private final int showTimeHintRow = rowId++;
@@ -117,6 +118,7 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
 
         var menu = actionBar.createMenu();
         resetItem = menu.addItem(0, R.drawable.msg_reset);
+        resetItem.setPlainButtonCircle(true);
         resetItem.setContentDescription(LocaleController.getString(R.string.ResetStickerSize));
         resetItem.setTag(null);
         resetItem.setOnClickListener(v -> {
@@ -160,6 +162,7 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
 
     @Override
     protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
+        items.add(TextSettingsCellFactory.of(triangleBackgroundRow, LocaleController.getString(R.string.TriangleBackground)).slug("triangleBackground"));
         items.add(StickerSizeCellFactory.of(stickerSizeRow, LocaleController.getString(R.string.StickerSize), NekoConfig.stickerSize, progress -> {
             NekoConfig.setStickerSize(progress);
             updateStickerCell();
@@ -277,7 +280,9 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
     @Override
     protected void onItemClick(UItem item, View view, int position, float x, float y) {
         var id = item.id;
-        if (id == iosLikeInputFieldRow) {
+        if (id == triangleBackgroundRow) {
+            presentFragment(new NekoTriangleSettingsActivity());
+        } else if (id == iosLikeInputFieldRow) {
             NekoConfig.toggleIosLikeInputField();
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.iosLikeInputField);

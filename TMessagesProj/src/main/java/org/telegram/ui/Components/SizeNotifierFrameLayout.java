@@ -359,6 +359,10 @@ public class SizeNotifierFrameLayout extends FrameLayout implements Theme.Colora
                     backgroundView.invalidate();
                 }
             }
+            int overlaySave = canvas.save();
+            canvas.clipRect(0, 0, getMeasuredWidth(), getWallpaperOverlayBottom());
+            drawWallpaperOverlay(canvas, this, backgroundDrawable, getMeasuredWidth(), getMeasuredHeight());
+            canvas.restoreToCount(overlaySave);
             if (themeAnimationValue != 1f) {
                 backgroundView.invalidate();
             }
@@ -369,6 +373,14 @@ public class SizeNotifierFrameLayout extends FrameLayout implements Theme.Colora
             super.invalidate();
             onBackgroundViewInvalidate();
         }
+    }
+
+    /** Called once after both wallpapers in a theme transition, before any chat content. */
+    protected void drawWallpaperOverlay(Canvas canvas, View host, Drawable wallpaper, int width, int height) {
+    }
+
+    protected int getWallpaperOverlayBottom() {
+        return Math.max(0, getMeasuredHeight() - bottomClip);
     }
 
     protected void onBackgroundViewInvalidate() {

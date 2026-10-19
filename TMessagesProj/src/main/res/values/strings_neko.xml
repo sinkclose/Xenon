@@ -690,6 +690,44 @@
     <string name="MarkdownParserTelegram">Telegram</string>
     <string name="GifsUnavailableForAnotherAccount">Sending GIFs from another account is currently unavailable.</string>
     <string name="IosLikeInputField">iOS like input field</string>
+    <!-- Chat wallpaper triangles -->
+    <string name="TriangleHideSettings">Hide settings</string>
+    <string name="TriangleShowSettings">Show settings</string>
+    <string name="TriangleSyncRefresh">Match screen refresh rate</string>
+    <string name="TriangleBackground">Triangle wallpaper</string>
+    <string name="EnableTriangles">Enable triangles</string>
+    <string name="TriangleDescription">Animated triangles above chat wallpapers, behind messages. This screen shows them on its background. Settings apply to all chats.</string>
+    <string name="TriangleGeometry">Appearance</string>
+    <string name="TriangleSize">Size</string>
+    <string name="TriangleDensity">Density</string>
+    <string name="TriangleThickness">Outline width</string>
+    <string name="TriangleOpacity">Opacity</string>
+    <string name="TriangleSizeVariance">Size variation</string>
+    <string name="TriangleFilled">Filled triangles</string>
+    <string name="TriangleRandomRotation">Random initial rotation</string>
+    <string name="TriangleRotation">Rotation</string>
+    <string name="TriangleMovement">Movement</string>
+    <string name="TriangleAnimate">Animate triangles</string>
+    <string name="TriangleSpeed">Movement speed</string>
+    <string name="TriangleSpeedVariance">Speed variation</string>
+    <string name="TriangleDirection">Movement direction</string>
+    <string name="TriangleSpin">Rotation speed</string>
+    <string name="TriangleFps">Frame rate limit</string>
+    <string name="TriangleDirectionHint">Direction: 0° right, 90° down, 180° left, 270° up. Disable animation for a static pattern. Higher density and frame rate use more battery.</string>
+    <string name="TriangleCustomizeColor">Customize triangle colors</string>
+    <string name="TriangleAutoColor">Match wallpaper automatically</string>
+    <string name="TriangleHue">Hue</string>
+    <string name="TriangleSaturation">Saturation</string>
+    <string name="TriangleBrightness">Brightness</string>
+    <string name="TriangleGradient">Color gradient</string>
+    <string name="TriangleGradientHue">Gradient hue shift</string>
+    <string name="TriangleGradientAngle">Gradient direction</string>
+    <string name="TriangleFade">Fade triangles</string>
+    <string name="TriangleFadeTop">Fade distance from top</string>
+    <string name="TriangleFadeBottom">Fade distance from bottom</string>
+    <string name="TriangleFadePower">Fade strength</string>
+    <string name="TriangleColorHint">By default, triangle color is calculated from each chat’s wallpaper. Enable color customization for manual color, gradient and fading. On Android 8, fading is applied to each whole triangle.</string>
+    <string name="TriangleReset">Reset triangle settings</string>
 </resources>
 
 

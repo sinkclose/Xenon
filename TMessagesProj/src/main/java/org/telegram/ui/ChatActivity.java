@@ -18639,6 +18639,64 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     public class ChatActivityFragmentView extends SizeNotifierFrameLayout {
+        private final zxc.iconic.xenon.triangles.TriangleWallpaperRenderer triangleWallpaperRenderer =
+                new zxc.iconic.xenon.triangles.TriangleWallpaperRenderer();
+        private int wallpaperOverlayCaptureSuppression;
+
+        @Override
+        protected void drawWallpaperOverlay(Canvas canvas, View host, Drawable wallpaper, int width, int height) {
+            if (wallpaperOverlayCaptureSuppression != 0) return;
+            if (glassSourceCaptureDepth != 0) {
+                triangleWallpaperRenderer.drawSnapshot(canvas, host, wallpaper,
+                        getThemedColor(Theme.key_chat_wallpaper), width, height);
+            } else {
+                triangleWallpaperRenderer.draw(canvas, host, wallpaper,
+                        getThemedColor(Theme.key_chat_wallpaper), width, height, !ChatActivity.this.paused && isAttachedToWindow());
+            }
+        }
+
+        private void drawWallpaperForFade(Canvas canvas, boolean includeTriangles) {
+            if (backgroundView == null || backgroundView.getWidth() <= 0) {
+                navbarContentSourceWallpaperSharp.draw(canvas, 0, 0, getWidth(), getHeight());
+                return;
+            }
+            int save = canvas.save();
+            if (!includeTriangles) wallpaperOverlayCaptureSuppression++;
+            try {
+                canvas.translate(backgroundView.getX(), backgroundView.getY());
+                backgroundView.draw(canvas);
+            } finally {
+                if (!includeTriangles) wallpaperOverlayCaptureSuppression--;
+                canvas.restoreToCount(save);
+            }
+        }
+
+        private void drawTrianglesForFade(Canvas canvas) {
+            if (backgroundView == null || backgroundView.getWidth() <= 0) return;
+            int save = canvas.save();
+            try {
+                canvas.translate(backgroundView.getX(), backgroundView.getY());
+                canvas.clipRect(0, 0, backgroundView.getWidth(), getWallpaperOverlayBottom());
+                triangleWallpaperRenderer.drawSnapshot(canvas, backgroundView, getBackgroundImage(),
+                        getThemedColor(Theme.key_chat_wallpaper), backgroundView.getWidth(), backgroundView.getHeight());
+            } finally {
+                canvas.restoreToCount(save);
+            }
+        }
+
+        @Override
+        public void onPause() {
+            triangleWallpaperRenderer.suspend();
+            super.onPause();
+        }
+
+        @Override
+        public void onResume() {
+            super.onResume();
+            triangleWallpaperRenderer.suspend();
+            if (backgroundView != null) backgroundView.invalidate();
+        }
+
         private final org.telegram.ui.Components.LiquidTouchDispatcher liquidTouchDispatcher = new org.telegram.ui.Components.LiquidTouchDispatcher();
         private LiquidGlassInputGroup headerGlassGroup;
         private boolean headerGlassGroupFailed, headerGlassPrepared;
@@ -51399,14 +51457,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             Canvas wallpaperCanvas = fadeWallpaperSource.beginRecording(fw, fh);
             try {
                 wallpaperCanvas.drawColor(wallpaperColor);
-                if (contentView.backgroundView != null && contentView.backgroundView.getWidth() > 0) {
-                    wallpaperCanvas.save();
-                    wallpaperCanvas.translate(contentView.backgroundView.getX(), contentView.backgroundView.getY());
-                    contentView.backgroundView.draw(wallpaperCanvas);
-                    wallpaperCanvas.restore();
-                } else {
-                    navbarContentSourceWallpaperSharp.draw(wallpaperCanvas, 0, 0, fw, fh);
-                }
+                // Dimming preserves sharp wallpaper, but triangles belong to the
+                // blurred content and must not be replayed sharply on top of it.
+                contentView.drawWallpaperForFade(wallpaperCanvas, false);
             } finally {
                 fadeWallpaperSource.endRecording();
             }
@@ -51418,8 +51471,8 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             fadeWallpaperSource.invalidateDisplayListForDrawables();
             fadeBlurSource.invalidateDisplayListForDrawables();
         }
-        // Only messages pass through the blur effect in dimming mode. Their
-        // background is drawn underneath, outside that effect.
+        // Messages and wallpaper particles pass through the blur effect in
+        // dimming mode. The wallpaper itself remains outside that effect.
         final BlurredBackgroundSource underSource = NekoConfig.blurredFadeDimming
                 ? fadeWallpaperSource : navbarContentSourceWallpaper;
         if (fadeBlurSource.underSource != underSource) {
@@ -51432,7 +51485,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         try {
             if (!NekoConfig.blurredFadeDimming) {
                 c.drawColor(wallpaperColor);
-                navbarContentSourceWallpaper.draw(c, 0, 0, fw, fh);
+                contentView.drawWallpaperForFade(c, true);
+            } else {
+                contentView.drawTrianglesForFade(c);
             }
             contentView.drawList(c, fadeBlurCaptureRect);
         } finally {

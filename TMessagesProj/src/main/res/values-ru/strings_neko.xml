@@ -683,5 +683,43 @@
     <string name="MarkdownParserTelegram">Telegram</string>
     <string name="GifsUnavailableForAnotherAccount">Сейчас отправлять GIF через другой аккаунт нельзя.</string>
     <string name="IosLikeInputField">Поле ввода в стиле iOS</string>
+    <!-- Chat wallpaper triangles -->
+    <string name="TriangleHideSettings">Скрыть настройки</string>
+    <string name="TriangleShowSettings">Показать настройки</string>
+    <string name="TriangleSyncRefresh">Синхронизировать с частотой экрана</string>
+    <string name="TriangleBackground">Треугольники на фоне</string>
+    <string name="EnableTriangles">Включить треугольники</string>
+    <string name="TriangleDescription">Анимированные треугольники поверх обоев чата, под сообщениями. На этом экране они отображаются на его фоне. Настройки действуют во всех чатах.</string>
+    <string name="TriangleGeometry">Внешний вид</string>
+    <string name="TriangleSize">Размер</string>
+    <string name="TriangleDensity">Плотность</string>
+    <string name="TriangleThickness">Толщина контура</string>
+    <string name="TriangleOpacity">Непрозрачность</string>
+    <string name="TriangleSizeVariance">Разброс размеров</string>
+    <string name="TriangleFilled">Заливка треугольников</string>
+    <string name="TriangleRandomRotation">Случайный начальный поворот</string>
+    <string name="TriangleRotation">Поворот</string>
+    <string name="TriangleMovement">Движение</string>
+    <string name="TriangleAnimate">Анимация треугольников</string>
+    <string name="TriangleSpeed">Скорость движения</string>
+    <string name="TriangleSpeedVariance">Разброс скоростей</string>
+    <string name="TriangleDirection">Направление движения</string>
+    <string name="TriangleSpin">Скорость вращения</string>
+    <string name="TriangleFps">Ограничение частоты кадров</string>
+    <string name="TriangleDirectionHint">Направление: 0° — вправо, 90° — вниз, 180° — влево, 270° — вверх. Отключите анимацию для неподвижного узора. Высокая плотность и частота кадров увеличивают расход батареи.</string>
+    <string name="TriangleCustomizeColor">Настроить цвета треугольников</string>
+    <string name="TriangleAutoColor">Автоматический цвет по обоям</string>
+    <string name="TriangleHue">Цветовой тон</string>
+    <string name="TriangleSaturation">Насыщенность</string>
+    <string name="TriangleBrightness">Яркость</string>
+    <string name="TriangleGradient">Цветовой градиент</string>
+    <string name="TriangleGradientHue">Сдвиг оттенка градиента</string>
+    <string name="TriangleGradientAngle">Направление градиента</string>
+    <string name="TriangleFade">Затухание треугольников</string>
+    <string name="TriangleFadeTop">Длина затухания сверху</string>
+    <string name="TriangleFadeBottom">Длина затухания снизу</string>
+    <string name="TriangleFadePower">Сила затухания</string>
+    <string name="TriangleColorHint">По умолчанию цвет вычисляется из обоев каждого чата. Включите настройку цветов для ручного выбора, градиента и затухания. На Android 8 затухание применяется к треугольнику целиком.</string>
+    <string name="TriangleReset">Сбросить настройки треугольников</string>
 </resources>
 

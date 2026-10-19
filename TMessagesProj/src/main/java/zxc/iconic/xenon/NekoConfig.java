@@ -658,6 +658,7 @@ public class NekoConfig {
         });
         editor.apply();
         loadConfig(true);
+        zxc.iconic.xenon.triangles.TriangleSettings.reloadFromConfig();
     }
 
     public static void setCameraInVideoMessages(int camera) {

@@ -156,11 +156,32 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
                 search(editText.getText().toString());
             }
         });
+        searchItem.setPlainButtonCircle(true);
         syncItem = menu.addItem(1, R.drawable.cloud_sync);
+        syncItem.setPlainButtonCircle(true);
         syncItem.setContentDescription(LocaleController.getString(R.string.CloudConfig));
         syncItem.setOnClickListener(v -> CloudSettingsHelper.getInstance().showDialog(this));
+        updateHeaderButtonSpacing();
 
         return fragmentView;
+    }
+
+    private void updateHeaderButtonSpacing() {
+        if (searchItem == null) return;
+        android.view.ViewGroup.MarginLayoutParams params =
+                (android.view.ViewGroup.MarginLayoutParams) searchItem.getLayoutParams();
+        // 48dp buttons with 46dp circles already leave 2dp; add 10dp for the 12dp edge inset.
+        int margin = NekoConfig.fadeViewOtherActivities() ? AndroidUtilities.dp(10) : 0;
+        if (params.rightMargin != margin) {
+            params.rightMargin = margin;
+            searchItem.setLayoutParams(params);
+        }
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        updateHeaderButtonSpacing();
     }
 
     @Override

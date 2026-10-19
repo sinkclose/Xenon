@@ -227,7 +227,30 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
                 }
             }
         });
-        iBlur3Capture = new ViewGroupPartRenderer(listView, contentView, listView::drawChild);
+        iBlur3Capture = new ViewGroupPartRenderer(listView, contentView, listView::drawChild) {
+            @Override
+            public void capture(Canvas canvas, RectF position) {
+                float alpha = BaseNekoSettingsActivity.this.listView.getAlpha();
+                if (BaseNekoSettingsActivity.this.listView.getVisibility() != View.VISIBLE || alpha <= 0) return;
+                if (alpha >= 1) {
+                    super.capture(canvas, position);
+                    return;
+                }
+                int save = canvas.saveLayerAlpha(position, Math.round(alpha * 255));
+                try {
+                    super.capture(canvas, position);
+                } finally {
+                    canvas.restoreToCount(save);
+                }
+            }
+
+            @Override
+            public void captureCalculateHash(IBlur3Hash hash, RectF position) {
+                hash.add(BaseNekoSettingsActivity.this.listView.getVisibility());
+                hash.addF(BaseNekoSettingsActivity.this.listView.getAlpha());
+                super.captureCalculateHash(hash, position);
+            }
+        };
         listView.addEdgeEffectListener(() -> listView.postOnAnimation(this::blur3_InvalidateBlur));
         listView.setSections();
         listView.setPadding(0, needActionBarPadding() ? ActionBar.getCurrentActionBarHeight() : AndroidUtilities.dp(12), 0, 0);
