@@ -6,7 +6,6 @@ import android.graphics.LinearGradient;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
-import android.graphics.PathMeasure;
 import android.graphics.PixelFormat;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
@@ -166,68 +165,13 @@ public class MediaActionDrawable extends Drawable {
                 + (INDETERMINATE_MAX_ARC - INDETERMINATE_MIN_ARC) * arcFraction;
     }
 
-    private final Path wavyProgressPath = new Path();
-    private final PathMeasure wavyProgressPathMeasure = new PathMeasure();
-    private final Path wavySegmentPath = new Path();
-    private RectF wavyLastOval = new RectF();
-    private int wavyLastGeneration;
+    private final WavyProgressPath wavyProgressPath = new WavyProgressPath();
     private float wavePhaseAngle;
     private float wavyAmplitudeSmooth = 1f;
-    private float wavyLastAmplitudeSmooth = 1f;
 
     private void drawWavyArc(Canvas canvas, RectF oval, float startAngle, float sweepAngle, Paint paint) {
-        if (!oval.equals(wavyLastOval) || wavyLastGeneration != 0 || wavyLastAmplitudeSmooth != wavyAmplitudeSmooth) {
-            wavyLastOval.set(oval);
-            wavyProgressPath.rewind();
-
-            float cx = oval.centerX();
-            float cy = oval.centerY();
-            float baseRadius = Math.min(oval.width(), oval.height()) / 2f;
-
-            float amplitude = NekoConfig.wavyProgressEnabled ? baseRadius * 0.05f * wavyAmplitudeSmooth : 0f;
-            int waves = WAVY_WAVE_COUNT;
-            int steps = 180;
-
-            for (int i = 0; i <= steps; i++) {
-                float angle = (i * 360f) / steps;
-                float rad = (float) Math.toRadians(angle);
-                float r = baseRadius + amplitude * (float) Math.sin(waves * rad);
-                float x = cx + r * (float) Math.cos(rad);
-                float y = cy + r * (float) Math.sin(rad);
-
-                if (i == 0) {
-                    wavyProgressPath.moveTo(x, y);
-                } else {
-                    wavyProgressPath.lineTo(x, y);
-                }
-            }
-            wavyProgressPath.close();
-            wavyProgressPathMeasure.setPath(wavyProgressPath, false);
-            wavyLastGeneration = 0;
-            wavyLastAmplitudeSmooth = wavyAmplitudeSmooth;
-        }
-
-        float length = wavyProgressPathMeasure.getLength();
-        float sweepDist = (Math.abs(sweepAngle) / 360f) * length;
-
-        float startDist = (wavePhaseAngle / 360f) * length;
-        startDist = (startDist % length + length) % length;
-        float stopDist = startDist + sweepDist;
-
-        wavySegmentPath.reset();
-
-        if (stopDist <= length) {
-            wavyProgressPathMeasure.getSegment(startDist, stopDist, wavySegmentPath, true);
-        } else {
-            wavyProgressPathMeasure.getSegment(startDist, length, wavySegmentPath, true);
-            wavyProgressPathMeasure.getSegment(0, stopDist - length, wavySegmentPath, false);
-        }
-        wavySegmentPath.rLineTo(0, 0);
-
-        canvas.save();
-        canvas.rotate(startAngle - wavePhaseAngle, oval.centerX(), oval.centerY());
-        canvas.drawPath(wavySegmentPath, paint);
-        canvas.restore();
+        wavyProgressPath.draw(canvas, oval, startAngle, sweepAngle, wavePhaseAngle,
+                NekoConfig.wavyProgressEnabled ? wavyAmplitudeSmooth : 0f, paint);
     }
 
     private final static float EPS = 0.001f;
