@@ -35,6 +35,7 @@ import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.ActionBarMenuItem;
 import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.LauncherIconController;
 import org.telegram.ui.Cells.SettingsSearchCell;
 import org.telegram.ui.Components.BackupImageView;
 import org.telegram.ui.Components.Bulletin;
@@ -58,6 +59,8 @@ import zxc.iconic.xenon.accessibility.AccessibilitySettingsActivity;
 import zxc.iconic.xenon.helpers.ApkInstaller;
 import zxc.iconic.xenon.helpers.CloudSettingsHelper;
 import zxc.iconic.xenon.helpers.PasscodeHelper;
+import zxc.iconic.xenon.triangles.OsuCatLogoView;
+import androidx.recyclerview.widget.RecyclerView;
 
 
 public class NekoSettingsActivity extends BaseNekoSettingsActivity implements FactorAnimator.Target {
@@ -97,6 +100,10 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
     private String lastSearchString;
 
     private FrameLayout topView;
+    private FrameLayout logoContainer;
+    private OsuCatLogoView osuLogo;
+    private int headerLogoType = -1;
+    private boolean headerActive;
 
     @Override
     public View createView(Context context) {
@@ -105,11 +112,9 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
         }
         topView = new FrameLayout(context);
 
-        var logoContainer = new FrameLayout(context);
-        var logoView = new BackupImageView(context);
-
-        logoView.setImageDrawable(AppCompatResources.getDrawable(context, R.mipmap.ic_launcher));
-        logoContainer.addView(logoView, LayoutHelper.createFrame(90, 90, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 15, 0, 0));
+        logoContainer = new FrameLayout(context);
+        headerLogoType = -1;
+        updateHeaderLogo();
         topView.addView(logoContainer, LayoutHelper.createFrame(120, 120, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 23 - 12, 0, 0));
 
         var titleView = new TextView(context);
@@ -132,6 +137,11 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
         topView.addView(subtitleView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 168 - 12, 0, 0));
 
         var fragmentView = super.createView(context);
+        listView.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
+                if (osuLogo != null) osuLogo.updateAnimationVisibility();
+            }
+        });
 
         var menu = actionBar.createMenu();
         createSearchItem(menu, new ActionBarMenuItem.ActionBarMenuItemSearchListener() {
@@ -181,7 +191,49 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
     @Override
     public void onResume() {
         super.onResume();
+        headerActive = true;
+        updateHeaderLogo();
+        if (osuLogo != null) osuLogo.setScreenActive(true);
         updateHeaderButtonSpacing();
+    }
+
+    private void updateHeaderLogo() {
+        if (logoContainer == null) return;
+        int type = LauncherIconController.isEnabled(LauncherIconController.LauncherIcon.OSU) ? 1
+                : LauncherIconController.isEnabled(LauncherIconController.LauncherIcon.OSU_OLD) ? 2 : 0;
+        if (type == headerLogoType) return;
+        if (osuLogo != null) osuLogo.setScreenActive(false);
+        logoContainer.removeAllViews();
+        osuLogo = null;
+        View logo;
+        if (type != 0) {
+            osuLogo = new OsuCatLogoView(logoContainer.getContext(), type == 2);
+            osuLogo.setScreenActive(headerActive);
+            logo = osuLogo;
+        } else {
+            BackupImageView image = new BackupImageView(logoContainer.getContext());
+            image.setImageDrawable(AppCompatResources.getDrawable(logoContainer.getContext(), R.mipmap.ic_launcher));
+            logo = image;
+        }
+        logoContainer.addView(logo, LayoutHelper.createFrame(90, 90, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 15, 0, 0));
+        headerLogoType = type;
+    }
+
+    @Override public void onPause() {
+        headerActive = false;
+        if (osuLogo != null) osuLogo.setScreenActive(false);
+        super.onPause();
+    }
+
+    @Override public void onBecomeFullyVisible() {
+        super.onBecomeFullyVisible();
+        if (osuLogo != null) osuLogo.updateAnimationVisibility();
+    }
+
+    @Override public void onFragmentDestroy() {
+        headerActive = false;
+        if (osuLogo != null) osuLogo.setScreenActive(false);
+        super.onFragmentDestroy();
     }
 
     @Override
