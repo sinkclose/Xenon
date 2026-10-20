@@ -8,6 +8,7 @@ import unittest
 
 from test_glass_blur import ROOT
 from test_glass_chat_refresh import run_java
+from test_glass_prism_math import RAW
 
 
 def java_class(name):
@@ -28,6 +29,16 @@ def java_class(name):
 
 class PrismGlassTest(unittest.TestCase):
     def test_uniform_caching_isolation_settings_and_switching(self):
+        contracts = []
+        for kind, filename in (
+            ("standard", "liquid_glass_shader.agsl"), ("advanced", "liquid_glass_shader_advanced.agsl"),
+            ("prism_standard", "prism_glass_shader.agsl"), ("prism_advanced", "prism_glass_shader_advanced.agsl"),
+            ("highlight", "liquid_glass_highlight.agsl"),
+        ):
+            uniforms = re.findall(r"uniform (?:float|half)([234]?) (\w+);", (RAW / filename).read_text())
+            values = ",".join(f'"{name}",{size or 1}' for size, name in uniforms)
+            contracts.append(f'"{kind}",Map.of({values})')
+        contract = "Map.of(" + ",".join(contracts) + ")"
         harness = r'''
 import java.util.*;
 public class PrismHarness {
@@ -66,15 +77,17 @@ public class PrismHarness {
     }
     static class FileLog { static int failures; static void e(Throwable error) { failures++; } }
     static class RuntimeShader {
+        static final Map<String,Map<String,Integer>> contracts = CONTRACT;
         Map<String, float[]> values = new HashMap<>();
         final String kind;
         int writes;
         RuntimeShader(String kind) { this.kind = kind; }
         void setFloatUniform(String name, float... values) {
+            check(contracts.get(kind).getOrDefault(name, 0)==values.length,"Uniform contract: " + kind + "." + name);
             for (float v : values) check(Float.isFinite(v), "Nonfinite " + name);
             this.values.put(name, values.clone()); writes++;
         }
-        void setColorUniform(String name, int c) {}
+        void setColorUniform(String name, int c) { check(contracts.get(kind).getOrDefault(name,0)==4,"Color uniform contract"); }
     }
     static class GlassShaderCache {
         static int creations; static boolean available = true;
@@ -175,8 +188,10 @@ public class PrismHarness {
         check(otherNode.effect.shader != shader, "Surfaces share mutable uniforms");
         near(120, shader.values.get("center")[0]);
         near(50, otherNode.effect.snapshot.get("center")[0]);
-        near(200, otherNode.effect.snapshot.get("radius")[0]);
-        near(-2, otherNode.effect.snapshot.get("radius")[1]);
+        near(20, otherNode.effect.snapshot.get("radius")[0]);
+        near(0, otherNode.effect.snapshot.get("radius")[1]);
+        near(10, other.highlightShader.values.get("origin")[0]);
+        near(20, other.highlightShader.values.get("origin")[1]);
 
         NekoConfig.useAdvancedLiquidGlass = false;
         check(!effect.isConfigurationCurrent(), "Optical mode change not detected");
@@ -207,7 +222,7 @@ public class PrismHarness {
         check(frostedCanvas.strokes == 1, "Frosted glare must remain unchanged");
     }
 }
-'''.replace("EFFECT_CLASS", java_class("LiquidGlassEffect"))
+'''.replace("EFFECT_CLASS", java_class("LiquidGlassEffect")).replace("CONTRACT", contract)
         run_java(self, "PrismHarness", harness)
 
 

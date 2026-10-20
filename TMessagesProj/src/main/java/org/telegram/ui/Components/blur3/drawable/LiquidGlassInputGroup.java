@@ -89,6 +89,7 @@ public final class LiquidGlassInputGroup {
         int x = (int) Math.floor(left) - margin, y = (int) Math.floor(top) - margin;
         int width = (int) Math.ceil(right) - x + margin, height = (int) Math.ceil(bottom) - y + margin;
         if (width <= 0 || height <= 0) return;
+        shader.setFloatUniform("resolution", (float) width, (float) height);
         boolean touchActive = false;
         for (int i = 0; i < members.length; i++) {
             if (members[i] == null || bounds[i].isEmpty()) continue;

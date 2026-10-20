@@ -220,7 +220,7 @@ public class PreviewSelectionHarness {
         preview.textSelectionHelper.selected=true;
         preview.textSelectionHelper.moving=true; // Native long-press runnable selected the word.
         preview.onTextSelectionChanged(true);
-        check(preview.menu.visibility==View.INVISIBLE, "message menu must yield to text actions");
+        check(preview.menu.visibility==View.VISIBLE, "message menu must stay visible while selecting text");
         check(preview.scroll.cancels==1 && preview.scroll.disallow, "selection must take over the active scroll gesture");
         nativeEvents=preview.nativeEvents;
         preview.dispatchTouchEvent(new MotionEvent(MotionEvent.ACTION_MOVE,180,50));

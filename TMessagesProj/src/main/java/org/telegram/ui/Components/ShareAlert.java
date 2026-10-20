@@ -3869,7 +3869,7 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
         }
 
         iBlur3PositionMainTabs.set(0, 0, containerView.getMeasuredWidth(), containerView.getMeasuredHeight());
-        iBlur3PositionMainTabs.inset(0, LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0 : -dp(48));
+        iBlur3PositionMainTabs.inset(0, -dp(48));
 
         scrollableViewNoiseSuppressor.setupRenderNodes(iBlur3Positions, 1);
         scrollableViewNoiseSuppressor.invalidateResultRenderNodes(iBlur3Capture, containerView.getMeasuredWidth(), containerView.getMeasuredHeight());

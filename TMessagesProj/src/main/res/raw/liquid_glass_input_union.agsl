@@ -1,4 +1,5 @@
 uniform shader img;
+uniform float2 resolution;
 // Specialized at construction for the fixed slots in each host's group.
 const int SHAPE_COUNT = 8;
 uniform float4 shapes[8];
@@ -22,6 +23,10 @@ uniform float shadowRadius;
 uniform float4 glows[8];
 uniform float links[64];
 uniform float touchActive;
+
+half4 sampleBackdrop(float2 coord) {
+    return img.eval(clamp(coord, float2(0.5), resolution - float2(0.5)));
+}
 
 float touchLight(float2 p, float4 glow) {
     if (glow.w <= 0.0) return 0.0;
@@ -340,17 +345,17 @@ half4 main(float2 p) {
         displacement = ray.xy * ((height + 8.0 * thickness) / max(-ray.z, 0.001)) * intensity;
     }
     float2 uv = p + displacement;
-    half4 color = img.eval(uv);
+    half4 color = sampleBackdrop(uv);
     if (advanced > 0.5 && dispersion > 0.0) {
         float spread = dispersionSpread(p, s);
         float2 delta = displacement * dispersion * clamp(spread, -1.0, 1.0);
-        half4 red = img.eval(uv + delta);
-        half4 orange = img.eval(uv + delta * (2.0 / 3.0));
-        half4 yellow = img.eval(uv + delta * (1.0 / 3.0));
+        half4 red = sampleBackdrop(uv + delta);
+        half4 orange = sampleBackdrop(uv + delta * (2.0 / 3.0));
+        half4 yellow = sampleBackdrop(uv + delta * (1.0 / 3.0));
         half4 green = color;
-        half4 cyan = img.eval(uv - delta * (1.0 / 3.0));
-        half4 blue = img.eval(uv - delta * (2.0 / 3.0));
-        half4 purple = img.eval(uv - delta);
+        half4 cyan = sampleBackdrop(uv - delta * (1.0 / 3.0));
+        half4 blue = sampleBackdrop(uv - delta * (2.0 / 3.0));
+        half4 purple = sampleBackdrop(uv - delta);
         color = half4((red.r + orange.r + yellow.r) / 3.5 + purple.r / 7.0,
                       orange.g / 7.0 + (yellow.g + green.g + cyan.g) / 3.5,
                       (cyan.b + blue.b + purple.b) / 3.0,

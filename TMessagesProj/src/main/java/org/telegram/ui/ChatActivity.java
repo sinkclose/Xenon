@@ -33107,6 +33107,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     private MessagePopupPreviewLayout.Source createMessagePopupPreviewSource(MessageObject message) {
         return new MessagePopupPreviewLayout.Source() {
             private final ArrayList<ChatMessageCell> cells = new ArrayList<>();
+            private final SparseArray<ChatMessageCell> cellsByMessageId = new SparseArray<>();
             private final int[] position = new int[2];
             private final long groupId = message.getGroupId();
             private final HashMap<ChatMessageCell, Float> avatarOffsets = new HashMap<>();
@@ -33146,10 +33147,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 }
             }
 
-            @Override
-            public boolean getBounds(RectF bounds) {
+            private void collectCells() {
                 cells.clear();
-                bounds.setEmpty();
+                cellsByMessageId.clear();
                 for (int i = 0; i < chatListView.getChildCount(); i++) {
                     View view = chatListView.getChildAt(i);
                     if (!(view instanceof ChatMessageCell)) continue;
@@ -33157,7 +33157,29 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     MessageObject object = cell.getMessageObject();
                     if (object == null || object.getDialogId() != message.getDialogId()
                             || (groupId != 0 ? object.getGroupId() != groupId : object.getId() != message.getId())) continue;
-                    cells.add(cell);
+                    // Change animations can keep both old and new holders attached.
+                    // View.draw() below bypasses their RecyclerView alpha: drawing both
+                    // produces two fully visible copies of the same message.
+                    int adapterPosition = chatListView.getChildAdapterPosition(cell);
+                    RecyclerView.ViewHolder holder = adapterPosition == RecyclerView.NO_POSITION ? null
+                            : chatListView.findViewHolderForAdapterPosition(adapterPosition);
+                    if (holder != null && holder.itemView != cell) continue;
+                    ChatMessageCell previous = cellsByMessageId.get(object.getId());
+                    if (previous == null) {
+                        cells.add(cell);
+                        cellsByMessageId.put(object.getId(), cell);
+                    } else if (adapterPosition != RecyclerView.NO_POSITION) {
+                        cells.set(cells.indexOf(previous), cell);
+                        cellsByMessageId.put(object.getId(), cell);
+                    }
+                }
+            }
+
+            @Override
+            public boolean getBounds(RectF bounds) {
+                collectCells();
+                bounds.setEmpty();
+                for (ChatMessageCell cell : cells) {
                     cell.getLocationOnScreen(position);
                     float left = position[0] - cell.getPivotX() * (1f - cell.getScaleX());
                     float top = position[1] - cell.getPivotY() * (1f - cell.getScaleY());
@@ -33266,7 +33288,10 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     if (groupedPosition != null || cell.getTransitionParams().animateBackgroundBoundsInner) {
                         if (groupedPosition == null || groupedPosition.last) cell.drawTime(canvas, 1f, true);
                         if (groupedPosition == null || groupedPosition.minX == 0 && groupedPosition.minY == 0) cell.drawNamesLayout(canvas, 1f);
-                        if (groupedPosition == null || (groupedPosition.flags & cell.captionFlag()) != 0) cell.drawCaptionLayout(canvas, false, 1f);
+                        if (!cell.shouldDrawCaptionLayout() && (groupedPosition == null || (groupedPosition.flags & cell.captionFlag()) != 0)) {
+                            boolean selectionOnly = groupedPosition != null && (groupedPosition.flags & MessageObject.POSITION_FLAG_LEFT) == 0;
+                            cell.drawCaptionLayout(canvas, selectionOnly, 1f);
+                        }
                         if (groupedPosition == null || (groupedPosition.flags & MessageObject.POSITION_FLAG_BOTTOM) != 0 && (groupedPosition.flags & MessageObject.POSITION_FLAG_LEFT) != 0) cell.drawReactionsLayout(canvas, 1f, null);
                     }
                     if (cell.hasOutboundsContent()) cell.drawOutboundsContent(canvas);

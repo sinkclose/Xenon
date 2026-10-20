@@ -14728,14 +14728,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         boolean hasBottomBlur = false;
         if (hasMainTabs) {
             iBlur3PositionMainTabs.set(0, mainTabTop, fragmentView.getMeasuredWidth(), mainTabBottom);
-            iBlur3PositionMainTabs.inset(0, LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0 : -dp(48));
 
             hasBottomBlur = true;
         } else if (commentView != null && chatInputViewsContainer != null || filterTabsView != null && filterTabsView.getVisibility() == View.VISIBLE && bottomFilterTabs()) {
             iBlur3PositionMainTabs.set(0,
                 fragmentView.getMeasuredHeight() - calculateListViewPaddingBottom(),
                 fragmentView.getMeasuredWidth(), fragmentView.getMeasuredHeight());
-            iBlur3PositionMainTabs.inset(0, LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0 : -dp(48));
 
             hasBottomBlur = true;
         }
@@ -14744,6 +14742,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             int bottom = fragmentView.getMeasuredHeight() - Math.max(navigationBarHeight, iosBottomSearchInset);
             iBlur3PositionMainTabs.set(0, bottom - dp(72 + SEARCH_TABS_HEIGHT + 12), fragmentView.getMeasuredWidth(), bottom);
             hasBottomBlur = true;
+        }
+
+        if (hasBottomBlur) {
+            // Both frosted and refracted glass need uncropped pixels for the backing blur.
+            iBlur3PositionMainTabs.inset(0, -dp(48));
         }
 
         scrollableViewNoiseSuppressor.setupRenderNodes(iBlur3Positions, hasBottomBlur ? 2 : 1);

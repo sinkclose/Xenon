@@ -853,7 +853,7 @@ public class StarGiftPreviewSheet extends BottomSheetWithRecyclerListView {
                 return;
             }
 
-            final int inset = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0 : dp(48);
+            final int inset = dp(48);
             tabsRectF.inset(-inset, -inset);
 
             scrollableViewNoiseSuppressor.setupRenderNodes(blurredPositions, 1);
