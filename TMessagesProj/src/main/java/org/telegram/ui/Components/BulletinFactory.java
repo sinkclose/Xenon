@@ -79,8 +79,11 @@ public final class BulletinFactory {
 
     public static BulletinFactory global() {
         BaseFragment baseFragment = LaunchActivity.getSafeLastFragment();
-        if (baseFragment == null) {
-            return BulletinFactory.of(Bulletin.BulletinWindow.make(ApplicationLoader.applicationContext), null);
+        if (!canShowBulletin(baseFragment)
+                || !AndroidUtilities.isActivityRunning(baseFragment.getParentActivity())) {
+            // No UI host: create() will return an EmptyBulletin. An application
+            // context cannot provide the window token required by a dialog.
+            return new BulletinFactory((BaseFragment) null);
         }
         if (baseFragment.visibleDialog instanceof BottomSheet) {
             return BulletinFactory.of(((BottomSheet) baseFragment.visibleDialog).container, baseFragment.getResourceProvider());
