@@ -22,6 +22,7 @@ COMMON = r'''
     static class Rect {
         int left, top, right, bottom;
         Rect() {} Rect(int l, int t, int r, int b) { left=l; top=t; right=r; bottom=b; }
+        void set(int l, int t, int r, int b) { left=l; top=t; right=r; bottom=b; }
         int width() { return right-left; } int height() { return bottom-top; }
         boolean isEmpty() { return width() <= 0 || height() <= 0; }
     }
@@ -44,11 +45,12 @@ COMMON = r'''
         void drawColor(int color) {} void drawRenderNode(RenderNode n) {}
         boolean isHardwareAccelerated() { return true; }
     }
-    static class Paint { void setShadowLayer(float r,float x,float y,int c) {} }
+    static class Paint { void setShadowLayer(float r,float x,float y,int c) {} void setStrokeWidth(float w) {} }
+    static class Outline { void setAlpha(float value) {} }
     static class Props {
         Rect boundsWithPadding = new Rect(7,13,247,63);
         float[] radii = new float[8], shaderRadii = new float[8];
-        int liquidThickness; float liquidIntensity, liquidIndex, strokeWidthTop, strokeWidthBottom;
+        int liquidThickness; float liquidIntensity=DEFAULT_INTENSITY, liquidIndex, strokeWidthTop, strokeWidthBottom;
         void drawShadows(Canvas c, Paint p, boolean b) {}
     }
     static class BlurredBackgroundDrawable {
@@ -58,6 +60,8 @@ COMMON = r'''
         float sourceScaleX=1, sourceScaleY=1, sourceTranslationX, sourceTranslationY;
         Props boundProps = new Props(); int notifications;
         void onSourceOffsetChange(float x, float y) { notifications++; }
+        void onBoundPropsChanged() {}
+        void getOutline(Outline outline, Rect rect, float[] radii) {}
         void setBounds(Rect r) { boundProps.boundsWithPadding = r; }
         void draw(Canvas c) {}
         BASE_METHODS
@@ -70,6 +74,9 @@ COMMON = r'''
     }
     static class RenderNode {
         int recordings; float alpha=1;
+        Rect position = new Rect();
+        void setPosition(int l, int t, int r, int b) { position.set(l,t,r,b); }
+        void setOutline(Outline outline) {}
         Canvas beginRecording() { recordings++; return new Canvas(); }
         void endRecording() {} boolean hasDisplayList() { return recordings>0; }
         void setAlpha(float a) { alpha=a; } float getAlpha() { return alpha; }
@@ -78,7 +85,9 @@ COMMON = r'''
 
 
 def common():
-    return COMMON.replace("BASE_METHODS", methods(
+    source = (ROOT / "org/telegram/ui/Components/blur3/drawable/BlurredBackgroundDrawable.java").read_text()
+    default_intensity = re.search(r"public float liquidIntensity = ([^;]+);", source)[1]
+    return COMMON.replace("DEFAULT_INTENSITY", default_intensity).replace("BASE_METHODS", methods(
         "org/telegram/ui/Components/blur3/drawable/BlurredBackgroundDrawable.java", (
             "public boolean setSourceTransform(", "protected void transformSourceCanvas(",
             "public void getPositionRelativeSource("))).replace("EFFECT_METHODS", methods(
@@ -98,7 +107,8 @@ class GlassDeformationTest(unittest.TestCase):
         renderer_methods = "\n".join(method(source, signature) for signature in (
             "protected void onSourceOffsetChange(", "public void updateDisplayList()", "public void draw(",
             "public void setAlpha(", "public void invalidateDisplayList()", "private void updatePrismDisplayList(",
-            "private void ensureLiquidGlassEffect()"))
+            "private void ensureLiquidGlassEffect()", "public void setLiquidGlassSamplePadding(",
+            "protected void onBoundPropsChanged()"))
         renderer_methods = renderer_methods.replace("@NonNull ", "").replace("@Override", "")
         renderer_methods = renderer_methods.replace("org.telegram.messenger.LiteMode", "LiteMode").replace("zxc.iconic.xenon.NekoConfig", "NekoConfig").replace("new LiquidGlassEffect(", "new Effect(")
         pipeline = (ROOT / "org/telegram/ui/Components/blur3/drawable/PrismGlassPipeline.java").read_text()
@@ -124,7 +134,12 @@ public class GlassDeformationHarness {
         Effect() {} Effect(RenderNode node, boolean fixed, Runnable onReady) {}
         boolean ensureShaders() { return false; } boolean hasRefractionShader() { return true; }
         int updates; Object[] lastUpdate;
-        void update(Object... args) { updates++; lastUpdate = args; } void drawHighlight(Canvas c,float a) {}
+        float highlightLeft, highlightTop;
+        void update(Object... args) { updates++; lastUpdate = args; }
+        void drawHighlight(Canvas c,float a) {
+            highlightLeft = c.tx + c.sx * ((Number) lastUpdate[0]).floatValue();
+            highlightTop = c.ty + c.sy * ((Number) lastUpdate[1]).floatValue();
+        }
         boolean current = true, configuredPrism = NekoConfig.usePrismGlass;
         boolean isConfigurationCurrent() { return current && configuredPrism == NekoConfig.usePrismGlass; }
     }
@@ -141,6 +156,8 @@ public class GlassDeformationHarness {
         boolean renderNodeInvalidated, fixedRefraction, liquidGlassEnabled, inAppKeyboardOptimization;
         boolean liquidGlassEffectAllowed = true; Runnable onShadersReady;
         boolean prismPipelineActive, retainSurfaceDisplayList; PrismGlassPipeline prismPipeline;
+        int liquidGlassSamplePadding;
+        Outline outline = new Outline(); Rect outlineRect = new Rect();
         Effect liquidGlassEffect=new Effect(); int backgroundColor, strokeColorTop, strokeColorBottom, shadowColor;
         float shadowAlpha=1, shadowLayerRadius, shadowLayerDx, shadowLayerDy;
         Paint paintShadow=new Paint(), paintStrokeTop=new Paint(), paintStrokeBottom=new Paint();
@@ -211,6 +228,22 @@ public class GlassDeformationHarness {
                 check(g.source.recordings==idleRecordings,"unchanged alpha rebuilt idle glass");
             }
         }
+        }
+        NekoConfig.usePrismGlass = false;
+        for (boolean prism : new boolean[]{false,true}) {
+            NekoConfig.usePrismGlass=prism;
+            Glass surface=new Glass();
+            for(float intensity:new float[]{0,.25f,1.5f}) {
+                NekoConfig.liquidGlassIntensity=intensity;
+                surface.invalidateDisplayList(); surface.draw(new Canvas());
+                near(((Number)surface.liquidGlassEffect.lastUpdate[9]).floatValue(),intensity);
+            }
+            surface.boundProps.liquidIntensity=0;
+            surface.invalidateDisplayList(); surface.draw(new Canvas());
+            near(((Number)surface.liquidGlassEffect.lastUpdate[9]).floatValue(),0);
+            surface.boundProps.liquidIntensity=.4f;
+            surface.invalidateDisplayList(); surface.draw(new Canvas());
+            near(((Number)surface.liquidGlassEffect.lastUpdate[9]).floatValue(),.4f);
         }
         NekoConfig.usePrismGlass = false;
         Glass alphaGlass = new Glass(); Canvas alphaCanvas = new Canvas();
@@ -310,6 +343,45 @@ public class GlassDeformationHarness {
         explicit.updateDisplayList();
         check(explicit.liquidGlassEffect != beforeExplicit && explicit.liquidGlassEffect.configuredPrism,
                 "Explicit GlassEngine refresh did not switch GPU program");
+        // Preview lenses retain the same shape while sampling an expanded backdrop.
+        for (boolean prism : new boolean[]{false, true}) {
+            NekoConfig.usePrismGlass = prism;
+            Glass preview = new Glass();
+            preview.sourceOffsetX = preview.sourceOffsetY = 256;
+            preview.boundProps.boundsWithPadding = new Rect(21, 42, 339, 98);
+            preview.setLiquidGlassSamplePadding(256);
+            near(preview.renderNodeFill.position.left, -256);
+            near(preview.renderNodeFill.position.top, -256);
+            near(preview.renderNodeFill.position.width(), 318 + 512);
+            near(preview.renderNodeFill.position.height(), 56 + 512);
+            near(preview.renderNode.position.width(), 318);
+            near(preview.renderNode.position.height(), 56);
+            preview.draw(new Canvas());
+            near(preview.source.l, 21); near(preview.source.t, 42);
+            near(preview.source.r, 339 + 512); near(preview.source.b, 98 + 512);
+            near(preview.source.tx, -21); near(preview.source.ty, -42);
+            Object[] optics = preview.liquidGlassEffect.lastUpdate;
+            near(((Number) optics[0]).floatValue(), 256);
+            near(((Number) optics[1]).floatValue(), 256);
+            near(((Number) optics[2]).floatValue(), 256 + 318);
+            near(((Number) optics[3]).floatValue(), 256 + 56);
+            near(preview.liquidGlassEffect.highlightLeft, 21);
+            near(preview.liquidGlassEffect.highlightTop, 42);
+            // The surface's center still samples the original wallpaper center.
+            near((256 + 159 - preview.source.tx) / preview.source.sx, 256 + 180);
+            near((256 + 28 - preview.source.ty) / preview.source.sy, 256 + 70);
+            int recordings = preview.source.recordings;
+            preview.draw(new Canvas());
+            check(preview.source.recordings == recordings, "Preview re-recorded idle backdrop");
+            preview.setLiquidGlassSamplePadding(256);
+            preview.draw(new Canvas());
+            check(preview.source.recordings == recordings, "Same padding invalidated backdrop");
+            NekoConfig.usePrismGlass = !prism;
+            preview.draw(new Canvas());
+            near(preview.source.l, 21); near(preview.source.r, 339 + 512);
+            near(preview.liquidGlassEffect.highlightLeft, 21);
+            near(preview.liquidGlassEffect.highlightTop, 42);
+        }
         NekoConfig.usePrismGlass = false;
         // The software Canvas path must cancel the deformation in source coordinates too.
         BlurredBackgroundDrawable d=new BlurredBackgroundDrawable(); d.setSourceTransform(1.2f,1.1f,17,-9);

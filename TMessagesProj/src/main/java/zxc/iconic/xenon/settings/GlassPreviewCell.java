@@ -46,6 +46,9 @@ public class GlassPreviewCell extends View implements NotificationCenter.Notific
     // Keep wallpaper rendering on the hardware canvas: some wallpaper shaders
     // cannot be captured reliably into a software bitmap.
     private final RenderNode wallpaperNode = new RenderNode("GlassPreviewWallpaper");
+    // Covers the maximum standard displacement (9 * 20 dp * 1.5 / sqrt(1.5² - 1))
+    // and advanced displacement with full dispersion (32 dp * 2 * 2).
+    private final int samplePadding = dp(256);
     @Nullable private final BlurredBackgroundSourceRenderNode renderNodeSource;
     @Nullable private BlurredBackgroundDrawable glassDrawable;
 
@@ -73,8 +76,11 @@ public class GlassPreviewCell extends View implements NotificationCenter.Notific
         if (glassDrawable != null) glassDrawable.setCallback(null);
         glassDrawable = renderNodeSource.createDrawable();
         glassDrawable.setCallback(this);
+        glassDrawable.setSourceOffset(samplePadding, samplePadding);
         if (glassDrawable instanceof BlurredBackgroundDrawableRenderNode) {
-            ((BlurredBackgroundDrawableRenderNode) glassDrawable).setLiquidGlassEffectAllowed();
+            BlurredBackgroundDrawableRenderNode drawable = (BlurredBackgroundDrawableRenderNode) glassDrawable;
+            drawable.setLiquidGlassSamplePadding(samplePadding);
+            drawable.setLiquidGlassEffectAllowed();
         }
         glassDrawable.setColorProvider(BlurredBackgroundProviderImpl.chatTitlePill(resourcesProvider));
         glassDrawable.setBounds(
@@ -163,9 +169,10 @@ public class GlassPreviewCell extends View implements NotificationCenter.Notific
         wallpaperDirty = false;
 
         // Use exactly the same recording for the visible wallpaper and the glass.
-        final Canvas c = renderNodeSource.beginRecording(getMeasuredWidth(), getMeasuredHeight());
+        final int width = getMeasuredWidth(), height = getMeasuredHeight();
+        final Canvas c = renderNodeSource.beginRecording(width + 2 * samplePadding, height + 2 * samplePadding);
         try {
-            c.drawRenderNode(wallpaperNode);
+            drawPaddedWallpaper(c, width, height);
         } finally {
             renderNodeSource.endRecording();
         }
@@ -175,6 +182,32 @@ public class GlassPreviewCell extends View implements NotificationCenter.Notific
             ((BlurredBackgroundDrawableRenderNode) glassDrawable).invalidateDisplayList();
         }
         invalidate();
+    }
+
+    /** Extend edge pixels on the hardware canvas without changing the visible wallpaper crop. */
+    private void drawPaddedWallpaper(Canvas canvas, int width, int height) {
+        for (int y = -1; y <= 1; y++) {
+            final int srcTop = y < 0 ? 0 : y > 0 ? height - 1 : 0;
+            final int srcHeight = y == 0 ? height : 1;
+            final int dstTop = y < 0 ? 0 : y > 0 ? samplePadding + height : samplePadding;
+            final int dstHeight = y == 0 ? height : samplePadding;
+            for (int x = -1; x <= 1; x++) {
+                final int srcLeft = x < 0 ? 0 : x > 0 ? width - 1 : 0;
+                final int srcWidth = x == 0 ? width : 1;
+                final int dstLeft = x < 0 ? 0 : x > 0 ? samplePadding + width : samplePadding;
+                final int dstWidth = x == 0 ? width : samplePadding;
+                final int save = canvas.save();
+                try {
+                    canvas.clipRect(dstLeft, dstTop, dstLeft + dstWidth, dstTop + dstHeight);
+                    canvas.translate(dstLeft, dstTop);
+                    canvas.scale((float) dstWidth / srcWidth, (float) dstHeight / srcHeight);
+                    canvas.translate(-srcLeft, -srcTop);
+                    canvas.drawRenderNode(wallpaperNode);
+                } finally {
+                    canvas.restoreToCount(save);
+                }
+            }
+        }
     }
 
     // ---------------------------------------------------------------------------
@@ -218,7 +251,9 @@ public class GlassPreviewCell extends View implements NotificationCenter.Notific
         final float len = (float) Math.hypot(getMeasuredWidth(), getMeasuredHeight());
         final int save = canvas.save();
         try {
-            canvas.clipRect(bubbleRect);
+            // A continuous backdrop avoids a hard seam when refraction samples
+            // beyond the glass shape at high intensity or dispersion.
+            canvas.clipRect(0, 0, getMeasuredWidth(), getMeasuredHeight());
             for (int i = 0; i < colors.length; i++) {
                 paint.setColor(colors[i]);
                 final int stripeSave = canvas.save();

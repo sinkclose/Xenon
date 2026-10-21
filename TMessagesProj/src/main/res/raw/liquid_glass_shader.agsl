@@ -25,7 +25,7 @@ half4 srcOver(half4 src, half4 dst) {
 half4 main(in float2 fragCoord) {
   half2 p = fragCoord - center;
   half sd = sdfRect(p, radius);
-  half2 uv = fragCoord;
+  float2 uv = fragCoord;
   if (sd < 0.0) {
     half sdX = sdfRect(p + half2(1.0, 0.0), radius);
     half sdY = sdfRect(p + half2(0.0, 1.0), radius);
@@ -42,5 +42,8 @@ half4 main(in float2 fragCoord) {
     uv += refract_vec.xy * refract_length * refract_intensity;
   }
 
+  // RuntimeShader inputs use transparent pixels outside the captured layer.
+  // Keep refraction inside that layer instead of cutting holes in the glass.
+  uv = clamp(uv, float2(0.5), resolution - float2(0.5));
   return srcOver(half4(foreground_color_premultiplied), img.eval(uv));
 }

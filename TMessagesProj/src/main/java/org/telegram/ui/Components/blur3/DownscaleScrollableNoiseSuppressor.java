@@ -195,11 +195,20 @@ public class DownscaleScrollableNoiseSuppressor {
 
         long lastHash;
 
+        private boolean hasDisplayList() {
+            if (!renderNodeOriginalWithOffset.hasDisplayList()) return false;
+            for (int a = 0; a < renderNodeDownsampled.length; a++) {
+                if (!renderNodeDownsampled[a].hasDisplayList() || !renderNodeRestored[a].hasDisplayList()) return false;
+            }
+            return true;
+        }
+
         public void invalidateRenderNodes(RenderNode renderNode) {
             final int originalWidth = renderNode.getWidth();
             final int originalHeight = renderNode.getHeight();
-            final int downsampledWidth = Math.round((float) originalWidth * k / scaleX);
-            final int downsampledHeight = Math.round((float) originalHeight * k / scaleY);
+            if (originalWidth <= 0 || originalHeight <= 0) return;
+            final int downsampledWidth = Math.max(1, Math.round((float) originalWidth * k / scaleX));
+            final int downsampledHeight = Math.max(1, Math.round((float) originalHeight * k / scaleY));
 
             final float scaleX = (float) downsampledWidth / originalWidth;
             final float scaleY = (float) downsampledHeight / originalHeight;
@@ -216,17 +225,7 @@ public class DownscaleScrollableNoiseSuppressor {
             hash = MediaDataController.calcHash(hash, originalWidth);
             hash = MediaDataController.calcHash(hash, originalHeight);
 
-            boolean ignoreHashCheck = !renderNodeOriginalWithOffset.hasDisplayList()
-                || !renderNodeDownsampled[0].hasDisplayList();
-
-            for (int a = 0; a < renderNodeDownsampled.length; a++) {
-                ignoreHashCheck |= !renderNodeDownsampled[a].hasDisplayList();
-                if (!simpleMode) {
-                    ignoreHashCheck |= !renderNodeRestored[a].hasDisplayList();
-                }
-            }
-
-            if (lastHash == hash && !ignoreHashCheck) {
+            if (lastHash == hash && hasDisplayList()) {
                 return;
             }
             lastHash = hash;
@@ -440,7 +439,7 @@ public class DownscaleScrollableNoiseSuppressor {
             final long hash = builder.get();
 
             if (!builder.isUnsupported() && sourcePart.lastHash == hash && sourcePart.renderNode.hasDisplayList()) {
-                if (prism && sourcePart.materialChanged()) {
+                if (sourcePart.materialChanged() || !sourcePart.hasFilterDisplayLists()) {
                     sourcePart.invalidate();
                     updatedCount++;
                 }
@@ -460,13 +459,10 @@ public class DownscaleScrollableNoiseSuppressor {
             updatedCount++;
         }
 
-        if (updatedCount > 0) {
-            invalidateResultRenderNodes(width, height);
-            // The composition can stay cached while its child nodes get new
-            // content. Callers still need to redraw glass views after a capture.
-            return true;
-        }
-        return false;
+        // The composition can lose its display list, resize or lose regions
+        // while all surviving source pixels remain cached. Check both layers.
+        final boolean compositionChanged = invalidateResultRenderNodes(width, height);
+        return compositionChanged || updatedCount > 0;
     }
 
     private class SourcePart {
@@ -483,6 +479,11 @@ public class DownscaleScrollableNoiseSuppressor {
         private boolean materialChanged() {
             return materialBlurStrength != zxc.iconic.xenon.NekoConfig.blurStrength
                     || materialAdvanced != zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass;
+        }
+
+        private boolean hasFilterDisplayLists() {
+            return renderNodesForBlur.hasDisplayList()
+                    && (renderNodesForGlass == null || renderNodesForGlass.hasDisplayList());
         }
 
         private SourcePart() {
@@ -556,11 +557,11 @@ public class DownscaleScrollableNoiseSuppressor {
     }
 
     private static int roundDown(float value, int N) {
-        return Math.round(value - value % N);
+        return (int) Math.floor(value / N) * N;
     }
 
     public static int roundUp(float value, int N) {
-        return Math.round(value + (N - value % N));
+        return (int) Math.ceil(value / N) * N;
     }
 
 
@@ -572,26 +573,20 @@ public class DownscaleScrollableNoiseSuppressor {
     }
 
     public void setupRenderNodes(GlassPositionsArray positions) {
-        rectRenderNodesCount = positions.size();
-
-        while (rectRenderNodesCount > rectRenderNodes.size()) {
-            rectRenderNodes.add(new SourcePart());
-        }
-
-        for (int a = 0; a < rectRenderNodesCount; a++) {
-            rectRenderNodes.get(a).setPosition(positions.get(a));
+        rectRenderNodesCount = 0;
+        for (int a = 0; a < positions.size(); a++) {
+            if (positions.get(a).isEmpty()) continue;
+            if (rectRenderNodesCount == rectRenderNodes.size()) rectRenderNodes.add(new SourcePart());
+            rectRenderNodes.get(rectRenderNodesCount++).setPosition(positions.get(a));
         }
     }
 
     public void setupRenderNodes(List<RectF> positions, int count) {
-        rectRenderNodesCount = count;
-
-        while (rectRenderNodesCount > rectRenderNodes.size()) {
-            rectRenderNodes.add(new SourcePart());
-        }
-
-        for (int a = 0; a < rectRenderNodesCount; a++) {
-            rectRenderNodes.get(a).setPosition(positions.get(a));
+        rectRenderNodesCount = 0;
+        for (int a = 0; a < count; a++) {
+            if (positions.get(a).isEmpty()) continue;
+            if (rectRenderNodesCount == rectRenderNodes.size()) rectRenderNodes.add(new SourcePart());
+            rectRenderNodes.get(rectRenderNodesCount++).setPosition(positions.get(a));
         }
     }
 

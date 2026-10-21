@@ -52,6 +52,7 @@ float2 operator*(float a,float2 b){return b*a;}
 float2 max(float2 a,float b){return {max(a.x,b),max(a.y,b)};}
 float2 abs(float2 a){return {std::abs(a.x),std::abs(a.y)};}
 float2 sign(float2 a){return {sign(a.x),sign(a.y)};}
+float2 clamp(float2 p,float2 a,float2 b){return {clamp(p.x,a.x,b.x),clamp(p.y,a.y,b.y)};}
 float length(float2 a){return sqrt(a.x*a.x+a.y*a.y);}
 struct half3 {
     float x,y,z;
@@ -109,6 +110,7 @@ int main(){
         float2 center(width/2,height/2);
         float4 radii(corner,corner*.6f,corner*.3f,corner*.9f);
         base::center=prism::center=advanced::center=prismAdvanced::center=center;
+        base::resolution=prism::resolution=advanced::resolution=prismAdvanced::resolution=float2(width,height);
         base::size=prism::size=center;
         advanced::size=prismAdvanced::size=float2(width,height);
         base::radius=prism::radius=advanced::radius=prismAdvanced::radius=radii;

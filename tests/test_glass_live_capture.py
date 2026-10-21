@@ -13,6 +13,7 @@ class GlassLiveCaptureTest(unittest.TestCase):
         source = (ROOT / "org/telegram/ui/Components/blur3/DownscaleScrollableNoiseSuppressor.java").read_text()
         capture_method = method(source, "public boolean invalidateResultRenderNodes(IBlur3Capture capture, int width, int height)")
         region_method = method(source, "public void invalidateSourceRegion(RectF dirty)")
+        composition_method = method(source, "private boolean invalidateResultRenderNodes(int width, int height)")
         harness = r'''
 import java.util.*;
 public class GlassLiveCaptureHarness {
@@ -21,7 +22,11 @@ public class GlassLiveCaptureHarness {
     }
     static class NekoConfig { static int blurStrength = 15; static boolean useAdvancedLiquidGlass = true, usePrismGlass; }
     static class Build { static class VERSION { static int SDK_INT = 33; } }
-    static class Canvas { void save() {} void restore() {} void translate(float x, float y) {} }
+    static class Canvas {
+        void save() {} void restore() {} void translate(float x, float y) {}
+        void drawRenderNode(RenderNode node) {}
+    }
+    static class MediaDataController { static long calcHash(long hash,long value) { return hash*31+value; } }
     static class Rect { int left, top, right = 100, bottom = 100; }
     static class RectF {
         float left, top, right, bottom;
@@ -29,12 +34,21 @@ public class GlassLiveCaptureHarness {
         RectF() {}
         RectF(float l, float t, float r, float b) { left = l; top = t; right = r; bottom = b; }
     }
-    static class RenderNode { boolean recorded; boolean hasDisplayList() { return recorded; } }
+    static class RenderNode {
+        static int nextId; final int id=++nextId;
+        int width,height,recordings; boolean recorded;
+        boolean hasDisplayList() { return recorded; } long getUniqueId() { return id; }
+        void setPosition(int l,int t,int r,int b) { width=r-l; height=b-t; }
+        Canvas beginRecording(int w,int h) { recordings++; return new Canvas(); }
+        void endRecording() { recorded=true; }
+    }
     static class SourcePart {
         Rect position = new Rect(); RenderNode renderNode = new RenderNode(); long lastHash, contentVersion;
         int materialBlurStrength, materialUpdates; boolean materialAdvanced;
+        boolean filtersRecorded=true;
+        boolean hasFilterDisplayLists() { return filtersRecorded; }
         boolean materialChanged() { return materialBlurStrength != NekoConfig.blurStrength || materialAdvanced != NekoConfig.useAdvancedLiquidGlass; }
-        void invalidate() { materialBlurStrength = NekoConfig.blurStrength; materialAdvanced = NekoConfig.useAdvancedLiquidGlass; materialUpdates++; }
+        void invalidate() { materialBlurStrength = NekoConfig.blurStrength; materialAdvanced = NekoConfig.useAdvancedLiquidGlass; materialUpdates++; filtersRecorded=true; }
     }
     static class Builder {
         long hash; boolean unsupported;
@@ -61,11 +75,12 @@ public class GlassLiveCaptureHarness {
         boolean isLiquidGlassEnabled = true, allowNoiseSuppress;
         RectF tmpRectF = new RectF(); Builder builder = new Builder();
         List<SourcePart> rectRenderNodes = new ArrayList<>(List.of(new SourcePart()));
+        RenderNode[] resultRenderNodes = {new RenderNode()}; long lastHash;
+        RenderNode getRenderNode(int effect,int part) { return rectRenderNodes.get(part).renderNode; }
         static int captureScale(boolean glass, boolean noise, int strength) { return 1; }
         Canvas beginRecordingRect(int index) { recordingIndex = index; return new Canvas(); }
         void endRecordingRect() { rectRenderNodes.get(recordingIndex).renderNode.recorded = true; rectRenderNodes.get(recordingIndex).invalidate(); }
-        // Composition needs rebuilding only once: the same child node receives new content.
-        boolean invalidateResultRenderNodes(int width, int height) { return compositionChecks++ == 0; }
+        COMPOSITION_METHOD
         CAPTURE_METHOD
         REGION_METHOD
     }
@@ -73,10 +88,10 @@ public class GlassLiveCaptureHarness {
         Suppressor s = new Suppressor(); Capture capture = new Capture();
         check(s.invalidateResultRenderNodes(capture, 100, 100), "Initial capture must notify");
         check(!s.invalidateResultRenderNodes(capture, 100, 100), "Unchanged content must stay cached");
-        check(capture.captures == 1 && s.compositionChecks == 1, "Cache must avoid recording");
+        check(capture.captures == 1 && s.resultRenderNodes[0].recordings == 1, "Cache must avoid recording");
         capture.generation++;
         check(s.invalidateResultRenderNodes(capture, 100, 100), "New content with unchanged geometry must notify glass views");
-        check(capture.captures == 2 && s.compositionChecks == 2, "New content must reach the existing node");
+        check(capture.captures == 2 && s.resultRenderNodes[0].recordings == 1, "New content must reach the existing node");
         check(!s.invalidateResultRenderNodes(capture, 100, 100), "New snapshot must be cached");
         capture.hashed = false;
         for (int frame = 0; frame < 3; frame++) {
@@ -116,8 +131,20 @@ public class GlassLiveCaptureHarness {
         check(s.invalidateResultRenderNodes(capture, 100, 100), "Moved region reused old pixels");
         check(capture.captures == captures + 1, "Moved region must recapture once");
         check(!s.invalidateResultRenderNodes(capture, 100, 100), "Stationary region must settle");
+        captures=capture.captures;
+        s.rectRenderNodes.get(0).filtersRecorded=false;
+        check(s.invalidateResultRenderNodes(capture, 100, 100), "Trimmed filters did not recover");
+        check(s.rectRenderNodes.get(0).filtersRecorded && capture.captures==captures,
+                "Filter recovery must reuse the captured scene");
+        check(s.invalidateResultRenderNodes(capture, 200, 300), "Resized composition kept old bounds");
+        check(s.resultRenderNodes[0].width==200 && s.resultRenderNodes[0].height==300, "Composition size mismatch");
+        check(capture.captures==captures, "Resize recaptured unchanged pixels");
+        s.resultRenderNodes[0].recorded=false;
+        check(s.invalidateResultRenderNodes(capture, 200, 300), "Trimmed composition did not recover");
+        check(s.resultRenderNodes[0].recorded && capture.captures==captures, "Composition recovery lost its source cache");
         s.rectRenderNodesCount = 0;
-        check(!s.invalidateResultRenderNodes(capture, 100, 100), "No visible regions must not notify");
+        check(s.invalidateResultRenderNodes(capture, 200, 300), "Removed regions must clear stale composition");
+        check(!s.invalidateResultRenderNodes(capture, 200, 300), "Empty composition must settle");
 
         // A local animation must refresh the affected capture and retain the other.
         Suppressor regions = new Suppressor();
@@ -152,7 +179,7 @@ public class GlassLiveCaptureHarness {
         check(scene.captures == 26, "Moved capture must update independently");
     }
 }
-'''.replace("CAPTURE_METHOD", capture_method.replace("zxc.iconic.xenon.NekoConfig", "NekoConfig").replace("android.os.Build", "Build")).replace("REGION_METHOD", region_method)
+'''.replace("CAPTURE_METHOD", capture_method.replace("zxc.iconic.xenon.NekoConfig", "NekoConfig").replace("android.os.Build", "Build")).replace("REGION_METHOD", region_method).replace("COMPOSITION_METHOD", composition_method)
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "GlassLiveCaptureHarness.java"
             path.write_text(harness)

@@ -144,6 +144,11 @@ public class LiquidGlassEffect {
         float cY = (top + bottom) / 2f;
         float sX = (right - left) / 2f;
         float sY = (bottom - top) / 2f;
+        final float maxRadius = Math.max(0f, Math.min(sX, sY));
+        rLT = Math.max(0f, Math.min(maxRadius, rLT));
+        rRT = Math.max(0f, Math.min(maxRadius, rRT));
+        rRB = Math.max(0f, Math.min(maxRadius, rRB));
+        rLB = Math.max(0f, Math.min(maxRadius, rLB));
 
         final float refractionSetting = customOptics ? customRefraction
                 : zxc.iconic.xenon.NekoConfig.advancedGlassFresnel;
@@ -198,6 +203,7 @@ public class LiquidGlassEffect {
                     final float refractionAmount = -AndroidUtilities.dp(32f) * fresnel;
                     final float dispersion = Math.max(0.0f, Math.min(1.0f, dispersionSetting));
 
+                    shader.setFloatUniform("resolution", resX, resY);
                     shader.setFloatUniform("size", sX * 2f, sY * 2f);
                     shader.setFloatUniform("center", cX, cY);
                     shader.setFloatUniform("radius", rLT, rRT, rRB, rLB);
@@ -224,6 +230,7 @@ public class LiquidGlassEffect {
             // over the frosted blur even when liquid glass (refraction) is off.
             if (highlightShader != null) {
                 highlightShader.setFloatUniform("size", sX * 2f, sY * 2f);
+                highlightShader.setFloatUniform("origin", left, top);
                 highlightShader.setFloatUniform("cornerRadii", rLT, rRT, rRB, rLB);
                 highlightShader.setColorUniform("color", Color.WHITE);
                 highlightShader.setFloatUniform("angle", (float) Math.toRadians(angleDeg));

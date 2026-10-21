@@ -14496,7 +14496,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         } else if (currentMessageObject.type == MessageObject.TYPE_TEXT || currentMessageObject.type == MessageObject.TYPE_STORY_MENTION || currentMessageObject.type == MessageObject.TYPE_EMOJIS || currentMessageObject.isGiveawayOrGiveawayResults()) {
             layoutTextXY(false);
             if (!enterTransitionInProgress && currentMessageObject != null && !currentMessageObject.preview) {
-                if (!transitionParams.animateExpandedQuotes || delegate == null || delegate.canDrawOutboundsContent()) {
+                if (!transitionParams.animateExpandedQuotes || !drawingMessagePopup && (delegate == null || delegate.canDrawOutboundsContent())) {
                     if (!drawForBlur && !(canvas instanceof SizeNotifierFrameLayout.SimplerCanvas) && animatedEmojiStack != null && ((currentMessageObject.textLayoutBlocks != null && !currentMessageObject.textLayoutBlocks.isEmpty()) || (transitionParams.animateOutTextBlocks != null && !transitionParams.animateOutTextBlocks.isEmpty()))) {
                         animatedEmojiStack.clearPositions();
                     }
@@ -20290,7 +20290,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         }
 
         if (channelRecommendationsCell != null && currentMessageObject.type == MessageObject.TYPE_JOINED_CHANNEL) {
-            if (delegate == null || delegate.canDrawOutboundsContent()) {
+            if (!drawingMessagePopup && (delegate == null || delegate.canDrawOutboundsContent())) {
                 channelRecommendationsCell.draw(canvas);
             }
             transitionParams.recordDrawingState();
@@ -20500,7 +20500,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             selectionOverlayPaint.setAlpha(wasAlpha);
         }
 
-        if (delegate == null || delegate.canDrawOutboundsContent() || transitionParams.messageEntering || getAlpha() != 1f) {
+        // The popup source owns the out-of-bounds pass, including expanded quote text.
+        if (!drawingMessagePopup && (delegate == null || delegate.canDrawOutboundsContent() || transitionParams.messageEntering || getAlpha() != 1f)) {
             drawOutboundsContent(canvas);
         }
         updateSelectionTextPosition();
@@ -23355,7 +23356,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         return currentBackgroundDrawable;
     }
 
-    private boolean shouldDrawCaptionLayout() {
+    /** Whether drawContent owns the caption, rather than the parent overlay pass. */
+    public boolean shouldDrawCaptionLayout() {
         return currentMessageObject != null && !currentMessageObject.preview && !currentMessageObject.isSponsored() && (currentPosition == null || (currentMessagesGroup != null && currentMessagesGroup.isDocuments && (currentPosition.flags & MessageObject.POSITION_FLAG_BOTTOM) == 0)) && !transitionParams.animateBackgroundBoundsInner && !(enterTransitionInProgress && currentMessageObject.isVoice());
     }
 

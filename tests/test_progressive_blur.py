@@ -340,7 +340,7 @@ public class ChatCaptureHarness {
     static class AndroidUtilities { static float dpf2(float dp) { return dp; } }
     interface BlurredBackgroundSource { void draw(Canvas c, int l, int t, int r, int b); }
     static class Source implements BlurredBackgroundSource {
-        int records, pixels;
+        int records, pixels, width, height;
         Canvas canvas;
         BlurredBackgroundSource underSource;
         boolean inRecording() { return canvas != null; }
@@ -348,7 +348,8 @@ public class ChatCaptureHarness {
         void setProgressiveBlur(float radius, int w, int h, float top, float bottom, int samples) {}
         void setUnderSource(BlurredBackgroundSource value) { underSource = value; }
         void invalidateDisplayListForDrawables() {}
-        Canvas beginRecording(int w, int h) { records++; return canvas = new Canvas(); }
+        boolean needUpdateDisplayList(int w,int h) { return records==0 || width!=w || height!=h; }
+        Canvas beginRecording(int w, int h) { records++; width=w; height=h; return canvas = new Canvas(); }
         void endRecording() { pixels = canvas.pixels; canvas = null; }
         public void draw(Canvas c, int l, int t, int r, int b) {}
     }
@@ -369,6 +370,8 @@ public class ChatCaptureHarness {
             Background backgroundView = new Background();
             int width = 360;
             int getWidth() { return width; } int getHeight() { return 800; }
+            void drawWallpaperForFade(Canvas c,boolean triangles) { backgroundView.draw(c); }
+            void drawTrianglesForFade(Canvas c) {}
             void drawList(Canvas c, RectF rect) {
                 invalidateFadeBlur();
                 if (failCapture) throw new IllegalStateException();

@@ -656,67 +656,11 @@ public class RadialProgress {
     private float wavePhaseAngle;
     private float wavyAmplitudeSmooth = 1f;
     private float bgThicknessScale;
-    private final Path wavyProgressPath = new Path();
-    private final PathMeasure wavyProgressPathMeasure = new PathMeasure();
-    private final Path wavySegmentPath = new Path();
-    private RectF wavyLastOval = new RectF();
-    private int wavyLastGeneration;
-    private float wavyLastAmplitudeSmooth = 1f;
+    private final WavyProgressPath wavyProgressPath = new WavyProgressPath();
 
     private void drawWavyArc(Canvas canvas, RectF oval, float startAngle, float sweepAngle, Paint paint) {
-        if (!oval.equals(wavyLastOval) || wavyLastGeneration != 0 || wavyLastAmplitudeSmooth != wavyAmplitudeSmooth) {
-            wavyLastOval.set(oval);
-            wavyProgressPath.rewind();
-
-            float cx = oval.centerX();
-            float cy = oval.centerY();
-            float baseRadius = Math.min(oval.width(), oval.height()) / 2f;
-
-            float amplitude = baseRadius * 0.05f * wavyAmplitudeSmooth;
-            int waves = 11;
-            int steps = 180;
-
-            for (int i = 0; i <= steps; i++) {
-                float angle = (i * 360f) / steps;
-                float rad = (float) Math.toRadians(angle);
-                float r = baseRadius + amplitude * (float) Math.sin(waves * rad);
-                float x = cx + r * (float) Math.cos(rad);
-                float y = cy + r * (float) Math.sin(rad);
-
-                if (i == 0) {
-                    wavyProgressPath.moveTo(x, y);
-                } else {
-                    wavyProgressPath.lineTo(x, y);
-                }
-            }
-            wavyProgressPath.close();
-            wavyProgressPathMeasure.setPath(wavyProgressPath, false);
-            wavyLastGeneration = 0;
-            wavyLastAmplitudeSmooth = wavyAmplitudeSmooth;
-        }
-
-        float length = wavyProgressPathMeasure.getLength();
-        float sweepDist = (Math.abs(sweepAngle) / 360f) * length;
-
-        float startDist = (wavePhaseAngle / 360f) * length;
-        startDist = (startDist % length + length) % length;
-        float stopDist = startDist + sweepDist;
-
-        wavySegmentPath.reset();
-
-        if (stopDist <= length) {
-            wavyProgressPathMeasure.getSegment(startDist, stopDist, wavySegmentPath, true);
-        } else {
-            wavyProgressPathMeasure.getSegment(startDist, length, wavySegmentPath, true);
-            wavyProgressPathMeasure.getSegment(0, stopDist - length, wavySegmentPath, false);
-        }
-        wavySegmentPath.rLineTo(0, 0);
-
-        canvas.save();
-        canvas.rotate(startAngle - wavePhaseAngle, oval.centerX(), oval.centerY());
-        canvas.drawPath(wavySegmentPath, paint);
-        canvas.restore();
-
+        wavyProgressPath.draw(canvas, oval, startAngle, sweepAngle, wavePhaseAngle,
+                wavyAmplitudeSmooth, paint);
         if (Math.abs(sweepAngle) > 0 && Math.abs(sweepAngle) < 360) {
             invalidateParent();
         }

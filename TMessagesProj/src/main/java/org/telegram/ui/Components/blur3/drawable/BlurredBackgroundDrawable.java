@@ -264,7 +264,8 @@ public abstract class BlurredBackgroundDrawable extends Drawable {
         public int padding;
         public boolean hasPadding;
         public int liquidThickness;
-        public float liquidIntensity = 0.75f;
+        // Negative means follow the user's setting; an explicit zero disables refraction.
+        public float liquidIntensity = -1f;
         public float liquidIndex = 1.5f;
 
         public float strokeWidthTop;

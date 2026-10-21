@@ -1,4 +1,5 @@
 uniform shader img;
+uniform float2 resolution;
 
 uniform float2 size;
 uniform float2 center;
@@ -7,6 +8,10 @@ uniform float refractionHeight;
 uniform float refractionAmount;
 uniform float depthEffect;
 uniform float chromaticAberration;
+
+half4 sampleBackdrop(float2 coord) {
+    return img.eval(clamp(coord, float2(0.5), resolution - float2(0.5)));
+}
 
 // NOTE: blur is no longer done inside the shader.
 // RenderEffect.createBlurEffect() on the source RenderNode provides a proper
@@ -68,7 +73,7 @@ half4 main(float2 coord) {
     // Deep inside: no refraction
     float d = refractionDistance(sd, min(halfSize.x, halfSize.y));
     if (d == 0.0) {
-        return img.eval(coord);
+        return sampleBackdrop(coord);
     }
 
     // Edge zone: apply lens refraction
@@ -94,7 +99,7 @@ half4 main(float2 coord) {
 
     float2 refractedCoord = coord + d * grad;
 
-    half4 baseColor = img.eval(refractedCoord);
+    half4 baseColor = sampleBackdrop(refractedCoord);
     if (chromaticAberration <= 0.0) {
         return baseColor;
     }
@@ -105,16 +110,16 @@ half4 main(float2 coord) {
 
     half4 color = half4(0.0);
 
-    half4 red = img.eval(refractedCoord + dispersedCoord);
+    half4 red = sampleBackdrop(refractedCoord + dispersedCoord);
     color.r += red.r / 3.5;
     color.a += red.a / 7.0;
 
-    half4 orange = img.eval(refractedCoord + dispersedCoord * (2.0 / 3.0));
+    half4 orange = sampleBackdrop(refractedCoord + dispersedCoord * (2.0 / 3.0));
     color.r += orange.r / 3.5;
     color.g += orange.g / 7.0;
     color.a += orange.a / 7.0;
 
-    half4 yellow = img.eval(refractedCoord + dispersedCoord * (1.0 / 3.0));
+    half4 yellow = sampleBackdrop(refractedCoord + dispersedCoord * (1.0 / 3.0));
     color.r += yellow.r / 3.5;
     color.g += yellow.g / 3.5;
     color.a += yellow.a / 7.0;
@@ -123,16 +128,16 @@ half4 main(float2 coord) {
     color.g += green.g / 3.5;
     color.a += green.a / 7.0;
 
-    half4 cyan = img.eval(refractedCoord - dispersedCoord * (1.0 / 3.0));
+    half4 cyan = sampleBackdrop(refractedCoord - dispersedCoord * (1.0 / 3.0));
     color.g += cyan.g / 3.5;
     color.b += cyan.b / 3.0;
     color.a += cyan.a / 7.0;
 
-    half4 blue = img.eval(refractedCoord - dispersedCoord * (2.0 / 3.0));
+    half4 blue = sampleBackdrop(refractedCoord - dispersedCoord * (2.0 / 3.0));
     color.b += blue.b / 3.0;
     color.a += blue.a / 7.0;
 
-    half4 purple = img.eval(refractedCoord - dispersedCoord);
+    half4 purple = sampleBackdrop(refractedCoord - dispersedCoord);
     color.r += purple.r / 7.0;
     color.b += purple.b / 3.0;
     color.a += purple.a / 7.0;

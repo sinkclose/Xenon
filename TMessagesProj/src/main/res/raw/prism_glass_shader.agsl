@@ -25,7 +25,7 @@ half4 srcOver(half4 src, half4 dst) {
 half4 main(in float2 fragCoord) {
   half2 p = fragCoord - center;
   half sd = sdfRect(p, radius);
-  half2 uv = fragCoord;
+  float2 uv = fragCoord;
   // Outside the edge band the original normal is (0, 0, 1), so the
   // refracted XY displacement is exactly zero. Avoid two more SDFs,
   // normalization and Snell's law for those pixels.
@@ -45,5 +45,7 @@ half4 main(in float2 fragCoord) {
     uv += refract_vec.xy * refract_length * refract_intensity;
   }
 
+  // Match the standard program's finite backdrop sampling.
+  uv = clamp(uv, float2(0.5), resolution - float2(0.5));
   return srcOver(half4(foreground_color_premultiplied), img.eval(uv));
 }

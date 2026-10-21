@@ -28,6 +28,7 @@ final class PrismGlassPipeline {
     private boolean sourceInvalidated = true;
     private boolean initialized;
     private int left, top, right, bottom;
+    private int samplePadding;
     private float offsetX, offsetY, scaleX, scaleY, translationX, translationY;
     private int backgroundColor, strokeColorTop, strokeColorBottom, tintPercent;
     private float strokeWidthTop, strokeWidthBottom;
@@ -54,12 +55,13 @@ final class PrismGlassPipeline {
         final BlurredBackgroundDrawable.Props props = drawable.boundProps;
         final Rect bounds = props.boundsWithPadding;
         final int width = bounds.width(), height = bounds.height();
+        final int padding = drawable.liquidGlassSamplePadding;
         final boolean advanced = NekoConfig.useAdvancedLiquidGlass;
         final boolean refractionEnabled = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
         final boolean hasEffect = effect != null && effect.hasRefractionShader();
 
         final boolean mappingChanged = !initialized || left != bounds.left || top != bounds.top
-                || right != bounds.right || bottom != bounds.bottom
+                || right != bounds.right || bottom != bounds.bottom || samplePadding != padding
                 || offsetX != drawable.sourceOffsetX || offsetY != drawable.sourceOffsetY
                 || scaleX != drawable.sourceScaleX || scaleY != drawable.sourceScaleY
                 || translationX != drawable.sourceTranslationX || translationY != drawable.sourceTranslationY;
@@ -76,10 +78,10 @@ final class PrismGlassPipeline {
         // The effect selects the optimized Prism program with the same optical
         // uniforms; highlight rendering and material controls remain shared.
         if (effect != null) {
-            effect.update(0, 0, width, height,
+            effect.update(padding, padding, padding + width, padding + height,
                     props.shaderRadii[0], props.shaderRadii[2], props.shaderRadii[4], props.shaderRadii[6],
                     props.liquidThickness <= 0 ? dp(NekoConfig.liquidGlassThickness) : props.liquidThickness,
-                    props.liquidIntensity <= 0 ? NekoConfig.liquidGlassIntensity : props.liquidIntensity,
+                    props.liquidIntensity < 0 ? NekoConfig.liquidGlassIntensity : props.liquidIntensity,
                     props.liquidIndex, drawable.backgroundColor);
         }
 
@@ -87,13 +89,13 @@ final class PrismGlassPipeline {
             Canvas canvas = background.beginRecording();
             try {
                 canvas.save();
-                canvas.translate(-bounds.left, -bounds.top);
+                canvas.translate(padding - bounds.left, padding - bounds.top);
                 drawable.transformSourceCanvas(canvas);
                 source.draw(canvas,
-                        drawable.sourceScaleX * bounds.left + drawable.sourceOffsetX + drawable.sourceTranslationX,
-                        drawable.sourceScaleY * bounds.top + drawable.sourceOffsetY + drawable.sourceTranslationY,
-                        drawable.sourceScaleX * bounds.right + drawable.sourceOffsetX + drawable.sourceTranslationX,
-                        drawable.sourceScaleY * bounds.bottom + drawable.sourceOffsetY + drawable.sourceTranslationY);
+                        drawable.sourceScaleX * (bounds.left - padding) + drawable.sourceOffsetX + drawable.sourceTranslationX,
+                        drawable.sourceScaleY * (bounds.top - padding) + drawable.sourceOffsetY + drawable.sourceTranslationY,
+                        drawable.sourceScaleX * (bounds.right + padding) + drawable.sourceOffsetX + drawable.sourceTranslationX,
+                        drawable.sourceScaleY * (bounds.bottom + padding) + drawable.sourceOffsetY + drawable.sourceTranslationY);
                 canvas.restore();
             } finally {
                 background.endRecording();
@@ -137,6 +139,7 @@ final class PrismGlassPipeline {
         if (surface.getAlpha() != alpha) surface.setAlpha(alpha);
 
         left = bounds.left; top = bounds.top; right = bounds.right; bottom = bounds.bottom;
+        samplePadding = padding;
         offsetX = drawable.sourceOffsetX; offsetY = drawable.sourceOffsetY;
         scaleX = drawable.sourceScaleX; scaleY = drawable.sourceScaleY;
         translationX = drawable.sourceTranslationX; translationY = drawable.sourceTranslationY;

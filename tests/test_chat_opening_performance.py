@@ -95,14 +95,17 @@ public class SpringHarness {
     interface Listener { void update(Object a, float v, float velocity); }
     static class SpringAnimation {
         static int creations;
+        SpringForce force;
         SpringAnimation(FloatValueHolder h) { creations++; }
-        void setSpring(SpringForce f) {} void setMinimumVisibleChange(float v) {}
+        void setSpring(SpringForce f) { force=f; } SpringForce getSpring() { return force; }
+        void setMinimumVisibleChange(float v) {}
         void addUpdateListener(Listener l) {} void cancel() {} void setStartValue(float v) {}
     }
     static class Effect {
         View host; Paint glowPaint = new Paint();
         SpringAnimation press, returnX, returnY;
         float progress, offsetX, offsetY; int pointerId=-1;
+        float pressDamping=.5f,pressStiffness=300f;
         boolean releasePending; long minimumPressDuration;
         Runnable releasePress = () -> {};
         interface Update { void set(float v); }

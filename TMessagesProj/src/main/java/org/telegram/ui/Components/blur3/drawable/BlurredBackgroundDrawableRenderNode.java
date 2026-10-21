@@ -35,6 +35,16 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
     private PrismGlassPipeline prismPipeline;
     private boolean prismPipelineActive;
     private boolean retainSurfaceDisplayList;
+    int liquidGlassSamplePadding;
+
+    /** Extra backdrop pixels for lenses whose refraction can cross the opposite edge. */
+    public void setLiquidGlassSamplePadding(int padding) {
+        padding = Math.max(0, padding);
+        if (liquidGlassSamplePadding == padding) return;
+        liquidGlassSamplePadding = padding;
+        onBoundPropsChanged();
+        invalidateDisplayList();
+    }
 
     /** Keep the outer surface while a live lens refreshes its captured contents. */
     public void setRetainSurfaceDisplayList(boolean enabled) {
@@ -130,7 +140,9 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
         outline.setAlpha(1);
 
         if (!boundProps.boundsWithPadding.isEmpty()) {
-            renderNodeFill.setPosition(0, 0, boundProps.boundsWithPadding.width(), boundProps.boundsWithPadding.height());
+            renderNodeFill.setPosition(-liquidGlassSamplePadding, -liquidGlassSamplePadding,
+                    boundProps.boundsWithPadding.width() + liquidGlassSamplePadding,
+                    boundProps.boundsWithPadding.height() + liquidGlassSamplePadding);
             renderNode.setPosition(0, 0, boundProps.boundsWithPadding.width(), boundProps.boundsWithPadding.height());
             renderNode.setOutline(outline);
 
@@ -168,25 +180,22 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
         if (prismPipeline != null) prismPipeline.invalidateAll();
         Canvas c;
 
-        final float sL = sourceScaleX * boundProps.boundsWithPadding.left + sourceOffsetX + sourceTranslationX;
-        final float sT = sourceScaleY * boundProps.boundsWithPadding.top + sourceOffsetY + sourceTranslationY;
-        final float sR = sourceScaleX * boundProps.boundsWithPadding.right + sourceOffsetX + sourceTranslationX;
-        final float sB = sourceScaleY * boundProps.boundsWithPadding.bottom + sourceOffsetY + sourceTranslationY;
+        final int padding = liquidGlassSamplePadding;
+        final float sL = sourceScaleX * (boundProps.boundsWithPadding.left - padding) + sourceOffsetX + sourceTranslationX;
+        final float sT = sourceScaleY * (boundProps.boundsWithPadding.top - padding) + sourceOffsetY + sourceTranslationY;
+        final float sR = sourceScaleX * (boundProps.boundsWithPadding.right + padding) + sourceOffsetX + sourceTranslationX;
+        final float sB = sourceScaleY * (boundProps.boundsWithPadding.bottom + padding) + sourceOffsetY + sourceTranslationY;
 
         c = renderNodeFill.beginRecording();
         c.save();
-        c.translate(-boundProps.boundsWithPadding.left, -boundProps.boundsWithPadding.top);
+        c.translate(padding - boundProps.boundsWithPadding.left, padding - boundProps.boundsWithPadding.top);
         transformSourceCanvas(c);
         if (liquidGlassEffect != null && Build.VERSION.SDK_INT >= 33) {
-            final int thickness = Math.max(Math.min(
-                boundProps.liquidThickness <= 0 ? dp(11) : boundProps.liquidThickness,
-                Math.min(boundProps.boundsWithPadding.width(), boundProps.boundsWithPadding.height()) / 5), 1);
-
             liquidGlassEffect.update(
-                0, 0, boundProps.boundsWithPadding.width(), boundProps.boundsWithPadding.height(),
+                padding, padding, padding + boundProps.boundsWithPadding.width(), padding + boundProps.boundsWithPadding.height(),
                 boundProps.shaderRadii[0], boundProps.shaderRadii[2], boundProps.shaderRadii[4], boundProps.shaderRadii[6],
                 boundProps.liquidThickness <= 0 ? dp(zxc.iconic.xenon.NekoConfig.liquidGlassThickness) : boundProps.liquidThickness,
-                boundProps.liquidIntensity <= 0 ? zxc.iconic.xenon.NekoConfig.liquidGlassIntensity : boundProps.liquidIntensity,
+                boundProps.liquidIntensity < 0 ? zxc.iconic.xenon.NekoConfig.liquidGlassIntensity : boundProps.liquidIntensity,
                 boundProps.liquidIndex,
                 backgroundColor
             );
@@ -328,6 +337,7 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
         canvas.translate(boundProps.boundsWithPadding.left, boundProps.boundsWithPadding.top);
         canvas.drawRenderNode(renderNode);
         if (liquidGlassEffect != null && Build.VERSION.SDK_INT >= 33) {
+            canvas.translate(-liquidGlassSamplePadding, -liquidGlassSamplePadding);
             liquidGlassEffect.drawHighlight(canvas, renderNode.getAlpha());
         }
         canvas.restore();
