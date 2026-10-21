@@ -17376,7 +17376,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     radialProgress.setColorKeys(Theme.key_chat_inLoader, Theme.key_chat_inLoaderSelected, Theme.key_chat_inMediaIcon, Theme.key_chat_inMediaIconSelected);
                 }
                 if (buttonState == -1) {
-                    return MediaActionDrawable.ICON_FILE;
+                    return zxc.iconic.xenon.osu.OsuReplay.isOsuFile(currentMessageObject.getFileName()) ? MediaActionDrawable.ICON_OSU : MediaActionDrawable.ICON_FILE;
                 } else if (buttonState == 0) {
                     return MediaActionDrawable.ICON_DOWNLOAD;
                 } else if (buttonState == 1) {
@@ -17397,7 +17397,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     }
                 } else if (buttonState == -1) {
                     if (documentAttachType == DOCUMENT_ATTACH_TYPE_DOCUMENT) {
-                        return (drawPhotoImage && (currentPhotoObject != null || currentPhotoObjectThumb != null) && (photoImage.hasBitmapImage() || currentMessageObject.mediaExists() || currentMessageObject.attachPathExists)) ? MediaActionDrawable.ICON_NONE : MediaActionDrawable.ICON_FILE;
+                        return (drawPhotoImage && (currentPhotoObject != null || currentPhotoObjectThumb != null) && (photoImage.hasBitmapImage() || currentMessageObject.mediaExists() || currentMessageObject.attachPathExists)) ? MediaActionDrawable.ICON_NONE : zxc.iconic.xenon.osu.OsuReplay.isOsuFile(currentMessageObject.getFileName()) ? MediaActionDrawable.ICON_OSU : MediaActionDrawable.ICON_FILE;
                     } else if (currentMessageObject.needDrawBluredPreview()) {
                         return MediaActionDrawable.ICON_FIRE;
                     } else if (hasEmbed) {
@@ -26763,7 +26763,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         }
         if (action == AccessibilityNodeInfo.ACTION_CLICK) {
             int icon = getIconForCurrentState();
-            if (icon != MediaActionDrawable.ICON_NONE && icon != MediaActionDrawable.ICON_FILE) {
+            if (icon != MediaActionDrawable.ICON_NONE && icon != MediaActionDrawable.ICON_FILE && icon != MediaActionDrawable.ICON_OSU) {
                 didPressButton(true, false);
             } else if (currentMessageObject.type == MessageObject.TYPE_PHONE_CALL) {
                 delegate.didPressOther(this, otherX, otherY);
@@ -27540,6 +27540,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                         actionLabel = getString("AccActionPause", R.string.AccActionPause);
                         break;
                     case MediaActionDrawable.ICON_FILE:
+                    case MediaActionDrawable.ICON_OSU:
                         actionLabel = getString("AccActionOpenFile", R.string.AccActionOpenFile);
                         break;
                     case MediaActionDrawable.ICON_DOWNLOAD:

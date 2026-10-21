@@ -1900,7 +1900,8 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
             }
         } else if (id == NotificationCenter.musicDidLoad) {
             long did = (Long) args[0];
-            if (playingMessageObject != null && playingMessageObject.isMusic() && playingMessageObject.getDialogId() == did && !playingMessageObject.scheduled) {
+            if (!zxc.iconic.xenon.osu.OsuBeatmapPlayer.isMapPlaylist()
+                    && playingMessageObject != null && playingMessageObject.isMusic() && playingMessageObject.getDialogId() == did && !playingMessageObject.scheduled) {
                 ArrayList<MessageObject> arrayListBegin = (ArrayList<MessageObject>) args[1];
                 ArrayList<MessageObject> arrayListEnd = (ArrayList<MessageObject>) args[2];
                 playlist.addAll(0, arrayListBegin);
@@ -2662,6 +2663,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
             return false;
         }
         NotificationCenter.getInstance(messageObject.currentAccount).postNotificationName(NotificationCenter.messagePlayingDidSeek, playingMessageObject.getId(), progress);
+        zxc.iconic.xenon.osu.OsuBeatmapPlayer.onSeek(messageObject);
         return true;
     }
 
@@ -2696,6 +2698,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
         if (duration != 0) {
             NotificationCenter.getInstance(messageObject.currentAccount).postNotificationName(NotificationCenter.messagePlayingDidSeek, playingMessageObject.getId(), Utilities.clamp01((float) progressMs / duration));
         }
+        zxc.iconic.xenon.osu.OsuBeatmapPlayer.onSeek(messageObject);
         return true;
     }
 
@@ -2755,6 +2758,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
     }
 
     public void loadMoreMusic() {
+        if (zxc.iconic.xenon.osu.OsuBeatmapPlayer.isMapPlaylist()) return;
         if (currentSavedMusicList != null) {
             currentSavedMusicList.load();
             return;
@@ -2916,6 +2920,15 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
             }
         }
         return playMessage(current);
+    }
+
+    /** Replace the local map queue without restarting or unpausing the current track. */
+    public void replaceLocalMapPlaylist(ArrayList<MessageObject> messages) {
+        playlist.clear(); playlistMap.clear(); playlist.addAll(messages);
+        for (MessageObject message : playlist) playlistMap.put(message.getId(), message);
+        sortPlaylist();
+        currentPlaylistNum = playlist.indexOf(playingMessageObject);
+        if (SharedConfig.shuffleMusic) buildShuffledPlayList();
     }
 
     private void sortPlaylist() {
@@ -3885,6 +3898,9 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
             }
             try {
                 audioPlayer = new VideoPlayer();
+                zxc.iconic.xenon.osu.OsuArchive.Track osuTrack = zxc.iconic.xenon.osu.OsuBeatmapPlayer.track(messageObject);
+                if (osuTrack != null) audioPlayer.setOsuAudioMixer(new zxc.iconic.xenon.osu.OsuPcmMixer(osuTrack.map,
+                        org.telegram.ui.LauncherIconController.isEnabled(org.telegram.ui.LauncherIconController.LauncherIcon.OSU_OLD)));
                 int tag = ++playerNum;
                 audioPlayer.setDelegate(new VideoPlayer.VideoPlayerDelegate() {
                     @Override

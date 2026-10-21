@@ -19,14 +19,33 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewTreeObserver;
+import org.telegram.messenger.MediaController;
+import org.telegram.messenger.MessageObject;
+import zxc.iconic.xenon.osu.OsuArchive;
+import zxc.iconic.xenon.osu.OsuAudioData;
+import zxc.iconic.xenon.osu.OsuBeatClock;
+import zxc.iconic.xenon.osu.OsuBeatmapPlayer;
+import zxc.iconic.xenon.osu.OsuLogoSounds;
 
 import androidx.appcompat.content.res.AppCompatResources;
 import org.telegram.messenger.LocaleController;
+import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.R;
 
 /** Android adaptation of ppy/osu OsuLogo, Triangles and TrianglesV2 (MIT). */
 public final class OsuCatLogoView extends View {
     private final OsuLogoModel model;
+    private final OsuLogoMusicMotion musicMotion = new OsuLogoMusicMotion();
+    private final OsuLogoVisualisation visualisation = new OsuLogoVisualisation();
+    private final float[] audioSpectrum = new float[200], barLines = new float[OsuLogoVisualisation.MAX_LINE_FLOATS];
+    private final Paint barPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private boolean musicReactive;
+    private OsuArchive.Track mapTrack;
+    private final OsuBeatClock mapClock = new OsuBeatClock();
+    private float logoSizeDp = 90;
+    private int lastMapSeek;
+    private float lastMapRate;
+    private long lastMusicSequence;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Paint additivePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path clip = new Path(), drawPath = new Path();
@@ -62,6 +81,11 @@ public final class OsuCatLogoView extends View {
         triangles = new LinearGradient(0, 0, 0, model.diameter, 0xffff66ab, 0xffb6346f, Shader.TileMode.CLAMP);
         additivePaint.setColor(Color.WHITE);
         additivePaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.ADD));
+        barPaint.setColor(Color.WHITE);
+        barPaint.setAlpha(26); // Logo visualizer .5 alpha * source bar colour .2 alpha.
+        barPaint.setStrokeWidth(model.diameter * (float) Math.sin(Math.PI / OsuLogoVisualisation.BARS));
+        barPaint.setStrokeCap(Paint.Cap.BUTT);
+        barPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.ADD));
         setClickable(true);
         setFocusable(true);
         setContentDescription(LocaleController.getString(legacy ? R.string.AppIconOsuOld : R.string.AppIconOsu));
@@ -80,10 +104,23 @@ public final class OsuCatLogoView extends View {
     }
 
     public boolean isLegacy() { return model.legacy; }
+    public void setLogoSizeDp(float size) { logoSizeDp = size; overlay = null; invalidate(); }
+
+    public void setMusicReactive(boolean enabled) {
+        if (musicReactive == enabled) return;
+        if (musicReactive) LogoAudioVisualizer.setConsumerVisible(false);
+        musicReactive = enabled;
+        if (OsuBeatmapPlayer.current() == null) { musicMotion.reset(); visualisation.reset(); }
+        lastMusicSequence = enabled ? LogoAudioVisualizer.beatSequence : 0;
+        updateAnimationVisibility();
+        invalidate();
+    }
 
     public void setScreenActive(boolean active) {
         screenActive = active;
         if (!active) {
+            mapClock.reset(); mapTrack = null;
+            musicMotion.reset(); visualisation.reset();
             stopFrames();
             scaleFrom = scaleTarget = 1;
             flashStart = -1;
@@ -100,6 +137,11 @@ public final class OsuCatLogoView extends View {
     public void updateAnimationVisibility() {
         boolean visible = screenActive && isAttachedToWindow() && isShown()
                 && getWindowVisibility() == VISIBLE && getGlobalVisibleRect(visibleRect);
+        OsuLogoSounds.setVisible(this, visible);
+        if (musicReactive) {
+            LogoAudioVisualizer.setConsumerVisible(visible && OsuBeatmapPlayer.current() == null);
+            if (!visible) { musicMotion.reset(); visualisation.reset(); }
+        }
         if (!visible) { stopFrames(); return; }
         if (!framePosted) {
             framePosted = true;
@@ -116,8 +158,50 @@ public final class OsuCatLogoView extends View {
     private void frame(long nanos) {
         framePosted = false;
         if (!screenActive || !isAttachedToWindow() || !isShown() || getWindowVisibility() != VISIBLE
-                || !getGlobalVisibleRect(visibleRect)) { stopFrames(); return; }
-        if (lastFrame != 0) model.advance(Math.min(0.1f, Math.max(0, (nanos - lastFrame) / 1_000_000_000f)));
+                || !getGlobalVisibleRect(visibleRect)) { updateAnimationVisibility(); return; }
+        float seconds = lastFrame == 0 ? 0 : Math.min(0.1f, Math.max(0, (nanos - lastFrame) / 1_000_000_000f));
+        OsuArchive.Track currentMap = OsuBeatmapPlayer.current();
+        if (mapTrack != currentMap) {
+            mapTrack = currentMap; mapClock.reset(); musicMotion.reset(); visualisation.reset();
+            if (mapTrack != null) OsuBeatmapPlayer.ensureAudio(mapTrack);
+        }
+        if (mapTrack != null) {
+            MediaController player = MediaController.getInstance();
+            MessageObject message = player.getPlayingMessageObject();
+            long now = SystemClock.uptimeMillis(), position = player.getProgressMs(message);
+            boolean playing = position >= 0 && !player.isMessagePaused() && !player.isDownloadingCurrentMessage();
+            float rate = Math.max(0.1f, player.getPlaybackSpeed(true));
+            if (lastMapSeek != OsuBeatmapPlayer.seekGeneration || lastMapRate != rate) mapClock.reset();
+            lastMapSeek = OsuBeatmapPlayer.seekGeneration; lastMapRate = rate;
+            mapClock.update(mapTrack.map, Math.max(0, position), seconds * 1000, rate, playing);
+            OsuLogoSounds.mapFrame(mapTrack);
+            if (mapClock.jumped) { musicMotion.reset(); visualisation.reset(); }
+            OsuAudioData decoded = OsuBeatmapPlayer.audio(mapTrack);
+            float amplitude = decoded == null ? 0 : decoded.sample(Math.max(0, position), audioSpectrum);
+            if (decoded == null || !playing) java.util.Arrays.fill(audioSpectrum, 0);
+            if (mapClock.pulse) musicMotion.onBeat(now - Math.round((position + 60 * rate - mapClock.upcoming.beatTime) / rate),
+                    amplitude, (float) (mapClock.upcoming.beatLength / rate), mapClock.upcoming.kiai);
+            musicMotion.update(now, seconds * 1000, amplitude, playing, true, mapClock.state.kiai);
+            visualisation.update(seconds * 1000, audioSpectrum, playing, true, mapClock.state.kiai);
+            model.advance(seconds, musicMotion.velocity);
+        } else if (musicReactive && LogoAudioVisualizer.isRequested()) {
+            long now = SystemClock.uptimeMillis();
+            boolean playing = LogoAudioVisualizer.soundTime > 0 && now - LogoAudioVisualizer.soundTime < 300;
+            OsuLogoSounds.systemFrame(playing);
+            float amplitude = now - LogoAudioVisualizer.sampleTime < 250 ? LogoAudioVisualizer.amplitude : 0;
+            long sequence = LogoAudioVisualizer.beatSequence;
+            if (sequence != lastMusicSequence) {
+                lastMusicSequence = sequence;
+                if (playing && now - LogoAudioVisualizer.beatTime < 250) {
+                    musicMotion.onBeat(LogoAudioVisualizer.beatTime, LogoAudioVisualizer.beatAmplitude, LogoAudioVisualizer.beatLength);
+                    OsuLogoSounds.systemBeat(sequence, LogoAudioVisualizer.beatTime, model.legacy);
+                }
+            }
+            musicMotion.update(now, seconds * 1000, amplitude, playing);
+            LogoAudioVisualizer.copySpectrum(audioSpectrum);
+            visualisation.update(seconds * 1000, audioSpectrum, playing);
+            model.advance(seconds, musicMotion.velocity);
+        } else { OsuLogoSounds.systemFrame(false); model.advance(seconds); }
         lastFrame = nanos;
         invalidate();
         updateAnimationVisibility();
@@ -131,7 +215,11 @@ public final class OsuCatLogoView extends View {
     }
 
     @Override protected void onDetachedFromWindow() {
+        OsuLogoSounds.setVisible(this, false);
         stopFrames();
+        if (musicReactive) LogoAudioVisualizer.setConsumerVisible(false);
+        musicMotion.reset();
+        visualisation.reset();
         if (visibilityObserver != null && visibilityObserver.isAlive()) {
             visibilityObserver.removeOnPreDrawListener(visibilityListener);
         }
@@ -169,6 +257,7 @@ public final class OsuCatLogoView extends View {
         int action = event.getActionMasked();
         if (action == MotionEvent.ACTION_DOWN) {
             if (!insideLogo(event)) return false;
+            if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
             removeCallbacks(allowClickFlash);
             suppressTouchClickFlash = false;
             releaseGesture.down();
@@ -185,13 +274,14 @@ public final class OsuCatLogoView extends View {
         }
         boolean handled = super.onTouchEvent(event);
         if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) setPressed(false);
+        if ((action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) && getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
         if (action == MotionEvent.ACTION_UP) post(allowClickFlash);
         return handled;
     }
 
     private boolean insideLogo(MotionEvent event) {
         float dx = event.getX() - getWidth() / 2f, dy = event.getY() - getHeight() / 2f;
-        float radius = Math.min(getWidth(), getHeight()) * 0.48f;
+        float radius = Math.min(AndroidUtilities.dp(logoSizeDp), Math.min(getWidth(), getHeight())) * 0.48f;
         return dx * dx + dy * dy <= radius * radius;
     }
 
@@ -203,6 +293,9 @@ public final class OsuCatLogoView extends View {
 
     @Override public boolean performClick() {
         if (!suppressTouchClickFlash) startFlash();
+        boolean sound = OsuLogoSounds.toggle();
+        setSelected(sound);
+        announceForAccessibility(LocaleController.getString(sound ? R.string.OsuLogoBeatSoundsOn : R.string.OsuLogoBeatSoundsOff));
         super.performClick();
         return true;
     }
@@ -246,7 +339,7 @@ public final class OsuCatLogoView extends View {
 
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        int size = Math.min(getWidth(), getHeight());
+        int size = Math.min(AndroidUtilities.dp(logoSizeDp), Math.min(getWidth(), getHeight()));
         if (size <= 0) return;
         if (overlay == null) prepareOverlay(size);
         long now = SystemClock.uptimeMillis();
@@ -255,6 +348,23 @@ public final class OsuCatLogoView extends View {
         canvas.scale(size / OsuLogoModel.SIZE, size / OsuLogoModel.SIZE);
         float scale = currentScale(now);
         canvas.scale(scale, scale, 256, 256);
+        if (musicReactive || mapTrack != null) {
+            float alpha = musicMotion.rippleAlpha(now);
+            if (alpha > 0.001f) {
+                int ripple = canvas.save();
+                float rippleScale = musicMotion.rippleScale(now);
+                canvas.scale(rippleScale, rippleScale, 256, 256);
+                additivePaint.setAlpha(Math.round(alpha * 255));
+                canvas.drawBitmap(overlay, null, overlayBounds, additivePaint);
+                canvas.restoreToCount(ripple);
+            }
+            float musicScale = musicMotion.scale(now);
+            canvas.scale(musicScale, musicScale, 256, 256);
+            // One batched line draw replaces up to 1000 individual rotated quads.
+            int lineCount = visualisation.writeLines(model.diameter / 2, barLines);
+            barPaint.setAlpha(Math.round(26 * musicMotion.spectrumAlpha(now)));
+            if (lineCount > 0) canvas.drawLines(barLines, 0, lineCount, barPaint);
+        }
         int content = canvas.save();
         float inset = (OsuLogoModel.SIZE - model.diameter) / 2;
         canvas.translate(inset, inset);
@@ -284,6 +394,7 @@ public final class OsuCatLogoView extends View {
             }
         }
         float flash = flashStart < 0 ? 0 : OsuLogoModel.flash((now - flashStart) / (float) OsuLogoModel.FLASH_MS);
+        if (mapTrack != null) flash = Math.max(flash, musicMotion.kiaiFlash(now));
         if (flash > 0) {
             // The clipped background is opaque, so ADD affects only the logo, below its white artwork.
             additivePaint.setAlpha(Math.round(flash * 255));

@@ -1465,6 +1465,7 @@ public class AndroidUtilities {
     }
 
     public static int getThumbForNameOrMime(String name, String mime, boolean media) {
+        if (zxc.iconic.xenon.osu.OsuReplay.isOsuFile(name)) return R.drawable.ic_osu_document;
         if (name != null && name.length() != 0) {
             int color = -1;
             if (name.contains(".doc") || name.contains(".txt") || name.contains(".psd")) {
@@ -4309,6 +4310,18 @@ public class AndroidUtilities {
 
     public static boolean openForView(File f, String fileName, String mimeType, final Activity activity, Theme.ResourcesProvider resourcesProvider, boolean restrict) {
         if (f != null && f.exists()) {
+            if (zxc.iconic.xenon.osu.OsuSkinInstaller.supports(fileName)) {
+                zxc.iconic.xenon.osu.OsuSkinInstaller.install(f,activity);
+                return true;
+            }
+            if (zxc.iconic.xenon.osu.OsuReplay.supports(fileName)) {
+                zxc.iconic.xenon.osu.OsuReplaySheet.open(f, fileName, activity, resourcesProvider);
+                return true;
+            }
+            if (zxc.iconic.xenon.osu.OsuBeatmapPlayer.supports(fileName)) {
+                zxc.iconic.xenon.osu.OsuBeatmapPlayer.open(f, fileName, activity, resourcesProvider);
+                return true;
+            }
             String realMimeType = null;
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -4363,6 +4376,10 @@ public class AndroidUtilities {
             f = FileLoader.getInstance(message.currentAccount).getPathToMessage(message.messageOwner);
         }
         String mimeType = message.type == MessageObject.TYPE_FILE || message.type == MessageObject.TYPE_TEXT ? message.getMimeType() : null;
+        if (f != null && f.isFile() && zxc.iconic.xenon.osu.OsuBeatmapPlayer.supports(message.getFileName())) {
+            zxc.iconic.xenon.osu.OsuBeatmapPlayer.open(f, message.getFileName(), activity, resourcesProvider, message);
+            return true;
+        }
         return openForView(f, message.getFileName(), mimeType, activity, resourcesProvider, restrict);
     }
 

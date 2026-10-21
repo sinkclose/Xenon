@@ -1,6 +1,9 @@
 package zxc.iconic.xenon.settings;
 
 import android.app.Activity;
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.widget.Toast;
 import android.content.Context;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
@@ -60,6 +63,7 @@ import zxc.iconic.xenon.helpers.ApkInstaller;
 import zxc.iconic.xenon.helpers.CloudSettingsHelper;
 import zxc.iconic.xenon.helpers.PasscodeHelper;
 import zxc.iconic.xenon.triangles.OsuCatLogoView;
+import zxc.iconic.xenon.triangles.LogoAudioVisualizer;
 import androidx.recyclerview.widget.RecyclerView;
 
 
@@ -90,6 +94,11 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
     private final int sourceCodeRow = rowId++;
 
     private final int commitRow = rowId++;
+    private final int logoMusicRow = rowId++;
+    private static final int REQUEST_LOGO_AUDIO = 9821;
+    private boolean musicPermissionPending, ownsMusicCapture;
+    private boolean musicStartPending;
+    private final LogoAudioVisualizer.Listener musicCaptureListener = this::refreshMusicCapture;
 
     private ActionBarMenuItem syncItem;
     private final ArrayList<SearchResult> searchArray = createSearchArray();
@@ -111,8 +120,12 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
             actionBar.setBackButtonImage(R.drawable.ic_ab_close);
         }
         topView = new FrameLayout(context);
+        topView.setClipChildren(false);
+        topView.setClipToPadding(false);
 
         logoContainer = new FrameLayout(context);
+        logoContainer.setClipChildren(false);
+        logoContainer.setClipToPadding(false);
         headerLogoType = -1;
         updateHeaderLogo();
         topView.addView(logoContainer, LayoutHelper.createFrame(120, 120, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 23 - 12, 0, 0));
@@ -194,6 +207,11 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
         headerActive = true;
         updateHeaderLogo();
         if (osuLogo != null) osuLogo.setScreenActive(true);
+        LogoAudioVisualizer.setListener(musicCaptureListener);
+        if (NekoConfig.osuLogoSystemMusic && osuLogo != null && !ownsMusicCapture) {
+            if (getParentActivity().checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startMusicVisualizer();
+        }
+        if (listView != null) listView.adapter.update(false);
         updateHeaderButtonSpacing();
     }
 
@@ -215,12 +233,14 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
             image.setImageDrawable(AppCompatResources.getDrawable(logoContainer.getContext(), R.mipmap.ic_launcher));
             logo = image;
         }
-        logoContainer.addView(logo, LayoutHelper.createFrame(90, 90, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 15, 0, 0));
+        logoContainer.addView(logo, LayoutHelper.createFrame(type == 0 ? 90 : 120, type == 0 ? 90 : 120,
+                Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, type == 0 ? 15 : 0, 0, 0));
         headerLogoType = type;
     }
 
     @Override public void onPause() {
         headerActive = false;
+        stopMusicCapture();
         if (osuLogo != null) osuLogo.setScreenActive(false);
         super.onPause();
     }
@@ -232,8 +252,67 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
 
     @Override public void onFragmentDestroy() {
         headerActive = false;
+        musicPermissionPending = false;
+        musicStartPending = false;
+        stopMusicCapture();
         if (osuLogo != null) osuLogo.setScreenActive(false);
         super.onFragmentDestroy();
+    }
+
+    private void refreshMusicCapture(boolean error) {
+        boolean enabled = ownsMusicCapture && LogoAudioVisualizer.isRequested();
+        if (!LogoAudioVisualizer.isRequested()) ownsMusicCapture = false;
+        if (osuLogo != null) osuLogo.setMusicReactive(enabled);
+        if (listView != null) listView.adapter.update(false);
+        if (error && getParentActivity() != null) Toast.makeText(getParentActivity(),
+                LocaleController.getString(R.string.OsuLogoMusicFailed), Toast.LENGTH_LONG).show();
+    }
+
+    private void stopMusicCapture() {
+        LogoAudioVisualizer.clearListener(musicCaptureListener);
+        if (osuLogo != null) osuLogo.setMusicReactive(false);
+        if (ownsMusicCapture) {
+            ownsMusicCapture = false;
+            LogoAudioVisualizer.stop();
+        }
+    }
+
+    private void toggleMusicCapture() {
+        Activity activity = getParentActivity();
+        if (activity == null || osuLogo == null) return;
+        if (NekoConfig.osuLogoSystemMusic) {
+            NekoConfig.setOsuLogoSystemMusic(false);
+            musicPermissionPending = false;
+            musicStartPending = false;
+            stopMusicCapture();
+            refreshMusicCapture(false);
+            return;
+        }
+        NekoConfig.setOsuLogoSystemMusic(true);
+        LogoAudioVisualizer.setListener(musicCaptureListener);
+        musicPermissionPending = true;
+        if (activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            activity.requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQUEST_LOGO_AUDIO);
+        } else { musicPermissionPending = false; startMusicVisualizer(); }
+        refreshMusicCapture(false);
+    }
+
+    private void startMusicVisualizer() {
+        if (!headerActive) { musicStartPending = true; return; }
+        musicStartPending = false;
+        if (osuLogo == null || !NekoConfig.osuLogoSystemMusic || ownsMusicCapture) return;
+        ownsMusicCapture = true;
+        LogoAudioVisualizer.setListener(musicCaptureListener);
+        LogoAudioVisualizer.start();
+        refreshMusicCapture(false);
+    }
+
+    @Override public void onRequestPermissionsResultFragment(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResultFragment(requestCode, permissions, grantResults);
+        if (requestCode != REQUEST_LOGO_AUDIO || !musicPermissionPending) return;
+        musicPermissionPending = false;
+        if (NekoConfig.osuLogoSystemMusic && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) startMusicVisualizer();
+        else { NekoConfig.setOsuLogoSystemMusic(false); refreshMusicCapture(false); }
     }
 
     @Override
@@ -260,7 +339,12 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
             return;
         }
 
-        items.add(UItem.asCustomShadow(topView, 200 - 12));
+        items.add(UItem.asCustomShadow(topView, 200 - 12).setChecked(true));
+        if (osuLogo != null) {
+            items.add(UItem.asCheck(logoMusicRow, LocaleController.getString(R.string.OsuLogoMusic))
+                    .setChecked(NekoConfig.osuLogoSystemMusic));
+            items.add(UItem.asShadow(LocaleController.getString(R.string.OsuLogoMusicHint)));
+        }
 
         items.add(UItem.asButton(generalRow, R.drawable.msg_media, LocaleController.getString(R.string.General)).slug("general"));
         items.add(UItem.asButton(appearanceRow, R.drawable.msg_theme, LocaleController.getString(R.string.ChangeChannelNameColor2)).slug("appearance"));
@@ -296,7 +380,9 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
             return;
         }
         var id = item.id;
-        if (id == chatRow) {
+        if (id == logoMusicRow) {
+            toggleMusicCapture();
+        } else if (id == chatRow) {
             presentFragment(new NekoChatSettingsActivity());
         } else if (id == generalRow) {
             presentFragment(new NekoGeneralSettingsActivity());

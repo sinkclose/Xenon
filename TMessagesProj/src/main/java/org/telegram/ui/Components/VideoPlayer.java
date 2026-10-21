@@ -176,6 +176,8 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
 
     private VideoPlayerDelegate delegate;
     private AudioVisualizerDelegate audioVisualizerDelegate;
+    private zxc.iconic.xenon.osu.OsuPcmMixer osuAudioMixer;
+    public void setOsuAudioMixer(zxc.iconic.xenon.osu.OsuPcmMixer mixer) { osuAudioMixer = mixer; }
     private int lastReportedPlaybackState;
     private boolean lastReportedPlayWhenReady;
 
@@ -1807,13 +1809,14 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
                 @NonNull Context context,
                 boolean enableFloatOutput,
                 boolean enableAudioTrackPlaybackParams) {
-            return new DefaultAudioSink.Builder(context)
+            AudioSink sink = new DefaultAudioSink.Builder(context)
                     .setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                     .setAudioProcessors(new AudioProcessor[]{
                             new TeeAudioProcessor(new VisualizerBufferSink())
                     })
                     .build();
+            return osuAudioMixer == null ? sink : new zxc.iconic.xenon.osu.OsuMixedAudioSink(sink, osuAudioMixer);
         }
     }
 

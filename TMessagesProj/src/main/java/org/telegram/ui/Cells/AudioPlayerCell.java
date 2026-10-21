@@ -137,7 +137,11 @@ public class AudioPlayerCell extends FrameLayout implements DownloadController.F
         }
 
         try {
-            CharSequence author = currentMessageObject.getMusicAuthor().replace('\n', ' ');
+            CharSequence author = zxc.iconic.xenon.osu.OsuBeatmapPlayer.author(currentMessageObject, resourcesProvider);
+            if (TextUtils.indexOf(author, '\n') >= 0) {
+                author = new SpannableStringBuilder(author);
+                for (int i = 0; i < author.length(); i++) if (author.charAt(i) == '\n') ((SpannableStringBuilder) author).replace(i, i + 1, " ");
+            }
             if (viewType == VIEW_TYPE_GLOBAL_SEARCH) {
                 author = new SpannableStringBuilder(author).append(' ').append(dotSpan).append(' ').append(FilteredSearchView.createFromInfoString(currentMessageObject, 2));
             }

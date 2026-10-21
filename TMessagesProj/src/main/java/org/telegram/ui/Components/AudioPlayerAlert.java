@@ -125,6 +125,9 @@ import org.telegram.ui.Stories.recorder.SelectAudioAlert;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import zxc.iconic.xenon.osu.OsuBeatmapPlayer;
+import zxc.iconic.xenon.triangles.OsuCatLogoView;
+import org.telegram.ui.LauncherIconController;
 
 public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.NotificationCenterDelegate, DownloadController.FileDownloadProgressListener {
 
@@ -150,6 +153,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
     private ButtonWithCounterView unsaveFromProfileButton;
     private ItemTouchHelper itemTouchHelper;
     private CoverContainer coverContainer;
+    private OsuCatLogoView beatmapLogo, largeBeatmapLogo;
     private ClippingTextViewSwitcher titleTextView;
     private RLottieImageView prevButton;
     private RLottieImageView nextButton;
@@ -549,6 +553,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
 
             @Override
             public boolean onTouchEvent(MotionEvent event) {
+                if (OsuBeatmapPlayer.current() != null) return super.onTouchEvent(event);
                 int action = event.getAction();
                 if (action == MotionEvent.ACTION_DOWN) {
                     if (getImageReceiver().hasBitmapImage()) {
@@ -1476,6 +1481,20 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
         bigAlbumConver.setScaleX(0.9f);
         bigAlbumConver.setScaleY(0.9f);
         blurredView.addView(bigAlbumConver, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.LEFT | Gravity.TOP, 30, 30, 30, 30));
+        boolean oldOsuLogo = LauncherIconController.isEnabled(LauncherIconController.LauncherIcon.OSU_OLD);
+        beatmapLogo = new OsuCatLogoView(context, oldOsuLogo);
+        beatmapLogo.setVisibility(View.GONE);
+        beatmapLogo.setScreenActive(true);
+        beatmapLogo.setLogoSizeDp(44);
+        beatmapLogo.setOnLongClickListener(v -> { showAlbumCover(true, true); return true; });
+        coverContainer.setClipChildren(false);
+        coverContainer.setClipToPadding(false);
+        coverContainer.addView(beatmapLogo, LayoutHelper.createFrame(160, 160, Gravity.CENTER));
+        largeBeatmapLogo = new OsuCatLogoView(context, oldOsuLogo);
+        largeBeatmapLogo.setLogoSizeDp(180);
+        largeBeatmapLogo.setVisibility(View.GONE);
+        largeBeatmapLogo.setScreenActive(true);
+        blurredView.addView(largeBeatmapLogo, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
         updateTitle(false);
         updateRepeatButton();
@@ -2064,6 +2083,8 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
 
     @Override
     public void dismiss() {
+        if (beatmapLogo != null) beatmapLogo.setScreenActive(false);
+        if (largeBeatmapLogo != null) largeBeatmapLogo.setScreenActive(false);
         super.dismiss();
         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.messagePlayingDidReset);
         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.messagePlayingPlayStateChanged);
@@ -2170,6 +2191,13 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
     }
 
     private void updateProgress(MessageObject messageObject, boolean animated) {
+        if (OsuBeatmapPlayer.track(messageObject) != null) {
+            int duration = (int) messageObject.getDuration();
+            if (duration > 0 && duration != lastDuration && durationTextView != null) {
+                lastDuration = duration;
+                durationTextView.setText(AndroidUtilities.formatShortDuration(duration));
+            }
+        }
         if (seekBarView != null) {
             int newTime;
             if (seekBarView.isDragging()) {
@@ -2300,7 +2328,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
                 playButton.setContentDescription(LocaleController.getString(R.string.AccActionPause));
             }
             String title = messageObject.getMusicTitle();
-            String author = messageObject.getMusicAuthor();
+            CharSequence author = OsuBeatmapPlayer.author(messageObject, resourcesProvider);
             titleTextView.setText(title);
             authorTextView.setText(author);
 
@@ -2327,7 +2355,26 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
     }
 
     private void updateCover(MessageObject messageObject, boolean animated) {
+        boolean map = OsuBeatmapPlayer.track(messageObject) != null;
+        playerLayout.setClipChildren(!map);
+        playerLayout.setClipToPadding(!map);
+        containerView.setClipChildren(!map);
+        containerView.setClipToPadding(!map);
+        if (beatmapLogo != null) {
+            beatmapLogo.setVisibility(map ? View.VISIBLE : View.GONE);
+            largeBeatmapLogo.setVisibility(map ? View.VISIBLE : View.GONE);
+            bigAlbumConver.setVisibility(map ? View.GONE : View.VISIBLE);
+        }
+        if (map) {
+            coverContainer.bringToFront();
+            coverContainer.getImageView().setVisibility(View.GONE);
+            coverContainer.getNextImageView().setVisibility(View.GONE);
+            setCustomPaddingRight(dp(64), false);
+            currentFile = null; currentAudioFinishedLoading = true;
+            return;
+        }
         final BackupImageView imageView = animated ? coverContainer.getNextImageView() : coverContainer.getImageView();
+        imageView.setVisibility(View.VISIBLE);
         final AudioInfo audioInfo = MediaController.getInstance().getAudioInfo();
         if (animated) {
             coverContainer.switchImageViews();
@@ -2354,6 +2401,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
     }
 
     private ImageLocation getArtworkThumbImageLocation(MessageObject messageObject) {
+        if (OsuBeatmapPlayer.track(messageObject) != null) return null;
         final TLRPC.Document document = messageObject.getDocument();
         TLRPC.PhotoSize thumb = document != null ? FileLoader.getClosestPhotoSizeWithSize(document.thumbs, 360) : null;
         if (!(thumb instanceof TLRPC.TL_photoSize) && !(thumb instanceof TLRPC.TL_photoSizeProgressive)) {
@@ -2884,6 +2932,22 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
         }
 
         final ItemOptions o = ItemOptions.makeOptions(container, resourcesProvider, v, true);
+        if (OsuBeatmapPlayer.isMapPlaylist()) {
+            o.add(getString(R.string.OsuMapShowOtherAudio), () -> {
+                o.dismiss();
+                OsuBeatmapPlayer.toggleOtherAudio();
+                playlist = MediaController.getInstance().getPlaylist();
+                listAdapter.notifyDataSetChanged();
+                updateEmptyView();
+            });
+            if (OsuBeatmapPlayer.track(messageObject) != null) {
+                if (OsuBeatmapPlayer.track(messageObject).map.mode == 0) o.add(getString(R.string.OsuAutoplay), () -> {
+                    o.dismiss();dismiss();OsuBeatmapPlayer.startAutoplay(parentActivity,messageObject);
+                });
+                o.show(); return;
+            }
+            o.addGap();
+        }
         ItemOptions o2 = buildSaveOptions(o, messageObject);
         if (!isMyList()) {
             o.addIf(!noforwards, R.drawable.msg_stories_save, getString(R.string.AudioSaveTo), () -> o.openSwipeback(o2));

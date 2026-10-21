@@ -1,0 +1,17 @@
+Default replay hitsounds: ppy/osu-resources
+Source commit: 2dd67f9ba7db3c968aee12a7a965255b023d3554
+Original paths: osu.Game.Resources/Samples/Gameplay/Argon/{normal,soft,drum}-{hitnormal,hitwhistle,hitfinish,hitclap,slidertick}.wav
+and osu.Game.Resources/Samples/Gameplay/Argon/combobreak.wav.
+Original files are included unchanged.
+License: CC BY-NC 4.0; see osu-resources-CC-BY-NC-4.0.md alongside this file.
+https://github.com/ppy/osu-resources
+
+Additional unchanged default judgements: osu.Game.Resources/Skins/Legacy/hit{0,50,100,300}@2x.png.
+Additional unchanged fail sample: osu.Game.Resources/Samples/Gameplay/failsound.wav.
+These resources use the same source commit and CC BY-NC 4.0 licence listed above.
+
+Default gameplay/HUD PNGs in assets/osu/skin-default: 59 unchanged files from
+osu.Game.Resources/Skins/Legacy at the source commit above; CC BY-NC 4.0.
+
+Additional unchanged spinner samples: osu.Game.Resources/Samples/Gameplay/Argon/spinnerbonus.wav
+and spinnerbonus-max.wav, from the same source commit and CC BY-NC 4.0 licence above.

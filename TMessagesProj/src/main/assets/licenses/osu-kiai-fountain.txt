@@ -1,0 +1,42 @@
+osu! gameplay Kiai star fountains
+Source: https://github.com/ppy/osu
+Code reference: commit 44819244af116e8ae08fe2cbd29c6e489b5c9d4e
+osu.Game/Screens/Play/KiaiGameplayFountains.cs
+osu.Game/Screens/Menu/StarFountain.cs
+osu.Game/Graphics/ParticleSpewer.cs
+osu.Game/Skinning/LegacyKiaiFlashingDrawable.cs
+osu.Game.Rulesets.Osu/Skinning/Legacy/LegacyMainCirclePiece.cs
+osu.Game/Graphics/Containers/BeatSyncedContainer.cs
+
+The spawn parameters and particle equations in OsuKiaiFountain are adapted
+from these MIT-licensed sources. Random samples use a deterministic hash to
+restore particles when seeking without storing or replaying frame history.
+
+Copyright (c) 2025 ppy Pty Ltd <contact@ppy.sh>.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+Texture: assets/osu/skin-default/star2@2x.png
+Copied without modification from ppy/osu-resources commit
+2dd67f9ba7db3c968aee12a7a965255b023d3554:
+osu.Game.Resources/Textures/Menu/fountain-star.png
+SHA-256: e736a1f076cd0fc500a0ecee368a0a805e9b54de489146617283fdaaa7004237
+Copyright ppy Pty Ltd and contributors.
+Texture licence: Creative Commons Attribution-NonCommercial 4.0 International.
+See osu-resources-CC-BY-NC-4.0.md in this directory.

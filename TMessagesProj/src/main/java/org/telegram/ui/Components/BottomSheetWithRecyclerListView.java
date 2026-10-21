@@ -695,6 +695,8 @@ public abstract class BottomSheetWithRecyclerListView extends BottomSheet {
 
     protected int additionalTitleX;
 
+    protected boolean showActionBarWhenExpanded() { return true; }
+
     protected int getActionBarProgressHeight() {
         return dp(56);
     }
@@ -736,7 +738,7 @@ public abstract class BottomSheetWithRecyclerListView extends BottomSheet {
             float handleAlpha = 1.0f;
             float progressToFullView = 0.0f;
             if (actionBarType == ActionBarType.FADING) {
-                progressToFullView = 1f - (top + dp(16)) / (float) getActionBarProgressHeight();
+                progressToFullView = showActionBarWhenExpanded() ? 1f - (top + dp(16)) / (float) getActionBarProgressHeight() : 0;
                 if (progressToFullView < 0) {
                     progressToFullView = 0;
                 }

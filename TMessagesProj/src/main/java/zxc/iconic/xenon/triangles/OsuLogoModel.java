@@ -66,10 +66,14 @@ public final class OsuLogoModel {
     }
 
     public void advance(float seconds) {
+        advance(seconds, 0.5f);
+    }
+
+    public void advance(float seconds, float velocity) {
         // OsuLogo settles Velocity at triangles_paused_velocity=0.5 without music.
         boolean respawned = false;
         for (int i = 0; i < count; i++) {
-            y[i] -= Math.max(0, seconds) * 25 * speed[i];
+            y[i] -= Math.max(0, seconds) * 50 * TriangleMath.clamp(velocity, 0, 10) * speed[i];
             if (y[i] + side[i] * 0.866f < 0) {
                 configureParticle(i);
                 y[i] = diameter;

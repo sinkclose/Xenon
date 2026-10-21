@@ -368,6 +368,12 @@
         </activity-alias>
 
         <activity
+            android:name="zxc.iconic.xenon.osu.OsuReplayActivity"
+            android:theme="@style/Theme.TMessages.Dark"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape" />
+
+        <activity
             android:name="org.telegram.ui.LaunchActivity"
             android:theme="@style/Theme.TMessages.Start"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|uiMode|smallestScreenSize|screenLayout"

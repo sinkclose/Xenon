@@ -40,6 +40,8 @@ public class MediaActionDrawable extends Drawable {
     public static final int ICON_CANCEL_PERCENT = 13;
     public static final int ICON_CANCEL_FILL = 14;
     public static final int ICON_UPDATE = 15;
+    public static final int ICON_OSU = 16;
+    private Drawable osuFileDrawable;
 
     private TextPaint textPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     public Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -276,6 +278,7 @@ public class MediaActionDrawable extends Drawable {
 
     @Override
     public void setColorFilter(ColorFilter colorFilter) {
+        this.colorFilter = colorFilter;
         paint.setColorFilter(colorFilter);
         paint2.setColorFilter(colorFilter);
         paint3.setColorFilter(colorFilter);
@@ -645,7 +648,7 @@ public class MediaActionDrawable extends Drawable {
                     alpha = 0;
                 }
                 rotation = 0;
-            } else if (nextIcon == ICON_UPDATE || nextIcon == ICON_PLAY || nextIcon == ICON_PAUSE || nextIcon == ICON_FILE || nextIcon == ICON_GIF || nextIcon == ICON_SECRETCHECK || nextIcon == ICON_FIRE || nextIcon == ICON_CHECK) {
+            } else if (nextIcon == ICON_UPDATE || nextIcon == ICON_PLAY || nextIcon == ICON_PAUSE || nextIcon == ICON_FILE || nextIcon == ICON_OSU || nextIcon == ICON_GIF || nextIcon == ICON_SECRETCHECK || nextIcon == ICON_FIRE || nextIcon == ICON_CHECK) {
                 float progress;
                 float backProgress;
                 if (nextIcon == ICON_CHECK) {
@@ -875,6 +878,10 @@ public class MediaActionDrawable extends Drawable {
         } else if (currentIcon == ICON_FILE) {
             previousPath = Theme.chat_filePath;
         }
+        if (nextIcon == ICON_OSU || currentIcon == ICON_OSU) {
+            if (osuFileDrawable == null) osuFileDrawable = new zxc.iconic.xenon.osu.OsuFileDrawable();
+            if (nextIcon == ICON_OSU) nextDrawable = osuFileDrawable; else previousDrawable = osuFileDrawable;
+        }
         if (nextIcon == ICON_FIRE) {
             nextDrawable = Theme.chat_flameIcon;
         } else if (currentIcon == ICON_FIRE) {
@@ -1054,7 +1061,7 @@ public class MediaActionDrawable extends Drawable {
         if (previousDrawable != null && previousDrawable != nextDrawable) {
             int w = (int) (previousDrawable.getIntrinsicWidth() * previowsDrawableScale);
             int h = (int) (previousDrawable.getIntrinsicHeight() * previowsDrawableScale);
-            previousDrawable.setColorFilter(colorFilter);
+            previousDrawable.setColorFilter(previousDrawable == osuFileDrawable ? new PorterDuffColorFilter(getColor(), PorterDuff.Mode.SRC_IN) : colorFilter);
             previousDrawable.setAlpha(currentIcon == nextIcon ? 255 : (int) ((1.0f - transitionProgress) * 255));
             previousDrawable.setBounds(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2);
             previousDrawable.draw(canvas);
@@ -1062,7 +1069,7 @@ public class MediaActionDrawable extends Drawable {
         if (nextDrawable != null) {
             int w = (int) (nextDrawable.getIntrinsicWidth() * drawableScale);
             int h = (int) (nextDrawable.getIntrinsicHeight() * drawableScale);
-            nextDrawable.setColorFilter(colorFilter);
+            nextDrawable.setColorFilter(nextDrawable == osuFileDrawable ? new PorterDuffColorFilter(getColor(), PorterDuff.Mode.SRC_IN) : colorFilter);
             nextDrawable.setAlpha(currentIcon == nextIcon ? 255 : (int) (transitionProgress * 255));
             nextDrawable.setBounds(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2);
             nextDrawable.draw(canvas);

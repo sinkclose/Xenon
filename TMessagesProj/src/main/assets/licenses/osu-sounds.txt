@@ -1,0 +1,21 @@
+osu! audio resources by ppy Pty Ltd and contributors.
+Source: https://github.com/ppy/osu-resources
+Licence: Creative Commons Attribution-NonCommercial 4.0 International.
+Full licence included as osu-resources-CC-BY-NC-4.0.md in this directory.
+https://creativecommons.org/licenses/by-nc/4.0/
+
+These audio files are copied without modification. Code licences do not replace
+the CC-BY-NC terms applying to these audio assets.
+
+Current resources, commit 2dd67f9ba7db3c968aee12a7a965255b023d3554:
+osu_logo_downbeat.wav <- osu.Game.Resources/Samples/Menu/osu-logo-downbeat.wav
+osu_logo_heartbeat.wav <- osu.Game.Resources/Samples/Menu/osu-logo-heartbeat.wav
+osu_fountain_start.wav <- osu.Game.Resources/Samples/Gameplay/Argon/fountain-shoot.wav
+osu_fountain_loop.wav <- osu.Game.Resources/Samples/Gameplay/Argon/fountain-loop.wav
+
+Historical resources, commit 9ee0490240eab8196752b88c5feadb7acc732906:
+osu_logo_downbeat_old.wav <- osu.Game.Resources/Samples/Menu/osu-logo-downbeat.wav
+osu_logo_heartbeat_old.wav <- osu.Game.Resources/Samples/Menu/osu-logo-heartbeat.wav
+This is the previous sample revision, before 6889cb4 (2022-04-15) replaced
+the logo hover samples. The same licence applies to this revision.
+

@@ -4954,6 +4954,10 @@ public class MediaDataController extends BaseController {
     }
 
     public void loadMusic(long dialogId, long maxId, long minId) {
+        loadMusic(dialogId, maxId, minId, null);
+    }
+
+    public void loadMusic(long dialogId, long maxId, long minId, java.util.function.Consumer<ArrayList<MessageObject>> localCallback) {
         getMessagesStorage().getStorageQueue().postRunnable(() -> {
             ArrayList<MessageObject> arrayListBegin = new ArrayList<>();
             ArrayList<MessageObject> arrayListEnd = new ArrayList<>();
@@ -4993,7 +4997,13 @@ public class MediaDataController extends BaseController {
             } catch (Exception e) {
                 FileLog.e(e);
             }
-            AndroidUtilities.runOnUIThread(() -> getNotificationCenter().postNotificationName(NotificationCenter.musicDidLoad, dialogId, arrayListBegin, arrayListEnd));
+            AndroidUtilities.runOnUIThread(() -> {
+                if (localCallback == null) getNotificationCenter().postNotificationName(NotificationCenter.musicDidLoad, dialogId, arrayListBegin, arrayListEnd);
+                else {
+                    arrayListBegin.addAll(arrayListEnd);
+                    localCallback.accept(arrayListBegin);
+                }
+            });
         });
     }
     //---------------- MEDIA END ----------------

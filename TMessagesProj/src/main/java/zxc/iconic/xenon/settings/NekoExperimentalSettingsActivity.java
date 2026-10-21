@@ -29,11 +29,76 @@ import java.util.Locale;
 
 import zxc.iconic.xenon.Extra;
 import zxc.iconic.xenon.NekoConfig;
+import zxc.iconic.xenon.osu.OsuLocalCache;
+import zxc.iconic.xenon.osu.OsuSkinStore;
+import org.telegram.ui.Components.BulletinFactory;
 import zxc.iconic.xenon.helpers.PopupHelper;
 import zxc.iconic.xenon.helpers.remote.UpdateHelper;
 import zxc.iconic.xenon.proxy.XrayProxyProfileStore;
 
 public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
+    private final int osuLogoKiaiSoundRow = rowId++, osuHitsoundVolumeRow = rowId++, osuMapMusicVolumeRow = rowId++;
+    private final int osuKeepHitsoundsPlayingRow = rowId++;
+    private final int osuClearLocalFilesRow = rowId++;
+    private final int osuVideoBackgroundRow=rowId++,osuKiaiIntensityRow=rowId++;
+    private final int osuBackgroundDimRow=rowId++,osuBackgroundBlurRow=rowId++,osuBackgroundParallaxRow=rowId++,osuSkinRow=rowId++;
+    private static final int OSU_SKIN_PICKER=49422;
+    private boolean importingOsuSkin;
+
+    private void chooseOsuSkin(){
+        java.util.List<java.io.File> skins=OsuSkinStore.list();
+        CharSequence[] choices=new CharSequence[skins.size()+2];
+        choices[0]=LocaleController.getString(R.string.OsuSkinDefault);choices[1]=LocaleController.getString(R.string.OsuSkinImport);
+        for(int i=0;i<skins.size();i++)choices[i+2]=OsuSkinStore.name(skins.get(i));
+        showDialog(new AlertDialog.Builder(getParentActivity(),resourcesProvider).setTitle(LocaleController.getString(R.string.OsuReplaySkin))
+                .setItems(choices,(dialog,index)->{
+                    if(index==0)NekoConfig.setOsuReplaySkin("");
+                    else if(index==1){try{startActivityForResult(new android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(android.content.Intent.CATEGORY_OPENABLE),OSU_SKIN_PICKER);}catch(Exception error){FileLog.e(error);BulletinFactory.of(this).createErrorBulletin(LocaleController.getString(R.string.OsuSkinImportFailed)).show();}}
+                    else NekoConfig.setOsuReplaySkin(skins.get(index-2).getName());
+                    if(listView!=null)listView.adapter.update(true);
+                }).create());
+    }
+    @Override public void onActivityResultFragment(int request,int result,android.content.Intent data){
+        super.onActivityResultFragment(request,result,data);
+        if(request!=OSU_SKIN_PICKER||result!=android.app.Activity.RESULT_OK||data==null||data.getData()==null||importingOsuSkin||getParentActivity()==null)return;
+        android.content.Context context=getParentActivity().getApplicationContext();android.net.Uri uri=data.getData();
+        importingOsuSkin=true;if(listView!=null)listView.adapter.update(true);
+        Utilities.globalQueue.postRunnable(()->{
+            String key=null;
+            try(java.io.InputStream input=context.getContentResolver().openInputStream(uri)){if(input==null)throw new java.io.IOException("Skin missing");key=OsuSkinStore.importSkin(input);}catch(Exception error){FileLog.e(error);}
+            String imported=key;
+            AndroidUtilities.runOnUIThread(()->{
+                importingOsuSkin=false;if(imported!=null)NekoConfig.setOsuReplaySkin(imported);
+                if(listView!=null)listView.adapter.update(true);
+                if(getParentActivity()!=null){BulletinFactory factory=BulletinFactory.of(this);if(imported==null)factory.createErrorBulletin(LocaleController.getString(R.string.OsuSkinImportFailed)).show();else factory.createSuccessBulletin(LocaleController.getString(R.string.OsuSkinImported)).show();}
+            });
+        });
+    }
+    private long osuCacheBytes = -1;
+    private boolean osuCacheBusy;
+
+    @Override public void onResume() {
+        super.onResume();
+        refreshOsuCache(false);
+    }
+    private void refreshOsuCache(boolean clear) {
+        if (osuCacheBusy) return;
+        osuCacheBusy = true;
+        if (listView != null) listView.adapter.update(true);
+        Utilities.globalQueue.postRunnable(() -> {
+            boolean failed = false;
+            try { if (clear) OsuLocalCache.clear(); } catch (java.io.IOException error) { FileLog.e(error); failed = true; }
+            long size = -1;
+            try { size = OsuLocalCache.size(); } catch (java.io.IOException error) { FileLog.e(error); }
+            final long bytes = size;
+            final boolean showError = failed;
+            AndroidUtilities.runOnUIThread(() -> {
+                osuCacheBytes = bytes; osuCacheBusy = false;
+                if (listView != null) listView.adapter.update(true);
+                if (showError && getParentActivity() != null) android.widget.Toast.makeText(getParentActivity(), LocaleController.getString(R.string.ErrorOccurred), android.widget.Toast.LENGTH_SHORT).show();
+            });
+        });
+    }
 
     private final int disableTypingRow = rowId++;
     private final int ghostModeRow = rowId++;
@@ -58,6 +123,37 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
 
     @Override
     protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
+        items.add(UItem.asHeader(LocaleController.getString(R.string.OsuLogoAudio)));
+        items.add(UItem.asCheck(osuKeepHitsoundsPlayingRow, LocaleController.getString(R.string.OsuLogoKeepHitsoundsPlaying),
+                LocaleController.getString(R.string.OsuLogoKeepHitsoundsPlayingHint))
+                .setChecked(NekoConfig.osuKeepHitsoundsPlaying).slug("osuKeepHitsoundsPlaying"));
+        SeekbarConfig hits = new SeekbarConfig(LocaleController.getString(R.string.OsuLogoHitsoundVolume), "0%", "100%", 0, 100, 1,
+                value -> NekoConfig.setOsuHitsoundVolume(Math.round(value)));
+        hits.valueFormatter = value -> value + "%";
+        items.add(SeekbarCellFactory.of(osuHitsoundVolumeRow, hits, NekoConfig.osuHitsoundVolume).slug("osuHitsoundVolume"));
+        SeekbarConfig music = new SeekbarConfig(LocaleController.getString(R.string.OsuLogoMapMusicVolume), "0%", "100%", 0, 100, 1,
+                value -> NekoConfig.setOsuMapMusicVolume(Math.round(value)));
+        music.valueFormatter = value -> value + "%";
+        items.add(SeekbarCellFactory.of(osuMapMusicVolumeRow, music, NekoConfig.osuMapMusicVolume).slug("osuMapMusicVolume"));
+        items.add(UItem.asCheck(osuLogoKiaiSoundRow, LocaleController.getString(R.string.OsuLogoKiaiSound))
+                .setChecked(NekoConfig.osuLogoKiaiSound).slug("osuLogoKiaiSound"));
+        items.add(UItem.asShadow(LocaleController.getString(R.string.OsuLogoKiaiSoundHint)));
+        items.add(UItem.asCheck(osuVideoBackgroundRow,LocaleController.getString(R.string.OsuReplayVideoBackground)).setChecked(NekoConfig.osuReplayVideoBackground).slug("osuReplayVideoBackground"));
+        SeekbarConfig dim=new SeekbarConfig(LocaleController.getString(R.string.OsuReplayBackgroundDim),"0%","100%",0,100,1,value->NekoConfig.setOsuReplayBackgroundDim(Math.round(value)));
+        dim.valueFormatter=value->value+"%";items.add(SeekbarCellFactory.of(osuBackgroundDimRow,dim,NekoConfig.osuReplayBackgroundDim).slug("osuReplayBackgroundDim"));
+        SeekbarConfig blur=new SeekbarConfig(LocaleController.getString(R.string.OsuReplayBackgroundBlur),"0%","100%",0,100,1,value->NekoConfig.setOsuReplayBackgroundBlur(Math.round(value)));
+        blur.valueFormatter=value->value+"%";items.add(SeekbarCellFactory.of(osuBackgroundBlurRow,blur,NekoConfig.osuReplayBackgroundBlur).slug("osuReplayBackgroundBlur"));
+        SeekbarConfig parallax=new SeekbarConfig(LocaleController.getString(R.string.OsuReplayBackgroundParallax),"-200%","200%",-200,200,1,value->NekoConfig.setOsuReplayBackgroundParallax(Math.round(value)));
+        parallax.valueFormatter=value->value+"%";items.add(SeekbarCellFactory.of(osuBackgroundParallaxRow,parallax,NekoConfig.osuReplayBackgroundParallax).slug("osuReplayBackgroundParallax"));
+        SeekbarConfig kiai=new SeekbarConfig(LocaleController.getString(R.string.OsuReplayKiaiIntensity),"0%","200%",0,200,1,value->NekoConfig.setOsuReplayKiaiIntensity(Math.round(value)));
+        kiai.valueFormatter=value->value+"%";items.add(SeekbarCellFactory.of(osuKiaiIntensityRow,kiai,NekoConfig.osuReplayKiaiIntensity).slug("osuReplayKiaiIntensity"));
+        java.io.File skin=OsuSkinStore.directory(NekoConfig.osuReplaySkin);
+        String skinName=importingOsuSkin?LocaleController.getString(R.string.Loading):skin!=null&&skin.isDirectory()?OsuSkinStore.name(skin):LocaleController.getString(R.string.OsuSkinDefault);
+        items.add(TextSettingsCellFactory.of(osuSkinRow,LocaleController.getString(R.string.OsuReplaySkin),skinName).slug("osuReplaySkin").setEnabled(!importingOsuSkin));
+        items.add(TextSettingsCellFactory.of(osuClearLocalFilesRow, LocaleController.getString(R.string.OsuClearLocalFiles),
+                osuCacheBusy || osuCacheBytes < 0 ? LocaleController.getString(R.string.Loading) : AndroidUtilities.formatFileSize(osuCacheBytes))
+                .slug("osuClearLocalFiles").red().setEnabled(!osuCacheBusy));
+        items.add(UItem.asShadow(LocaleController.getString(R.string.OsuClearLocalFilesHint)));
         items.add(UItem.asHeader(LocaleController.getString(R.string.Experiment)));
         items.add(UItem.asCheck(disableTypingRow, LocaleController.getString(R.string.DisableTypingIndicator), LocaleController.getString(R.string.DisableTypingIndicatorDesc)).slug("disableTyping").setChecked(NekoConfig.disableTypingIndicator));
         items.add(UItem.asCheck(ghostModeRow, LocaleController.getString(R.string.GhostMode), LocaleController.getString(R.string.GhostModeDesc)).slug("ghostMode").setChecked(NekoConfig.ghostModeEnabled));
@@ -108,7 +204,18 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
             return;
         }
         int id = item.id;
-        if (id == disableTypingRow) {
+        if(id==osuSkinRow){
+            chooseOsuSkin();
+        } else if (id == osuClearLocalFilesRow) {
+            refreshOsuCache(true);
+        } else if(id==osuVideoBackgroundRow){NekoConfig.setOsuReplayVideoBackground(!NekoConfig.osuReplayVideoBackground);if(view instanceof TextCheckCell)((TextCheckCell)view).setChecked(NekoConfig.osuReplayVideoBackground);
+        } else if (id == osuKeepHitsoundsPlayingRow) {
+            NekoConfig.setOsuKeepHitsoundsPlaying(!NekoConfig.osuKeepHitsoundsPlaying);
+            listView.adapter.update(true);
+        } else if (id == osuLogoKiaiSoundRow) {
+            NekoConfig.setOsuLogoKiaiSound(!NekoConfig.osuLogoKiaiSound);
+            listView.adapter.update(true);
+        } else if (id == disableTypingRow) {
             NekoConfig.toggleDisableTypingIndicator();
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.disableTypingIndicator);

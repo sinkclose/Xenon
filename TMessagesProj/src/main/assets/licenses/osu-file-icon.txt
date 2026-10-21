@@ -1,0 +1,4 @@
+Official osu! file icon: osu.Game.Resources/Textures/Menu/logo.png
+Source: https://github.com/ppy/osu-resources
+The PNG is packaged unchanged as drawable-nodpi/ic_osu_file.png.
+Copyright ppy Pty Ltd; CC-BY-NC 4.0. See osu-resources-CC-BY-NC-4.0.md.

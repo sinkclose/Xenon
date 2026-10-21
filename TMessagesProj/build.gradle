@@ -248,12 +248,34 @@ logger.lifecycle("Git commit hash: ${resolvedGitHash}")
 logger.lifecycle("Git commit short: ${resolvedGitShort}")
 logger.lifecycle("Git commit date: ${resolvedGitCommitDate}")
 
+def osuDifficultyOutput = layout.buildDirectory.dir('generated/osu-difficulty/jniLibs')
+def buildOsuDifficulty = tasks.register('buildOsuDifficulty', Exec) {
+    inputs.dir('jni/osu-difficulty')
+    inputs.file(rootProject.file('scripts/build-osu-difficulty.ps1'))
+    inputs.file(rootProject.file('scripts/build-osu-difficulty.sh'))
+    outputs.dir(osuDifficultyOutput)
+    doFirst {
+        def ndk = androidComponents.sdkComponents.ndkDirectory.get().asFile.absolutePath
+        if (OperatingSystem.current().isWindows()) {
+            def args = ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+                        rootProject.file('scripts/build-osu-difficulty.ps1').absolutePath, '-NdkPath', ndk]
+            if (gradle.startParameter.offline) args.add('-Offline')
+            commandLine(args)
+        } else {
+            commandLine('bash', rootProject.file('scripts/build-osu-difficulty.sh').absolutePath,
+                        ndk, gradle.startParameter.offline ? 'offline' : 'online')
+        }
+    }
+}
+tasks.named('preBuild').configure { dependsOn(buildOsuDifficulty) }
+
 android {
     buildFeatures {
         buildConfig true
     }
 
     sourceSets.main.jniLibs.srcDirs = ['./jniLibs/']
+    sourceSets.main.jniLibs.srcDir(osuDifficultyOutput.get().asFile)
 
     externalNativeBuild {
         cmake {

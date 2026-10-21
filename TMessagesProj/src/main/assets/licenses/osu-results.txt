@@ -1,0 +1,15 @@
+Original result samples: ppy/osu-resources
+Source commit: 2dd67f9ba7db3c968aee12a7a965255b023d3554
+Original paths: osu.Game.Resources/Samples/Results/*.wav
+Included unchanged in assets/osu/sounds/results (16 WAV files).
+Licence: CC BY-NC 4.0; see osu-resources-CC-BY-NC-4.0.md.
+https://github.com/ppy/osu-resources/tree/2dd67f9ba7db3c968aee12a7a965255b023d3554/osu.Game.Resources/Samples/Results
+
+Results animation/audio timing port: ppy/osu
+Source commit: 2f4e620cbc6245fb88fe1113c1842c213ea58701
+Sources: Screens/Ranking/ScorePanel.cs, Expanded/Accuracy/AccuracyCircle.cs,
+Expanded/TotalScoreCounter.cs, Expanded/ExpandedPanelTopContent.cs,
+Screens/Ranking/ResultsScreen.cs, Screens/Play/Player.cs,
+Screens/Play/ComboEffects.cs.
+Licence: MIT; full ppy MIT licence is included in osu-fail-animation-MIT.txt.
+https://github.com/ppy/osu

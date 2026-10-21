@@ -79,6 +79,14 @@ public class NekoConfig {
 
     private static final Object sync = new Object();
     public static boolean preferIPv6 = false;
+    public static boolean osuLogoSystemMusic = false;
+    public static volatile boolean osuLogoKiaiSound = false;
+    public static volatile boolean osuKeepHitsoundsPlaying = false;
+    public static volatile int osuHitsoundVolume = 60, osuMapMusicVolume = 100;
+    public static volatile boolean osuReplayVideoBackground=true;
+    public static volatile int osuReplayBackgroundDim = 70, osuReplayBackgroundBlur, osuReplayBackgroundParallax;
+    public static volatile int osuReplayHudOpacity=100,osuReplayObjectOpacity=100,osuReplayKiaiIntensity=100;
+    public static volatile String osuReplaySkin = "";
 
     public static boolean useSystemEmoji = false;
     public static boolean ignoreBlocked = false;
@@ -360,6 +368,19 @@ public class NekoConfig {
 
             SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
             preferIPv6 = preferences.getBoolean("preferIPv6", false);
+            osuLogoSystemMusic = preferences.getBoolean("osuLogoSystemMusic", false);
+            osuLogoKiaiSound = preferences.getBoolean("osuLogoKiaiSound", false);
+            osuReplayVideoBackground=preferences.getBoolean("osuReplayVideoBackground",true);
+            osuReplayBackgroundDim = Math.max(0,Math.min(100,preferences.getInt("osuReplayBackgroundDim",70)));
+            osuReplayBackgroundParallax = Math.max(-200,Math.min(200,preferences.getInt("osuReplayBackgroundParallax",0)));
+            osuReplayBackgroundBlur = Math.max(0,Math.min(100,preferences.getInt("osuReplayBackgroundBlur",0)));
+            osuReplayHudOpacity=Math.max(0,Math.min(100,preferences.getInt("osuReplayHudOpacity",100)));
+            osuReplayObjectOpacity=Math.max(0,Math.min(100,preferences.getInt("osuReplayObjectOpacity",100)));
+            osuReplayKiaiIntensity=Math.max(0,Math.min(200,preferences.getInt("osuReplayKiaiIntensity",100)));
+            osuReplaySkin = preferences.getString("osuReplaySkin", "");
+            osuKeepHitsoundsPlaying = preferences.getBoolean("osuKeepHitsoundsPlaying", false);
+            osuHitsoundVolume = Math.max(0, Math.min(100, preferences.getInt("osuHitsoundVolume", 60)));
+            osuMapMusicVolume = Math.max(0, Math.min(100, preferences.getInt("osuMapMusicVolume", 100)));
             ignoreBlocked = preferences.getBoolean("ignoreBlocked2", false);
             tabletMode = preferences.getInt("tabletMode", TABLET_AUTO);
             nameOrder = preferences.getInt("nameOrder", 1);
@@ -1029,6 +1050,51 @@ public class NekoConfig {
     // same fade as a plain (non-blurred) gradient instead.
     public static boolean fadeViewOtherActivities() {
         return progressiveFadeBlurOtherActivities;
+    }
+
+    public static void setOsuLogoSystemMusic(boolean enabled) {
+        osuLogoSystemMusic = enabled;
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
+                .edit().putBoolean("osuLogoSystemMusic", enabled).apply();
+    }
+
+    public static void setOsuLogoKiaiSound(boolean enabled) {
+        osuLogoKiaiSound = enabled;
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
+                .edit().putBoolean("osuLogoKiaiSound", enabled).apply();
+    }
+    public static void setOsuHitsoundVolume(int percent) {
+        osuHitsoundVolume = Math.max(0, Math.min(100, percent));
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
+                .edit().putInt("osuHitsoundVolume", osuHitsoundVolume).apply();
+    }
+    public static void setOsuKeepHitsoundsPlaying(boolean enabled) {
+        osuKeepHitsoundsPlaying = enabled;
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
+                .edit().putBoolean("osuKeepHitsoundsPlaying", enabled).apply();
+        zxc.iconic.xenon.osu.OsuLogoSounds.keepPlayingChanged();
+    }
+    public static void setOsuReplayVideoBackground(boolean value){osuReplayVideoBackground=value;ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig",Activity.MODE_PRIVATE).edit().putBoolean("osuReplayVideoBackground",value).apply();}
+    public static void setOsuReplayBackgroundDim(int value) {
+        osuReplayBackgroundDim=Math.max(0,Math.min(100,value));
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig",Activity.MODE_PRIVATE).edit().putInt("osuReplayBackgroundDim",osuReplayBackgroundDim).apply();
+    }
+    public static void setOsuReplayBackgroundParallax(int value){osuReplayBackgroundParallax=Math.max(-200,Math.min(200,value));ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig",Activity.MODE_PRIVATE).edit().putInt("osuReplayBackgroundParallax",osuReplayBackgroundParallax).apply();}
+    public static void setOsuReplayBackgroundBlur(int value) {
+        osuReplayBackgroundBlur=Math.max(0,Math.min(100,value));
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig",Activity.MODE_PRIVATE).edit().putInt("osuReplayBackgroundBlur",osuReplayBackgroundBlur).apply();
+    }
+    public static void setOsuReplayHudOpacity(int value){osuReplayHudOpacity=Math.max(0,Math.min(100,value));ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig",Activity.MODE_PRIVATE).edit().putInt("osuReplayHudOpacity",osuReplayHudOpacity).apply();}
+    public static void setOsuReplayKiaiIntensity(int value){osuReplayKiaiIntensity=Math.max(0,Math.min(200,value));ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig",Activity.MODE_PRIVATE).edit().putInt("osuReplayKiaiIntensity",osuReplayKiaiIntensity).apply();}
+    public static void setOsuReplayObjectOpacity(int value){osuReplayObjectOpacity=Math.max(0,Math.min(100,value));ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig",Activity.MODE_PRIVATE).edit().putInt("osuReplayObjectOpacity",osuReplayObjectOpacity).apply();}
+    public static void setOsuReplaySkin(String key) {
+        osuReplaySkin=key;
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig",Activity.MODE_PRIVATE).edit().putString("osuReplaySkin",key).apply();
+    }
+    public static void setOsuMapMusicVolume(int percent) {
+        osuMapMusicVolume = Math.max(0, Math.min(100, percent));
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
+                .edit().putInt("osuMapMusicVolume", osuMapMusicVolume).apply();
     }
 
     public static void setAvatarPlacement(int placement) {

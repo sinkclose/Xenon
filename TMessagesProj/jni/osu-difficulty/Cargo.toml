@@ -1,0 +1,19 @@
+[package]
+name = "xenon-osu-difficulty"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "xenon_osu_difficulty"
+crate-type = ["cdylib"]
+
+[dependencies]
+rosu-pp = "=4.0.1"
+jni = { version = "=0.21.1", default-features = false }
+lzma-rs = "=0.3.0"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = "symbols"

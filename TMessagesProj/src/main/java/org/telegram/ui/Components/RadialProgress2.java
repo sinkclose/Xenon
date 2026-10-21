@@ -414,6 +414,9 @@ public class RadialProgress2 {
             miniDrawBitmap.eraseColor(0);
         }
 
+        if (currentIcon == MediaActionDrawable.ICON_OSU) {
+            mediaActionDrawable.setColor(zxc.iconic.xenon.osu.OsuUiColors.icon(mediaActionDrawable.getColor(), circlePaint.getColor()));
+        }
         int originalAlpha = circlePaint.getAlpha();
         circlePaint.setAlpha((int) (originalAlpha * wholeAlpha * overrideAlpha * overrideCircleAlpha));
         originalAlpha = circleMiniPaint.getAlpha();

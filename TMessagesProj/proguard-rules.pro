@@ -5,6 +5,7 @@
 
 -keep @interface androidx.annotation.Keep
 -keep @androidx.annotation.Keep class * { *; }
+-keep class zxc.iconic.xenon.osu.OsuDifficulty { *; }
 -keepclasseswithmembers class * { @androidx.annotation.Keep *; }
 
 -keep class org.webrtc.* { *; }

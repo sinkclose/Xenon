@@ -265,6 +265,7 @@ public class SharedDocumentCell extends FrameLayout implements DownloadControlle
             extTextView.setVisibility(INVISIBLE);
         }
         needDivider = divider;
+        if (zxc.iconic.xenon.osu.OsuReplay.isOsuFile(text)) extTextView.setVisibility(INVISIBLE);
         if (resId == 0) {
             placeholderImageView.setImageResource(AndroidUtilities.getThumbForNameOrMime(text, type, false));
             placeholderImageView.setVisibility(VISIBLE);
@@ -444,6 +445,7 @@ public class SharedDocumentCell extends FrameLayout implements DownloadControlle
             extTextView.setVisibility(VISIBLE);
             placeholderImageView.setImageResource(AndroidUtilities.getThumbForNameOrMime(fileName, document.mime_type, false));
             extTextView.setText((idx = fileName.lastIndexOf('.')) == -1 ? "" : fileName.substring(idx + 1).toLowerCase());
+            extTextView.setVisibility(zxc.iconic.xenon.osu.OsuReplay.isOsuFile(fileName) ? INVISIBLE : VISIBLE);
             TLRPC.PhotoSize bigthumb = FileLoader.getClosestPhotoSizeWithSize(document.thumbs, 320);
             TLRPC.PhotoSize thumb = FileLoader.getClosestPhotoSizeWithSize(document.thumbs, 40);
             if (thumb == bigthumb) {
