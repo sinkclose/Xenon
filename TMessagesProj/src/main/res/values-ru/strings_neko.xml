@@ -772,5 +772,7 @@
     <string name="OsuReplayObjectOpacity">Непрозрачность объектов</string>
     <string name="OsuReplaySkipSection">Пропустить</string>
     <string name="OsuReplayVideoBackground">Видеофоны</string>
+    <string name="DisableOpeningFailureBottomsheet">Не показывать шит ошибки запуска</string>
+    <string name="DisableOpeningFailureBottomsheetDesc">Скрывает предупреждение о незавершённом запуске приложения. Автоматический безопасный режим продолжает работать.</string>
 </resources>
 

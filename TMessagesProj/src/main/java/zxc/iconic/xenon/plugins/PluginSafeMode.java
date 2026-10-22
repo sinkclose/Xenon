@@ -568,6 +568,11 @@ public final class PluginSafeMode {
     }
 
     private static void showCrashSheet(Activity activity, long crashTime, String reason, boolean pluginsActive, boolean pluginsDisabled, boolean pluginBlamed) {
+        // Suppress only incomplete-boot warnings. Recovery, flag cleanup and
+        // logging have already run; real crashes and manual Safe Mode stay visible.
+        if ("hang".equals(reason) && NekoConfig.disableOpeningFailureBottomsheet) {
+            return;
+        }
         try {
             final String crashLog = readCrashLog();
             boolean isHang = "hang".equals(reason);

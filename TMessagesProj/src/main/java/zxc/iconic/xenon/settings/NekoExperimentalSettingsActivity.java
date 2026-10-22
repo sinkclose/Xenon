@@ -104,6 +104,7 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
     private final int ghostModeRow = rowId++;
     private final int telegaDetectorRow = rowId++;
     private final int optimizedPushServiceRow = rowId++;
+    private final int disableOpeningFailureBottomsheetRow = rowId++;
 
     private final int useCamera2ApiRow = rowId++;
 
@@ -162,6 +163,10 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
         items.add(UItem.asShadow(null));
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.Tweaks)));
+        items.add(UItem.asCheck(disableOpeningFailureBottomsheetRow,
+                LocaleController.getString(R.string.DisableOpeningFailureBottomsheet),
+                LocaleController.getString(R.string.DisableOpeningFailureBottomsheetDesc))
+                .slug("disableOpeningFailureBottomsheet").setChecked(NekoConfig.disableOpeningFailureBottomsheet));
         items.add(UItem.asCheck(useCamera2ApiRow, LocaleController.getString(R.string.UseCamera2Api), LocaleController.getString(R.string.UseCamera2ApiDesc)).slug("useCamera2Api").setChecked(NekoConfig.useCamera2Api));
         if (!MessagesController.getInstance(currentAccount).getfileExperimentalParams) {
             items.add(TextSettingsCellFactory.of(downloadSpeedBoostRow, LocaleController.getString(R.string.DownloadSpeedBoost), switch (NekoConfig.downloadSpeedBoost) {
@@ -234,6 +239,11 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
             NekoConfig.toggleOptimizedPushService();
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.optimizedPushService);
+            }
+        } else if (id == disableOpeningFailureBottomsheetRow) {
+            NekoConfig.toggleDisableOpeningFailureBottomsheet();
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.disableOpeningFailureBottomsheet);
             }
         } else if (id == useCamera2ApiRow) {
             NekoConfig.toggleUseCamera2Api();

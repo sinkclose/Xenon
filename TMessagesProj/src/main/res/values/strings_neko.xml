@@ -779,6 +779,8 @@
     <string name="OsuReplayObjectOpacity">Hit object opacity</string>
     <string name="OsuReplaySkipSection">Skip</string>
     <string name="OsuReplayVideoBackground">Video backgrounds</string>
+    <string name="DisableOpeningFailureBottomsheet">Disable opening failure bottomsheet</string>
+    <string name="DisableOpeningFailureBottomsheetDesc">Hide the warning that the application did not finish booting. Automatic safe mode still works.</string>
 </resources>
 
 

@@ -202,6 +202,7 @@ public class NekoConfig {
      * manually (hold a volume button while the app is opening).
      */
     public static boolean pluginAutoSafeMode = true;
+    public static boolean disableOpeningFailureBottomsheet = true;
     public static boolean hidePhoneNumber = false;
     public static boolean removeAds = false;
     public static boolean textAnimationEnabled = false;
@@ -494,6 +495,7 @@ public class NekoConfig {
             pluginsEnabled = preferences.getBoolean("pluginsEnabled", false);
             pluginGodMode = preferences.getBoolean("pluginGodMode", false);
             pluginAutoSafeMode = preferences.getBoolean("pluginAutoSafeMode", true);
+            disableOpeningFailureBottomsheet = preferences.getBoolean("disableOpeningFailureBottomsheet", true);
             hidePhoneNumber = preferences.getBoolean("hidePhoneNumber", false);
             xrayAppProxyEnabled = preferences.getBoolean("xrayAppProxyEnabled", false);
             xrayVpnMode = preferences.getBoolean("xrayVpnMode", false);
@@ -1226,6 +1228,12 @@ public class NekoConfig {
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("pluginAutoSafeMode", pluginAutoSafeMode);
         editor.apply();
+    }
+
+    public static void toggleDisableOpeningFailureBottomsheet() {
+        disableOpeningFailureBottomsheet = !disableOpeningFailureBottomsheet;
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
+                .edit().putBoolean("disableOpeningFailureBottomsheet", disableOpeningFailureBottomsheet).apply();
     }
 
     public static void toggleKeepFormatting() {
