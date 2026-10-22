@@ -249,21 +249,59 @@ logger.lifecycle("Git commit short: ${resolvedGitShort}")
 logger.lifecycle("Git commit date: ${resolvedGitCommitDate}")
 
 def osuDifficultyOutput = layout.buildDirectory.dir('generated/osu-difficulty/jniLibs')
+def osuRustToolchain = '1.90.0'
+def osuRustTarget = 'aarch64-linux-android'
+def osuRustBuild = rootProject.layout.buildDirectory.dir('osu-rust').get().asFile
+def osuRustEnvironment = [
+        RUSTUP_HOME: new File(osuRustBuild, 'rustup').absolutePath,
+        CARGO_HOME: new File(osuRustBuild, 'cargo').absolutePath,
+        CARGO_TARGET_DIR: new File(osuRustBuild, 'target').absolutePath
+]
+if (gradle.startParameter.offline) osuRustEnvironment.CARGO_NET_OFFLINE = 'true'
+def osuWindows = OperatingSystem.current().isWindows()
+def osuNdkHost = osuWindows ? 'windows-x86_64' :
+        OperatingSystem.current().isMacOsX() ? 'darwin-x86_64' : 'linux-x86_64'
+
+def prepareOsuRustToolchain = tasks.register('prepareOsuRustToolchain', Exec) {
+    environment(osuRustEnvironment)
+    commandLine(osuWindows ? 'rustup.exe' : 'rustup', 'toolchain', 'install',
+            osuRustToolchain, '--profile', 'minimal', '--target', osuRustTarget, '--no-self-update')
+    onlyIf {
+        def toolchains = new File(osuRustBuild, 'rustup/toolchains').listFiles()
+        def ready = toolchains != null && toolchains.any {
+            it.name.startsWith(osuRustToolchain + '-') &&
+                    new File(it, "lib/rustlib/${osuRustTarget}/lib").isDirectory()
+        }
+        if (!ready && gradle.startParameter.offline) {
+            throw new GradleException('Run buildOsuDifficulty once online to install the isolated Rust toolchain and Android target')
+        }
+        return !ready
+    }
+}
+
 def buildOsuDifficulty = tasks.register('buildOsuDifficulty', Exec) {
+    dependsOn(prepareOsuRustToolchain)
     inputs.dir('jni/osu-difficulty')
-    inputs.file(rootProject.file('scripts/build-osu-difficulty.ps1'))
-    inputs.file(rootProject.file('scripts/build-osu-difficulty.sh'))
-    outputs.dir(osuDifficultyOutput)
+    inputs.property('rustToolchain', osuRustToolchain)
+    inputs.property('rustTarget', osuRustTarget)
+    inputs.property('ndkVersion', providers.provider { android.ndkVersion })
+    outputs.file(osuDifficultyOutput.map { it.file('arm64-v8a/libxenon_osu_difficulty.so') })
+    environment(osuRustEnvironment)
+    workingDir(rootProject.rootDir)
+    commandLine(osuWindows ? 'cargo.exe' : 'cargo', "+${osuRustToolchain}", 'build',
+            '--manifest-path', file('jni/osu-difficulty/Cargo.toml').absolutePath,
+            '--release', '--target', osuRustTarget, '--locked')
     doFirst {
-        def ndk = androidComponents.sdkComponents.ndkDirectory.get().asFile.absolutePath
-        if (OperatingSystem.current().isWindows()) {
-            def args = ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-                        rootProject.file('scripts/build-osu-difficulty.ps1').absolutePath, '-NdkPath', ndk]
-            if (gradle.startParameter.offline) args.add('-Offline')
-            commandLine(args)
-        } else {
-            commandLine('bash', rootProject.file('scripts/build-osu-difficulty.sh').absolutePath,
-                        ndk, gradle.startParameter.offline ? 'offline' : 'online')
+        def ndk = androidComponents.sdkComponents.ndkDirectory.get().asFile
+        def linker = new File(ndk, "toolchains/llvm/prebuilt/${osuNdkHost}/bin/aarch64-linux-android23-clang${osuWindows ? '.cmd' : ''}")
+        if (!linker.isFile()) throw new GradleException("Android arm64 linker not found: ${linker}")
+        environment('CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER', linker.absolutePath)
+        environment('CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS', '-C link-arg=-Wl,-z,max-page-size=16384')
+    }
+    doLast {
+        copy {
+            from(new File(osuRustBuild, "target/${osuRustTarget}/release/libxenon_osu_difficulty.so"))
+            into(osuDifficultyOutput.get().dir('arm64-v8a'))
         }
     }
 }
