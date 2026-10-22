@@ -16,25 +16,31 @@ public final class OsuReplayJudgements {
     }
     private OsuReplayJudgements(OsuPlaybackMap map,OsuReplayFrames frames,OsuReplay replay){
         int count=map.objects.size();int[] heads=new int[count];Arrays.fill(heads,-1);headTimes=new double[count];Arrays.fill(headTimes,Double.POSITIVE_INFINITY);
+        double[] judgedTimes=new double[count];Arrays.fill(judgedTimes,Double.POSITIVE_INFINITY);
         double od=map.overallDifficulty(replay.mods);
-        double great=80-6*od,ok=140-8*od,meh=200-10*od,radius=map.radius(replay.mods);
+        double great=Math.floor(80-6*od)-.5,ok=Math.floor(140-8*od)-.5,meh=Math.floor(200-10*od)-.5,radius=map.radius(replay.mods);
         int first=0,previous=0;
         for(int frame=0;frame<frames.size;frame++){
             int time=frames.time(frame),buttons=frames.buttons(frame),edges=buttons&~previous;previous=buttons;
             while(first<count && map.objects.get(first).time+meh<time){first++;}
             for(int press=0;press<Integer.bitCount(edges);press++)for(int i=first;i<count;i++){
-                OsuPlaybackMap.Hit hit=map.objects.get(i);if(hit.time-meh>time)break;
+                OsuPlaybackMap.Hit hit=map.objects.get(i);if(hit.time-(replay.lazer?400:meh)>time)break;
                 if(hit.type==8||heads[i]>=0)continue;
                 double y=(replay.mods&16)!=0?384-hit.y:hit.y;
                 if(Math.hypot(hit.x-frames.x(frame),y-frames.y(frame))>radius)continue;
                 double error=Math.abs(time-hit.time);
-                heads[i]=error<great?300:error<ok?100:50;headTimes[i]=time;break;
+                if(replay.lazer){
+                    boolean blocked=false;for(int prior=first;prior<i;prior++)if(heads[prior]<0&&map.objects.get(prior).type!=8&&map.objects.get(prior).time>time){blocked=true;break;}
+                    if(blocked)break;
+                    for(int prior=first;prior<i;prior++)if(heads[prior]<0&&map.objects.get(prior).type!=8&&map.objects.get(prior).time<hit.time){heads[prior]=0;judgedTimes[prior]=time;}
+                }
+                heads[i]=error<=great?300:error<=ok?100:error<=meh?50:0;judgedTimes[i]=time;if(heads[i]>0)headTimes[i]=time;break;
             }
         }
         OsuReplaySpinners spinners=new OsuReplaySpinners(map,frames,replay);
         OsuReplayFrames.Sample sample=new OsuReplayFrames.Sample();double[] position=new double[2];
         for(int i=0;i<count;i++){
-            OsuPlaybackMap.Hit hit=map.objects.get(i);int value=heads[i];double judged=headTimes[i];
+            OsuPlaybackMap.Hit hit=map.objects.get(i);int value=heads[i];double judged=judgedTimes[i];
             if((replay.mods&(128|2048))!=0&&hit.type!=8){frames.at(hit.time,sample);double y=(replay.mods&16)!=0?384-hit.y:hit.y;if(Math.hypot(hit.x-sample.x,y-sample.y)<=radius){value=300;judged=hit.time;headTimes[i]=judged;}}
             if(hit.type==8){
                 OsuReplaySpinners.Spin spin=spinners.objects.get(i);

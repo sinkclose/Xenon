@@ -36,6 +36,7 @@ public final class OsuReplayActivity extends Activity {
     private ImageButton play;
     private org.telegram.ui.Components.PlayPauseDrawable playIcon;
     private TextView seekTime;
+    private LinearLayout transportTimeline;
     private int seekMaximum;
     private View skipBreak,settingsButton;
     private OsuScorePanel resultsPanel;
@@ -45,15 +46,28 @@ public final class OsuReplayActivity extends Activity {
     private LinearLayout controls;
     private boolean controlsVisible=true;
     private final Runnable hideControls=()->{if(controls!=null&&!this.seeking){controlsVisible=false;controls.animate().alpha(0).setDuration(180).withEndAction(()->controls.setVisibility(View.GONE)).start();}};
-    private void showControls(){controlsVisible=true;controls.animate().cancel();controls.setVisibility(View.VISIBLE);controls.animate().alpha(1).setDuration(120).withEndAction(null).start();handler.removeCallbacks(hideControls);handler.postDelayed(hideControls,2500);}
+    private void showControls(){controlsVisible=true;controls.animate().cancel();controls.setVisibility(View.VISIBLE);controls.animate().alpha(1).setDuration(120).withEndAction(null).start();handler.removeCallbacks(hideControls);handler.postDelayed(hideControls,2500);if(skipBreak instanceof SkipButton)((SkipButton)skipBreak).reveal();}
 
     private org.telegram.ui.Components.SeekBarView seek;
     private Playfield field;
+    private View argonProgress;
     private boolean destroyed,foreground,prepared,loading,seeking,audioSeeking,failed,importingSkin,failurePaused;
     private int generation,settingsGeneration;
-    private double rate=1,failTime,endTime;
+    private double rate=1,failTime,endTime,finalJudgementTime;
     private long failElapsed,failLast;
-    private final AudioManager.OnAudioFocusChangeListener audioFocus=change->{if(change<0)runOnUiThread(this::pause);};
+    private boolean resumeAfterAudioFocus;
+    private float audioFocusVolume=1;
+    private final AudioManager.OnAudioFocusChangeListener audioFocus=change->runOnUiThread(()->{
+        if(destroyed)return;
+        if(change==AudioManager.AUDIOFOCUS_GAIN){
+            audioFocusVolume=1;restoreAudio();boolean restart=resumeAfterAudioFocus;resumeAfterAudioFocus=false;if(restart)resume();
+        }else if(change==AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK){
+            audioFocusVolume=.2f;restoreAudio();
+        }else if(change==AudioManager.AUDIOFOCUS_LOSS||change==AudioManager.AUDIOFOCUS_LOSS_TRANSIENT){
+            boolean wasPlaying=prepared&&music!=null&&(music.isPlaying()||resumeOnSeek);
+            pause();resumeOnSeek=false;resumeAfterAudioFocus=change==AudioManager.AUDIOFOCUS_LOSS_TRANSIENT&&wasPlaying;
+        }
+    });
     private final Runnable soundTick=new Runnable(){public void run(){
         if(destroyed||!foreground||!prepared||music==null||!music.isPlaying()||failed)return;
         double time=playbackTime();
@@ -69,7 +83,8 @@ public final class OsuReplayActivity extends Activity {
         super.onCreate(state);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,WindowManager.LayoutParams.FLAG_FULLSCREEN);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_FULLSCREEN);
+        if(Build.VERSION.SDK_INT>=28){WindowManager.LayoutParams attributes=getWindow().getAttributes();attributes.layoutInDisplayCutoutMode=Build.VERSION.SDK_INT>=30?WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS:WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;getWindow().setAttributes(attributes);}
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_LAYOUT_STABLE|View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
         root=new FrameLayout(this);root.setBackgroundColor(Color.BLACK);setContentView(root);
         status=new TextView(this);status.setTextColor(Color.WHITE);status.setGravity(Gravity.CENTER);status.setTextSize(17);root.addView(status,new FrameLayout.LayoutParams(-1,-1));
         audioManager=(AudioManager)getSystemService(AUDIO_SERVICE);
@@ -78,6 +93,7 @@ public final class OsuReplayActivity extends Activity {
     private void install(OsuReplayPreparation data){
         loading=false;session=data.session;replay=session.replay;map=session.map;frames=session.frames;judgements=session.judgements;endTime=map.duration();
         rate=OsuReplayModEffects.rate(replay);
+        finalJudgementTime=0;for(OsuReplayJudgements.Result result:judgements.results)finalJudgementTime=Math.max(finalJudgementTime,result.time);for(OsuPlaybackMap.Hit hit:map.objects)if(hit.type!=1)finalJudgementTime=Math.max(finalJudgementTime,hit.end);
         bind(data);
     }
     private void load(){
@@ -107,7 +123,7 @@ public final class OsuReplayActivity extends Activity {
         return Math.max(0,Math.min(music.getDuration(),music.getCurrentPosition()));
     }
     private void preferMaximumRefresh(){
-        try{Display display=getWindowManager().getDefaultDisplay();Display.Mode current=display.getMode(),best=current;for(Display.Mode mode:display.getSupportedModes())if(mode.getPhysicalWidth()==current.getPhysicalWidth()&&mode.getPhysicalHeight()==current.getPhysicalHeight()&&mode.getRefreshRate()>best.getRefreshRate())best=mode;WindowManager.LayoutParams attributes=getWindow().getAttributes();attributes.preferredDisplayModeId=best.getModeId();attributes.preferredRefreshRate=best.getRefreshRate();getWindow().setAttributes(attributes);if(Build.VERSION.SDK_INT>=35&&root!=null)root.setRequestedFrameRate(best.getRefreshRate());}
+        try{Display display=getWindowManager().getDefaultDisplay();Display.Mode current=display.getMode(),best=current;for(Display.Mode mode:display.getSupportedModes())if(mode.getPhysicalWidth()==current.getPhysicalWidth()&&mode.getPhysicalHeight()==current.getPhysicalHeight()&&mode.getRefreshRate()>best.getRefreshRate())best=mode;WindowManager.LayoutParams attributes=getWindow().getAttributes();attributes.preferredDisplayModeId=best.getModeId();attributes.preferredRefreshRate=best.getRefreshRate();if(Build.VERSION.SDK_INT>=30)attributes.preferMinimalPostProcessing=true;getWindow().setAttributes(attributes);if(Build.VERSION.SDK_INT>=35){if(root!=null)root.setRequestedFrameRate(best.getRefreshRate());if(field!=null)field.setRequestedFrameRate(best.getRefreshRate());if(video!=null)video.setRequestedFrameRate(best.getRefreshRate());}}
         catch(Exception error){FileLog.e(error);}
     }
     private void bind(OsuReplayPreparation data){
@@ -115,20 +131,22 @@ public final class OsuReplayActivity extends Activity {
         if(resultsAnimation!=null)resultsAnimation.cancel();if(resultsPanel!=null)resultsPanel.dispose();resultsShown=false;gameplayAlpha=1;gameplayScale=1;resultsBackgroundMix=0;resultsDimMix=0;resultsVideoMix=0;
         releasePlayer();failed=false;if(field!=null)field.dispose();root.removeAllViews();
         configureVideo(session.assets.video);
-        field=new Playfield(background,data.resultsBackground,data.rawBackground,skin);root.addView(field,new FrameLayout.LayoutParams(-1,-1));field.setOnTouchListener((v,event)->{if(event.getAction()==MotionEvent.ACTION_UP){toggleControls();v.performClick();}return true;});
-        controls=new LinearLayout(this);controls.setGravity(Gravity.CENTER_VERTICAL);controls.setPadding(12,0,12,0);controls.setBackgroundColor(0x66000000);
+        field=new Playfield(background,data.resultsBackground,data.rawBackground,skin);root.addView(field,new FrameLayout.LayoutParams(-1,-1));field.setOnTouchListener((v,event)->field.touch(event));
+        preferMaximumRefresh();
+        field.setOnHoverListener((v,event)->{if(field.skin.argonPro){field.argonHud.setProgressExpanded(event.getActionMasked()!=MotionEvent.ACTION_HOVER_EXIT&&field.argonHud.hitProgress(event.getX(),event.getY(),field.getWidth(),field.getHeight()));field.invalidate();}return false;});
+        controls=new LinearLayout(this);controls.setGravity(Gravity.CENTER);controls.setPadding(12,0,12,0);controls.setBackgroundColor(0x66000000);
         root.addView(controls,new FrameLayout.LayoutParams(-1,AndroidUtilities.dp(76),Gravity.BOTTOM));
         ImageButton back=button(R.drawable.ic_ab_back,R.string.Back);back.setContentDescription(LocaleController.getString(R.string.Back));controls.addView(back,new LinearLayout.LayoutParams(AndroidUtilities.dp(44),AndroidUtilities.dp(44)));back.setOnClickListener(v->finish());
         play=button(R.drawable.ic_action_pause,R.string.AccActionPause);playIcon=new org.telegram.ui.Components.PlayPauseDrawable(24);playIcon.setPause(true,false);play.setImageDrawable(playIcon);play.setContentDescription(LocaleController.getString(R.string.AccActionPause));play.setEnabled(false);controls.addView(play,new LinearLayout.LayoutParams(AndroidUtilities.dp(44),AndroidUtilities.dp(44)));
         play.setOnClickListener(v->{if(prepared){if(failed||(resultsShown&&music.getCurrentPosition()>=music.getDuration()-100)){seekTo(0,true);}else if(music.isPlaying())pause();else resume();}});
-        skipBreak=new SkipButton();skipBreak.setVisibility(View.GONE);root.addView(skipBreak,new FrameLayout.LayoutParams(-2,-2,Gravity.BOTTOM|Gravity.RIGHT));
-        skipBreak.setOnClickListener(v->{if(prepared){double target=map.skipSection(music.getCurrentPosition(),replay.mods);if(target>=0)seekTo((int)target);}});
-        LinearLayout timeline=new LinearLayout(this);timeline.setOrientation(LinearLayout.VERTICAL);timeline.setGravity(Gravity.CENTER_VERTICAL);controls.addView(timeline,new LinearLayout.LayoutParams(0,-1,1));
+        skipBreak=new SkipButton();skipBreak.setVisibility(View.GONE);root.addView(skipBreak,new FrameLayout.LayoutParams(-1,-2,Gravity.TOP));
+        skipBreak.setOnClickListener(v->{if(prepared){double target=map.skipSection(music.getCurrentPosition(),replay.mods);if(target>=0){seekTo((int)target);if(sounds!=null)sounds.skip();}}});
+        LinearLayout timeline=transportTimeline=new LinearLayout(this);timeline.setVisibility(skin.argonPro?View.GONE:View.VISIBLE);timeline.setOrientation(LinearLayout.VERTICAL);timeline.setGravity(Gravity.CENTER_VERTICAL);controls.addView(timeline,new LinearLayout.LayoutParams(0,-1,1));
         seekMaximum=OsuReplayCompletion.seekEnd(endTime,session.health.failureTime);seek=new org.telegram.ui.Components.SeekBarView(this);seek.setColors(0x66ffffff,Color.WHITE);seek.setReportChanges(true);timeline.addView(seek,new LinearLayout.LayoutParams(-1,AndroidUtilities.dp(44)));
         seekTime=new TextView(this);seekTime.setTextColor(Color.WHITE);seekTime.setTextSize(12);seekTime.setGravity(Gravity.CENTER);timeline.addView(seekTime,new LinearLayout.LayoutParams(-1,AndroidUtilities.dp(20)));updateSeekTime(0);
         seek.setDelegate(new org.telegram.ui.Components.SeekBarView.SeekBarViewDelegate(){
-            public void onSeekBarPressed(boolean pressed){if(pressed){resumeAfterDrag=prepared&&(music.isPlaying()||(resultsShown&&music.getCurrentPosition()>=music.getDuration()-100));seeking=true;pause();handler.removeCallbacks(hideControls);}else{seeking=false;showControls();}}
-            public void onSeekBarDrag(boolean stop,float progress){int value=Math.round(progress*seekMaximum);if(resultsShown&&value<endTime+1000)setResultsVisible(false);updateSeekTime(value);field.invalidate();if(stop){seeking=false;if(prepared)seekTo(Math.min(value,music.getDuration()),resumeAfterDrag);showControls();}}
+            public void onSeekBarPressed(boolean pressed){if(pressed){resumeAfterDrag=prepared&&(music.isPlaying()||(resultsShown&&music.getCurrentPosition()>=music.getDuration()-100));seeking=true;handler.removeCallbacks(hideControls);}else{seeking=false;showControls();}}
+            public void onSeekBarDrag(boolean stop,float progress){int value=Math.round(progress*seekMaximum);if(resultsShown&&value<endTime+1000)setResultsVisible(false);updateSeekTime(value);field.invalidate();if(stop){boolean continuePlaying=seeking?resumeAfterDrag:prepared&&(music.isPlaying()||resumeOnSeek);seeking=false;if(prepared)seekTo(Math.min(value,music.getDuration()),continuePlaying);showControls();}}
         });
         ImageButton restart=button(R.drawable.msg_retry,R.string.OsuReplayRestart);controls.addView(restart,new LinearLayout.LayoutParams(AndroidUtilities.dp(44),AndroidUtilities.dp(44)));restart.setOnClickListener(v->{if(prepared)seekTo(0,true);});
         ImageButton settings=button(R.drawable.msg_settings,R.string.Settings);controls.addView(settings,new LinearLayout.LayoutParams(AndroidUtilities.dp(44),AndroidUtilities.dp(44)));settingsButton=settings;settings.setOnClickListener(v->showSettings());
@@ -137,6 +155,20 @@ public final class OsuReplayActivity extends Activity {
         sounds=data.sounds;music=data.music;
         resultsPanel=new OsuScorePanel(this,replay.title,null);resultsPanel.setPlayback(true);resultsPanel.setSounds(data.resultsSounds);resultsPanel.bind(replay);resultsPanel.setVisibility(View.GONE);
         root.addView(resultsPanel,new FrameLayout.LayoutParams(1,1,Gravity.CENTER));
+        // A separate screen-space layer survives the gameplay/results fade and
+        // remains above the results card, including its transparent view bounds.
+        argonProgress=new View(this){
+            @Override protected void onDraw(Canvas canvas){
+                super.onDraw(canvas);if(field==null||!field.skin.argonPro)return;
+                double time=seeking?seek.getProgress()*seekMaximum:playbackTime();
+                float opacity=OsuReplayCompletion.progressOpacity(NekoConfig.osuReplayHudOpacity,gameplayAlpha);
+                int layer=canvas.saveLayerAlpha(0,0,getWidth(),getHeight(),Math.round(opacity*255));
+                field.argonHud.drawProgress(canvas,time,getWidth(),getHeight());canvas.restoreToCount(layer);
+            }
+        };
+        argonProgress.setOnTouchListener((v,event)->field.skin.argonPro&&(field.hudSeeking||field.argonHud.hitProgress(event.getX(),event.getY(),v.getWidth(),v.getHeight()))&&field.touch(event));
+        argonProgress.setOnHoverListener((v,event)->{if(!field.skin.argonPro)return false;boolean hit=event.getActionMasked()!=MotionEvent.ACTION_HOVER_EXIT&&field.argonHud.hitProgress(event.getX(),event.getY(),v.getWidth(),v.getHeight());field.argonHud.setProgressExpanded(hit);field.invalidate();return hit;});
+        root.addView(argonProgress,new FrameLayout.LayoutParams(-1,-1));
         root.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->layoutResults());layoutResults();
         // Keep transport above the non-modal results card, so it can always rewind.
         controls.bringToFront();
@@ -155,19 +187,19 @@ public final class OsuReplayActivity extends Activity {
     private void setResultsVisible(boolean visible){
         if(resultsPanel==null||resultsShown==visible)return;
         resultsShown=visible;controls.animate().cancel();if(resultsAnimation!=null)resultsAnimation.cancel();handler.removeCallbacks(hideControls);
-        if(visible){handler.removeCallbacks(soundTick);if(sounds!=null)sounds.stop();resultsPanel.setVisibility(View.VISIBLE);resultsPanel.restart(0);resultsPanel.setAlpha(0);resultsPanel.setScaleX(130f/360);resultsPanel.setScaleY(385f/586);skipBreak.setVisibility(View.GONE);}
+        if(visible){handler.removeCallbacks(soundTick);if(sounds!=null)sounds.stop();resultsPanel.setVisibility(View.VISIBLE);resultsPanel.restart(0);resultsPanel.setAlpha(0);resultsPanel.setScaleX(1);resultsPanel.setScaleY(1);skipBreak.setVisibility(View.GONE);}
         else resultsPanel.stop();
         float from=gameplayAlpha,scaleFrom=gameplayScale,backgroundFrom=resultsBackgroundMix,dimFrom=resultsDimMix,videoFrom=resultsVideoMix,panelAlpha=resultsPanel.getAlpha();long began=SystemClock.uptimeMillis();
         resultsAnimation=ValueAnimator.ofFloat(0,1);resultsAnimation.setDuration(800);resultsAnimation.setInterpolator(input->input);
         resultsAnimation.addUpdateListener(animation->{long elapsed=SystemClock.uptimeMillis()-began;gameplayScale=OsuReplayCompletion.gameplayScale(elapsed,scaleFrom,visible);resultsBackgroundMix=OsuReplayCompletion.backgroundMix(elapsed,backgroundFrom,visible);resultsDimMix=OsuReplayCompletion.dimMix(elapsed,dimFrom,visible);gameplayAlpha=visible?from*OsuReplayCompletion.hudAlpha(elapsed):from+(1-from)*(1-OsuReplayCompletion.hudAlpha(elapsed));
             resultsVideoMix=OsuReplayCompletion.videoMix(elapsed,videoFrom,visible);
-            if(visible){resultsPanel.setAlpha(OsuReplayCompletion.panelAlpha(elapsed));resultsPanel.setScaleX(OsuReplayCompletion.panelScale(elapsed,true));resultsPanel.setScaleY(OsuReplayCompletion.panelScale(elapsed,false));}
+            if(visible){resultsPanel.setAlpha(OsuReplayCompletion.panelAlpha(elapsed));}
             else {resultsPanel.setAlpha(panelAlpha*OsuReplayCompletion.panelExitAlpha(elapsed));if(resultsPanel.getAlpha()==0)resultsPanel.setVisibility(View.GONE);}
             if(settingsButton!=null){settingsButton.setAlpha(1);settingsButton.setEnabled(!visible);}if(visible){controls.setAlpha(gameplayAlpha);if(gameplayAlpha==0){controls.setVisibility(View.GONE);controlsVisible=false;}}field.invalidate();
         });resultsAnimation.start();
         if(!visible)showControls();
     }
-    private void restoreAudio(){if(music!=null&&prepared)try{music.setPlaybackParams(new PlaybackParams().setSpeed((float)rate).setPitch((replay.adjustPitch||(replay.mods&512)!=0)?(float)rate:1));float volume=NekoConfig.osuMapMusicVolume/100f;music.setVolume(volume,volume);}catch(Exception error){FileLog.e(error);}}
+    private void restoreAudio(){if(music!=null&&prepared)try{music.setPlaybackParams(new PlaybackParams().setSpeed((float)rate).setPitch((replay.adjustPitch||(replay.mods&512)!=0)?(float)rate:1));float volume=NekoConfig.osuMapMusicVolume/100f*audioFocusVolume;music.setVolume(volume,volume);}catch(Exception error){FileLog.e(error);}}
     private void seekTo(int position){seekTo(position,prepared&&music.isPlaying());}
     private void seekTo(int position,boolean resume){
         if(!prepared)return;if(resultsShown&&position<endTime+1000)setResultsVisible(false);
@@ -180,7 +212,7 @@ public final class OsuReplayActivity extends Activity {
         if(audioManager.requestAudioFocus(audioFocus,AudioManager.STREAM_MUSIC,AudioManager.AUDIOFOCUS_GAIN)!=AudioManager.AUDIOFOCUS_REQUEST_GRANTED)return;
         if(audioSeeking){resumeOnSeek=true;return;}if(music.getCurrentPosition()>=music.getDuration()-100){seekTo(0,true);return;}music.start();if(sounds!=null)sounds.seek(music.getCurrentPosition());handler.removeCallbacks(soundTick);handler.post(soundTick);playIcon.setPause(true);play.setContentDescription(LocaleController.getString(R.string.AccActionPause));field.invalidate();
     }
-    private void pause(){if(video!=null)video.pause();if(failed)failurePaused=true;handler.removeCallbacks(soundTick);if(sounds!=null)sounds.stop();if(prepared&&music!=null){try{music.pause();}catch(IllegalStateException ignored){}if(play!=null){playIcon.setPause(false);play.setContentDescription(LocaleController.getString(R.string.AccActionPlay));}if(field!=null)field.invalidate();}}
+    private void pause(){resumeAfterAudioFocus=false;if(video!=null)video.pause();if(failed)failurePaused=true;handler.removeCallbacks(soundTick);if(sounds!=null)sounds.stop();if(prepared&&music!=null){try{music.pause();}catch(IllegalStateException ignored){}if(play!=null){playIcon.setPause(false);play.setContentDescription(LocaleController.getString(R.string.AccActionPlay));}if(field!=null)field.invalidate();}}
     private void releasePlayer(){if(video!=null){video.release();video=null;}handler.removeCallbacks(soundTick);if(sounds!=null){sounds.release();sounds=null;}prepared=false;audioSeeking=false;if(music!=null){music.release();music=null;}if(audioManager!=null)audioManager.abandonAudioFocus(audioFocus);}
     private void startFailure(){failed=true;failurePaused=false;failTime=session.health.failureTime;failElapsed=0;failLast=SystemClock.uptimeMillis();handler.removeCallbacks(soundTick);if(sounds!=null)sounds.fail();}
     private OsuFailAnimation updateFailure(){
@@ -194,14 +226,17 @@ public final class OsuReplayActivity extends Activity {
         return animation;
     }
     private void showSettings(){
-        boolean playing=prepared&&music.isPlaying()&&!failed;pause();
+        String oldSkin=NekoConfig.osuReplaySkin;int oldBlur=NekoConfig.osuReplayBackgroundBlur;boolean oldVideo=NekoConfig.osuReplayVideoBackground;
         OsuReplaySettingsSheet sheet=new OsuReplaySettingsSheet(this,()->{
             importingSkin=true;Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE);
             try{startActivityForResult(intent,49423);}catch(Exception error){importingSkin=false;FileLog.e(error);}
         });
-        sheet.setOnDismissListener(dialog->{if(!importingSkin)reloadSettings(playing);});sheet.show();
+        sheet.setOnDismissListener(dialog->{if(!importingSkin){
+            if(!oldSkin.equals(NekoConfig.osuReplaySkin)||oldBlur!=NekoConfig.osuReplayBackgroundBlur||oldVideo!=NekoConfig.osuReplayVideoBackground)reloadSettings();
+            else {restoreAudio();seek.updateStyle();field.invalidate();}
+        }});sheet.show();
     }
-    private void reloadSettings(boolean resumeAfter){
+    private void reloadSettings(){
         if(session==null)return;int token=++settingsGeneration;
         queue.postRunnable(()->{
             File foundVideo=session.assets.video;
@@ -213,46 +248,66 @@ public final class OsuReplayActivity extends Activity {
             Bitmap image=background,resultImage=resultsBackground,rawImage=rawBackground;OsuReplaySkin replacement=skin;
             runOnUiThread(()->{
                 if(destroyed||token!=settingsGeneration||replacement==null){if(image!=null)image.recycle();if(resultImage!=null)resultImage.recycle();if(rawImage!=null)rawImage.recycle();if(replacement!=null)replacement.dispose();return;}
-                session.assets.video=videoFile;configureVideo(videoFile);seek.updateStyle();field.replaceResources(image,resultImage,rawImage,replacement);skipBreak.requestLayout();skipBreak.invalidate();if(sounds!=null)sounds.release();sounds=new OsuReplaySounds(this,NekoConfig.osuReplaySkin,session.sounds,true);music.setHitSamples(hitSamples);restoreAudio();if(prepared&&!resumeAfter)music.pause();if(resumeAfter)resume();
+                session.assets.video=videoFile;configureVideo(videoFile);seek.updateStyle();field.replaceResources(image,resultImage,rawImage,replacement);skipBreak.requestLayout();skipBreak.invalidate();if(sounds!=null)sounds.release();sounds=new OsuReplaySounds(this,NekoConfig.osuReplaySkin,session.sounds,true);music.setHitSamples(hitSamples);restoreAudio();field.invalidate();
             });
         });
     }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);if(request!=49423)return;importingSkin=false;
-        if(result!=RESULT_OK||data==null||data.getData()==null){reloadSettings(false);return;}
+        if(result!=RESULT_OK||data==null||data.getData()==null){reloadSettings();return;}
         android.net.Uri uri=data.getData();queue.postRunnable(()->{
             String imported=null;try(InputStream input=getContentResolver().openInputStream(uri)){imported=OsuSkinStore.importSkin(input);}catch(Exception error){FileLog.e(error);}String key=imported;
-            runOnUiThread(()->{if(destroyed)return;if(key!=null){NekoConfig.setOsuReplaySkin(key);BulletinFactory.of(root,null).createSuccessBulletin(LocaleController.getString(R.string.OsuSkinImported)).show();reloadSettings(false);}else BulletinFactory.of(root,null).createErrorBulletin(LocaleController.getString(R.string.OsuSkinImportFailed)).show();});
+            runOnUiThread(()->{if(destroyed)return;if(key!=null){NekoConfig.setOsuReplaySkin(key);BulletinFactory.of(root,null).createSuccessBulletin(LocaleController.getString(R.string.OsuSkinImported)).show();reloadSettings();}else BulletinFactory.of(root,null).createErrorBulletin(LocaleController.getString(R.string.OsuSkinImportFailed)).show();});
         });
     }
     @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);if(focus&&foreground)preferMaximumRefresh();}
     @Override protected void onResume(){super.onResume();foreground=true;preferMaximumRefresh();if(resultsPanel!=null)resultsPanel.setPaused(false);if(startWhenResumed){startWhenResumed=false;resume();}failLast=SystemClock.uptimeMillis();if(failed&&field!=null)field.invalidate();}
-    @Override protected void onPause(){foreground=false;resumeOnSeek=false;if(resultsPanel!=null)resultsPanel.setPaused(true);pause();if(audioManager!=null)audioManager.abandonAudioFocus(audioFocus);super.onPause();}
+    @Override protected void onPause(){startWhenResumed=prepared&&(music.isPlaying()||resumeOnSeek);foreground=false;resumeOnSeek=false;if(resultsPanel!=null)resultsPanel.setPaused(true);pause();if(audioManager!=null)audioManager.abandonAudioFocus(audioFocus);super.onPause();}
     @Override protected void onDestroy(){destroyed=true;if(resultsAnimation!=null)resultsAnimation.cancel();if(resultsPanel!=null)resultsPanel.dispose();handler.removeCallbacksAndMessages(null);generation++;settingsGeneration++;releasePlayer();if(field!=null)field.dispose();super.onDestroy();}
 
-    /** Remains available during intro/breaks even after the transport controls fade out. */
+    /** Lazer SkipOverlay: centre at 70% height, 100-high full-width strip and 60-square button. */
     private final class SkipButton extends View {
-        private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG);
-        private final RectF rect=new RectF();
+        private final OsuLazerSkipRenderer skipRenderer=new OsuLazerSkipRenderer();
+        private boolean available,pressed,hovered;
+        private double target=Double.NaN,shownAt,previousTime=Double.NaN,periodEnd;
+        private long revealed,pressedAt,releasedAt,hiddenAt;
+        private float releasedFrom=1;
         SkipButton(){super(OsuReplayActivity.this);setContentDescription(LocaleController.getString(R.string.OsuReplaySkipSection));setClickable(true);setFocusable(true);}
-        private float scale(){return Math.max(1,field.getMeasuredHeight())/768f;}
-        @Override protected void onMeasure(int widthSpec,int heightSpec){
-            float scale=scale();boolean image=field.skin.has("play-skip");
-            int width=image?Math.max(1,Math.round(field.skin.width("play-skip")*scale)):AndroidUtilities.dp(96);
-            int height=image?Math.max(1,Math.round(field.skin.height("play-skip")*scale)):AndroidUtilities.dp(44);
-            setMeasuredDimension(resolveSize(width,widthSpec),resolveSize(height,heightSpec));
-        }
-        @Override protected void onDraw(Canvas canvas){
-            double time=playbackTime();float scale=scale();
-            if(!field.skin.natural(canvas,paint,rect,"play-skip",getWidth()-field.skin.width("play-skip")*scale/2,getHeight()-field.skin.height("play-skip")*scale/2,scale,1,null,time)){
-                paint.setColor(0xaa202028);rect.set(0,0,getWidth(),getHeight());canvas.drawRoundRect(rect,AndroidUtilities.dp(22),AndroidUtilities.dp(22),paint);
-                paint.setColor(Color.WHITE);paint.setTextSize(AndroidUtilities.dp(14));paint.setTextAlign(Paint.Align.CENTER);canvas.drawText(LocaleController.getString(R.string.OsuReplaySkipSection),getWidth()/2f,(getHeight()-paint.ascent()-paint.descent())/2,paint);
+        @Override public boolean onHoverEvent(MotionEvent event){hovered=event.getActionMasked()!=MotionEvent.ACTION_HOVER_EXIT;skipRenderer.setHovered(hovered,SystemClock.uptimeMillis());reveal();return true;}
+        void reveal(){revealed=SystemClock.uptimeMillis();invalidate();}
+        void update(double time,boolean active,double nextTarget){
+            if(active&&(!available||target!=nextTarget||time<previousTime-100)){
+                target=nextTarget;shownAt=time;reveal();
+                boolean intro=!map.objects.isEmpty()&&time<map.objects.get(0).time-Math.max(1000,map.preempt(replay.mods));periodEnd=target-(intro?2000:1000);
             }
-            if(prepared&&foreground&&music.isPlaying())postInvalidateOnAnimation();
+            if(!active&&available)hiddenAt=SystemClock.uptimeMillis();
+            available=active;previousTime=time;setEnabled(active);
+            if(active){setVisibility(View.VISIBLE);setTranslationY(root.getHeight()*.7f-getMeasuredHeight()/2f);invalidate();}
+            else if(getVisibility()==View.VISIBLE)invalidate();
+        }
+        @Override protected void onMeasure(int widthSpec,int heightSpec){float scale=OsuArgonGeometry.hudScale(root.getWidth(),Math.max(1,field.getMeasuredHeight()));setMeasuredDimension(MeasureSpec.getSize(widthSpec),Math.max(1,Math.round(100*scale)));}
+        @Override protected void onDetachedFromWindow(){skipRenderer.suspend();super.onDetachedFromWindow();}
+        private float pressScale(long now){return pressed?OsuLazerSkipAnimation.pressScale(now-pressedAt):releasedAt==0?1:OsuLazerSkipAnimation.releaseScale(releasedFrom,now-releasedAt);}
+        @Override public boolean onTouchEvent(MotionEvent event){
+            if(!available)return false;
+            if(event.getActionMasked()==MotionEvent.ACTION_DOWN){pressed=true;pressedAt=SystemClock.uptimeMillis();reveal();return true;}
+            if(event.getActionMasked()==MotionEvent.ACTION_UP||event.getActionMasked()==MotionEvent.ACTION_CANCEL){releasedFrom=pressScale(SystemClock.uptimeMillis());releasedAt=SystemClock.uptimeMillis();pressed=false;reveal();if(event.getActionMasked()==MotionEvent.ACTION_UP){skipRenderer.click(SystemClock.uptimeMillis());performClick();}return true;}
+            return true;
+        }
+        @Override protected void onDraw(Canvas c){
+            long now=SystemClock.uptimeMillis();float opacity=OsuLazerSkipAnimation.opacity(now-revealed);
+            if(pressed||hovered)opacity=1;
+            if(!available)opacity*=1-OsuArgonAnimation.progress(now-hiddenAt,300);
+            if(opacity<=0&&!available){skipRenderer.suspend();setVisibility(View.GONE);return;}
+            skipRenderer.draw(c,getWidth(),getHeight(),opacity,pressScale(now),OsuLazerSkipAnimation.remaining(playbackTime(),shownAt,periodEnd),now,pressed,this);
+            if(foreground&&(available||opacity>0))postInvalidateOnAnimation();
         }
     }
 
     private final class Playfield extends View {
+        private final OsuArgonRenderer argon=new OsuArgonRenderer();
+        private final OsuArgonHud argonHud=new OsuArgonHud(session);
+        private final OsuLazerBreakRenderer breakOverlay=new OsuLazerBreakRenderer(session);
         private final OsuReplayKiai kiai=new OsuReplayKiai();
         private final OsuKiaiFlash kiaiFlash=new OsuKiaiFlash(session.effects);
         private final PorterDuffXfermode kiaiAdditive=new PorterDuffXfermode(PorterDuff.Mode.ADD);
@@ -273,6 +328,17 @@ public final class OsuReplayActivity extends Activity {
         private final OsuHudSmoothing hudSmoothing=new OsuHudSmoothing();
         private final OsuReplayParallax parallax=new OsuReplayParallax();
         private long parallaxLast;
+        private boolean hudSeeking;
+        boolean touch(MotionEvent event){
+            int action=event.getActionMasked();
+            if(skin.argonPro&&(hudSeeking||action==MotionEvent.ACTION_DOWN&&argonHud.hitProgress(event.getX(),event.getY(),getWidth(),getHeight()))){
+                if(action==MotionEvent.ACTION_DOWN){hudSeeking=true;resumeAfterDrag=prepared&&(music.isPlaying()||resumeOnSeek||resultsShown&&music.getCurrentPosition()>=music.getDuration()-100);seeking=true;handler.removeCallbacks(hideControls);argonHud.setProgressExpanded(true);}
+                if(action!=MotionEvent.ACTION_CANCEL){seek.setProgress(argonHud.progressAt(event.getX(),getWidth(),getHeight()));updateSeekTime(seek.getProgress()*seekMaximum);}
+                if(action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_CANCEL){hudSeeking=false;seeking=false;argonHud.setProgressExpanded(false);if(action==MotionEvent.ACTION_UP&&prepared){seekTo(Math.min(Math.round(seek.getProgress()*seekMaximum),music.getDuration()),resumeAfterDrag);performClick();}}
+                invalidate();return true;
+            }
+            if(action==MotionEvent.ACTION_UP){toggleControls();performClick();}return true;
+        }
         private Bitmap background,resultsBackground,rawBackground;
         private RenderNode backgroundNode;
         private float lastBlurSigma=Float.NaN;
@@ -285,14 +351,14 @@ public final class OsuReplayActivity extends Activity {
         private final int[] colors={0xffffc000,0xff00ca00,0xff127cff,0xfff21839};
         Playfield(Bitmap background,Bitmap resultsBackground,Bitmap rawBackground,OsuReplaySkin skin){
             super(OsuReplayActivity.this);hudText.setTypeface(Typeface.createFromAsset(getAssets(),"osu/fonts/Quicksand-Bold.ttf"));this.background=background;this.resultsBackground=resultsBackground;this.rawBackground=rawBackground;this.skin=skin;bindSkin();prefixEnds=new double[map.objects.size()];double end=0;
-            for(int i=0;i<map.objects.size();i++){OsuPlaybackMap.Hit hit=map.objects.get(i);include(hit.x,y(hit.y));end=Math.max(end,hit.end+400);prefixEnds[i]=end;
+            for(int i=0;i<map.objects.size();i++){OsuPlaybackMap.Hit hit=map.objects.get(i);include(hit.x,y(hit.y));end=Math.max(end,hit.end+1000);prefixEnds[i]=end;
                 if(hit.px!=null){Path path=new Path();for(int j=0;j<hit.px.length;j++){float x=(float)hit.px[j],y=(float)y(hit.py[j]);include(x,y);if(j==0)path.moveTo(x,y);else path.lineTo(x,y);}paths.put(hit,path);}
             }
         }
-        private void bindSkin(){skin.setInvalidationCallback(()->{invalidate();if(skipBreak!=null)skipBreak.invalidate();});}
+        private void bindSkin(){if(transportTimeline!=null)transportTimeline.setVisibility(skin.argonPro?View.GONE:View.VISIBLE);skin.setInvalidationCallback(()->{invalidate();if(skipBreak!=null)skipBreak.invalidate();});}
         private void include(double x,double y){bounds[0]=Math.min(bounds[0],x);bounds[1]=Math.min(bounds[1],y);bounds[2]=Math.max(bounds[2],x);bounds[3]=Math.max(bounds[3],y);}
         void replaceResources(Bitmap image,Bitmap resultImage,Bitmap rawImage,OsuReplaySkin replacement){if(backgroundNode!=null)backgroundNode.discardDisplayList();if(rawBackground!=null&&!rawBackground.isRecycled())rawBackground.recycle();rawBackground=rawImage;nativeBlurDisabled=false;if(resultsBackground!=null&&!resultsBackground.isRecycled())resultsBackground.recycle();resultsBackground=resultImage;if(background!=null&&!background.isRecycled())background.recycle();skin.dispose();background=image;skin=replacement;bindSkin();invalidate();}
-        void dispose(){if(backgroundNode!=null)backgroundNode.discardDisplayList();if(rawBackground!=null&&!rawBackground.isRecycled())rawBackground.recycle();if(resultsBackground!=null&&!resultsBackground.isRecycled())resultsBackground.recycle();if(background!=null&&!background.isRecycled())background.recycle();skin.dispose();}
+        void dispose(){breakOverlay.dispose();if(backgroundNode!=null)backgroundNode.discardDisplayList();if(rawBackground!=null&&!rawBackground.isRecycled())rawBackground.recycle();if(resultsBackground!=null&&!resultsBackground.isRecycled())resultsBackground.recycle();if(background!=null&&!background.isRecycled())background.recycle();skin.dispose();}
         private double y(double value){return (replay.mods&16)!=0?384-value:value;}
         private void circle(Canvas c,float x,float y,float radius,int color,boolean fill,float width){paint.setColor(color);paint.setStyle(fill?Paint.Style.FILL:Paint.Style.STROKE);paint.setStrokeWidth(width);c.drawCircle(x,y,radius,paint);paint.setStyle(Paint.Style.FILL);}
         private void tint(float factor){paint.setColorFilter(new ColorMatrixColorFilter(new float[]{factor,0,0,0,0,0,factor,0,0,0,0,0,factor,0,0,0,0,0,1,0}));}
@@ -312,6 +378,7 @@ public final class OsuReplayActivity extends Activity {
         private void drawJudgements(Canvas c,double time,float radius){
             List<OsuReplayJudgements.Result> results=judgements.results;int lo=0,hi=results.size();while(lo<hi){int mid=(lo+hi)>>>1;if(results.get(mid).time<time-1100)lo=mid+1;else hi=mid;}
             for(int i=lo;i<results.size();i++){OsuReplayJudgements.Result result=results.get(i);if(result.time>time)break;
+                if(skin.argonPro){argon.judgement(c,result.value,(float)result.x,(float)y(result.y),time-result.time,result.object,radius);continue;}
                 float age=(float)(time-result.time),alpha=Math.min(1,age/120)*Math.max(0,Math.min(1,(1100-age)/600)),x=(float)result.x,y=(float)y(result.y)+(result.value==0?-5+45*age/1100:0);
                 float pulse=age<96?.6f+.5f*age/96:age<144?1.1f-.2f*(age-96)/48:age<168?.9f+.1f*(age-144)/24:1;
                 c.save();if(result.value==0)c.rotate(age/1100*12,x,y);skin.judgement(c,paint,rect,result.value,x,y,age,radius*pulse,alpha);c.restore();
@@ -324,7 +391,9 @@ public final class OsuReplayActivity extends Activity {
             float width=getWidth(),height=getHeight(),unit=Math.min(width/900f,height/430f);
             float[] viewport=OsuPlayfieldLayout.fit(bounds,(float)map.radius(replay.mods),width,0,height,0);
             frames.at(time,cursor);long parallaxNow=SystemClock.uptimeMillis();
-            parallax.update(width,height,cursor.x*viewport[0]+viewport[1],cursor.y*viewport[0]+viewport[2],NekoConfig.osuReplayBackgroundParallax,parallaxLast==0?0:parallaxNow-parallaxLast,resultsShown);parallaxLast=parallaxNow;
+            float cursorScreenX=cursor.x*viewport[0]+viewport[1],cursorScreenY=cursor.y*viewport[0]+viewport[2];
+            double parallaxElapsed=parallaxLast==0?0:parallaxNow-parallaxLast;
+            parallax.update(width,height,cursorScreenX,cursorScreenY,NekoConfig.osuReplayBackgroundParallax,parallaxElapsed,resultsShown);parallaxLast=parallaxNow;
             float videoAlpha=video==null?0:video.sync(time,foreground&&prepared&&music.isAdvancing()&&!seeking&&!audioSeeking&&!failed,rate,NekoConfig.osuReplayVideoBackground,1-resultsVideoMix,parallax.scale,parallax.x,parallax.y,OsuReplayCompletion.blurSigma(NekoConfig.osuReplayBackgroundBlur,resultsBackgroundMix)*height/768);
             if(background!=null&&!background.isRecycled()){
                 int backgroundLayer=c.saveLayerAlpha(0,0,width,height,Math.round((1-videoAlpha)*255));
@@ -334,7 +403,8 @@ public final class OsuReplayActivity extends Activity {
                 rect.set((width-w)/2+offsetX,(height-h)/2+offsetY,(width+w)/2+offsetX,(height+h)/2+offsetY);paint.setColor(Color.WHITE);if(failed)tint(1-.7f*Math.min(1,failElapsed/60f));drawPreparedBackground(c);paint.setColorFilter(null);c.restoreToCount(backgroundLayer);
             }
             if((background==null||background.isRecycled())&&videoAlpha<1)c.drawColor(Math.round((1-videoAlpha)*255)<<24);
-            c.drawColor(Math.round((1-OsuReplayCompletion.backgroundBrightness(NekoConfig.osuReplayBackgroundDim,resultsBackgroundMix,resultsDimMix))*255)<<24);
+            float lightening=failed?0:Math.max(OsuBreakAnimation.lightening(map.breaks,time),OsuReplayCompletion.endingLightening(time,finalJudgementTime));
+            c.drawColor(Math.round((1-OsuReplayCompletion.backgroundBrightness(NekoConfig.osuReplayBackgroundDim,resultsBackgroundMix,resultsDimMix,lightening))*255)<<24);
             if(!resultsShown&&!seeking&&!audioSeeking&&prepared&&music.isPlaying()&&OsuReplayCompletion.reached(time,endTime,failed))setResultsVisible(true);
             // Add stars directly to the dimmed background; a transparent gameplay layer
             // would turn their additive blend into source-over when it is composited.
@@ -352,22 +422,28 @@ public final class OsuReplayActivity extends Activity {
             c.save();c.translate(viewport[1],viewport[2]);c.scale(viewport[0],viewport[0]);
             int lo=0,hi=map.objects.size();while(lo<hi){int mid=(lo+hi)>>>1;if(prefixEnds[mid]<time-180)lo=mid+1;else hi=mid;}int first=lo;
             hi=map.objects.size();while(lo<hi){int mid=(lo+hi)>>>1;if(map.objects.get(mid).time<=time+preempt)lo=mid+1;else hi=mid;}
+            if(skin.argonPro)drawArgonFollowPoints(c,time,preempt,radius,first,lo);
             for(int i=lo-1;i>=first&&i>=lo-500;i--){
                 OsuPlaybackMap.Hit hit=map.objects.get(i);double visibleEnd=hit.type==1?(Double.isFinite(judgements.headTimes[i])?judgements.headTimes[i]:hit.time+200):hit.end;
-                if(time>visibleEnd+240)continue;double before=hit.time-time;
-                float alpha=(float)Math.min(1,(preempt-before)/Math.min(400,preempt));if(time>visibleEnd)alpha*=Math.max(0,1-(float)(time-visibleEnd)/240);
+                if(time>visibleEnd+(skin.argonPro?800:240))continue;double before=hit.time-time;
+                float alpha=(float)Math.min(1,(preempt-before)/OsuApproachCircle.fadeInDuration(preempt));if(time>visibleEnd)alpha*=skin.argonPro?OsuArgonAnimation.hitAlpha(time-visibleEnd):Math.max(0,1-(float)(time-visibleEnd)/240);
                 if(OsuReplayModEffects.hidden(replay)&&hit.type!=8)alpha=OsuReplayModEffects.circleAlpha(time,hit.time,preempt);alpha=Math.max(0,Math.min(1,alpha));
-                int a=Math.round(alpha*255),color=skin.combos.isEmpty()?colors[hit.combo%colors.length]:skin.combos.get(hit.combo%skin.combos.size());float x=(float)hit.x,y=(float)y(hit.y);
+                int a=Math.round(alpha*255),color=skin.argonPro&&!map.comboColours.isEmpty()?map.comboColours.get(hit.combo%map.comboColours.size()):skin.combos.isEmpty()?colors[hit.combo%colors.length]:skin.combos.get((hit.combo+(skin.argonPro?1:0))%skin.combos.size());float x=(float)hit.x,y=(float)y(hit.y);
                 c.save();
                 if(failed){float pivotX=hit.type==8?256:x,pivotY=hit.type==8?192:y;c.translate(0,failure.drop);c.rotate(OsuFailAnimation.objectRotation(i)*failure.progress,pivotX,pivotY);c.scale(failure.objectScale,failure.objectScale,pivotX,pivotY);}
                 if(hit.type==8){drawSpinner(c,i,time,alpha,viewport);c.restore();continue;}
                 if(hit.type==2){
-                    drawSliderTrack(c,hit,radius,OsuReplayModEffects.hidden(replay)?OsuReplayModEffects.sliderAlpha(time,hit.time,hit.end,preempt):alpha,color);
+                    drawSliderTrack(c,hit,i,time,preempt,radius,OsuReplayModEffects.hidden(replay)?OsuReplayModEffects.sliderAlpha(time,hit.time,hit.end,preempt):alpha,color);
                 }
                 if(hit.type==2)drawSliderEndpoints(c,hit,time,preempt,radius,color);
-                double headEnd=Double.isFinite(judgements.headTimes[i])?judgements.headTimes[i]+240:hit.time+200;
+                double headEnd=Double.isFinite(judgements.headTimes[i])?judgements.headTimes[i]+(skin.argonPro?800:240):hit.time+200;
                 if(hit.type==1||time<=headEnd){
                     float headAlpha=alpha;double headTime=judgements.headTimes[i];if(hit.type==2&&Double.isFinite(headTime)&&time>headTime)headAlpha*=Math.max(0,1-(float)(time-headTime)/240);
+                    if(skin.argonPro){
+                        double age=Double.isFinite(judgements.headTimes[i])?Math.max(0,time-judgements.headTimes[i]):0;
+                        float headFade=hit.type==2?alpha*OsuArgonAnimation.hitAlpha(age):alpha;
+                        argon.head(c,x,y,radius,color,headFade,hit.number,hit.type==2,age,kiaiGlow);
+                    }else{
                     String headName=skin.circleName(hit.type==2,false);
                     double hitAge=Double.isFinite(headTime)?time-headTime:0;
                     float hitRadius=radius*OsuHitCircleAnimation.scale(hitAge);
@@ -378,22 +454,38 @@ public final class OsuReplayActivity extends Activity {
                     if(!skin.number(c,paint,rect,hit.number,x,y,skin.textHeight("default")*.8f*numberRadius/64,numberAlpha))font.draw(c,Integer.toString(hit.number),x,y+numberRadius*.27f,numberRadius*.8f,(Math.round(numberAlpha*255)<<24)|0xffffff,numberRadius*1.6f,0);
                     if(skin.hitCircleOverlayAboveNumber)skin.natural(c,paint,rect,headName+"overlay",x,y,hitRadius/64,headAlpha,null,time);
                     drawKiaiCircle(c,headName,x,y,hitRadius,headAlpha,color,time);
+                    }
                 }
-                if(before>0&&((replay.mods&8)==0||i==0)&&time<headEnd-120){float size=radius*(1+3*(float)(before/preempt));if(!skin.natural(c,paint,rect,"approachcircle",x,y,size/64,Math.min(.9f,alpha),color,time))circle(c,x,y,size,(a<<24)|(color&0xffffff),false,2);}
+
                 if(hit.type==2&&time>=hit.time&&time<=hit.end)drawSliderBall(c,hit,time,radius,1,color);
                 c.restore();
             }
-            drawJudgements(c,time,radius);drawFlashlight(c,time,viewport);drawCursor(c,time);c.restore();c.restoreToCount(objectsLayer);
+            drawJudgements(c,time,radius);drawApproachCircles(c,time,preempt,radius,first,lo,failure);drawFlashlight(c,time,viewport);drawCursor(c,time);c.restore();c.restoreToCount(objectsLayer);
             drawHud(c,time,width,height,unit);
+            if(!failed)breakOverlay.draw(c,time,width,height,cursorScreenX,cursorScreenY,NekoConfig.osuReplayBackgroundParallax,parallaxElapsed);
             if(failed){
                 c.restoreToCount(contentLayer);paint.setColor((Math.round(failure.flash*255)<<24)|0xff0000);paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.ADD));c.drawRect(0,0,width,height,paint);paint.setXfermode(null);
                 if(failElapsed>=OsuFailAnimation.DURATION){font.draw(c,LocaleController.getString(R.string.OsuReplayFailed),width/2,height/2,46*unit,Color.WHITE,width*.8f,0);playIcon.setPause(false);}
             }
             c.restoreToCount(gameplayLayer);
-            skipBreak.setVisibility(!resultsShown&&!failed&&map.skipSection(time,replay.mods)>=0?View.VISIBLE:View.GONE);skipBreak.setTranslationY(-controls.getMeasuredHeight()*controls.getAlpha());if(!seeking&&prepared)seek.setProgress((float)Math.min(1,time/Math.max(1,seekMaximum)));updateSeekTime(time);
-            if(foreground&&parallax.animating())postInvalidateOnAnimation();
+            if(argonProgress!=null)argonProgress.invalidate();
+            ((SkipButton)skipBreak).update(time,!resultsShown&&!failed&&map.skipSection(time,replay.mods)>=0,map.skipSection(time,replay.mods));if(!seeking&&prepared)seek.setProgress((float)Math.min(1,time/Math.max(1,seekMaximum)));updateSeekTime(time);
+            if(foreground&&(parallax.animating()||breakOverlay.animating()||skin.argonPro&&argonHud.animating()))postInvalidateOnAnimation();
             if(failed&&foreground&&!failurePaused&&failElapsed<OsuFailAnimation.DURATION)postInvalidateOnAnimation();
             if(!failed&&prepared&&foreground&&music.isPlaying())postInvalidateOnAnimation();
+        }
+        /** OsuPlayfield.approachCircles is above HitObjectContainer and judgementAboveHitObjectLayer. */
+        private void drawApproachCircles(Canvas c,double time,double preempt,float radius,int first,int last,OsuFailAnimation failure){
+            for(int i=last-1;i>=first&&i>=last-500;i--){
+                OsuPlaybackMap.Hit hit=map.objects.get(i);if(hit.type==8||((replay.mods&8)!=0&&i!=0))continue;
+                float alpha=OsuApproachCircle.alpha(time,hit.time,preempt,judgements.headTimes[i]);if(alpha<=0)continue;
+                float size=radius*OsuApproachCircle.scale(time,hit.time,preempt),x=(float)hit.x,y=(float)y(hit.y);
+                int colour=skin.argonPro&&!map.comboColours.isEmpty()?map.comboColours.get(hit.combo%map.comboColours.size()):skin.combos.isEmpty()?colors[hit.combo%colors.length]:skin.combos.get((hit.combo+(skin.argonPro?1:0))%skin.combos.size());
+                c.save();if(failed&&failure!=null){c.translate(0,failure.drop);c.rotate(OsuFailAnimation.objectRotation(i)*failure.progress,x,y);c.scale(failure.objectScale,failure.objectScale,x,y);}
+                if(skin.argonPro)skin.draw(c,paint,rect,"argon-approachcircle",x,y,size*2*128/118,alpha,colour);
+                else if(!skin.natural(c,paint,rect,"approachcircle",x,y,size/64,alpha,colour,time))circle(c,x,y,size,(Math.round(alpha*255)<<24)|(colour&0xffffff),false,2);
+                c.restore();
+            }
         }
         private void drawKiaiCircle(Canvas c,String name,float x,float y,float radius,float alpha,int color,double time){
             float glow=alpha*kiaiGlow;if(glow<=0)return;
@@ -402,26 +494,77 @@ public final class OsuReplayActivity extends Activity {
             try{if(!skin.natural(c,paint,rect,name,x,y,radius/64,glow,tint,time))circle(c,x,y,radius,(Math.round(glow*255)<<24)|(tint&0xffffff),true,0);}
             finally{paint.setXfermode(null);}
         }
-        private void drawSliderTrack(Canvas c,OsuPlaybackMap.Hit hit,float radius,float alpha,int combo){
-            Path path=paths.get(hit);if(path==null)return;path.computeBounds(trackBounds,true);trackBounds.inset(-radius-1,-radius-1);
+        private void drawArgonFollowPoints(Canvas c,double time,double preempt,float radius,int first,int last){
+            if(OsuReplayModEffects.hidden(replay))return;
+            int lo=0,hi=map.objects.size();double ahead=time+OsuArgonAnimation.followPreempt(preempt);
+            while(lo<hi){int mid=(lo+hi)>>>1;if(map.objects.get(mid).time<=ahead)lo=mid+1;else hi=mid;}last=lo;
+            lo=0;hi=last;while(lo<hi){int mid=(lo+hi)>>>1;if(map.objects.get(mid).time<time-400)lo=mid+1;else hi=mid;}first=lo;
+            for(int i=Math.max(Math.max(1,first),last-500);i<last;i++){
+                OsuPlaybackMap.Hit previous=map.objects.get(i-1),next=map.objects.get(i);
+                if(previous.type==8||next.type==8||previous.combo!=next.combo||next.time<=previous.end)continue;
+                previous.position(previous.repeats%2==0?0:1,slider);
+                double dx=next.x-slider[0],dy=y(next.y)-y(slider[1]),length=Math.hypot(dx,dy);
+                int distance=(int)length;
+                for(int d=48;d<distance-32;d+=32){
+                    float fraction=d/(float)distance;
+                    double at=previous.end+(next.time-previous.end)*fraction;
+                    float alpha=OsuArgonAnimation.followAlpha(time,at,preempt),move=OsuArgonAnimation.followMove(time,at,preempt),position=fraction-.1f*(1-move);
+                    if(alpha>0)argon.followPoint(c,(float)(slider[0]+dx*position),(float)(y(slider[1])+dy*position),(float)Math.toDegrees(Math.atan2(dy,dx)),alpha,radius/64*(1.5f-.5f*move));
+                }
+            }
+        }
+        private final Path snakePath=new Path();
+        private final PathMeasure snakeMeasure=new PathMeasure();
+        private void drawSliderTrack(Canvas c,OsuPlaybackMap.Hit hit,int index,double time,double preempt,float radius,float alpha,int combo){
+            Path path=paths.get(hit);if(path==null)return;if(skin.argonPro){
+                double span=(hit.end-hit.time)/hit.repeats,progress=Math.max(0,Math.min(hit.repeats,(time-hit.time)/Math.max(1,span)));
+                boolean headHit=Double.isFinite(judgements.headTimes[index])&&time>=judgements.headTimes[index];
+                float start=0,end=(float)Math.max(0,Math.min(1,(time-hit.time+preempt)/(preempt/3)));
+                if(headHit&&progress>=hit.repeats-1){float local=(float)Math.min(1,progress-(hit.repeats-1));if((hit.repeats&1)==1)start=local;else end=1-local;}
+                if(time>hit.end)alpha=(float)Math.max(0,1-(time-hit.end)/(headHit?40:240));
+                snakeMeasure.setPath(path,false);float length=snakeMeasure.getLength();snakePath.rewind();
+                if(end>start)snakeMeasure.getSegment(length*start,length*end,snakePath,true);
+                argon.sliderBody(c,snakePath,radius,combo,alpha);return;
+            }path.computeBounds(trackBounds,true);trackBounds.inset(-radius-1,-radius-1);
             int layer=c.saveLayerAlpha(trackBounds,Math.round(alpha*255));paint.setStyle(Paint.Style.STROKE);paint.setStrokeCap(Paint.Cap.ROUND);paint.setStrokeJoin(Paint.Join.ROUND);paint.setXfermode(trackSource);
             int body=skin.sliderTrackOverride?skin.sliderTrack:combo;
             for(int band=0;band<32;band++){float inward=band/32f;paint.setStrokeWidth(2*radius*(1-inward));paint.setColor(OsuSliderTrack.color((band+.5f)/32,skin.sliderBorder,body));c.drawPath(path,paint);}
             paint.setXfermode(null);paint.setStrokeCap(Paint.Cap.BUTT);paint.setStyle(Paint.Style.FILL);c.restoreToCount(layer);
         }
         private void drawSliderEndpoints(Canvas c,OsuPlaybackMap.Hit hit,double time,double preempt,float radius,int color){
-            double span=(hit.end-hit.time)/hit.repeats;int next=Math.max(1,(int)Math.floor((time-hit.time)/Math.max(1,span))+1);
+            double span=(hit.end-hit.time)/hit.repeats;
+            if(skin.argonPro&&hit.tickInterval>0){
+                int activeSpan=Math.max(0,Math.min(hit.repeats-1,(int)((time-hit.time)/Math.max(1,span))));
+                for(int tick=1;tick<=Math.min(512,(int)(span/hit.tickInterval));tick++){
+                    double tickTime=hit.time+activeSpan*span+tick*hit.tickInterval;if(tickTime>=hit.time+(activeSpan+1)*span-10||tickTime<time)continue;
+                    double fraction=tick*hit.tickInterval/span;hit.position(activeSpan%2==0?fraction:1-fraction,slider);
+                    argon.tick(c,(float)slider[0],(float)y(slider[1]),radius,color,OsuArgonAnimation.progress(time-(hit.time-preempt),150));
+                }
+            }
+            int next=Math.max(1,(int)Math.floor((time-hit.time)/Math.max(1,span))+1);
             for(int index=Math.min(hit.repeats,next+1);index>=next;index--){
                 float alpha=OsuSliderEndpoints.alpha(hit,index,time,preempt);if(OsuReplayModEffects.hidden(replay))alpha*=OsuReplayModEffects.circleAlpha(time,hit.time,preempt);if(alpha<=0)continue;
                 hit.position(index%2==1?1:0,slider);float x=(float)slider[0],y=(float)y(slider[1]);String name=skin.circleName(true,true);
-                skin.natural(c,paint,rect,name,x,y,radius/64,alpha,color,time);skin.natural(c,paint,rect,name+"overlay",x,y,radius/64,alpha,null,time);
-                drawKiaiCircle(c,name,x,y,radius,alpha,color,time);
-                if(index<hit.repeats){hit.position(index%2==1?.99:.01,direction);float angle=(float)Math.toDegrees(Math.atan2(y(direction[1])-y,direction[0]-x));c.save();c.rotate(angle,x,y);skin.natural(c,paint,rect,"reversearrow",x,y,radius/64*OsuSliderEndpoints.bounce(hit,index,time,preempt),Math.min(1,(float)((time-OsuSliderEndpoints.appear(hit,index,preempt))/150)),null,time);c.restore();}
+                if(!skin.argonPro){skin.natural(c,paint,rect,name,x,y,radius/64,alpha,color,time);skin.natural(c,paint,rect,name+"overlay",x,y,radius/64,alpha,null,time);}
+                if(!skin.argonPro)drawKiaiCircle(c,name,x,y,radius,alpha,color,time);
+                if(index<hit.repeats){hit.position(index%2==1?.99:.01,direction);float angle=(float)Math.toDegrees(Math.atan2(y(direction[1])-y,direction[0]-x));if(skin.argonPro){
+                    double age=time-OsuSliderEndpoints.appear(hit,index,preempt);
+                    c.save();c.rotate(angle,x,y);float offset=-12*(OsuArgonAnimation.reversePulse(age)-1)/.3f*radius/64;
+                    skin.draw(c,paint,rect,"argon-repeat-edge-piece",x+offset,y,radius*(2-16f/58),alpha,null);c.restore();
+                    argon.reverse(c,x,y,radius,color,alpha,angle,age);continue;
+                }c.save();c.rotate(angle,x,y);skin.natural(c,paint,rect,"reversearrow",x,y,radius/64*OsuSliderEndpoints.bounce(hit,index,time,preempt),Math.min(1,(float)((time-OsuSliderEndpoints.appear(hit,index,preempt))/150)),null,time);c.restore();}
             }
         }
         private void drawSliderBall(Canvas c,OsuPlaybackMap.Hit hit,double time,float radius,float alpha,int color){
             double p=(time-hit.time)/Math.max(1,hit.end-hit.time)*hit.repeats;int span=Math.min(hit.repeats-1,(int)p);double fraction=Math.min(1,p-span),f=span%2==0?fraction:1-fraction;hit.position(f,slider);float x=(float)slider[0],y=(float)y(slider[1]);
             hit.position(Math.max(0,Math.min(1,f+.01)),direction);if(f>.99){hit.position(Math.max(0,f-.01),direction);direction[0]=slider[0]*2-direction[0];direction[1]=slider[1]*2-direction[1];}
+            if(skin.argonPro){
+                float rotation=(float)Math.toDegrees(Math.atan2(y(direction[1])-y,direction[0]-x))+(span%2==1?180:0);
+                argon.ball(c,x,y,radius,color,alpha*OsuArgonAnimation.out(time-hit.time,200),rotation);
+                frames.at(time,cursor);boolean held=(cursor.keys&15)!=0&&Math.hypot(cursor.x-x,cursor.y-y)<=radius*2.4;
+                if(held)argon.follow(c,x,y,radius,color,alpha,1+1.4f*OsuArgonAnimation.out(time-hit.time,300));
+                return;
+            }
             c.save();c.rotate((float)Math.toDegrees(Math.atan2(y(direction[1])-y,direction[0]-x)),x,y);if(skin.sliderBallFlip&&span%2==1)c.scale(-1,1,x,y);
             skin.natural(c,paint,rect,skin.sliderBall(time-hit.time),x,y,radius/64,alpha,skin.sliderBallTint?color:null,time);c.restore();
             frames.at(time,cursor);if((cursor.keys&15)!=0&&Math.hypot(cursor.x-x,cursor.y-y)<=radius*2.4)skin.natural(c,paint,rect,"sliderfollowcircle",x,y,radius/64,alpha,null,time);
@@ -429,6 +572,7 @@ public final class OsuReplayActivity extends Activity {
         private void hudLabel(Canvas c,String text,float x,float baseline,float size,int color,float maxWidth){hudText.setColor(color);hudText.setTextSize(size);float width=hudText.measureText(text);if(width>maxWidth){hudText.setTextSize(size*maxWidth/width);width=maxWidth;}c.drawText(text,x-width/2,baseline,hudText);}
         private void drawHud(Canvas c,double time,float width,float height,float unit){
             int layer=c.saveLayerAlpha(0,0,width,height,Math.round(NekoConfig.osuReplayHudOpacity*2.55f));
+            if(skin.argonPro){argonHud.draw(c,skin,time,width,height);c.restoreToCount(layer);return;}
             float scale=height/768f,sw=width/scale;c.save();c.scale(scale,scale);
             float hp=(float)session.health.at(time);
             skin.natural(c,paint,rect,"scorebar-bg",skin.width("scorebar-bg")/2,skin.height("scorebar-bg")/2,1,1,null,time);
@@ -479,6 +623,10 @@ public final class OsuReplayActivity extends Activity {
         private void drawSpinner(Canvas c,int index,double time,float alpha,float[] viewport){
             OsuPlaybackMap.Hit hit=map.objects.get(index);OsuReplaySpinners.Spin spin=session.spinners.objects.get(index);
             float rotation=spin==null?0:(float)spin.rotation(time);
+            if(skin.argonPro){
+                float spinnerAlpha=(float)Math.min(1,(time-hit.time+map.preempt(replay.mods))/OsuApproachCircle.fadeInDuration(map.preempt(replay.mods)))*(1-OsuArgonAnimation.progress(time-hit.end,240));
+                argon.spinner(c,spin,time,hit.time,hit.end,map.preempt(replay.mods),Math.max(0,spinnerAlpha));return;
+            }
             float[] overlay=OsuSpinnerLayout.overlay(getWidth(),getHeight(),viewport);
             if(skin.oldSpinnerStyle()){
                 c.save();c.translate(overlay[0],overlay[1]);c.scale(overlay[2],overlay[2]);
@@ -510,6 +658,10 @@ public final class OsuReplayActivity extends Activity {
             }
         }
         private void drawCursor(Canvas c,double time){
+            if(skin.argonPro){frames.at(time,cursor);for(int i=60;i>0;i--){frames.at(time-i,trailSample);float alpha=.8f*(float)Math.pow(1-i/61f,4);skin.draw(c,paint,rect,"argon-cursortrail",trailSample.x,trailSample.y,4,alpha,null);}boolean held=(cursor.keys&15)!=0;double changed=time-400;int lo=0,hi=frames.size;
+                while(lo<hi){int mid=(lo+hi)>>>1;if(frames.time(mid)<=time)lo=mid+1;else hi=mid;}
+                for(int i=lo-1;i>0&&frames.time(i)>=time-400;i--)if(((frames.buttons(i)&15)!=0)!=((frames.buttons(i-1)&15)!=0)){changed=frames.time(i);break;}
+                argon.cursor(c,cursor.x,cursor.y,OsuArgonAnimation.cursorScale(held,time-changed),1);return;}
             frames.at(time,cursor);for(int trail=5;trail>0;trail--){frames.at(time-trail*14,trailSample);if(!skin.natural(c,paint,rect,"cursortrail",trailSample.x,trailSample.y,.5f,(6-trail)*.08f,null,time))circle(c,trailSample.x,trailSample.y,4-trail*.4f,((85-trail*12)<<24)|0xffd66b,true,0);}
             c.save();if(skin.cursorRotate)c.rotate((float)(time*.06),cursor.x,cursor.y);if(!skin.natural(c,paint,rect,"cursor",cursor.x,cursor.y,.5f*(skin.cursorExpand&&(cursor.keys&15)!=0?1.3f:1),1,null,time)){circle(c,cursor.x,cursor.y,(cursor.keys&15)!=0?11:8,0xffffdd66,true,0);circle(c,cursor.x,cursor.y,12,Color.WHITE,false,1.5f);}c.restore();
         }

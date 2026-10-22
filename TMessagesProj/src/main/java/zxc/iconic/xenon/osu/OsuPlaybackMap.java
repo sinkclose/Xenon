@@ -8,6 +8,7 @@ import java.util.*;
 public final class OsuPlaybackMap {
     public final ArrayList<Hit> objects = new ArrayList<>();
     public final ArrayList<double[]> breaks = new ArrayList<>();
+    public final ArrayList<Integer> comboColours = new ArrayList<>();
     public String title = "", artist = "", difficulty = "", mapper = "", audio = "", background = "";
     public String video="";
     public double videoOffset;
@@ -51,6 +52,9 @@ public final class OsuPlaybackMap {
                     OsuBackgroundEvent event=OsuBackgroundEvent.parse(line);if(event!=null){if(event.video){map.video=event.file;map.videoOffset=event.offset;}else map.background=event.file;}
                 } else if (colon >= 0) {
                     String key = line.substring(0, colon).trim(), value = line.substring(colon+1).trim();
+                    if(section.equals("[Colours]")&&key.matches("Combo[1-8]")){
+                        String[] rgb=value.split(",");if(rgb.length>=3){int colour=0xff000000;for(int component=0;component<3;component++)colour|=((int)Math.max(0,Math.min(255,number(rgb[component]))))<<(16-component*8);map.comboColours.add(colour);}continue;
+                    }
                     switch (key) {
                         case "Title": if (map.title.isEmpty()) map.title=value; break;
                         case "Artist": if(map.artist.isEmpty())map.artist=value;break;

@@ -10,6 +10,8 @@ import java.util.zip.*;
 
 /** Imported skins are user data, separate from the disposable replay download cache. */
 public final class OsuSkinStore {
+    public static final String ARGON_PRO="builtin-argon-pro";
+    public static boolean isArgonPro(String key){return ARGON_PRO.equals(key);}
     private OsuSkinStore(){}
     public static File root(){return new File(ApplicationLoader.getFilesDirFixed(),"osu-skins");}
     public static File directory(String key){return key!=null&&key.matches("skin-[0-9a-f]{32}")?new File(root(),key):null;}

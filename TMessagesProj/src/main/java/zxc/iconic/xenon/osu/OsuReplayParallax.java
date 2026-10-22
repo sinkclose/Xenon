@@ -8,7 +8,10 @@ public final class OsuReplayParallax {
         update(width,height,cursorX,cursorY,setting,elapsed,false);
     }
     public void update(float width,float height,float cursorX,float cursorY,int setting,double elapsed,boolean results){
-        float amount=.06f*Math.max(-200,Math.min(200,setting))/100f;
+        update(width,height,cursorX,cursorY,setting,elapsed,results,.06f);
+    }
+    public void update(float width,float height,float cursorX,float cursorY,int setting,double elapsed,boolean results,float baseAmount){
+        float amount=baseAmount*Math.max(-200,Math.min(200,setting))/100f;
         float unit=Math.max(1,height)/768f;
         float targetX=offset(cursorX-width/2,unit)*width/2*amount;
         float targetY=offset(cursorY-height/2,unit)*height/2*amount;

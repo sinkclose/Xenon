@@ -748,6 +748,8 @@
     <string name="OsuReplayInvalid">Unable to open this replay</string>
     <string name="OsuReplayMappedBy">mapped by</string>
     <string name="OsuReplayAccuracy">Accuracy</string>
+    <string name="OsuReplayBreakProgress">Current progress</string>
+    <string name="OsuReplayBreakGrade">Grade</string>
     <string name="OsuReplayMaxCombo">Max combo</string>
     <string name="OsuReplayPlayedOn">Played on</string>
     <string name="OsuClearLocalFiles">Clear osu! local files</string>
@@ -768,7 +770,7 @@
     <string name="OsuReplayBackgroundParallax">Background parallax</string>
     <string name="OsuReplayBackgroundBlur">Background blur</string>
     <string name="OsuReplaySkin">Replay skin</string>
-    <string name="OsuSkinDefault">Default</string>
+    <string name="OsuSkinDefault">osu! classic (stable)</string>
     <string name="OsuSkinImport">Import .osk…</string>
     <string name="OsuSkinImported">Skin imported and selected.</string>
     <string name="OsuSkinImportFailed">Could not import this osu! skin. Choose a valid .osk archive.</string>

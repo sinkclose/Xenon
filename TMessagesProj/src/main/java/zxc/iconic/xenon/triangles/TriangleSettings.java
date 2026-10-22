@@ -65,6 +65,18 @@ public final class TriangleSettings {
         return instance;
     }
 
+    public static TriangleSettings skipPreset(){
+        TriangleSettings s=new TriangleSettings(false);
+        s.flags[Flag.ENABLED.ordinal()]=true;s.flags[Flag.FILLED.ordinal()]=false;
+        s.flags[Flag.AUTO_COLOR.ordinal()]=false;s.flags[Flag.FADE.ordinal()]=false;
+        s.values[Value.SIZE.ordinal()]=100;s.values[Value.DENSITY.ordinal()]=50;
+        s.values[Value.SPEED.ordinal()]=25;s.values[Value.OPACITY.ordinal()]=100;
+        s.values[Value.THICKNESS.ordinal()]=20;
+        s.values[Value.HUE.ordinal()]=45;s.values[Value.SATURATION.ordinal()]=25;s.values[Value.BRIGHTNESS.ordinal()]=100;
+        s.flags[Flag.RANDOM_ROTATION.ordinal()]=false;
+        return s;
+    }
+    private TriangleSettings(boolean persisted){prefs=null;for(Value v:Value.values())values[v.ordinal()]=v.initial;for(Flag f:Flag.values())flags[f.ordinal()]=f.initial;}
     private TriangleSettings() {
         prefs = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", 0);
         SharedPreferences legacy = ApplicationLoader.applicationContext.getSharedPreferences("triangle_wallpaper", 0);
@@ -103,15 +115,16 @@ public final class TriangleSettings {
         value = (int) TriangleMath.clamp(value, v.min, v.max);
         if (values[v.ordinal()] == value) return;
         values[v.ordinal()] = value; revision++;
-        prefs.edit().putInt(PREFIX + v.key, value).apply();
+        if(prefs!=null)prefs.edit().putInt(PREFIX + v.key, value).apply();
     }
     public void toggle(Flag f) {
         flags[f.ordinal()] = !flag(f); revision++;
-        prefs.edit().putBoolean(PREFIX + f.key, flag(f)).apply();
+        if(prefs!=null)prefs.edit().putBoolean(PREFIX + f.key, flag(f)).apply();
     }
     public void reset() {
         for (Value v : Value.values()) values[v.ordinal()] = v.initial;
         for (Flag f : Flag.values()) flags[f.ordinal()] = f.initial;
+        if(prefs==null){revision++;return;}
         SharedPreferences.Editor editor = prefs.edit();
         for (Value v : Value.values()) editor.remove(PREFIX + v.key);
         for (Flag f : Flag.values()) editor.remove(PREFIX + f.key);

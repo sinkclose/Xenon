@@ -20,6 +20,8 @@ public final class OsuDifficulty {
     private static native String nativeReplayFrames(byte[] data);
     public static String replayFrames(byte[] data) { return available && data != null ? nativeReplayFrames(data) : null; }
     private static native double[] nativeReplayPerformance(byte[] data, long mods, int[] counts, boolean lazer, double rate);
+    private static native double[] nativeReplayPpTimeline(byte[] data,long mods,int[] states,boolean lazer,double rate);
+    public static double[] replayPpTimeline(File map,long mods,int[] states,boolean lazer,double rate)throws IOException{byte[] data=read(map);return data==null?null:nativeReplayPpTimeline(data,mods,states,lazer,rate);}
     public static String replayJson(byte[] data) { return available ? nativeReplayJson(data) : null; }
     public static double[] replayPerformance(File map, long mods, int[] counts, boolean lazer, double rate) throws IOException {
         byte[] data = read(map);

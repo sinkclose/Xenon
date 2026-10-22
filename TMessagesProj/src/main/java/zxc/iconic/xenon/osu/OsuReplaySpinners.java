@@ -7,16 +7,25 @@ public final class OsuReplaySpinners {
     public static final class Spin {
         public final int required,maxBonus,bonusValue;
         private final double[] times,angles,completions;
+        private final float[] trackingLevels;
+        public final double start,end;
+        private double firstTracking=Double.POSITIVE_INFINITY;
         Spin(OsuPlaybackMap.Hit hit,OsuReplayFrames frames,double od,boolean lazer,long mods,int budget){
             bonusValue=lazer?50:1000;
+            this.start=hit.time;this.end=hit.end;
             double seconds=(hit.end-hit.time)/1000;
             required=Math.max(0,(int)(seconds*rate(od,1.5,2.5,3.75)));
             maxBonus=lazer?Math.max(0,(int)(seconds*rate(od,250d/60,380d/60,430d/60))-required-2):Integer.MAX_VALUE;
             int start=0,hi=frames.size;while(start<hi){int mid=(start+hi)>>>1;if(frames.time(mid)<hit.time)start=mid+1;else hi=mid;}
             int end=start;while(end<frames.size&&end-start<budget&&frames.time(end)<=hit.end)end++;
-            times=new double[end-start];angles=new double[end-start];ArrayList<Double> spins=new ArrayList<>();
+            times=new double[end-start];angles=new double[end-start];trackingLevels=new float[end-start];ArrayList<Double> spins=new ArrayList<>();
             double last=Double.NaN,total=0,completionAngle=0;
             for(int f=start;f<end;f++){
+                boolean tracking=(mods&(128|4096|8192))!=0||frames.buttons(f)!=0;
+                if(tracking)firstTracking=Math.min(firstTracking,frames.time(f));
+                float previous=f==start?0:trackingLevels[f-start-1];
+                double dt=frames.time(f)-(f==start?hit.time:frames.time(f-1));
+                trackingLevels[f-start]=(float)((tracking?1:0)+(previous-(tracking?1:0))*Math.pow(.985,Math.max(0,dt)));
                 double angle=Math.atan2(frames.y(f)-192,frames.x(f)-256);
                 if(((mods&(128|4096|8192))==0&&frames.buttons(f)==0)||Math.hypot(frames.x(f)-256,frames.y(f)-192)<20)last=Double.NaN;
                 else{if(Double.isFinite(last))total+=Math.toDegrees(Math.atan2(Math.sin(angle-last),Math.cos(angle-last)));last=angle;}
@@ -39,6 +48,15 @@ public final class OsuReplaySpinners {
             return angles[i]+(angles[i+1]-angles[i])*mix;
         }
         public double rotation(double time){return angle(time);}
+        /** Continuous rotation drives Argon fill; integer completed turns are only for scoring. */
+        public float progress(double time){return required==0?1:(float)Math.max(0,Math.min(1,Math.abs(angle(time))/360/required));}
+        public double completedAt(){return required==0?start:completions.length>=required?completions[required-1]:Double.POSITIVE_INFINITY;}
+        public double startedAt(){return firstTracking;}
+        public float tracking(double time){int i=Arrays.binarySearch(times,Math.min(time,end));if(i<0)i=-i-2;return i<0?0:trackingLevels[i];}
+        public float smoothProgress(double time,double decay){
+            // Evaluate a bounded exponential history in replay time, also after a seek.
+            double sum=0,weight=0;for(int i=0;i<32;i++){double w=Math.exp(-i*16/decay);sum+=progress(time-i*16)*w;weight+=w;}return (float)(sum/weight);
+        }
         public int turns(double time){return count(time);}
         public int rpm(double time){return (int)(Math.abs(angle(time)-angle(time-500))/360*120);}
         public int bonus(double time){return Math.min(maxBonus,Math.max(0,count(time)-required-2))*bonusValue;}

@@ -26,11 +26,11 @@ final class OsuReplaySamples {
                 if(wave!=null)break;
             }
             if(wave!=null&&used+wave.durationMs()*wave.sampleRate*wave.channels/500>16L*1024*1024)wave=null;
-            if(wave==null)try(InputStream in=context.getAssets().open("osu/sounds/"+name+".wav")){wave=OsuWave.read(in);}catch(Exception error){FileLog.e(error);}
+            if(wave==null)try(InputStream in=context.getAssets().open((OsuSkinStore.isArgonPro(key)?"osu/argon-pro/sounds/":"osu/sounds/")+name+".wav")){wave=OsuWave.read(in);}catch(Exception error){FileLog.e(error);}
             if(wave!=null){samples.put(name,wave);used+=(long)(wave.durationMs()*wave.sampleRate*wave.channels/500);}
         }
         int[] ids={R.raw.osu_fountain_start,R.raw.osu_fountain_loop};String[] fountains={"fountain-shoot","fountain-loop"};
-        for(int i=0;i<ids.length;i++)try(InputStream in=context.getResources().openRawResource(ids[i])){samples.put(fountains[i],OsuWave.read(in));}catch(Exception error){FileLog.e(error);}
+        for(int i=0;i<ids.length;i++)try(InputStream in=OsuSkinStore.isArgonPro(key)?context.getAssets().open("osu/argon-pro/sounds/"+fountains[i]+".wav"):context.getResources().openRawResource(ids[i])){samples.put(fountains[i],OsuWave.read(in));}catch(Exception error){FileLog.e(error);}
         return Collections.unmodifiableMap(samples);
     }
     private static OsuWave decode(File file)throws Exception{

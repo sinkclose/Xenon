@@ -20,7 +20,8 @@ final class OsuReplayVideo extends TextureView {
     private float lastSigma=-1;
     OsuReplayVideo(Context context,File file,double offset,Runnable invalidate){
         super(context);this.offset=offset;this.invalidate=invalidate;setOpaque(false);setAlpha(0);
-        player=new ExoPlayer.Builder(context).build();player.setVolume(0);
+        // Background video cadence must not vote the gameplay display down to 24/30/60Hz.
+        player=new ExoPlayer.Builder(context).setVideoChangeFrameRateStrategy(C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF).build();player.setVolume(0);
         player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_AUDIO,true).build());
         player.setSeekParameters(SeekParameters.EXACT);player.setVideoTextureView(this);
         player.addListener(new Player.Listener(){

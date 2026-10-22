@@ -47,14 +47,15 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
 
     private void chooseOsuSkin(){
         java.util.List<java.io.File> skins=OsuSkinStore.list();
-        CharSequence[] choices=new CharSequence[skins.size()+2];
-        choices[0]=LocaleController.getString(R.string.OsuSkinDefault);choices[1]=LocaleController.getString(R.string.OsuSkinImport);
-        for(int i=0;i<skins.size();i++)choices[i+2]=OsuSkinStore.name(skins.get(i));
+        CharSequence[] choices=new CharSequence[skins.size()+3];
+        choices[0]="osu! argon pro (2022)";choices[1]=LocaleController.getString(R.string.OsuSkinImport);
+        choices[2]=LocaleController.getString(R.string.OsuSkinDefault);
+        for(int i=0;i<skins.size();i++)choices[i+3]=OsuSkinStore.name(skins.get(i));
         showDialog(new AlertDialog.Builder(getParentActivity(),resourcesProvider).setTitle(LocaleController.getString(R.string.OsuReplaySkin))
                 .setItems(choices,(dialog,index)->{
-                    if(index==0)NekoConfig.setOsuReplaySkin("");
+                    if(index==0)NekoConfig.setOsuReplaySkin(OsuSkinStore.ARGON_PRO);
                     else if(index==1){try{startActivityForResult(new android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(android.content.Intent.CATEGORY_OPENABLE),OSU_SKIN_PICKER);}catch(Exception error){FileLog.e(error);BulletinFactory.of(this).createErrorBulletin(LocaleController.getString(R.string.OsuSkinImportFailed)).show();}}
-                    else NekoConfig.setOsuReplaySkin(skins.get(index-2).getName());
+                    else NekoConfig.setOsuReplaySkin(index==2?"":skins.get(index-3).getName());
                     if(listView!=null)listView.adapter.update(true);
                 }).create());
     }
@@ -149,7 +150,7 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
         SeekbarConfig kiai=new SeekbarConfig(LocaleController.getString(R.string.OsuReplayKiaiIntensity),"0%","200%",0,200,1,value->NekoConfig.setOsuReplayKiaiIntensity(Math.round(value)));
         kiai.valueFormatter=value->value+"%";items.add(SeekbarCellFactory.of(osuKiaiIntensityRow,kiai,NekoConfig.osuReplayKiaiIntensity).slug("osuReplayKiaiIntensity"));
         java.io.File skin=OsuSkinStore.directory(NekoConfig.osuReplaySkin);
-        String skinName=importingOsuSkin?LocaleController.getString(R.string.Loading):skin!=null&&skin.isDirectory()?OsuSkinStore.name(skin):LocaleController.getString(R.string.OsuSkinDefault);
+        String skinName=importingOsuSkin?LocaleController.getString(R.string.Loading):OsuSkinStore.isArgonPro(NekoConfig.osuReplaySkin)?"osu! argon pro (2022)":skin!=null&&skin.isDirectory()?OsuSkinStore.name(skin):LocaleController.getString(R.string.OsuSkinDefault);
         items.add(TextSettingsCellFactory.of(osuSkinRow,LocaleController.getString(R.string.OsuReplaySkin),skinName).slug("osuReplaySkin").setEnabled(!importingOsuSkin));
         items.add(TextSettingsCellFactory.of(osuClearLocalFilesRow, LocaleController.getString(R.string.OsuClearLocalFiles),
                 osuCacheBusy || osuCacheBytes < 0 ? LocaleController.getString(R.string.Loading) : AndroidUtilities.formatFileSize(osuCacheBytes))

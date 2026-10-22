@@ -14,6 +14,9 @@ final class OsuKiaiFountain {
     }
 
     final Particle[] particles = new Particle[CAPACITY * 2];
+    private static final class Spawn {long key;boolean valid;float duration,vx,vy,startAngle,endAngle,endScale;}
+    private final Spawn[] spawnCache=new Spawn[CAPACITY*2];
+    private final long[] spawnBases;
     private final double[] starts, ends;
     private final int intervals;
 
@@ -28,7 +31,9 @@ final class OsuKiaiFountain {
             else { starts[count] = shot; ends[count++] = shot + SHOOT_DURATION; }
         }
         intervals = count;
+        spawnBases=new long[count];for(int i=1;i<count;i++)spawnBases[i]=spawnBases[i-1]+(long)Math.ceil((ends[i-1]-starts[i-1])/SPAWN_INTERVAL);
         for (int i = 0; i < particles.length; i++) particles[i] = new Particle();
+        for(int i=0;i<spawnCache.length;i++)spawnCache[i]=new Spawn();
     }
 
     int at(double time) {
@@ -44,15 +49,17 @@ final class OsuKiaiFountain {
                 float age = (float)(time - spawn);
                 if (age >= MAX_DURATION) return count;
                 for (int side = 0; side < 2; side++) {
-                    long seed = mix(Double.doubleToLongBits(starts[interval]) ^ index * 0x9e3779b97f4a7c15L ^ side);
-                    float duration = 300 + random(seed) * 700;
+                    long key=Double.doubleToLongBits(starts[interval]) ^ index * 0x9e3779b97f4a7c15L ^ side;
+                    Spawn data=spawnCache[(int)((spawnBases[interval]+index)%CAPACITY)*2+side];
+                    if(!data.valid||data.key!=key){
+                        long seed=mix(key);data.key=key;data.valid=true;
+                        data.duration=300+random(seed)*700;data.vx=450+random(seed+1)*150;data.vy=-1500+random(seed+2)*200;
+                        data.startAngle=-4+random(seed+3)*8;data.endAngle=-2+random(seed+4)*4;data.endScale=1.8f+random(seed+5)*.8f;
+                    }
+                    float duration = data.duration;
                     if (age < 0 || age >= duration) continue;
                     float progress = age / duration, seconds = age / 1000;
-                    float vx = 450 + random(seed + 1) * 150;
-                    float vy = -1500 + random(seed + 2) * 200;
-                    float startAngle = -4 + random(seed + 3) * 8;
-                    float endAngle = -2 + random(seed + 4) * 4;
-                    float endScale = 1.8f + random(seed + 5) * .8f;
+                    float vx=data.vx,vy=data.vy,startAngle=data.startAngle,endAngle=data.endAngle,endScale=data.endScale;
                     Particle p = particles[count++];
                     p.side = side;
                     p.x = (side == 0 ? 1 : -1) * (75 + vx * seconds);

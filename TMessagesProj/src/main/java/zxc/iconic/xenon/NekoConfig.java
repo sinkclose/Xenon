@@ -86,7 +86,7 @@ public class NekoConfig {
     public static volatile boolean osuReplayVideoBackground=true;
     public static volatile int osuReplayBackgroundDim = 70, osuReplayBackgroundBlur, osuReplayBackgroundParallax;
     public static volatile int osuReplayHudOpacity=100,osuReplayObjectOpacity=100,osuReplayKiaiIntensity=100;
-    public static volatile String osuReplaySkin = "";
+    public static volatile String osuReplaySkin = zxc.iconic.xenon.osu.OsuSkinStore.ARGON_PRO;
 
     public static boolean useSystemEmoji = false;
     public static boolean ignoreBlocked = false;
@@ -378,7 +378,7 @@ public class NekoConfig {
             osuReplayHudOpacity=Math.max(0,Math.min(100,preferences.getInt("osuReplayHudOpacity",100)));
             osuReplayObjectOpacity=Math.max(0,Math.min(100,preferences.getInt("osuReplayObjectOpacity",100)));
             osuReplayKiaiIntensity=Math.max(0,Math.min(200,preferences.getInt("osuReplayKiaiIntensity",100)));
-            osuReplaySkin = preferences.getString("osuReplaySkin", "");
+            osuReplaySkin = preferences.getString("osuReplaySkin", zxc.iconic.xenon.osu.OsuSkinStore.ARGON_PRO);
             osuKeepHitsoundsPlaying = preferences.getBoolean("osuKeepHitsoundsPlaying", false);
             osuHitsoundVolume = Math.max(0, Math.min(100, preferences.getInt("osuHitsoundVolume", 60)));
             osuMapMusicVolume = Math.max(0, Math.min(100, preferences.getInt("osuMapMusicVolume", 100)));

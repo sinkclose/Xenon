@@ -3,7 +3,7 @@ package zxc.iconic.xenon.osu;
 import java.io.*;
 import java.nio.*;
 
-/** Immutable PCM16 WAV sample, resampled on read without allocations. */
+/** Immutable PCM16 mixer sample; reads PCM16/PCM24 WAV and resamples without allocations. */
 public final class OsuWave {
     public final int sampleRate, channels;
     private final short[] samples;
@@ -93,18 +93,28 @@ public final class OsuWave {
         for (int n; (n = source.read(block)) >= 0;) { if (bytes.size() + n > 8 * 1024 * 1024) throw new IOException("Sample too large"); bytes.write(block, 0, n); }
         ByteBuffer data = ByteBuffer.wrap(bytes.toByteArray()).order(ByteOrder.LITTLE_ENDIAN);
         if (data.remaining() < 12 || data.getInt() != 0x46464952 || data.getInt(8) != 0x45564157) throw new IOException("Not a WAV sample");
-        int channels = 0, rate = 0, payload = -1, size = 0;
+        int channels = 0, rate = 0, payload = -1, size = 0, bits = 0;
         for (int offset = 12; offset + 8 <= data.limit();) {
             int type = data.getInt(offset), length = data.getInt(offset + 4);
             if (length < 0 || length > data.limit() - offset - 8) throw new IOException("Truncated WAV");
             if (type == 0x20746d66) {
-                if (length < 16 || data.getShort(offset + 8) != 1 || data.getShort(offset + 22) != 16) throw new IOException("Expected PCM16");
+                if(length<16)throw new IOException("Invalid WAV format chunk");
+                int format=data.getShort(offset+8)&65535;bits=data.getShort(offset+22)&65535;
+                if(format==65534&&length>=40&&data.getShort(offset+24)>=22
+                        &&data.getInt(offset+32)==1&&data.getInt(offset+36)==0x00100000
+                        &&data.getInt(offset+40)==0xaa000080&&data.getInt(offset+44)==0x719b3800)format=1;
+                if(format!=1||(bits!=16&&bits!=24))throw new IOException("Expected PCM16 or PCM24");
                 channels = data.getShort(offset + 10); rate = data.getInt(offset + 12);
+                if(data.getShort(offset+20)!=channels*(bits/8))throw new IOException("Invalid PCM block alignment");
             } else if (type == 0x61746164) { payload = offset + 8; size = length; }
             offset += 8 + length + (length & 1);
         }
-        if (payload < 0 || channels < 1 || channels > 2 || rate < 8000 || rate > 192000 || size % (2 * channels) != 0) throw new IOException("Invalid WAV format");
-        short[] samples = new short[size / 2]; data.position(payload); for (int i = 0; i < samples.length; i++) samples[i] = data.getShort();
+        if (payload < 0 || channels < 1 || channels > 2 || rate < 8000 || rate > 192000 || bits == 0 || size % ((bits / 8) * channels) != 0) throw new IOException("Invalid WAV format");
+        short[] samples = new short[size / (bits / 8)]; data.position(payload);
+        for(int i=0;i<samples.length;i++){
+            if(bits==16)samples[i]=data.getShort();
+            else {int value=(data.get()&255)|((data.get()&255)<<8)|(data.get()<<16);samples[i]=(short)Math.max(-32768,Math.min(32767,(value+128)>>8));}
+        }
         return new OsuWave(rate, channels, samples);
     }
 }

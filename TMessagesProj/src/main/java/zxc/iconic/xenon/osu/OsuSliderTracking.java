@@ -13,13 +13,23 @@ public final class OsuSliderTracking {
         double start=Math.max(headJudgedAt,Math.max(last,Math.max(hit.time+(hit.end-hit.time)/2,hit.end-36)));
         if(start>hit.end)return Double.NaN;
         OsuReplayFrames.Sample sample=new OsuReplayFrames.Sample();double[] point=new double[2];
-        if(held(hit,frames,start,mods,radius,sample,point))return start;
-        int low=0,high=frames.size;while(low<high){int mid=(low+high)>>>1;if(frames.time(mid)<=start)low=mid+1;else high=mid;}
-        for(int i=low;i<frames.size&&frames.time(i)<=hit.end;i++)if(held(hit,frames,frames.time(i),mods,radius,sample,point))return frames.time(i);
-        return held(hit,frames,hit.end,mods,radius,sample,point)?hit.end:Double.NaN;
+        // Expanded follow area only retains tracking. After leaving it or releasing
+        // the key, the cursor must re-enter the ball's normal radius (SliderInputManager).
+        double begin=Math.min(start,Math.max(hit.time,headJudgedAt));
+        boolean tracking=held(hit,frames,begin,mods,radius*2.4,sample,point);
+        int low=0,high=frames.size;while(low<high){int mid=(low+high)>>>1;if(frames.time(mid)<=begin)low=mid+1;else high=mid;}
+        boolean checkedStart=false;
+        for(int i=low;i<frames.size&&frames.time(i)<=hit.end;i++){
+            double time=frames.time(i);
+            if(!checkedStart&&time>=start){tracking=held(hit,frames,start,mods,radius*(tracking?2.4:1),sample,point);checkedStart=true;if(tracking)return start;}
+            tracking=held(hit,frames,time,mods,radius*(tracking?2.4:1),sample,point);
+            if(time>=start&&tracking)return time;
+        }
+        if(!checkedStart){tracking=held(hit,frames,start,mods,radius*(tracking?2.4:1),sample,point);if(tracking)return start;}
+        return held(hit,frames,hit.end,mods,radius*(tracking?2.4:1),sample,point)?hit.end:Double.NaN;
     }
     private static boolean held(OsuPlaybackMap.Hit hit,OsuReplayFrames frames,double time,long mods,double radius,OsuReplayFrames.Sample sample,double[] point){
         double p=(time-hit.time)/Math.max(1,hit.end-hit.time)*hit.repeats;int span=Math.min(hit.repeats-1,(int)p);double fraction=Math.min(1,p-span);hit.position(span%2==0?fraction:1-fraction,point);frames.at(time,sample);
-        return((mods&128)!=0||(sample.keys&15)!=0)&&Math.hypot(sample.x-point[0],sample.y-((mods&16)!=0?384-point[1]:point[1]))<=radius*2.4;
+        return((mods&128)!=0||(sample.keys&15)!=0)&&Math.hypot(sample.x-point[0],sample.y-((mods&16)!=0?384-point[1]:point[1]))<=radius;
     }
 }

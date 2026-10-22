@@ -30,15 +30,16 @@ final class OsuReplaySettingsSheet extends BottomSheet {
         slider(context,content,R.string.OsuLogoMapMusicVolume,NekoConfig.osuMapMusicVolume,NekoConfig::setOsuMapMusicVolume);
         slider(context,content,R.string.OsuLogoHitsoundVolume,NekoConfig.osuHitsoundVolume,NekoConfig::setOsuHitsoundVolume);
         File selected=OsuSkinStore.directory(NekoConfig.osuReplaySkin);
-        TextView skin=label(context,LocaleController.getString(R.string.OsuReplaySkin)+": "+(selected==null?LocaleController.getString(R.string.OsuSkinDefault):OsuSkinStore.name(selected)));
+        TextView skin=label(context,LocaleController.getString(R.string.OsuReplaySkin)+": "+(OsuSkinStore.isArgonPro(NekoConfig.osuReplaySkin)?"osu! argon pro (2022)":selected==null?LocaleController.getString(R.string.OsuSkinDefault):OsuSkinStore.name(selected)));
         skin.setPadding(0,padding,0,padding);content.addView(skin);
         skin.setOnClickListener(view->{
-            List<File> skins=OsuSkinStore.list();CharSequence[] names=new CharSequence[skins.size()+2];
-            names[0]=LocaleController.getString(R.string.OsuSkinDefault);names[1]=LocaleController.getString(R.string.OsuSkinImport);
-            for(int i=0;i<skins.size();i++)names[i+2]=OsuSkinStore.name(skins.get(i));
+            List<File> skins=OsuSkinStore.list();CharSequence[] names=new CharSequence[skins.size()+3];
+            names[0]="osu! argon pro (2022)";names[1]=LocaleController.getString(R.string.OsuSkinImport);
+            names[2]=LocaleController.getString(R.string.OsuSkinDefault);
+            for(int i=0;i<skins.size();i++)names[i+3]=OsuSkinStore.name(skins.get(i));
             new AlertDialog.Builder(context).setTitle(LocaleController.getString(R.string.OsuReplaySkin)).setItems(names,(dialog,index)->{
                 if(index==1){importSkin.run();dismiss();return;}
-                NekoConfig.setOsuReplaySkin(index==0?"":skins.get(index-2).getName());
+                NekoConfig.setOsuReplaySkin(index==0?OsuSkinStore.ARGON_PRO:index==2?"":skins.get(index-3).getName());
                 skin.setText(LocaleController.getString(R.string.OsuReplaySkin)+": "+names[index]);
             }).show();
         });

@@ -114,7 +114,14 @@ final class OsuReplayLoader {
         result.title = beatmap.title; result.artist = beatmap.artist; result.difficulty = beatmap.version;
         // Creator is independent of the music artist.
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(map), StandardCharsets.UTF_8))) {
-            String line; while ((line = reader.readLine()) != null) if (line.trim().startsWith("Creator:")) { result.mapper = line.substring(line.indexOf(':') + 1).trim(); break; }
+            String line;boolean metadataSection=false;while ((line = reader.readLine()) != null) {
+                line=line.trim();
+                if(line.startsWith("[")){metadataSection=line.equals("[Metadata]");continue;}
+                if(!metadataSection)continue;
+                if(line.startsWith("Title:")&&!line.substring(6).trim().isEmpty())result.title=line.substring(6).trim();
+                else if(line.startsWith("Artist:")&&!line.substring(7).trim().isEmpty())result.artist=line.substring(7).trim();
+                else if(line.startsWith("Creator:"))result.mapper=line.substring(8).trim();
+            }
         }
         if (replay.performanceSupported) {
             double[] performance = OsuDifficulty.replayPerformance(map, replay.mods, replay.performanceCounts(), replay.lazer, replay.clockRate);

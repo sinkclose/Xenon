@@ -15,16 +15,19 @@ public final class OsuLocalCache {
     public interface Progress { void update(long downloaded, long total); }
     private static File root() { return new File(ApplicationLoader.getFilesDirFixed(), "osu-cache"); }
     public static File file(String group, String key) {
-        if (!group.matches("maps|metadata|avatars|sets|media|sets-video|media-video") || !key.matches("[a-zA-Z0-9_.-]+") || key.contains("..")) throw new IllegalArgumentException("Invalid cache key");
+        if (!group.matches("maps|metadata|avatars|profiles|covers|sets|media|sets-video|media-video") || !key.matches("[a-zA-Z0-9_.-]+") || key.contains("..")) throw new IllegalArgumentException("Invalid cache key");
         return new File(new File(root(), group), key);
     }
     public static File fetch(String group, String key, String address, int limit, String expectedMd5) throws IOException {
         return fetch(group,key,address,limit,expectedMd5,null);
     }
     public static File fetch(String group, String key, String address, int limit, String expectedMd5, Progress progress) throws IOException {
+        return fetch(group,key,address,limit,expectedMd5,progress,Long.MAX_VALUE);
+    }
+    public static File fetch(String group, String key, String address, int limit, String expectedMd5, Progress progress,long maxAgeMs) throws IOException {
         synchronized (LOCK) {
             File target = file(group, key);
-            if (target.isFile() && target.length() > 0 && target.length() <= limit && (expectedMd5 == null || expectedMd5.equals(md5(target)))) return target;
+            if (target.isFile() && target.length() > 0 && target.length() <= limit && System.currentTimeMillis()-target.lastModified()<=maxAgeMs && (expectedMd5 == null || expectedMd5.equals(md5(target)))) return target;
             File temporary = null;
             HttpURLConnection connection = null;
             try {

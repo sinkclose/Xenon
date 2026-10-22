@@ -26,7 +26,7 @@ final class OsuReplayPreparation {
     static OsuReplayPreparation prepareAutoplay(Context context,File map,File audio)throws Exception{
         return prepare(context,OsuReplaySession.autoplay(map,audio));
     }
-    private static OsuReplayPreparation prepare(Context context,OsuReplaySession session)throws Exception{
+    static OsuReplayPreparation prepare(Context context,OsuReplaySession session)throws Exception{
         OsuReplayPreparation data=new OsuReplayPreparation(session);
         try{
             if(data.session.assets.background!=null){data.background=decodeBackground(data.session.assets.background);data.resultsBackground=decodeBackground(data.session.assets.background,10);if(android.os.Build.VERSION.SDK_INT>=31)data.rawBackground=decodeBackground(data.session.assets.background,0);}
@@ -38,7 +38,7 @@ final class OsuReplayPreparation {
             data.music=onMain(()->new OsuReplayMusic(context,data.session.assets.audio,mixer));data.music.awaitReady();
             data.sounds.awaitReady();data.resultsSounds.awaitReady();
             // Fonts are shared caches: warm them on the Watch worker too.
-            for(String font:new String[]{"Torus-Regular","Torus-Light","Torus-SemiBold","Venera-Bold"})OsuBitmapFont.get(font);
+            for(String font:new String[]{"Torus-Regular","Torus-Light","Torus-SemiBold","Torus-Bold","Venera-Bold"})OsuBitmapFont.get(font);
             return data;
         }catch(Exception error){data.dispose();throw error;}
     }

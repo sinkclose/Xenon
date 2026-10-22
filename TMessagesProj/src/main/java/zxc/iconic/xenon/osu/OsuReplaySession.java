@@ -15,6 +15,8 @@ public final class OsuReplaySession {
     public OsuReplayHealth health;
     public OsuReplaySpinners spinners;
     public OsuReplayHud hud;
+    public OsuReplayPerformance performance;
+    OsuArgonTimeline argonTimeline;
     public OsuReplayModEffects.Flashlight flashlight;
     public interface Progress { void update(boolean downloading,long bytes,long total); }
     private static OsuReplaySession ready;
@@ -35,6 +37,8 @@ public final class OsuReplaySession {
         session.hud=new OsuReplayHud(session.map,session.frames,r,session.judgements,session.spinners);
         r.score=session.hud.score(session.map.duration()+1);r.combo=session.hud.combo(session.map.duration()+1);r.maxCombo=r.combo;
         session.sounds=new OsuReplaySoundEvents(session.map,session.frames,r,session.judgements,session.hud,session.spinners);
+        session.performance=OsuReplayPerformance.prepare(session);
+        session.argonTimeline=new OsuArgonTimeline(session);
         return session;
     }
     private static OsuBeatmap readEffects(File file)throws IOException{try(Reader reader=new InputStreamReader(new FileInputStream(file),java.nio.charset.StandardCharsets.UTF_8)){return OsuBeatmap.read(reader);}}
@@ -58,6 +62,8 @@ public final class OsuReplaySession {
         session.hud=new OsuReplayHud(session.map,session.frames,session.replay,session.judgements,session.spinners);
         if((session.replay.mods&1024)!=0)session.flashlight=new OsuReplayModEffects.Flashlight(session.map,session.frames,session.replay,session.hud);
         session.sounds=new OsuReplaySoundEvents(session.map,session.frames,session.replay,session.judgements,session.hud,session.spinners);
+        session.performance=OsuReplayPerformance.prepare(session);
+        session.argonTimeline=new OsuArgonTimeline(session);
         return session;
     }
 }

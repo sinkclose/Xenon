@@ -18,7 +18,8 @@ import static zxc.iconic.xenon.triangles.TriangleSettings.Value.*;
 
 /** Drawn once after the wallpaper, before messages. No view, bitmap or path allocation per particle/frame. */
 public final class TriangleWallpaperRenderer {
-    private final TriangleSettings settings = TriangleSettings.get();
+    private final TriangleSettings settings;
+    private final float densityOverride;
     private final Random random = new Random();
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path path = new Path();
@@ -38,10 +39,15 @@ public final class TriangleWallpaperRenderer {
     private View animationHost;
     private boolean framePosted;
     private final Choreographer.FrameCallback frameCallback = this::onAnimationFrame;
+    private int paletteTop,paletteBottom;
+    /** Optional fixed surface palette for embedded effects such as replay Skip. */
+    public void setGradientColors(int top,int bottom){if(paletteTop==top&&paletteBottom==bottom)return;paletteTop=top;paletteBottom=bottom;shaderRevision=-1;}
     private Shader shader;
     private boolean legacyFade;
 
-    public TriangleWallpaperRenderer() {
+    public TriangleWallpaperRenderer() {this(TriangleSettings.get(),0);}
+    public TriangleWallpaperRenderer(TriangleSettings settings,float densityOverride) {
+        this.settings=settings;this.densityOverride=densityOverride;
         for (int i = 0; i < x.length; i++) {
             sizeRandom[i] = random.nextFloat() * 2 - 1;
             speedRandom[i] = (float) Math.max(-1, Math.min(1, random.nextGaussian() * 0.5));
@@ -88,7 +94,7 @@ public final class TriangleWallpaperRenderer {
     }
 
     private void advance(float dt) {
-        float density = AndroidUtilities.density;
+        float density = (densityOverride>0?densityOverride:AndroidUtilities.density);
         float direction = (float) Math.toRadians(settings.value(DIRECTION));
         float vx = (float) Math.cos(direction) * settings.value(SPEED) * density;
         float vy = (float) Math.sin(direction) * settings.value(SPEED) * density;
@@ -117,7 +123,7 @@ public final class TriangleWallpaperRenderer {
     private void draw(Canvas canvas, View host, Drawable wallpaper, int fallbackColor, int w, int h, boolean active, boolean snapshot) {
         if (!settings.flag(ENABLED) || w <= 0 || h <= 0) { if (!snapshot) suspend(); return; }
         final long now = SystemClock.uptimeMillis();
-        final float density = AndroidUtilities.density;
+        final float density = (densityOverride>0?densityOverride:AndroidUtilities.density);
         int target = TriangleMath.count(w / density, settings.value(DENSITY));
         if (width != w || height != h) {
             width = w; height = h; count = 0; shaderRevision = -1;
@@ -141,6 +147,7 @@ public final class TriangleWallpaperRenderer {
         }
         if (shaderRevision != settings.revision || lastSampleColor != wallpaperColor) {
             rebuildShader(automatic, custom);
+            if(paletteTop!=0)shader=new LinearGradient(0,0,0,height,paletteTop,paletteBottom,Shader.TileMode.CLAMP);
             shaderRevision = settings.revision;
             lastSampleColor = wallpaperColor;
         }

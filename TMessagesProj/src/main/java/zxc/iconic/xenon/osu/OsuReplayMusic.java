@@ -27,7 +27,9 @@ final class OsuReplayMusic {
     OsuReplayMusic(Context context,File file,OsuReplayPcmMixer mixer){
         this.mixer=mixer;
         DefaultExtractorsFactory extractors=new DefaultExtractorsFactory()
-                .setMp3ExtractorFlags(Mp3Extractor.FLAG_ENABLE_INDEX_SEEKING);
+                // A seekable Xing table can still be hundreds of milliseconds off.
+                // Replays need actual sample timestamps, including after arbitrary seeks.
+                .setMp3ExtractorFlags(Mp3Extractor.FLAG_FORCE_INDEX_SEEKING);
         player=new ExoPlayer.Builder(context)
                 .setMediaSourceFactory(new DefaultMediaSourceFactory(context,extractors))
                 .setRenderersFactory(new DefaultRenderersFactory(context){
@@ -60,7 +62,13 @@ final class OsuReplayMusic {
     boolean isAdvancing(){return player.isPlaying();}
     void start(){player.play();}
     void pause(){player.pause();}
-    void seekTo(int position){seeking=true;player.seekTo(position);}
+    void seekTo(int position){
+        seeking=true;player.seekTo(position);
+        // A tap on the current position may stay READY without a state-change event.
+        new android.os.Handler(player.getApplicationLooper()).post(()->{
+            if(seeking&&player.getPlaybackState()==Player.STATE_READY){seeking=false;if(seekComplete!=null)seekComplete.accept(this);}
+        });
+    }
     void setPlaybackParams(PlaybackParams params){player.setPlaybackParameters(new PlaybackParameters(params.getSpeed(),params.getPitch()));}
     void setVolume(float left,float right){mixer.musicVolume=(left+right)/2;player.setVolume(1);}
     void setHitSamples(java.util.Map<String,OsuWave> samples){mixer.setSamples(samples);}

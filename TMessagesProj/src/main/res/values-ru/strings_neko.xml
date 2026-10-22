@@ -741,6 +741,8 @@
     <string name="OsuReplayInvalid">Не удалось открыть реплей</string>
     <string name="OsuReplayMappedBy">карта от</string>
     <string name="OsuReplayAccuracy">Точность</string>
+    <string name="OsuReplayBreakProgress">Текущий прогресс</string>
+    <string name="OsuReplayBreakGrade">Оценка</string>
     <string name="OsuReplayMaxCombo">Макс. комбо</string>
     <string name="OsuReplayPlayedOn">Сыграно</string>
     <string name="OsuClearLocalFiles">Очистить локальные файлы osu!</string>
@@ -761,7 +763,7 @@
     <string name="OsuReplayBackgroundParallax">Параллакс фона</string>
     <string name="OsuReplayBackgroundBlur">Размытие фона</string>
     <string name="OsuReplaySkin">Скин реплеев</string>
-    <string name="OsuSkinDefault">Стандартный</string>
+    <string name="OsuSkinDefault">osu! classic (stable)</string>
     <string name="OsuSkinImport">Импортировать .osk…</string>
     <string name="OsuSkinImported">Скин импортирован и выбран.</string>
     <string name="OsuSkinImportFailed">Не удалось импортировать скин osu! Выберите корректный архив .osk.</string>

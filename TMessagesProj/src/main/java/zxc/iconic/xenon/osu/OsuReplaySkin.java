@@ -19,6 +19,7 @@ final class OsuReplaySkin {
     private final OsuSkinTextureCache<Bitmap> images=new OsuSkinTextureCache<>(OsuSkinAssets.PIXEL_BUDGET);
     private final HashSet<String> pending=new HashSet<>(),failed=new HashSet<>();
     private Map<String,List<String>> animations=Collections.emptyMap();
+    private final Map<String,List<String>> textureFrames=new HashMap<>();
     private volatile boolean disposed;
     private volatile Runnable invalidation;
     private final HashMap<String,float[]> sizes=new HashMap<>();
@@ -31,7 +32,9 @@ final class OsuReplaySkin {
     boolean oldNumberAnimation(){return skinVersion<=1;}
     private float animationRate=-1,hitOverlap=-2,scoreOverlap,comboOverlap;
     private String hitPrefix="default",scorePrefix="score",comboPrefix="score";
+    final boolean argonPro;
     OsuReplaySkin(String key){
+        argonPro=OsuSkinStore.isArgonPro(key);
         File directory=OsuSkinStore.directory(key);
         if(directory!=null)readInfo(new File(directory,"skin.ini"));
         try{
@@ -39,10 +42,18 @@ final class OsuReplaySkin {
             String[] fallback=ApplicationLoader.applicationContext.getAssets().list("osu/skin-default");
             if(fallback!=null)for(String file:fallback)if(OsuSkinAssets.fallbackAllowed(OsuSkinAssets.name(file),custom))register(file,"osu/skin-default/"+file,true);
         }catch(IOException error){org.telegram.messenger.FileLog.e(error);}
+        if(argonPro){
+            combos.addAll(Arrays.asList(0xfff17400,0xff00f135,0xff0052f1,0xfff10000,0xffe8eb00,0xff5c00f1));
+            cursorRotate=false;sliderBallTint=true;
+            for(String name:new String[]{"hare","tortoise","cursortrail","repeat-edge-piece","approachcircle"})register("argon-"+name+".png","osu/argon-pro/textures/"+name+".png",true);
+            scorePrefix=comboPrefix="argon-counter";
+            try{for(String file:ApplicationLoader.applicationContext.getAssets().list("osu/argon-pro/fonts"))register(file,"osu/argon-pro/fonts/"+file,true);}catch(IOException error){org.telegram.messenger.FileLog.e(error);}
+        }
         animations=OsuSkinAssets.animations(textures.keySet());
+        for(String name:textures.keySet()){List<String> frames=animations.get(OsuSkinAssets.family(name));if(frames!=null)textureFrames.put(name,frames);}
         // Construction runs on the replay worker. Warm visible sprites, not hundreds of future frames.
         ArrayList<String> warm=new ArrayList<>(textures.keySet());Collections.sort(warm);
-        for(String name:warm){List<String> frames=animations.get(OsuSkinAssets.family(name));
+        for(String name:warm){List<String> frames=textureFrames.get(name);
             if(!name.startsWith("spinner-")&&(frames==null||name.equals(frames.get(0))))decode(name);
         }
     }
@@ -112,7 +123,7 @@ final class OsuReplaySkin {
     boolean natural(Canvas canvas,Paint paint,RectF rect,String name,float x,float y,float scale,float alpha,Integer tint,double time){return naturalFrame(canvas,paint,rect,frame(name,time,true),x,y,scale,alpha,tint);}
     private boolean naturalFrame(Canvas canvas,Paint paint,RectF rect,String name,float x,float y,float scale,float alpha,Integer tint){
         if(!textures.containsKey(name))return false;
-        Bitmap image=images.get(name);String resolved=name;List<String> frames=animations.get(OsuSkinAssets.family(name));
+        Bitmap image=images.get(name);String resolved=name;List<String> frames=textureFrames.get(name);
         if(image==null){request(name);if(frames!=null){int index=frames.indexOf(name);for(int offset=1;offset<=frames.size();offset++){String previous=frames.get(Math.floorMod(index-offset,frames.size()));image=images.get(previous);if(image!=null){resolved=previous;break;}}}}
         if(frames!=null){int index=frames.indexOf(name);for(int i=1;i<=2;i++)request(frames.get((index+i)%frames.size()));}
         // A known transparent or pending sprite suppresses procedural/default substitutes.
@@ -120,11 +131,25 @@ final class OsuReplaySkin {
         paint.setFilterBitmap(true);paint.setStyle(Paint.Style.FILL);paint.setColor(Color.WHITE);paint.setAlpha(Math.round(Math.max(0,Math.min(1,alpha))*(tint==null?255:Color.alpha(tint))));paint.setColorFilter(tint==null?null:new PorterDuffColorFilter(tint|0xff000000,PorterDuff.Mode.MULTIPLY));
         rect.set(x-w/2,y-h/2,x+w/2,y+h/2);canvas.drawBitmap(image,null,rect,paint);paint.setAlpha(255);paint.setColorFilter(null);return true;
     }
+    /** Star fountains share one texture: resolve it once, without regex/LRU work per particle. */
+    void drawKiaiStars(Canvas canvas,Paint paint,RectF rect,OsuKiaiFountain.Particle[] particles,int count,float width,float height,float opacity){
+        Bitmap image=images.get("star2");if(image==null){request("star2");return;}
+        float[] size=sizes.get("star2");float unit=height/768f;
+        paint.setFilterBitmap(true);paint.setStyle(Paint.Style.FILL);paint.setColor(Color.WHITE);paint.setColorFilter(null);
+        for(int i=0;i<count;i++){
+            OsuKiaiFountain.Particle p=particles[i];float scale=p.scale*unit,w=size[0]*scale,h=size[1]*scale;
+            float x=(p.side==0?0:width)+p.x*unit,y=height+p.y*unit,bound=(float)Math.hypot(w,h)*.5f;
+            if(x+bound<0||x-bound>width||y+bound<0||y-bound>height||p.alpha*opacity<=0)continue;
+            paint.setAlpha(Math.round(Math.min(1,p.alpha*opacity)*255));rect.set(x-w/2,y-h/2,x+w/2,y+h/2);
+            canvas.save();canvas.rotate((float)(-p.angle*180/Math.PI),x,y);canvas.drawBitmap(image,null,rect,paint);canvas.restore();
+        }
+        paint.setAlpha(255);
+    }
     boolean draw(Canvas canvas,Paint paint,RectF rect,String name,float x,float y,float width,float alpha,Integer tint){String resolved=frame(name,0,true);float w=width(resolved);return w>0&&naturalFrame(canvas,paint,rect,resolved,x,y,width/w,alpha,tint);}
     boolean judgement(Canvas canvas,Paint paint,RectF rect,int value,float x,float y,float age,float radius,float alpha){return naturalFrame(canvas,paint,rect,frame("hit"+value,age,false),x,y,radius/64,alpha,null);}
     private String prefix(String role){return role.equals("default")?hitPrefix:role.equals("combo")?comboPrefix:scorePrefix;}
     private float overlapFor(String role){return role.equals("default")?hitOverlap:role.equals("combo")?comboOverlap:scoreOverlap;}
-    private String glyph(String role,char ch){return OsuSkinAssets.glyph(prefix(role),ch,textures.keySet());}
+    private String glyph(String role,char ch){if(argonPro&&!role.equals("default")&&ch=='%')return "argon-counter-percentage";return OsuSkinAssets.glyph(prefix(role),ch,textures.keySet());}
     float textHeight(String role){for(char ch='0';ch<='9';ch++){float h=height(glyph(role,ch));if(h>0)return h;}return 0;}
     float textWidth(String role,String text,float scale){float width=0;int count=0;for(char ch:text.toCharArray()){String name=glyph(role,ch);if(name==null)continue;width+=width(name)-overlapFor(role);count++;}return (width+(count==0?0:overlapFor(role)))*scale;}
     boolean text(Canvas canvas,Paint paint,RectF rect,String role,String text,float x,float top,float scale,float alpha,int align){
@@ -134,5 +159,25 @@ final class OsuReplaySkin {
     }
     boolean number(Canvas c,Paint p,RectF r,int value,float x,float y,float height,float alpha){float h=textHeight("default");return h>0&&text(c,p,r,"default",Integer.toString(value),x,y-height/2,height/h,alpha,0);}
     boolean scoreNumber(Canvas c,Paint p,RectF r,int value,float x,float y,float height,float alpha){float h=textHeight("score");return h>0&&text(c,p,r,"score",Integer.toString(value),x,y-height/2,height/h,alpha,0);}
+    /** ArgonCounterSpriteText: native glyph size is PNG / 8, with -2 logical spacing. */
+    float argonWidth(String text,float scale){
+        float width=0;for(int i=0;i<text.length();i++){String name=text.charAt(i)=='.'?"argon-counter-dot":"argon-counter-5";width+=width(name)/8-2;}
+        return (width+(text.isEmpty()?0:2))*scale;
+    }
+    void argonCounter(Canvas c,Paint p,RectF r,String text,String template,float x,float top,float scale,boolean right){
+        float templateWidth=argonWidth(template,scale),actualWidth=argonWidth(text,scale);
+        float edge=right?x:x+Math.max(templateWidth,actualWidth);
+        float left=edge-templateWidth;
+        for(int i=0;i<template.length();i++){
+            String name=template.charAt(i)=='.'?"argon-counter-dot":"argon-counter-wireframes";
+            float w=width(name)*scale/8,h=height(name)*scale/8;
+            naturalFrame(c,p,r,name,left+w/2,top+h/2,scale/8,.25f,null);left+=w-2*scale;
+        }
+        left=edge-actualWidth;
+        for(int i=0;i<text.length();i++){
+            String name=glyph("score",text.charAt(i));float w=width(name)*scale/8,h=height(name)*scale/8;
+            naturalFrame(c,p,r,name,left+w/2,top+h/2,scale/8,1,null);left+=w-2*scale;
+        }
+    }
     void dispose(){disposed=true;invalidation=null;images.clear();}
 }

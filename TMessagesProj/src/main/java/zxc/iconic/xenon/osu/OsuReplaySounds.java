@@ -16,13 +16,15 @@ final class OsuReplaySounds {
     private final Set<Integer> loaded=ConcurrentHashMap.newKeySet(),completed=ConcurrentHashMap.newKeySet();
     private final OsuReplaySoundEvents timeline;
     private final boolean embedded;
+    private final boolean argonPro;
     private int kiaiStart,kiaiLoop,kiaiStream;private double lastFountain=Double.NaN,kiaiPrevious=Double.NaN;
     private final OsuBeatmap.State kiaiState=new OsuBeatmap.State();
     private int next;private double previous=Double.NaN;
     private final ArrayList<Integer> streams=new ArrayList<>();
     OsuReplaySounds(Context context,String key,OsuReplaySoundEvents timeline,boolean embedded){
-        this.embedded=embedded;
+        this.embedded=embedded;this.argonPro=OsuSkinStore.isArgonPro(key);
         this.timeline=timeline;pool.setOnLoadCompleteListener((soundPool,id,status)->{if(status==0)loaded.add(id);synchronized(completed){completed.add(id);completed.notifyAll();}});File directory=OsuSkinStore.directory(key);
+        try(AssetFileDescriptor asset=context.getAssets().openFd("osu/argon-pro/sounds/skip.wav")){samples.put("skip",pool.load(asset,1));}catch(Exception error){FileLog.e(error);}
         if(embedded){load(context,directory,"failsound",true);return;}
         for(String bank:new String[]{"normal","soft","drum"})for(String sample:new String[]{"hitnormal","hitwhistle","hitfinish","hitclap","slidertick"})load(context,directory,bank+"-"+sample,true);
         kiaiStart=pool.load(context,R.raw.osu_fountain_start,1);kiaiLoop=pool.load(context,R.raw.osu_fountain_loop,1);
@@ -33,9 +35,10 @@ final class OsuReplaySounds {
     private void load(Context context,File directory,String name,boolean fallback,String alias){
         try {
             if(directory!=null)for(String selected:alias==null?new String[]{name}:new String[]{name,alias})for(String extension:new String[]{"wav","ogg","mp3"}){File file=new File(directory,selected+"."+extension);if(file.isFile()){samples.put(name,pool.load(file.getAbsolutePath(),1));return;}}
-            if(fallback)try(AssetFileDescriptor asset=context.getAssets().openFd("osu/sounds/"+name+".wav")){samples.put(name,pool.load(asset,1));}
+            if(fallback)try(AssetFileDescriptor asset=context.getAssets().openFd((argonPro?"osu/argon-pro/sounds/":"osu/sounds/")+name+".wav")){samples.put(name,pool.load(asset,1));}
         }catch(Exception error){FileLog.e(error);}
     }
+    void skip(){Integer id=samples.get("skip");if(id!=null&&loaded.contains(id)){float volume=NekoConfig.osuHitsoundVolume/100f;pool.play(id,volume,volume,2,0,1);}}
     void fail(){stop();Integer id=samples.get("failsound");if(id!=null&&loaded.contains(id)){float volume=NekoConfig.osuHitsoundVolume/100f;int stream=pool.play(id,volume,volume,2,0,1);if(stream!=0)streams.add(stream);}}
     void seek(double time){stop();next=timeline.after(time);previous=time;}
     void update(double time,double rate){

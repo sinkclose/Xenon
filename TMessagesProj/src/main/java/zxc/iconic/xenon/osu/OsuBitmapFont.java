@@ -12,6 +12,7 @@ final class OsuBitmapFont {
     private static final Map<String, OsuBitmapFont> CACHE = new HashMap<>();
     private final Map<Integer, int[]> glyphs = new HashMap<>();
     private final Map<Long, Short> kernings = new HashMap<>();
+    private final PorterDuffXfermode additive=new PorterDuffXfermode(PorterDuff.Mode.ADD);
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final TextPaint fallback = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final Rect src = new Rect();
@@ -59,6 +60,16 @@ final class OsuBitmapFont {
             if(previous>=0) width+=kernings.getOrDefault(((long)previous<<32)|(cp&0xffffffffL),(short)0)*pixels/size+spacing;
             width+=advance(cp,pixels);previous=cp;
         } return width;
+    }
+    void centeredAdditive(Canvas c,String text,float x,float y,float pixels,int colour,float maxWidth,float spacing){
+        paint.setXfermode(additive);fallback.setXfermode(additive);
+        centered(c,text,x,y,pixels,colour,maxWidth,spacing);paint.setXfermode(null);fallback.setXfermode(null);
+    }
+    void centered(Canvas c,String text,float x,float y,float pixels,int colour,float maxWidth,float spacing){
+        float min=Float.POSITIVE_INFINITY,max=Float.NEGATIVE_INFINITY;
+        for(int i=0;i<text.length();i++){int[] g=glyphs.get((int)text.charAt(i));if(g!=null){min=Math.min(min,g[5]-baseline);max=Math.max(max,g[5]-baseline+g[3]);}}
+        float fit=Math.min(1,maxWidth/Math.max(1,width(text,pixels,spacing)));
+        draw(c,text,x,y-(Float.isFinite(min)?(min+max)*.5f*pixels/size*fit:0),pixels,colour,maxWidth,spacing);
     }
     void draw(Canvas canvas,String text,float center,float y,float pixels,int color,float maxWidth,float spacing) {
         if(text==null||text.isEmpty()||((color>>>24)==0))return;

@@ -20,6 +20,8 @@ final class OsuScorePanel extends View {
         private static final boolean SCORE_COUNTER_HAPTICS_ENABLED=false;
         private final Theme.ResourcesProvider scoreResources;
         private OsuReplay replay;
+        private String currentUsername;
+        private String playerName(){return currentUsername!=null?currentUsername:replay.player;}
         boolean error;
         private boolean closed,playback,paused;
         private long pausedAt;
@@ -46,6 +48,9 @@ final class OsuScorePanel extends View {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final RectF rect = new RectF();
         private final ImageReceiver avatar = new ImageReceiver(this);
+        private final ImageReceiver cover = new ImageReceiver(this);
+        private static final DispatchQueue COVER_QUEUE=new DispatchQueue("osu-profile-covers");
+        private long coverAttemptedUserId;
         private static final DispatchQueue FONT_QUEUE=new DispatchQueue("osu-result-fonts");
         private OsuBitmapFont regular,light,semibold,rankFont;
         private final Bitmap[] modeIcons = new Bitmap[4];
@@ -71,7 +76,14 @@ final class OsuScorePanel extends View {
             });
         }
         void bind(OsuReplay r) {
-            replay=r;
+            if(replay==null||replay.userId!=r.userId)currentUsername=null;replay=r;
+            if(r.userId>0&&coverAttemptedUserId!=r.userId){
+                coverAttemptedUserId=r.userId;long userId=r.userId;
+                COVER_QUEUE.postRunnable(()->{
+                    try{String name=OsuProfileCover.fetchUsername(userId);if(name!=null)AndroidUtilities.runOnUIThread(()->{if(replay==r){currentUsername=name;setContentDescription(description());invalidate();}});}catch(java.io.IOException error){FileLog.e(error);}
+                    if(playback)try{File image=OsuProfileCover.fetch(userId);if(image!=null)AndroidUtilities.runOnUIThread(()->{if(replay==r){cover.setImage(image.getAbsolutePath(),"500_800",null,null,0);invalidate();}});}catch(java.io.IOException error){FileLog.e(error);}
+                });
+            }
             if (r.userId > 0) {
                 File cachedAvatar = OsuLocalCache.file("avatars", r.userId + ".img");
                 if (cachedAvatar.isFile()) avatar.setImage(cachedAvatar.getAbsolutePath(), "80_80", null, null, 0);
@@ -87,12 +99,12 @@ final class OsuScorePanel extends View {
         }
         String description() {
             if (replay == null) return filename;
-            return replay.player + ", " + replay.title + ", " + replay.displayRank() + ", " + replay.score + ", "
+            return playerName() + ", " + replay.title + ", " + replay.displayRank() + ", " + replay.score + ", "
                     + String.format(Locale.US, "%.2f%%", replay.accuracy() * 100) + ", " + replay.combo + ", " + replay.modsLabel;
         }
         void start() { if(replay==null||regular==null)return;if (start < 0) { start = SystemClock.uptimeMillis(); invalidate(); }removeCallbacks(audioTick);post(audioTick); }
-        @Override protected void onAttachedToWindow() { super.onAttachedToWindow(); avatar.onAttachedToWindow(); start(); }
-        @Override protected void onDetachedFromWindow() { removeCallbacks(audioTick);if(sounds!=null)sounds.stop();avatar.onDetachedFromWindow(); super.onDetachedFromWindow(); }
+        @Override protected void onAttachedToWindow() { super.onAttachedToWindow(); avatar.onAttachedToWindow();cover.onAttachedToWindow(); start(); }
+        @Override protected void onDetachedFromWindow() { removeCallbacks(audioTick);if(sounds!=null)sounds.stop();avatar.onDetachedFromWindow();cover.onDetachedFromWindow(); super.onDetachedFromWindow(); }
         @Override public void onWindowFocusChanged(boolean focused){super.onWindowFocusChanged(focused);if(!focused){if(sounds!=null)sounds.stop();}else if(!closed&&!paused){removeCallbacks(audioTick);post(audioTick);}}
         @Override protected void onMeasure(int width, int height) {
             int w = MeasureSpec.getSize(width); setMeasuredDimension(w, Math.round(w * 1.91f));
@@ -118,31 +130,48 @@ final class OsuScorePanel extends View {
             if(closed)return;
             float scale = getWidth() / 500f;
             c.save(); c.scale(scale, scale);
+            long elapsed = start < 0 ? 0 : (paused?pausedAt:SystemClock.uptimeMillis()) - start;
+            elapsed=Math.max(0,elapsed);
+            if(!paused&&sounds!=null)elapsed=sounds.elapsed(elapsed);
+            float layerOffset=playback?500f/360*53/2*(1-OsuReplayCompletion.panelTopExpansion(elapsed)):0;
             if(playback){
-                paint.setShader(new LinearGradient(0,85,0,955,0xff444444,0xff333333,Shader.TileMode.CLAMP));rect.set(0,85,500,955);c.drawRoundRect(rect,28,28,paint);paint.setShader(null);
-                paint.setShader(new LinearGradient(0,155,0,955,0xff555555,0xff333333,Shader.TileMode.CLAMP));rect.set(0,155,500,955);c.drawRoundRect(rect,28,28,paint);paint.setShader(null);
+                // Lazer resizes the layer containers, rather than stretching their
+                // rendered contents. Keep image/text proportions fixed throughout.
+                float w=OsuReplayCompletion.panelScale(elapsed,true),h=OsuReplayCompletion.panelScale(elapsed,false),left=250-250*w,right=250+250*w;
+                paint.setColor(Color.WHITE);paint.setShader(new LinearGradient(0,85,0,955,0xff444444,0xff333333,Shader.TileMode.CLAMP));rect.set(left,520-435*h+layerOffset,right,520+435*h+layerOffset);c.drawRoundRect(rect,28,28,paint);paint.setShader(null);
+                float top=555-400*h-layerOffset,bottom=555+400*h-layerOffset;
+                paint.setShader(new LinearGradient(0,155,0,955,0xff555555,0xff333333,Shader.TileMode.CLAMP));rect.set(left,top,right,bottom);c.drawRoundRect(rect,28,28,paint);paint.setShader(null);
+                if(cover.hasBitmapImage()){
+                    int layer=c.saveLayer(0,0,500,955,null);Path clip=new Path();clip.addRoundRect(new RectF(left,top,right,bottom),28,28,Path.Direction.CW);c.clipPath(clip);
+                    c.save();c.scale(1/scale,1/scale);cover.setImageCoords(0,155*scale,500*scale,800*scale);cover.draw(c);c.restore();
+                    paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_IN));paint.setColor(Color.WHITE);paint.setShader(new LinearGradient(0,155,0,955,0x80ffffff,0x00444444,Shader.TileMode.CLAMP));c.drawRect(0,155,500,955,paint);paint.setShader(null);paint.setXfermode(null);c.restoreToCount(layer);
+                }
             }
             int foreground = primary(), muted = secondary();
             if (replay == null || regular==null) {
                 label(c, error ? LocaleController.getString(R.string.OsuReplayInvalid) : LocaleController.getString(R.string.Loading), 250, 340, 19, foreground, true, 420);
                 label(c, filename, 250, 380, 14, muted, false, 420); c.restore(); return;
             }
-            long elapsed = start < 0 ? 0 : (paused?pausedAt:SystemClock.uptimeMillis()) - start;
-            elapsed=Math.max(0,elapsed);
-            if(!paused&&sounds!=null)elapsed=sounds.elapsed(elapsed);
-            rounded(c, 208, 25, 84, 84, 18, 0xff333333);
-            label(c, replay.player.isEmpty() ? "?" : replay.player.substring(0, 1).toUpperCase(Locale.ROOT), 250, 83, 43, OsuUiColors.readable(0xffff9ad7, 0xff333333, foreground, 4.5), true, 74);
+            int contentLayer=c.saveLayerAlpha(0,0,500,955,playback?Math.round(OsuReplayCompletion.panelContentAlpha(elapsed)*255):255);
+            c.save();c.translate(0,layerOffset);
+            rounded(c,194.5f,16,111,111,28,0xff333333);
+            label(c, playerName().isEmpty() ? "?" : playerName().substring(0, 1).toUpperCase(Locale.ROOT),250,90,52,OsuUiColors.readable(0xffff9ad7,0xff333333,foreground,4.5),true,96);
             // ImageReceiver uses physical coordinates, independently of the score canvas scale.
             c.save(); c.scale(1 / scale, 1 / scale);
-            avatar.setRoundRadius(Math.round(18*scale));avatar.setImageCoords(208*scale,25*scale,84*scale,84*scale); avatar.draw(c); c.restore();
-            label(c, replay.player, 250, 132, 18, foreground, true, 420);
-            label(c, replay.title, 250, 179, 21, foreground, true, 420);
-            label(c, replay.artist, 250, 202, 14, foreground, false, 420);
+            avatar.setRoundRadius(Math.round(28*scale));avatar.setImageCoords(194.5f*scale,16*scale,111*scale,111*scale); avatar.draw(c); c.restore();
+            label(c,playerName(),250,145,18,foreground,true,420);
+            c.restore();c.save();c.translate(0,-layerOffset);
+            label(c,replay.title,250,184,26,foreground,true,460);
+            label(c,replay.artist,250,207,16,foreground,false,460);
 
             c.save(); c.scale(Math.max(.001f, OsuScoreAnimation.scale(elapsed)), Math.max(.001f, OsuScoreAnimation.scale(elapsed)), 250,402);
-            arc(c, 139, 30, -90, 360, 0xff383d3c);
-            paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(30);
-            paint.setShader(new LinearGradient(0,250,0,550,OsuUiColors.readable(0xff7cf6ff,surface(),foreground,3),OsuUiColors.readable(0xffbaffa9,surface(),foreground,3),Shader.TileMode.CLAMP));
+            // AccuracyCircle's unfilled track is Gray(47) at Alpha=0.5.
+            // The coloured accuracy arc above it remains opaque.
+            arc(c,139,31.5f,-90,360,0x802f2f2f);
+            paint.setColor(Color.WHITE);paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(30);
+            // Keep lazer's source colours: theme contrast correction can darken
+            // this decorative gauge on light Telegram themes.
+            paint.setShader(new LinearGradient(0,248,0,556,0xff7cf6ff,0xffbaffa9,Shader.TileMode.CLAMP));
             rect.set(111,263,389,541);
             String rank=replay.displayRank();
             float gauge=OsuScoreAnimation.gauge(replay.accuracy(),rank,elapsed);
@@ -191,22 +220,25 @@ final class OsuScorePanel extends View {
             if(elapsed>=450)label(c, scoreFormat.format(animatedScore), 250, 634, 62, foreground, false, 420);
             String stars = Double.isFinite(replay.stars) ? String.format(Locale.US,"★ %.2f",replay.stars) : "★ —";
             int difficultyColor=OsuUiColors.difficulty(replay.stars);
-            rounded(c,194,651,80,27,14,difficultyColor); label(c,stars,234,671,15,OsuUiColors.icon(0xff29202a,difficultyColor),true,74);
-            rounded(c,283,653,24,24,12,difficultyColor);
-            if(modeIcons[replay.mode]!=null) {paint.setColorFilter(new PorterDuffColorFilter(OsuUiColors.icon(Color.WHITE,difficultyColor),PorterDuff.Mode.SRC_IN));rect.set(284,654,306,676);c.drawBitmap(modeIcons[replay.mode],null,rect,paint);paint.setColorFilter(null);}
+            String mods="NM".equals(replay.modsLabel)?"":replay.modsLabel;
+            float modsWidth=mods.isEmpty()?0:Math.min(150,semibold.width(mods,14,0)+12),groupLeft=250-(104+(modsWidth>0?6+modsWidth:0))/2;
+            rounded(c,groupLeft,651,72,25,12.5f,difficultyColor);label(c,stars,groupLeft+36,670,15,OsuUiColors.icon(0xff29202a,difficultyColor),true,66);
+            float iconX=groupLeft+78;rounded(c,iconX,651,26,26,13,difficultyColor);
+            if(replay.mode==0)rounded(c,iconX+3,654,20,20,10,Color.WHITE);
+            else if(modeIcons[replay.mode]!=null){paint.setColorFilter(new PorterDuffColorFilter(Color.WHITE,PorterDuff.Mode.SRC_IN));rect.set(iconX+1,652,iconX+25,676);c.drawBitmap(modeIcons[replay.mode],null,rect,paint);paint.setColorFilter(null);}
+            if(modsWidth>0){rounded(c,iconX+32,653,modsWidth,22,7,0xff323232);label(c,mods,iconX+32+modsWidth/2,670,14,accent(0xffff9ad7),true,modsWidth-8);}
             label(c,replay.difficulty.isEmpty() ? "—" : replay.difficulty,250,701,16,foreground,true,420);
             label(c,replay.mapper.isEmpty() ? "" : LocaleController.getString(R.string.OsuReplayMappedBy)+" "+replay.mapper,250,720,13,muted,false,420);
-            label(c,replay.modsLabel,250,741,12,accent(0xffff9ad7),true,420);
             if(metadataStart<0&&Double.isFinite(replay.pp))metadataStart=Math.max(850,elapsed);
             long metaElapsed=metadataStart<0?0:elapsed-metadataStart;
             stat(c,30,752,146,LocaleController.getString(R.string.OsuReplayAccuracy),String.format(Locale.US,"%.2f%%",OsuScoreAnimation.accuracyPercent(replay.accuracy(),elapsed)),Color.WHITE,elapsed,0);
-            stat(c,178,752,146,LocaleController.getString(R.string.OsuReplayMaxCombo),OsuScoreAnimation.counter(replay.combo,elapsed,1)+(replay.maxCombo>0 ? " / "+replay.maxCombo : ""),Color.WHITE,elapsed,1);
+            stat(c,178,752,146,LocaleController.getString(R.string.OsuReplayMaxCombo),OsuScoreAnimation.counter(replay.combo,elapsed,1)+(replay.maxCombo>0 ? "/"+replay.maxCombo : ""),Color.WHITE,elapsed,1);
             stat(c,326,752,144,"PP",Double.isFinite(replay.pp) ? Long.toString(OsuScoreAnimation.lateCounter(Math.round(replay.pp),metaElapsed)) : "—",Color.WHITE,elapsed,2);
             String[] judgementNames = replay.mode == 3 ? new String[]{"PERFECT","GREAT","GOOD","OK","MEH","MISS"} : new String[]{"GREAT","OK","MEH","MISS"};
             int[] values = replay.mode == 3 ? new int[]{replay.geki,replay.great,replay.katu,replay.ok,replay.meh,replay.miss} : new int[]{replay.great,replay.ok,replay.meh,replay.miss};
             if (replay.mode == 1) { judgementNames = new String[]{"GREAT","OK","MISS"}; values = new int[]{replay.great,replay.ok,replay.miss}; }
             if (replay.mode == 2) { judgementNames = new String[]{"FRUIT","DROPLET","TINY","TINY MISS","MISS"}; values = new int[]{replay.great,replay.ok,replay.meh,replay.katu,replay.miss}; }
-            for(int i=0;i<values.length;i++) stat(c,30+i*(440f/values.length),800,440f/values.length-2,judgementNames[i],Long.toString(OsuScoreAnimation.counter(values[i],elapsed,3+i)),i==values.length-1 ? colors[0] : i==0 ? 0xff7cf6ff : colors[2],elapsed,3+i);
+            for(int i=0;i<values.length;i++) stat(c,30+i*(440f/values.length),800,440f/values.length-2,judgementNames[i],Long.toString(OsuScoreAnimation.counter(values[i],elapsed,3+i)),judgementNames[i].equals("MISS")?0xffed1121:judgementNames[i].equals("OK")?0xff88b300:judgementNames[i].equals("MEH")?0xffffcc22:0xff7cf6ff,elapsed,3+i);
             if (replay.lazer && replay.mode==0) {
                 boolean spinner=replay.max("large_bonus")>0||replay.max("small_bonus")>0;
                 float width=spinner?109:219;
@@ -218,16 +250,24 @@ final class OsuScorePanel extends View {
                 }
             }
             label(c,LocaleController.getString(R.string.OsuReplayPlayedOn)+" "+dateFormat.format(new Date(replay.playedAt)),250,925,11,muted,false,430);
+            c.restore();c.restoreToCount(contentLayer);
             c.restore();
             if (start>=0 && (elapsed<6000 || metadataStart>=0&&metaElapsed<3000) && !closed&&!paused) postInvalidateOnAnimation();
         }
-        String ratio(String hit,String miss,long elapsed,int index) { int n=replay.count(hit), max=Math.max(replay.max(hit),n+replay.count(miss)); return OsuScoreAnimation.counter(n,elapsed,index)+" / "+max; }
+        String ratio(String hit,String miss,long elapsed,int index) { int n=replay.count(hit), max=Math.max(replay.max(hit),n+replay.count(miss)); return OsuScoreAnimation.counter(n,elapsed,index)+"/"+max; }
         void stat(Canvas c,float x,float y,float width,String title,String value,int color,long elapsed,int index) {
             rounded(c,x,y,width,14,7,0xff252827); label(c,title.toUpperCase(Locale.ROOT),x+width/2,y+11,11,color,true,width-4);
             int content=c.saveLayerAlpha(x,y+14,x+width,y+50,Math.round(OsuScoreAnimation.statisticAlpha(elapsed,index)*255));
             boolean perfect=index==1&&replay.maxCombo>0&&replay.combo==replay.maxCombo;
             float valueWidth=perfect?width-42:width;
-            label(c,value,x+valueWidth/2,y+37,23,primary(),false,valueWidth-4);
+            int slash=value.indexOf('/');
+            if(slash>0&&regular!=null){
+                String numerator=value.substring(0,slash),denominator=value.substring(slash);float size=23,small=size*.6f;
+                float a=regular.width(numerator,size,0),b=regular.width(denominator,small,-1),fit=Math.min(1,(valueWidth-4)/(a+b));
+                a*=fit;b*=fit;float left=x+(valueWidth-a-b)/2;
+                regular.draw(c,numerator,left+a/2,y+37,size*fit,primary(),a,0);
+                regular.draw(c,denominator,left+a+b/2,y+37,small*fit,primary(),b,-fit);
+            }else label(c,value,x+valueWidth/2,y+37,23,primary(),false,valueWidth-4);
             if(perfect)label(c,"PERFECT",x+width-21,y+34,9,(Math.round(OsuScoreAnimation.perfectCombo(elapsed)*255)<<24)|0x66ffcc,true,40);
             c.restoreToCount(content);
         }

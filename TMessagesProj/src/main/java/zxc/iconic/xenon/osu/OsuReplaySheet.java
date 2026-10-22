@@ -27,7 +27,9 @@ public final class OsuReplaySheet extends BottomSheetWithRecyclerListView {
     private OsuReplay replay;
     private boolean metadataLoading, avatarLoading, metadataFailed, avatarFailed;
     private Bulletin downloadError;
-    private boolean watchLoading;
+    private boolean watchLoading,openWhenReady;
+    private OsuReplayDownloads.Job download;
+    private OsuReplayDownloads.Observer downloadObserver;
 
     private void showDownloadError(boolean avatar) {
         if (closed) return;
@@ -97,27 +99,35 @@ public final class OsuReplaySheet extends BottomSheetWithRecyclerListView {
         LinearLayout.LayoutParams watchParams = new LinearLayout.LayoutParams(-1, AndroidUtilities.dp(48));
         watchParams.setMargins(AndroidUtilities.dp(24), 0, AndroidUtilities.dp(24), AndroidUtilities.dp(24));
         content.addView(watch, watchParams);
-        watch.setOnClickListener(v -> {
-            if (replay == null) return;
-            if (replay.mode != 0) { BulletinFactory.of(container, scoreResources).createErrorBulletin(LocaleController.getString(R.string.OsuReplayWatchStandardOnly)).show(); return; }
-            if (watchLoading) return;
-            watchLoading = true; watch.update(true,false,0,0,false);
-            QUEUE.postRunnable(() -> {
-                try {
-                    OsuReplayPreparation session=OsuReplayPreparation.prepare(context.getApplicationContext(),source,(downloading,bytes,total)->AndroidUtilities.runOnUIThread(()->{if(!closed)watch.update(true,downloading,bytes,total,false);}));
-                    AndroidUtilities.runOnUIThread(()->{
-                        watchLoading=false;watch.update(false,false,0,0,false);
-                        if(closed){session.dispose();return;}
-                        String preparedToken=OsuReplayPreparation.offer(session);
-                        try{context.startActivity(new Intent(context,OsuReplayActivity.class)
-                                .putExtra(OsuReplayActivity.EXTRA_REPLAY,source.getAbsolutePath())
-                                .putExtra(OsuReplayActivity.EXTRA_PREPARED,preparedToken));}catch(Exception error){OsuReplayPreparation.discard(preparedToken);FileLog.e(error);BulletinFactory.of(container,scoreResources).createErrorBulletin(LocaleController.getString(R.string.OsuReplayWatchFailed)).show();}
-                    });
-                }catch(Exception error){FileLog.e(error);AndroidUtilities.runOnUIThread(()->{
-                    watchLoading=false;watch.update(false,false,0,0,true);
-                    if(!closed)BulletinFactory.of(container,scoreResources).createSimpleBulletin(0,LocaleController.getString(R.string.OsuReplayWatchFailed),LocaleController.getString(R.string.Retry),Bulletin.DURATION_PROLONG,watch::performClick).show();
-                });}
-            });
+        download=OsuReplayDownloads.get(source,zxc.iconic.xenon.NekoConfig.osuReplayVideoBackground);
+        downloadObserver=job->{
+            if(closed||watchLoading)return;
+            watch.update(job.running,job.downloading,job.bytes,job.total,job.error!=null);
+            if(job.session!=null&&openWhenReady){
+                openWhenReady=false;watchLoading=true;watch.update(true,false,0,0,false);
+                // Players and bitmaps are created only for a sheet that still wants to open Watch.
+                QUEUE.postRunnable(()->{
+                    try{
+                        OsuReplayPreparation data=OsuReplayPreparation.prepare(context.getApplicationContext(),job.session);
+                        AndroidUtilities.runOnUIThread(()->{
+                            watchLoading=false;watch.update(false,false,0,0,false);
+                            if(closed){data.dispose();return;}
+                            String token=OsuReplayPreparation.offer(data);
+                            try{context.startActivity(new Intent(context,OsuReplayActivity.class)
+                                    .putExtra(OsuReplayActivity.EXTRA_REPLAY,source.getAbsolutePath())
+                                    .putExtra(OsuReplayActivity.EXTRA_PREPARED,token));}
+                            catch(Exception error){OsuReplayPreparation.discard(token);FileLog.e(error);watch.update(false,false,0,0,true);}
+                        });
+                    }catch(Exception error){FileLog.e(error);AndroidUtilities.runOnUIThread(()->{watchLoading=false;if(!closed)watch.update(false,false,0,0,true);});}
+                });
+            }
+        };
+        download.observe(downloadObserver);
+        watch.setOnClickListener(v->{
+            if(replay==null||watchLoading)return;
+            if(replay.mode!=0){BulletinFactory.of(container,scoreResources).createErrorBulletin(LocaleController.getString(R.string.OsuReplayWatchStandardOnly)).show();return;}
+            openWhenReady=true;
+            if(download.session!=null)downloadObserver.changed(download);else download.start();
         });
         notifyDataSetChanged();
     }
@@ -167,6 +177,6 @@ public final class OsuReplaySheet extends BottomSheetWithRecyclerListView {
     @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);scoreView.setPaused(!focus);}
     @Override protected void onStart(){super.onStart();hideStatusBar();}
     @Override public void onOpenAnimationEnd(){super.onOpenAnimationEnd();hideStatusBar();}
-    @Override public void dismiss() { closed = true;scoreView.dispose(); if (downloadError != null) downloadError.hide(); super.dismiss(); }
+    @Override public void dismiss() { closed = true;openWhenReady=false;if(download!=null)download.remove(downloadObserver);scoreView.dispose(); if (downloadError != null) downloadError.hide(); super.dismiss(); }
 
 }

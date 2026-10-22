@@ -99,3 +99,37 @@ mod tests {
         assert!(rating >= 0.0 && rating < 1.0);
     }
 }
+
+/// One difficulty traversal for the whole replay; no quadratic recalculation on Android's UI thread.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_zxc_iconic_xenon_osu_OsuDifficulty_nativeReplayPpTimeline(
+    env: JNIEnv, _class: JClass, data: JByteArray, mods: jlong, states: JIntArray, lazer: jboolean, rate: jdouble,
+) -> jdoubleArray {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let len=env.get_array_length(&states).ok()? as usize;
+        if len==0 || len%7!=0 || len>300000*7 || env.get_array_length(&data).ok()?>8*1024*1024{return None;}
+        let map=Beatmap::from_bytes(&env.convert_byte_array(data).ok()?).ok()?;
+        map.check_suspicion().ok()?;
+        if map.mode as u8 != 0 || map.hit_objects.len()>50000{return None;}
+        let mut c=vec![0i32;len];env.get_int_array_region(states,0,&mut c).ok()?;
+        if c.iter().any(|&n|n<0){return None;}
+        let mut diff=Difficulty::new().mods(mods as u32).lazer(lazer!=0);
+        if rate>0.0{diff=diff.clock_rate(rate);}
+        let mut gradual=rosu_pp::osu::OsuGradualDifficulty::new(diff.clone(),&map).ok()?;
+        let mut attributes=None;let mut passed=0usize;
+        let mut values=Vec::with_capacity(len/7);
+        for c in c.chunks_exact(7){
+            let mut state=rosu_pp::osu::OsuScoreState::new();state.max_combo=c[0] as u32;
+            state.hitresults.n300=c[1] as u32;state.hitresults.n100=c[2] as u32;state.hitresults.n50=c[3] as u32;state.hitresults.misses=c[4] as u32;
+            state.hitresults.large_tick_hits=c[5] as u32;state.hitresults.slider_end_hits=c[6] as u32;
+            let total=(c[1] as usize)+(c[2] as usize)+(c[3] as usize)+(c[4] as usize);
+            if total<passed || total>map.hit_objects.len(){return None;}
+            while passed<total{attributes=Some(gradual.next()?);passed+=1;}
+            let pp=if let Some(attrs)=attributes.as_ref(){
+                attrs.clone().performance().lazer(lazer!=0).state(state).difficulty(diff.clone()).passed_objects(passed as u32).calculate().ok()?.pp
+            }else{0.0};
+            if !pp.is_finite(){return None;}values.push(pp);
+        }
+        let array=env.new_double_array(values.len() as i32).ok()?;env.set_double_array_region(&array,0,&values).ok()?;Some(array.into_raw())
+    })).ok().flatten().unwrap_or(std::ptr::null_mut())
+}
