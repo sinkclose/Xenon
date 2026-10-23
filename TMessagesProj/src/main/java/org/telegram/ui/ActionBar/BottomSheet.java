@@ -936,6 +936,10 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
             }
             if (child == containerView && predictiveBackTransformActive) {
                 getSheetDrawingBounds(sheetDrawingBounds);
+                // Expanded sheets draw their header/background above their local
+                // bounds, into the status-bar inset. Scaling must not cut that
+                // drawing off at the transformed top of the content container.
+                sheetDrawingBounds.top = 0;
                 int save = canvas.save();
                 canvas.clipRect(sheetDrawingBounds);
                 try {

@@ -77,17 +77,76 @@ final class OsuReplayLoader {
         String title = "", artist = "", difficulty = "", mapper = "";
         double stars = Double.NaN, pp = Double.NaN;
         int maxCombo;
+        void applyTo(OsuReplay replay) {
+            if (!title.isEmpty()) replay.title=title;
+            if (!artist.isEmpty()) replay.artist=artist;
+            if (!difficulty.isEmpty()) replay.difficulty=difficulty;
+            if (!mapper.isEmpty()) replay.mapper=mapper;
+            if (Double.isFinite(stars)) replay.stars=stars;
+            if (Double.isFinite(pp)) replay.pp=pp;
+            if (maxCombo>0) replay.maxCombo=maxCombo;
+        }
+    }
+    // This small, map-only record survives independently of the .osu download and
+    // never stores score/mod-dependent PP. Read it without waiting for network work.
+    static Metadata cachedMetadata(OsuReplay replay) throws Exception {
+        File details=OsuLocalCache.file("metadata",replay.beatmapHash+".details.json");
+        if(details.isFile())try {
+            if(details.length()>64*1024)throw new IOException("Invalid cached metadata size");
+            JSONObject json=new JSONObject(new String(java.nio.file.Files.readAllBytes(details.toPath()),StandardCharsets.UTF_8));
+            if(!replay.beatmapHash.equals(json.getString("checksum")))throw new IOException("Cached metadata checksum mismatch");
+            Metadata result=new Metadata();result.title=json.getString("title");result.artist=json.optString("artist");
+            result.difficulty=json.getString("version");result.mapper=json.optString("creator");
+            if(!result.title.isEmpty()&&!result.difficulty.isEmpty())return result;
+        } catch(Exception invalid) { details.delete(); }
+        for(File map:new File[]{OsuLocalCache.file("maps",replay.beatmapHash+".osu"),
+                new File(new File(ApplicationLoader.getFilesDirFixed(),"osu-replay-maps"),replay.beatmapHash+".osu"),
+                new File(OsuLocalCache.file("media",replay.beatmapHash),"map.osu"),
+                new File(OsuLocalCache.file("media-video",replay.beatmapHash),"map.osu")}) {
+            if(map.isFile()&&map.length()<=8*1024*1024&&replay.beatmapHash.equals(md5(map))) {
+                Metadata result=mapMetadata(map);saveMetadata(replay,result);return result;
+            }
+        }
+        // Older API responses sometimes include full beatmapset metadata.
+        File api=OsuLocalCache.file("metadata",replay.beatmapHash+".json");
+        if(api.isFile()&&api.length()<=512*1024)try {
+            JSONObject json=new JSONObject(new String(java.nio.file.Files.readAllBytes(api.toPath()),StandardCharsets.UTF_8));
+            if(replay.beatmapHash.equalsIgnoreCase(json.optString("checksum"))) {
+                Metadata result=new Metadata();result.difficulty=json.optString("version");
+                JSONObject set=json.optJSONObject("beatmapset");if(set!=null){result.title=set.optString("title");result.artist=set.optString("artist");result.mapper=set.optString("creator");}
+                return result;
+            }
+        } catch(JSONException ignored) { }
+        return null;
+    }
+    private static void saveMetadata(OsuReplay replay,Metadata result) throws Exception {
+        if(result.title.isEmpty()||result.difficulty.isEmpty())return;
+        File target=OsuLocalCache.file("metadata",replay.beatmapHash+".details.json");
+        if(!target.getParentFile().isDirectory()&&!target.getParentFile().mkdirs())throw new IOException("Cannot create metadata cache");
+        JSONObject json=new JSONObject();json.put("checksum",replay.beatmapHash);json.put("title",result.title);
+        json.put("artist",result.artist);json.put("version",result.difficulty);json.put("creator",result.mapper);
+        File temp=File.createTempFile("details-",".tmp",target.getParentFile());
+        try {java.nio.file.Files.write(temp.toPath(),json.toString().getBytes(StandardCharsets.UTF_8));
+            java.nio.file.Files.move(temp.toPath(),target.toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } finally {temp.delete();}
     }
     static Metadata resolve(OsuReplay replay) throws Exception {
-        synchronized (OsuLocalCache.LOCK) { return resolveCached(replay); }
+        return resolve(replay,null);
     }
-    private static Metadata resolveCached(OsuReplay replay) throws Exception {
-        Metadata result = new Metadata();
+    static Metadata resolve(OsuReplay replay,java.util.function.Consumer<Metadata> ready) throws Exception {
+        Metadata cached=cachedMetadata(replay);if(cached!=null&&ready!=null)ready.accept(cached);
+        synchronized (OsuLocalCache.LOCK) { return resolveCached(replay,ready); }
+    }
+    private static Metadata resolveCached(OsuReplay replay,java.util.function.Consumer<Metadata> ready) throws Exception {
         File root = new File(ApplicationLoader.getFilesDirFixed(), "osu-beatmaps");
         File map = find(root, replay.beatmapHash, 0, new int[]{0});
         if (map == null) {
             File downloaded = OsuLocalCache.file("maps", replay.beatmapHash + ".osu");
             if (downloaded.isFile() && replay.beatmapHash.equals(md5(downloaded))) map = downloaded;
+        }
+        if(map==null)for(String group:new String[]{"media","media-video"}) {
+            File extracted=new File(OsuLocalCache.file(group,replay.beatmapHash),"map.osu");
+            if(extracted.isFile()&&extracted.length()<=8*1024*1024&&replay.beatmapHash.equals(md5(extracted))){map=extracted;break;}
         }
         if (map == null) {
             File cache = new File(ApplicationLoader.getFilesDirFixed(), "osu-replay-maps");
@@ -105,14 +164,29 @@ final class OsuReplayLoader {
                     metadata.delete(); // Retry must be able to replace an invalid server response.
                     throw invalidMetadata;
                 }
+                Metadata available=new Metadata();available.difficulty=info.optString("version");
+                JSONObject set=info.optJSONObject("beatmapset");
+                if(set!=null){available.title=set.optString("title");available.artist=set.optString("artist");available.mapper=set.optString("creator");}
+                if(ready!=null)ready.accept(available);
+                if(!available.title.isEmpty()&&!available.difficulty.isEmpty())saveMetadata(replay,available);
                 map = OsuLocalCache.fetch("maps", replay.beatmapHash + ".osu", "https://osu.ppy.sh/osu/" + id, 8 * 1024 * 1024, replay.beatmapHash);
             }
         }
-        result.mapFile = map;
-        OsuBeatmap beatmap;
-        try (Reader reader = new InputStreamReader(new FileInputStream(map), StandardCharsets.UTF_8)) { beatmap = OsuBeatmap.read(reader); }
-        result.title = beatmap.title; result.artist = beatmap.artist; result.difficulty = beatmap.version;
-        // Creator is independent of the music artist.
+        Metadata result=mapMetadata(map);
+        // Publish textual information before native calculation; a failed PP
+        // calculation must not hide a successfully parsed map.
+        if(ready!=null)ready.accept(result);
+        saveMetadata(replay,result);
+        if (replay.performanceSupported) {
+            double[] performance = OsuDifficulty.replayPerformance(map, replay.mods, replay.performanceCounts(), replay.lazer, replay.clockRate);
+            if (performance != null) { result.stars = performance[0]; result.pp = performance[1]; result.maxCombo = (int) performance[2]; }
+        }
+        return result;
+    }
+    private static Metadata mapMetadata(File map) throws Exception {
+        Metadata result=new Metadata();result.mapFile = map;
+        // Only textual metadata is needed here. Broken/unsupported gameplay data
+        // and native performance calculation cannot prevent showing this section.
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(map), StandardCharsets.UTF_8))) {
             String line;boolean metadataSection=false;while ((line = reader.readLine()) != null) {
                 line=line.trim();
@@ -120,12 +194,11 @@ final class OsuReplayLoader {
                 if(!metadataSection)continue;
                 if(line.startsWith("Title:")&&!line.substring(6).trim().isEmpty())result.title=line.substring(6).trim();
                 else if(line.startsWith("Artist:")&&!line.substring(7).trim().isEmpty())result.artist=line.substring(7).trim();
+                else if(line.startsWith("TitleUnicode:")&&result.title.isEmpty())result.title=line.substring(13).trim();
+                else if(line.startsWith("ArtistUnicode:")&&result.artist.isEmpty())result.artist=line.substring(14).trim();
+                else if(line.startsWith("Version:"))result.difficulty=line.substring(8).trim();
                 else if(line.startsWith("Creator:"))result.mapper=line.substring(8).trim();
             }
-        }
-        if (replay.performanceSupported) {
-            double[] performance = OsuDifficulty.replayPerformance(map, replay.mods, replay.performanceCounts(), replay.lazer, replay.clockRate);
-            if (performance != null) { result.stars = performance[0]; result.pp = performance[1]; result.maxCombo = (int) performance[2]; }
         }
         return result;
     }

@@ -82,7 +82,10 @@ final class OsuScorePanel extends View {
             if(replay==null||replay.userId!=r.userId){currentUsername=null;coverReadyAt=-1;}replay=r;
             if(r.userId>0&&coverAttemptedUserId!=r.userId){
                 coverAttemptedUserId=r.userId;long userId=r.userId;
+                File cachedCover=OsuLocalCache.file("covers",userId+".img");
+                if(playback&&cachedCover.isFile())cover.setImage(cachedCover.getAbsolutePath(),"500_800",null,null,0);
                 COVER_QUEUE.postRunnable(()->{
+                    try{String name=OsuProfileCover.cachedUsername(userId);if(name!=null)AndroidUtilities.runOnUIThread(()->{if(replay==r){currentUsername=name;setContentDescription(description());invalidate();}});}catch(java.io.IOException error){FileLog.e(error);}
                     try{String name=OsuProfileCover.fetchUsername(userId);if(name!=null)AndroidUtilities.runOnUIThread(()->{if(replay==r){currentUsername=name;setContentDescription(description());invalidate();}});}catch(java.io.IOException error){FileLog.e(error);}
                     if(playback)try{File image=OsuProfileCover.fetch(userId);if(image!=null)AndroidUtilities.runOnUIThread(()->{if(replay==r){cover.setImage(image.getAbsolutePath(),"500_800",null,null,0);invalidate();}});}catch(java.io.IOException error){FileLog.e(error);}
                 });

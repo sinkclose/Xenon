@@ -25,9 +25,11 @@ public final class OsuLocalCache {
         return fetch(group,key,address,limit,expectedMd5,progress,Long.MAX_VALUE);
     }
     public static File fetch(String group, String key, String address, int limit, String expectedMd5, Progress progress,long maxAgeMs) throws IOException {
+        File target = file(group, key);
+        // Cached images/metadata must not wait behind an unrelated archive download.
+        if(usable(target,limit,expectedMd5,maxAgeMs))return target;
         synchronized (LOCK) {
-            File target = file(group, key);
-            if (target.isFile() && target.length() > 0 && target.length() <= limit && System.currentTimeMillis()-target.lastModified()<=maxAgeMs && (expectedMd5 == null || expectedMd5.equals(md5(target)))) return target;
+            if(usable(target,limit,expectedMd5,maxAgeMs))return target;
             File temporary = null;
             HttpURLConnection connection = null;
             try {
@@ -58,6 +60,11 @@ public final class OsuLocalCache {
                 if (temporary != null) temporary.delete();
             }
         }
+    }
+    private static boolean usable(File target,int limit,String expectedMd5,long maxAgeMs)throws IOException {
+        return target.isFile()&&target.length()>0&&target.length()<=limit
+                &&System.currentTimeMillis()-target.lastModified()<=maxAgeMs
+                &&(expectedMd5==null||expectedMd5.equals(md5(target)));
     }
     private static String md5(File file) throws IOException {
         try {

@@ -49,18 +49,27 @@ public final class OsuReplaySheet extends BottomSheetWithRecyclerListView {
         metadataLoading = true; metadataFailed = false;
         QUEUE.postRunnable(() -> {
             try {
-                OsuReplayLoader.Metadata metadata = OsuReplayLoader.resolve(replay);
+                OsuReplayLoader.Metadata metadata = OsuReplayLoader.resolve(replay, this::showMetadata);
                 AndroidUtilities.runOnUIThread(() -> {
                     metadataLoading = false;
                     if (closed) return;
-                    replay.title = metadata.title; replay.artist = metadata.artist; replay.difficulty = metadata.difficulty; replay.mapper = metadata.mapper;
-                    replay.stars = metadata.stars; replay.pp = metadata.pp; replay.maxCombo = metadata.maxCombo;
+                    metadata.applyTo(replay);
                     scoreView.setContentDescription(scoreView.description()); scoreView.invalidate();
                 });
             } catch (Exception error) {
                 FileLog.e(error);
                 AndroidUtilities.runOnUIThread(() -> { metadataLoading = false; showDownloadError(false); });
             }
+        });
+    }
+    private void showMetadata(OsuReplayLoader.Metadata metadata) {
+        // The worker may continue calculating performance after this callback.
+        String title=metadata.title,artist=metadata.artist,difficulty=metadata.difficulty,mapper=metadata.mapper;
+        AndroidUtilities.runOnUIThread(()->{
+            if(closed||replay==null)return;
+            if(!title.isEmpty())replay.title=title;if(!artist.isEmpty())replay.artist=artist;
+            if(!difficulty.isEmpty())replay.difficulty=difficulty;if(!mapper.isEmpty())replay.mapper=mapper;
+            scoreView.setContentDescription(scoreView.description());scoreView.invalidate();
         });
     }
     private void loadAvatar() {
@@ -156,6 +165,10 @@ public final class OsuReplaySheet extends BottomSheetWithRecyclerListView {
                 String fallback = filename.replaceFirst("(?i)\\.osr$", "");
                 int playing = fallback.indexOf("_playing_");
                 replay.title = (playing >= 0 ? fallback.substring(playing + 9) : fallback).replace('_', ' ');
+                // Bind cached text on the first frame, without waiting behind a
+                // map/archive download on the replay preparation queue.
+                try {OsuReplayLoader.Metadata cached=OsuReplayLoader.cachedMetadata(replay);if(cached!=null)cached.applyTo(replay);}
+                catch(Exception cacheError){FileLog.e(cacheError);}
                 AndroidUtilities.runOnUIThread(() -> {
                     if (sheet.closed || activity.isFinishing())return;
                     OsuScorePanelSounds sounds=new OsuScorePanelSounds(activity.getApplicationContext(),replay,false);

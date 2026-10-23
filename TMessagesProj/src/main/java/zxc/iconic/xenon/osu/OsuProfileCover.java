@@ -33,6 +33,10 @@ final class OsuProfileCover {
         catch(IOException error){if(!cached.isFile())throw error;profile=cached;}
         return username(new String(Files.readAllBytes(profile.toPath()),StandardCharsets.UTF_8),userId);
     }
+    static String cachedUsername(long userId)throws IOException{
+        File profile=OsuLocalCache.file("profiles",userId+".html");
+        return profile.isFile()?username(new String(Files.readAllBytes(profile.toPath()),StandardCharsets.UTF_8),userId):null;
+    }
     static String coverUrl(String page,long userId)throws IOException{
         try{
             JSONObject user=user(page,userId);
