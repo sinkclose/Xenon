@@ -476,6 +476,9 @@ public class PluginApi {
                 return LuaValue.valueOf(PluginManager.hasScope(pluginFileName, scope.checkjstring()));
             }
         });
+        api.set("supportsMessageDeletionEvents", new ZeroArgFunction() {
+            @Override public LuaValue call() { return LuaValue.TRUE; }
+        });
         api.set("on", new TwoArgFunction() {
             @Override
             public LuaValue call(LuaValue name, LuaValue handler) {

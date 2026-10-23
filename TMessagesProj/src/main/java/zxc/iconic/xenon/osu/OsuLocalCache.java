@@ -15,7 +15,7 @@ public final class OsuLocalCache {
     public interface Progress { void update(long downloaded, long total); }
     private static File root() { return new File(ApplicationLoader.getFilesDirFixed(), "osu-cache"); }
     public static File file(String group, String key) {
-        if (!group.matches("maps|metadata|avatars|profiles|covers|sets|media|sets-video|media-video") || !key.matches("[a-zA-Z0-9_.-]+") || key.contains("..")) throw new IllegalArgumentException("Invalid cache key");
+        if (!group.matches("maps|metadata|avatars|profiles|covers|sets|media|sets-video|media-video|search") || !key.matches("[a-zA-Z0-9_.-]+") || key.contains("..")) throw new IllegalArgumentException("Invalid cache key");
         return new File(new File(root(), group), key);
     }
     public static File fetch(String group, String key, String address, int limit, String expectedMd5) throws IOException {

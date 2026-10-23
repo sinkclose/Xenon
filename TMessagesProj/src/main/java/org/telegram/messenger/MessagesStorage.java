@@ -14902,6 +14902,7 @@ public class MessagesStorage extends BaseController {
                         cursor.dispose();
                         cursor = null;
                     }
+                    capturePluginDeletions(did, "mid IN(" + ids + ")");
                     database.executeFast(String.format(Locale.US, "DELETE FROM messages_v2 WHERE mid IN(%s) AND uid = %d", ids, did)).stepThis().dispose();
                     database.executeFast(String.format(Locale.US, "DELETE FROM messages_topics WHERE mid IN(%s) AND uid = %d", ids, did)).stepThis().dispose();
                     database.executeFast(String.format(Locale.US, "DELETE FROM polls_v2 WHERE mid IN(%s) AND uid = %d", ids, did)).stepThis().dispose();
@@ -15445,6 +15446,7 @@ public class MessagesStorage extends BaseController {
                 cursor = null;
             }
 
+            capturePluginDeletions(-channelId, "mid <= " + mid);
             database.executeFast(String.format(Locale.US, "DELETE FROM messages_v2 WHERE uid = %d AND mid <= %d", -channelId, mid)).stepThis().dispose();
             database.executeFast(String.format(Locale.US, "DELETE FROM messages_topics WHERE uid = %d AND mid <= %d", -channelId, mid)).stepThis().dispose();
             database.executeFast(String.format(Locale.US, "DELETE FROM media_v4 WHERE uid = %d AND mid <= %d", -channelId, mid)).stepThis().dispose();
@@ -15840,6 +15842,27 @@ public class MessagesStorage extends BaseController {
             if (cursor != null) {
                 cursor.dispose();
             }
+        }
+    }
+
+    /** Read-only extension point; no archive or deleted-message UI lives in the client. */
+    private void capturePluginDeletions(long dialog, String idCondition) {
+        zxc.iconic.xenon.plugins.PluginManager plugins = zxc.iconic.xenon.plugins.PluginManager.getInstance();
+        if (DialogObject.isEncryptedDialog(dialog) || !plugins.hasDeletionListeners()) return;
+        SQLiteCursor cursor = null;
+        try {
+            // idCondition is built exclusively from the host's integer IDs.
+            cursor = database.queryFinalized("SELECT mid, data FROM messages_v2 WHERE uid = ? AND mid > 0 AND ("
+                    + idCondition + ")", dialog);
+            while (cursor.next()) {
+                byte[] data = cursor.byteArrayValue(1);
+                if (data != null) plugins.emitMessageDeletion(currentAccount, dialog, cursor.intValue(0), data);
+            }
+        } catch (Throwable error) {
+            // An extension failure must not prevent Telegram from deleting messages.
+            FileLog.e("Could not capture plugin message deletion", error);
+        } finally {
+            if (cursor != null) cursor.dispose();
         }
     }
 

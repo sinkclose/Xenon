@@ -746,6 +746,14 @@
     <string name="OsuLogoBeatSoundsOn">Beat sounds enabled</string>
     <string name="OsuLogoBeatSoundsOff">Beat sounds disabled</string>
     <string name="OsuLogoMusicFailed">Could not connect to the system audio visualizer. Check the audio permission. Your device may not support this feature.</string>
+    <string name="OsuSearchHint">Type @osu followed by at least 3 characters</string>
+    <string name="OsuSearchTitle">Search osu! beatmaps</string>
+    <string name="OsuSearchEmpty">No beatmaps found</string>
+    <string name="OsuSearchFailed">Beatmap search is unavailable</string>
+    <string name="OsuSearchRetry">Tap to retry</string>
+    <string name="OsuSearchDownloading">Downloading beatmap archive…</string>
+    <string name="OsuSearchDownloadFailed">Could not download the beatmap. Select it again to retry.</string>
+    <string name="OsuSearchDocumentsRestricted">Sending files is not allowed in this chat.</string>
     <string name="OsuReplayInvalid">Unable to open this replay</string>
     <string name="OsuReplayMappedBy">mapped by</string>
     <string name="OsuReplayAccuracy">Accuracy</string>

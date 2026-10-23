@@ -1232,6 +1232,34 @@ public class PluginManager {
     public static boolean isRuntimeCurrent(String owner, PluginLuaRuntime runtime) {
         return runtime != null && runtimes.get(owner) == runtime;
     }
+    public boolean hasDeletionListeners() {
+        if (!isEnabled()) return false;
+        for (LoadedPlugin plugin : plugins) if (plugin.isEnabled() && hasScope(plugin.fileName, SCOPE_READ)
+                && plugin.hooks.get("onMessageDeleted").isfunction()) return true;
+        return false;
+    }
+
+    public void emitMessageDeletion(int account, long dialog, int messageId, byte[] data) {
+        if (!hasDeletionListeners()) return;
+        // Snapshot subscribers too: a newly loaded VM must not receive old queued events.
+        for (LoadedPlugin plugin : plugins) {
+            if (!plugin.isEnabled() || !hasScope(plugin.fileName, SCOPE_READ)
+                    || !plugin.hooks.get("onMessageDeleted").isfunction()) continue;
+            final PluginLuaRuntime runtime = getRuntime(plugin.fileName);
+            org.telegram.messenger.Utilities.globalQueue.postRunnable(() -> {
+                if (!isEnabled() || !plugins.contains(plugin) || !plugin.isEnabled()
+                        || !isRuntimeCurrent(plugin.fileName, runtime) || !hasScope(plugin.fileName, SCOPE_READ)) return;
+                LuaTable event = new LuaTable();
+                event.set("account", account); event.set("peer", LuaValue.valueOf(dialog));
+                event.set("messageId", messageId);
+                event.set("tl", org.luaj.vm2.LuaString.valueOf(data));
+                // Only detached bytes cross the storage boundary; no Lua runs on storageQueue.
+                try { invokeHookWithTimeout(plugin, "onMessageDeleted", new LuaValue[]{event}); }
+                catch (Throwable error) { FileLog.e("Plugin message deletion callback failed", error); }
+            });
+        }
+    }
+
     public boolean hasEditListeners() {
         if (!isEnabled()) return false;
         for (LoadedPlugin plugin : plugins) if (plugin.isEnabled() && hasScope(plugin.fileName, SCOPE_READ)
@@ -1269,7 +1297,7 @@ public class PluginManager {
     }
 
     public static boolean allowsHook(String owner, String hook) {
-        if ("onNewMessage".equals(hook) || "onMessageEdited".equals(hook)) return hasScope(owner, SCOPE_READ);
+        if ("onNewMessage".equals(hook) || "onMessageEdited".equals(hook) || "onMessageDeleted".equals(hook)) return hasScope(owner, SCOPE_READ);
         if ("onSendMessage".equals(hook)) return hasScope(owner, SCOPE_SEND) && hasScope(owner, SCOPE_READ);
         if (hook.startsWith("onChatMenu")) return hasScope(owner, SCOPE_UI) && hasScope(owner, SCOPE_READ);
         return true;

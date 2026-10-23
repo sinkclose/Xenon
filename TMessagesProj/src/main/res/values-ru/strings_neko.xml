@@ -739,6 +739,14 @@
     <string name="OsuLogoBeatSoundsOn">Звуки битов включены</string>
     <string name="OsuLogoBeatSoundsOff">Звуки битов выключены</string>
     <string name="OsuLogoMusicFailed">Не удалось подключиться к системному визуализатору звука. Проверьте разрешение на аудио. Возможно, устройство не поддерживает эту функцию.</string>
+    <string name="OsuSearchHint">Введи @osu и название — от 3 символов</string>
+    <string name="OsuSearchTitle">Поиск карт osu!</string>
+    <string name="OsuSearchEmpty">Карты не найдены</string>
+    <string name="OsuSearchFailed">Поиск карт недоступен</string>
+    <string name="OsuSearchRetry">Нажми, чтобы повторить</string>
+    <string name="OsuSearchDownloading">Скачивание архива карты…</string>
+    <string name="OsuSearchDownloadFailed">Не удалось скачать карту. Выбери её ещё раз, чтобы повторить.</string>
+    <string name="OsuSearchDocumentsRestricted">В этом чате запрещена отправка файлов.</string>
     <string name="OsuReplayInvalid">Не удалось открыть реплей</string>
     <string name="OsuReplayMappedBy">карта от</string>
     <string name="OsuReplayAccuracy">Точность</string>

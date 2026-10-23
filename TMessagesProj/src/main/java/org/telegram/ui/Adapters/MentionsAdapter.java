@@ -74,6 +74,9 @@ import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RecyclerListView;
 
 import zxc.iconic.xenon.NekoConfig;
+import zxc.iconic.xenon.osu.OsuBeatmapSearch;
+import zxc.iconic.xenon.osu.OsuBeatmapSearchCell;
+import zxc.iconic.xenon.osu.OsuBeatmapSearchController;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -89,6 +92,11 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
     private boolean allowStickers = true;
     private boolean allowBots = true;
     private boolean allowChats = true;
+    private final OsuBeatmapSearchController osuSearch = new OsuBeatmapSearchController();
+    private java.util.List<OsuBeatmapSearch.Result> osuResults;
+    private String osuQuery, osuStatus;
+    private Object osuStatusItem;
+    private boolean osuRetry;
 
     public interface MentionsAdapterDelegate {
         void needChangePanelVisibility(boolean show);
@@ -484,6 +492,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
     }
 
     public void onDestroy() {
+        cancelOsuSearch();
         if (locationProvider != null) {
             locationProvider.stop();
         }
@@ -1003,6 +1012,10 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
             AndroidUtilities.cancelRunOnUIThread(checkAgainRunnable);
             checkAgainRunnable = null;
         }
+        String localQuery=!usernameOnly&&!forSearch&&!searchInDialogs&&needBotContext&&parentFragment!=null
+                ?OsuBeatmapSearch.query(charSequence,position):null;
+        if(localQuery!=null){showOsuSearch(localQuery,text.length());return;}
+        if(osuResults!=null){cancelOsuSearch();notifyDataSetChanged();}
         if (TextUtils.isEmpty(text) || text.length() > MessagesController.getInstance(currentAccount).getMaxMessageLength()) {
             searchForContextBot(null, null);
             delegate.needChangePanelVisibility(false);
@@ -1789,6 +1802,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
     }
 
     public int getItemCountInternal() {
+        if(osuResults!=null)return Math.max(1,osuResults.size());
         if (foundContextBot != null && !inlineMediaEnabled) {
             return 1;
         }
@@ -1816,6 +1830,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
         if (safe && (channelReqId != 0 || contextQueryReqid != 0 || contextUsernameReqid != 0 || lastReqId != 0)) {
             return;
         }
+        cancelOsuSearch();
         foundContextBot = null;
         hintHashtag = null;
         if (stickers != null) {
@@ -1846,6 +1861,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
 
     @Override
     public int getItemViewType(int position) {
+        if(osuResults!=null)return 8;
         if (hintHashtag != null) {
             if (position < 2) return 6;
             position -= 2;
@@ -1872,6 +1888,36 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
         searchAdapterHelper.addHashtagsFromMessage(message);
     }
 
+    private void cancelOsuSearch() {
+        osuSearch.cancel();osuResults=null;osuQuery=null;osuStatus=null;osuStatusItem=null;osuRetry=false;
+    }
+
+    private void showOsuSearch(String query,int textLength) {
+        resultStartPosition=0;resultLength=textLength;
+        if(osuResults!=null&&query.equals(osuQuery))return;
+        // Reserve @osu locally before Telegram can resolve an actual inline bot.
+        searchForContextBot(null,null);clear(false);clearStickers();
+        searchResultUsernames=null;searchResultUsernamesMap=null;searchResultBotContext=null;
+        searchResultHashtags=null;searchResultCommands=null;quickReplies=null;searchResultSuggestions=null;
+        hintHashtag=null;lastText=null;contextMedia=false;
+        osuResults=java.util.Collections.emptyList();osuQuery=query;osuRetry=false;
+        osuStatus=LocaleController.getString(query.isEmpty()?R.string.OsuSearchTitle:R.string.Loading);osuStatusItem=new Object();
+        notifyDataSetChanged();delegate.needChangePanelVisibility(true);
+        if(query.isEmpty())return;
+        osuSearch.search(query,(results,error)->{
+            if(osuResults==null||!query.equals(osuQuery))return;
+            osuRetry=error;osuResults=results==null?java.util.Collections.emptyList():results;
+            osuStatus=LocaleController.getString(error?R.string.OsuSearchFailed:R.string.OsuSearchEmpty);
+            osuStatusItem=new Object();
+            notifyDataSetChanged();delegate.needChangePanelVisibility(true);
+        });
+    }
+
+    public boolean retryOsuSearch() {
+        if(osuResults==null||!osuRetry)return false;
+        String query=osuQuery;osuQuery=null;showOsuSearch(query,resultLength);return true;
+    }
+
     public int getItemPosition(int i) {
         if (hintHashtag != null) {
             if (i < 2) return 0;
@@ -1896,6 +1942,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
     }
 
     public Object getItem(int i) {
+        if(osuResults!=null)return osuResults.isEmpty()&&i==0?osuStatusItem:i>=0&&i<osuResults.size()?osuResults.get(i):null;
         if (hintHashtag != null) {
             if (i < 2) return null;
             i -= 2;
@@ -2007,6 +2054,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
 
     @Override
     public boolean isEnabled(RecyclerView.ViewHolder holder) {
+        if(osuResults!=null)return !osuResults.isEmpty()||osuRetry;
         return (foundContextBot == null || inlineMediaEnabled) && stickers == null;
     }
 
@@ -2014,6 +2062,9 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
     public RecyclerView.ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
         View view;
         switch (viewType) {
+            case 8:
+                view = new OsuBeatmapSearchCell(mContext,resourcesProvider,isDarkTheme);
+                break;
             case 0:
                 view = new MentionCell(mContext, resourcesProvider);
                 ((MentionCell) view).setIsDarkTheme(isDarkTheme);
@@ -2059,6 +2110,10 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
 
     @Override
     public void onBindViewHolder(RecyclerView.ViewHolder holder, int position) {
+        if(holder.getItemViewType()==8){
+            ((OsuBeatmapSearchCell)holder.itemView).bind(osuResults!=null&&position<osuResults.size()?osuResults.get(position):null,osuStatus,osuRetry);
+            return;
+        }
         if (hintHashtag != null) {
             position -= 2;
 //            if (!searchResultHashtags.isEmpty()) position--;
@@ -2170,6 +2225,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
 
     public void setDialogId(long dialogId) {
         if (dialog_id != dialogId) {
+            cancelOsuSearch();
             dialog_id = dialogId;
         }
     }

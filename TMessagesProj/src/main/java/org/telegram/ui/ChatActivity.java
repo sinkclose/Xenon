@@ -3734,6 +3734,7 @@ public class ChatActivity extends BaseFragment implements
 
     @Override
     public void onFragmentDestroy() {
+        if(osuArchiveDownload!=null){osuArchiveDownload.cancelled=true;if(osuArchiveDownload.dialog!=null)osuArchiveDownload.dialog.dismiss();osuArchiveDownload=null;}
         if (messagePopupPreviewLayout != null && scrimPopupWindow != null) scrimPopupWindow.dismiss(false);
         cancelHold();
         holdPopupOpened = false;
@@ -8499,6 +8500,11 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
             Object object = mentionContainer.getAdapter().getItem(position);
             int start = mentionContainer.getAdapter().getResultStartPosition();
             int len = mentionContainer.getAdapter().getResultLength();
+            if(mentionContainer.getAdapter().retryOsuSearch())return;
+            if(object instanceof zxc.iconic.xenon.osu.OsuBeatmapSearch.Result){
+                sendOsuBeatmap((zxc.iconic.xenon.osu.OsuBeatmapSearch.Result)object);
+                return;
+            }
             if (mentionContainer.getAdapter().isLocalHashtagHint(position)) {
                 chatActivityEnterView.replaceWithText(start, len, mentionContainer.getAdapter().getHashtagHint() + "@" + ChatObject.getPublicUsername(currentChat) + " ", false);
                 return;
@@ -15514,6 +15520,70 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (chatAttachAlert != null) {
             chatAttachAlert.setupPoll(quiz);
         }
+    }
+
+    private static final class OsuArchiveDownload {
+        static final org.telegram.messenger.DispatchQueue QUEUE=new org.telegram.messenger.DispatchQueue("osu-send-archives");
+        volatile boolean cancelled;
+        AlertDialog dialog;
+    }
+    private OsuArchiveDownload osuArchiveDownload;
+
+    private void sendOsuBeatmap(zxc.iconic.xenon.osu.OsuBeatmapSearch.Result result) {
+        if(osuArchiveDownload!=null||getParentActivity()==null||isFinished||!checkSlowModeAlert())return;
+        if(getSendingChat()!=null&&!ChatObject.canSendDocument(getSendingChat())) {
+            BulletinFactory.of(this).createErrorBulletin(getString(R.string.OsuSearchDocumentsRestricted)).show();return;
+        }
+        final long targetDialog=dialog_id;
+        final String draft=chatActivityEnterView.getFieldText()==null?"":chatActivityEnterView.getFieldText().toString();
+        OsuArchiveDownload state=osuArchiveDownload=new OsuArchiveDownload();
+        AlertDialog progress=state.dialog=new AlertDialog(getParentActivity(),AlertDialog.ALERT_TYPE_LOADING,themeDelegate);
+        progress.setTitle(result.heading());progress.setMessage(getString(R.string.OsuSearchDownloading));
+        progress.setButton(android.content.DialogInterface.BUTTON_NEGATIVE,getString(R.string.Cancel),(dialog,which)->{
+            state.cancelled=true;if(osuArchiveDownload==state)osuArchiveDownload=null;
+        });
+        progress.setOnCancelListener(dialog->{state.cancelled=true;if(osuArchiveDownload==state)osuArchiveDownload=null;});
+        showDialog(progress);progress.setCancelable(true);progress.setCanceledOnTouchOutside(false);
+        OsuArchiveDownload.QUEUE.postRunnable(()->{
+            try {
+                File archive=zxc.iconic.xenon.osu.OsuBeatmapArchive.fetch(result.id,()->state.cancelled,(bytes,total)->AndroidUtilities.runOnUIThread(()->{
+                    if(osuArchiveDownload==state&&!state.cancelled&&total>0)progress.setProgress((int)Math.min(100,bytes*100/total));
+                }));
+                File external=ApplicationLoader.applicationContext.getExternalCacheDir();
+                File file=zxc.iconic.xenon.osu.OsuBeatmapArchive.forSending(archive,external==null?null:new File(external,"osu-send"),result.id,result.heading(),()->state.cancelled);
+                AndroidUtilities.runOnUIThread(()->{
+                    if(state.cancelled||osuArchiveDownload!=state||isFinished)return;
+                    osuArchiveDownload=null;progress.dismiss();
+                    if(dialog_id!=targetDialog||chatActivityEnterView==null||!TextUtils.equals(draft,chatActivityEnterView.getFieldText()))return;
+                    if(getSendingChat()!=null&&!ChatObject.canSendDocument(getSendingChat())) {
+                        BulletinFactory.of(this).createErrorBulletin(getString(R.string.OsuSearchDocumentsRestricted)).show();return;
+                    }
+                    ArrayList<String> paths=new ArrayList<>();paths.add(file.getAbsolutePath());
+                    AlertsCreator.ensurePaidMessageConfirmation(currentAccount,targetDialog,1,payStars->{
+                        if(isFinished||dialog_id!=targetDialog)return;
+                        if(chatMode==MODE_SCHEDULED) {
+                            AlertsCreator.createScheduleDatePickerDialog(getParentActivity(),targetDialog,(notify,date,repeat)->{
+                                if(!isFinished&&dialog_id==targetDialog)sendOsuBeatmapFile(paths,draft,notify,date,repeat,payStars);
+                            },themeDelegate);
+                        }else sendOsuBeatmapFile(paths,draft,true,0,0,payStars);
+                    });
+                });
+            }catch(Exception error){
+                if(!state.cancelled)FileLog.e(error);
+                AndroidUtilities.runOnUIThread(()->{
+                    if(state.cancelled||osuArchiveDownload!=state||isFinished)return;
+                    osuArchiveDownload=null;progress.dismiss();
+                    BulletinFactory.of(this).createErrorBulletin(getString(R.string.OsuSearchDownloadFailed)).show();
+                });
+            }
+        });
+    }
+
+    private void sendOsuBeatmapFile(ArrayList<String> paths,String draft,boolean notify,int date,int repeat,long payStars) {
+        if(isFinished||chatActivityEnterView==null||!TextUtils.equals(draft,chatActivityEnterView.getFieldText())||!checkSlowModeAlert())return;
+        chatActivityEnterView.setFieldText("");
+        if(mentionContainer!=null)mentionContainer.updateVisibility(false);
+        didSelectFiles(paths,null,null,new ArrayList<>(),notify,date,repeat,0,false,payStars);
     }
 
     @Override
