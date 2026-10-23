@@ -463,6 +463,16 @@ public class FeedController implements NotificationCenter.NotificationCenterDele
             postFeedCount(guid);
         } else {
             applyEnumeration(enumeration);
+            FeedFolders folders = FeedFolders.getInstance(currentAccount);
+            if (!enumeration.failed && folders.isOnlyUnread(folders.getActiveId())) {
+                // Cached rows may have been read since the feed was last opened.
+                visibleMessages.removeIf(message -> !this.unreadTracker.isUnread(message));
+                if (visibleMessages.isEmpty()) {
+                    clear();
+                    loadInitial(guid, loadIndex);
+                    return;
+                }
+            }
             postFeedResults(guid, loadIndex, visibleMessages, 0, false, enumeration.failed);
             postFeedCount(guid);
         }

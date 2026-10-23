@@ -216,6 +216,7 @@ final class FeedTimelineLoader {
 
     public OlderPage loadOlderPage(ArrayList<ChannelSnapshot> channels, Cursor cursor, HashSet<Long> exhausted) {
         OlderPage page = new OlderPage();
+        boolean onlyUnread = isOnlyUnread();
         boolean cursorEmpty = cursor.isEmpty();
         page.last.set(cursor.date, cursor.uid, cursor.mid);
         try {
@@ -246,7 +247,10 @@ final class FeedTimelineLoader {
             int maxDepthDate = 0;
             for (int i = 0; i < channels.size(); i++) {
                 ChannelSnapshot snapshot = channels.get(i);
-                boolean incomplete = !snapshot.localStartReached && !exhausted.contains(snapshot.dialogId);
+                int readMax = snapshot.readInboxMax <= 0 && snapshot.unreadCount <= 0 ? snapshot.topMessage : snapshot.readInboxMax;
+                boolean unreadStartReached = onlyUnread && (readMax >= snapshot.topMessage
+                        || snapshot.hasCached && snapshot.depthMid <= (long) readMax + 1);
+                boolean incomplete = !unreadStartReached && !snapshot.localStartReached && !exhausted.contains(snapshot.dialogId);
                 snapshot.incomplete = incomplete;
                 if (incomplete) {
                     page.hasIncomplete = true;
@@ -309,6 +313,7 @@ final class FeedTimelineLoader {
         StringBuilder sb = new StringBuilder("SELECT data, mid, date, uid FROM messages_v2 WHERE uid IN (");
         sb.append(join);
         sb.append(") AND mid > 0");
+        appendUnreadFilter(sb, isOnlyUnread());
         if (maxDate > 0) {
             sb.append(" AND date >= ");
             sb.append(maxDate);
@@ -391,6 +396,19 @@ final class FeedTimelineLoader {
         }
     }
 
+    private boolean isOnlyUnread() {
+        FeedFolders folders = FeedFolders.getInstance(currentAccount);
+        return folders.isOnlyUnread(folders.getActiveId());
+    }
+
+    private static void appendUnreadFilter(StringBuilder sb, boolean onlyUnread) {
+        if (!onlyUnread) return;
+        // Use the live per-dialog read boundary, including reads from other clients.
+        // Apply before LIMIT so pages cannot be filled with already-read rows.
+        sb.append(" AND out = 0 AND mid > COALESCE((SELECT CASE WHEN inbox_max <= 0 AND unread_count <= 0"
+                + " THEN last_mid ELSE inbox_max END FROM dialogs WHERE did = messages_v2.uid), 0)");
+    }
+
     private static void appendCursorBound(StringBuilder sb, Cursor cursor, boolean older, boolean inclusive) {
         String op = older ? "<" : ">";
         sb.append(" AND (date");
@@ -437,6 +455,7 @@ final class FeedTimelineLoader {
             StringBuilder sb = new StringBuilder("SELECT data, mid, date, uid FROM messages_v2 WHERE uid IN (");
             sb.append(TextUtils.join(",", dialogIds));
             sb.append(") AND mid > 0");
+            appendUnreadFilter(sb, isOnlyUnread());
             appendCursorBound(sb, cursor, false, false);
             sb.append(" ORDER BY date ASC, uid ASC, mid ASC LIMIT ");
             sb.append(50);
@@ -477,6 +496,7 @@ final class FeedTimelineLoader {
                 StringBuilder sb = new StringBuilder("SELECT data, mid, date, uid FROM messages_v2 WHERE uid IN (");
                 sb.append(TextUtils.join(",", dialogIds));
                 sb.append(") AND mid > 0");
+                appendUnreadFilter(sb, isOnlyUnread());
                 appendCursorBound(sb, newestCursor, true, true);
                 appendCursorBound(sb, oldestCursor, false, true);
                 sb.append(" ORDER BY date DESC, uid DESC, mid DESC LIMIT ");
@@ -523,9 +543,11 @@ final class FeedTimelineLoader {
         if (last.grouped_id == 0) {
             return;
         }
-        SQLiteCursor c = storage.getDatabase().queryFinalized(
-                "SELECT data, mid, date, uid FROM messages_v2 WHERE uid = " + last.dialog_id +
-                        " AND mid > 0 AND mid < " + last.id + " ORDER BY date DESC, mid DESC LIMIT 9", new Object[0]);
+        StringBuilder sql = new StringBuilder("SELECT data, mid, date, uid FROM messages_v2 WHERE uid = ");
+        sql.append(last.dialog_id).append(" AND mid > 0 AND mid < ").append(last.id);
+        appendUnreadFilter(sql, isOnlyUnread());
+        sql.append(" ORDER BY date DESC, mid DESC LIMIT 9");
+        SQLiteCursor c = storage.getDatabase().queryFinalized(sql.toString(), new Object[0]);
         while (c.next()) {
             TLRPC.Message message = readMessage(c);
             if (message == null || message.grouped_id != last.grouped_id) {

@@ -272,7 +272,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
 
     public TLRPC.Chat getChat() {
         if (baseFragment instanceof ChatActivity) {
-            return ((ChatActivity) baseFragment).getCurrentChat();
+            return ((ChatActivity) baseFragment).getSendingChat();
         } else {
             return MessagesController.getInstance(currentAccount).getChat(-dialogId);
         }
@@ -4975,7 +4975,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
         }
         if (baseFragment instanceof ChatActivity) {
             ChatActivity chatActivity = (ChatActivity) baseFragment;
-            TLRPC.Chat currentChat = chatActivity.getCurrentChat();
+            TLRPC.Chat currentChat = chatActivity.getSendingChat();
             contactsLayout.setMultipleSelectionAllowed(!(currentChat != null && !ChatObject.hasAdminRights(currentChat) && currentChat.slowmode_enabled));
         }
         showLayout(contactsLayout);
@@ -5018,7 +5018,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
         }
         if (baseFragment instanceof ChatActivity) {
             ChatActivity chatActivity = (ChatActivity) baseFragment;
-            TLRPC.Chat currentChat = chatActivity.getCurrentChat();
+            TLRPC.Chat currentChat = chatActivity.getSendingChat();
             audioLayout.setMaxSelectedFiles(currentChat != null && !ChatObject.hasAdminRights(currentChat) && currentChat.slowmode_enabled || editingMessageObject != null ? 1 : -1);
         }
         if (show) {
@@ -5092,7 +5092,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
             documentLayout.setMaxSelectedFiles(1);
         } else if (baseFragment instanceof ChatActivity) {
             ChatActivity chatActivity = (ChatActivity) baseFragment;
-            TLRPC.Chat currentChat = chatActivity.getCurrentChat();
+            TLRPC.Chat currentChat = chatActivity.getSendingChat();
             documentLayout.setMaxSelectedFiles(currentChat != null && !ChatObject.hasAdminRights(currentChat) && currentChat.slowmode_enabled || editingMessageObject != null ? 1 : -1);
         } else {
             documentLayout.setMaxSelectedFiles(maxSelectedPhotos);
@@ -6115,7 +6115,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
         TLRPC.User user = null;
         if (avatarPicker != 2) {
             if (baseFragment instanceof ChatActivity) {
-                chat = ((ChatActivity) baseFragment).getCurrentChat();
+                chat = ((ChatActivity) baseFragment).getSendingChat();
                 user = ((ChatActivity) baseFragment).getCurrentUser();
             } else if (dialogId >= 0) {
                 user = MessagesController.getInstance(currentAccount).getUser(dialogId);
@@ -6138,7 +6138,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                 pollsEnabled = UserObject.isBot(user) || UserObject.isUserSelf(user);
                 todoEnabled = !(baseFragment instanceof ChatActivity) || ((ChatActivity) baseFragment).getCurrentEncryptedChat() == null;
             }
-            todoEnabled = todoEnabled && UserConfig.getInstance(currentAccount).isPremium();
+            int sendingAccount = baseFragment instanceof ChatActivity ? ((ChatActivity) baseFragment).getSendingAccount() : currentAccount;
+            todoEnabled = todoEnabled && UserConfig.getInstance(sendingAccount).isPremium();
         }
 
         if (restrictEphemeralMessageTypes) {

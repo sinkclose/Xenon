@@ -110,8 +110,8 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     private View rightAnchorView;
     private int lastRightAvatarLeft = Integer.MIN_VALUE;
     private int lastRightAvatarTop = Integer.MIN_VALUE;
-    private int lastRightAvatarCenterX = Integer.MIN_VALUE;
-    private int lastRightAvatarCenterY = Integer.MIN_VALUE;
+    private float lastRightAvatarCenterX = Integer.MIN_VALUE;
+    private float lastRightAvatarCenterY = Integer.MIN_VALUE;
     StatusDrawable currentTypingDrawable;
 
     private int lastWidth = -1;
@@ -496,7 +496,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
                 || avatarImageView == null || avatarImageView.getVisibility() != VISIBLE) return;
         boolean transitioning = actionBar != null
                 && (actionBar.getSearchFactor() > 0f || actionBar.getActionModeFactor() > 0f);
-        int[] anchor = transitioning ? null : anchorCenterInParent();
+        float[] anchor = transitioning ? null : anchorCenterInParent();
         if (anchor != null) {
             lastRightAvatarCenterX = anchor[0];
             lastRightAvatarCenterY = anchor[1];
@@ -506,7 +506,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         // the menu. Resolve the avatar's position from their live coordinates.
         setAvatarOffset(avatarOffset(lastRightAvatarCenterX, getX(), avatarImageView.getLeft(), avatarImageView.getWidth()));
         setAvatarVerticalOffset(avatarOffset(lastRightAvatarCenterY, getY(), avatarImageView.getTop(),
-                avatarImageView.getHeight()) + dp(0.3f));
+                avatarImageView.getHeight()));
     }
 
     private static float avatarOffset(float anchorCenter, float containerPosition, float childPosition, float childSize) {
@@ -1114,26 +1114,26 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
             // Keep the last menu position while its anchor is hidden. Following
             // the pill edge here couples the avatar to changing subtitle widths.
             final boolean avatarTransitioning = actionBar != null && (actionBar.getSearchFactor() > 0f || actionBar.getActionModeFactor() > 0f);
-            int[] anchor = avatarTransitioning ? null : anchorCenterInParent();
+            float[] anchor = avatarTransitioning ? null : anchorCenterInParent();
             android.view.ViewGroup.MarginLayoutParams lp = (android.view.ViewGroup.MarginLayoutParams) getLayoutParams();
             if (anchor != null) {
                 lastRightAvatarCenterX = anchor[0];
                 lastRightAvatarCenterY = anchor[1];
-                avatarLeft = anchor[0] - avatarImageView.getMeasuredWidth() / 2 - getLeft();
-                avatarTop = anchor[1] - avatarImageView.getMeasuredHeight() / 2 + dp(0.3f);
+                avatarLeft = Math.round(anchor[0] - avatarImageView.getMeasuredWidth() / 2f - getLeft());
+                avatarTop = Math.round(anchor[1] - avatarImageView.getMeasuredHeight() / 2f - getTop());
                 lastRightAvatarLeft = avatarLeft;
                 lastRightAvatarTop = avatarTop;
             } else {
                 if (lastRightAvatarLeft != Integer.MIN_VALUE) {
                     // Cache the anchor in parent coordinates, not a child position
                     // that becomes stale when the container or avatar size changes.
-                    avatarLeft = lastRightAvatarCenterX - getLeft() - avatarImageView.getMeasuredWidth() / 2;
-                    avatarTop = lastRightAvatarCenterY - avatarImageView.getMeasuredHeight() / 2 + dp(0.3f);
+                    avatarLeft = Math.round(lastRightAvatarCenterX - getLeft() - avatarImageView.getMeasuredWidth() / 2f);
+                    avatarTop = Math.round(lastRightAvatarCenterY - getTop() - avatarImageView.getMeasuredHeight() / 2f);
                 } else {
                     final int parentWidth = getParent() instanceof View ? ((View) getParent()).getWidth() : getWidth() + lp.leftMargin;
                     avatarLeft = parentWidth - getLeft() - dp(16) - avatarImageView.getMeasuredWidth();
-                    lastRightAvatarCenterX = getLeft() + avatarLeft + avatarImageView.getMeasuredWidth() / 2;
-                    lastRightAvatarCenterY = avatarTop + avatarImageView.getMeasuredHeight() / 2 - dp(0.3f);
+                    lastRightAvatarCenterX = getLeft() + avatarLeft + avatarImageView.getMeasuredWidth() / 2f;
+                    lastRightAvatarCenterY = getTop() + avatarTop + avatarImageView.getMeasuredHeight() / 2f;
                     lastRightAvatarLeft = avatarLeft;
                     lastRightAvatarTop = avatarTop;
                 }
@@ -1236,25 +1236,27 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         }
     }
 
-    private int[] anchorCenterInParent() {
+    private float[] anchorCenterInParent() {
         // A GONE/INVISIBLE anchor (e.g. headerItem hidden while searching) must
         // not resolve: following it mid-transition teleports the avatar (e.g. to
         // the left) instead of keeping it glued to the pill.
         if (rightAnchorView == null || !rightAnchorView.isLaidOut() || rightAnchorView.getVisibility() != VISIBLE) return null;
-        int x = Math.round(rightAnchorView.getX());
-        int y = Math.round(rightAnchorView.getY());
-        ViewParent actionBar = getParent();
-        ViewParent p = rightAnchorView.getParent();
-        while (p != null && p != actionBar && p instanceof View) {
-            View pv = (View) p;
-            x += pv.getLeft() + (int) pv.getTranslationX();
-            y += pv.getTop() + (int) pv.getTranslationY();
-            p = pv.getParent();
+        float[] center = {rightAnchorView.getWidth() / 2f, rightAnchorView.getHeight() / 2f};
+        ViewParent targetParent = getParent();
+        View child = rightAnchorView;
+        ViewParent p = child.getParent();
+        while (p instanceof View) {
+            View parent = (View) p;
+            // Preserve fractional translations and odd-sized menu/avatars. The
+            // old integer center plus optical Y offset made the ring uneven.
+            child.getMatrix().mapPoints(center);
+            center[0] += child.getLeft() - parent.getScrollX();
+            center[1] += child.getTop() - parent.getScrollY();
+            if (p == targetParent) return center;
+            child = parent;
+            p = child.getParent();
         }
-        if (p != actionBar) return null;
-        x += rightAnchorView.getWidth() / 2;
-        y += rightAnchorView.getHeight() / 2;
-        return new int[]{x, y};
+        return null;
     }
 
     public void setLeftPadding(int value) {

@@ -266,10 +266,23 @@ public class FeedChatIntegration {
     }
 
     public void onHostResumed() {
+        FeedFolders folders = FeedFolders.getInstance(currentAccount);
+        if (initialScrollApplied && folders.isOnlyUnread(folders.getActiveId())) {
+            FeedController controller = FeedController.getInstance(currentAccount);
+            for (MessageObject row : host.getMessages()) {
+                if (FeedMessageUtils.isPostRow(row) && !controller.isUnread(row)) {
+                    // Keep seen posts stable during reading; discard them when
+                    // returning to the feed, including a retained main tab.
+                    host.reloadFeed();
+                    return;
+                }
+            }
+        }
         if (!this.host.getMessages().isEmpty()) {
             onMessagesLoaded();
         }
         requestPendingInitialPosition();
+        updatePagedownCounter();
     }
 
     private boolean hasPendingInitialPosition() {
@@ -691,6 +704,12 @@ public class FeedChatIntegration {
         }
     }
 
+    public boolean shouldShowPagedownButton() {
+        // Feed always offers its jump-to-unread/end action once posts exist.
+        // Scroll bounds can be zero during initial positioning, and at the end.
+        return this.host.isListReady() && hasMaterializedPostRows();
+    }
+
     private void updatePagedownCounter() {
         if (this.host.isListReady() && !this.host.isScrollAnimationRunning()) {
             int newestVisibleMessageIndex = this.host.getNewestVisibleMessageIndex();
@@ -699,10 +718,8 @@ public class FeedChatIntegration {
                 this.lastPagedownCount = iCountUnreadBelow;
                 this.host.setPagedownCount(iCountUnreadBelow);
             }
-            // Recompute after the initial layout/position restore too; no
-            // previous scroll gesture is required to reveal the button.
-            this.host.setPagedownButtonVisible(this.host.canScrollToNewer());
         }
+        this.host.setPagedownButtonVisible(shouldShowPagedownButton());
     }
 
     public void onScrolled(int i) {

@@ -1686,7 +1686,7 @@ public class ChatActivity extends BaseFragment implements
     }
 
     public boolean allowSendPhotos() {
-        if (currentChat != null && !ChatObject.canSendPhoto(currentChat)) {
+        if (currentChat != null && !ChatObject.canSendPhoto(getSendingChat())) {
             return false;
         } else {
             return true;
@@ -2535,7 +2535,7 @@ public class ChatActivity extends BaseFragment implements
                 AndroidUtilities.cancelRunOnUIThread(waitingForCharaterEnterRunnable);
                 waitingForCharaterEnterRunnable = null;
             }
-            if ((currentChat == null || ChatObject.canSendEmbed(currentChat)) && chatActivityEnterView.isMessageWebPageSearchEnabled() && (!chatActivityEnterView.isEditingMessage() || !chatActivityEnterView.isEditingCaption())) {
+            if ((currentChat == null || ChatObject.canSendEmbed(getSendingChat())) && chatActivityEnterView.isMessageWebPageSearchEnabled() && (!chatActivityEnterView.isEditingMessage() || !chatActivityEnterView.isEditingCaption())) {
                 if (bigChange) {
                     searchLinks(text, true);
                 } else {
@@ -2695,6 +2695,13 @@ public class ChatActivity extends BaseFragment implements
 
         @Override
         public void didPressAttachButton() {
+            if (editingMessageObject != null) {
+                if (!editingMessageObject.canEditMedia() || editingMessageObjectReqId != 0) return;
+                if (chatAttachAlert == null) createChatAttachView();
+                chatAttachAlert.setEditingMessageObject(ChatAttachAlert.EDITMEDIA_TYPE_ANY, editingMessageObject);
+                openAttachMenu();
+                return;
+            }
             if (chatAttachAlert != null) {
                 chatAttachAlert.setEditingMessageObject(0, null);
             }
@@ -7654,6 +7661,17 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
         }
 
         chatLayoutManager = new GridLayoutManagerFixed(context, 1000, LinearLayoutManager.VERTICAL, !reversed) {
+            @Override
+            public void onLayoutCompleted(RecyclerView.State state) {
+                super.onLayoutCompleted(state);
+                if (isFeedSearch() && feedIntegration != null && chatListView != null) {
+                    // Pending initial positioning is cleared by super. Recompute
+                    // after layout, when visible rows and scroll bounds are valid.
+                    chatListView.removeCallbacks(feedLayoutUpdateRunnable);
+                    chatListView.post(feedLayoutUpdateRunnable);
+                }
+            }
+
 
             boolean computingScroll;
 
@@ -14721,7 +14739,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
         if (userInfo != null && userInfo.voice_messages_forbidden) {
             mediaBanTooltip.setText(AndroidUtilities.replaceTags(LocaleController.formatString(chatActivityEnterView.isInVideoMode() ? R.string.VideoMessagesRestrictedByPrivacy : R.string.VoiceMessagesRestrictedByPrivacy, currentUser.first_name)));
-        } else if (!ChatObject.canSendVoice(currentChat) && !ChatObject.canSendRoundVideo(currentChat)) {
+        } else if (!ChatObject.canSendVoice(getSendingChat()) && !ChatObject.canSendRoundVideo(getSendingChat())) {
             if (checkCanRemoveRestrictionsByBoosts()) {
                 return;
             }
@@ -15084,7 +15102,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
         if (currentChat != null && messageSuggestionParams != null || isEphemeralMessage || chatMode == MODE_WELCOME_MESSAGES) {
             chatAttachAlert.setMaxSelectedPhotos(1, true);
-        } else if (currentChat != null && !ChatObject.hasAdminRights(currentChat) && currentChat.slowmode_enabled) {
+        } else if (currentChat != null && !ChatObject.hasAdminRights(getSendingChat()) && currentChat.slowmode_enabled) {
             chatAttachAlert.setMaxSelectedPhotos(10, true);
         } else {
             chatAttachAlert.setMaxSelectedPhotos(-1, true);
@@ -15281,7 +15299,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     public ChatActivityEnterView getChatActivityEnterViewForStickers() {
-        return bottomChannelButtonsLayout.getVisibility() != View.VISIBLE && (currentChat == null || ChatObject.canSendStickers(currentChat)) ? chatActivityEnterView : null;
+        return bottomChannelButtonsLayout.getVisibility() != View.VISIBLE && (currentChat == null || ChatObject.canSendStickers(getSendingChat())) ? chatActivityEnterView : null;
     }
 
     public ChatActivityEnterView getChatActivityEnterView() {
@@ -15422,7 +15440,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             PhotoAlbumPickerActivity fragment = new PhotoAlbumPickerActivity(PhotoAlbumPickerActivity.SELECT_TYPE_ALL, allowGifs, true, ChatActivity.this);
             if (chatMode == MODE_WELCOME_MESSAGES) {
                 fragment.setMaxSelectedPhotos(1, true);
-            } else if (currentChat != null && !ChatObject.hasAdminRights(currentChat) && currentChat.slowmode_enabled) {
+            } else if (currentChat != null && !ChatObject.hasAdminRights(getSendingChat()) && currentChat.slowmode_enabled) {
                 fragment.setMaxSelectedPhotos(10, true);
             } else {
                 fragment.setMaxSelectedPhotos(editingMessageObject != null ? 1 : 0, editingMessageObject == null);
@@ -15629,7 +15647,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (currentEncryptedChat != null && getMessagesController().secretWebpagePreview == 0 || editingMessageObject != null && (!editingMessageObject.isWebpage() || editingMessageObject.messageOwner.media.webpage instanceof TLRPC.TL_webPagePending)) {
             return;
         }
-        if (currentChat != null && !ChatObject.canSendEmbed(currentChat)) {
+        if (currentChat != null && !ChatObject.canSendEmbed(getSendingChat())) {
             if (foundWebPage != null) {
                 foundWebPage = null;
                 if (chatActivityEnterView != null) {
@@ -18573,7 +18591,10 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (sideControlsButtonsLayout == null) {
             return;
         }
-        boolean show = canShowPagedownButton && !hasTextSelection() && !chatActivityEnterView.isRecordingAudioVideo() && !isInsideContainer && (!searching || getMediaDataController().searchResultMessages.isEmpty());
+        boolean feed = isFeedSearch();
+        boolean available = feed && feedIntegration != null ? feedIntegration.shouldShowPagedownButton() : canShowPagedownButton;
+        boolean show = available && !hasTextSelection() && !chatActivityEnterView.isRecordingAudioVideo()
+                && (feed || !isInsideContainer) && (feed || !searching || getMediaDataController().searchResultMessages.isEmpty());
         if (show) {
             if (animated && (openAnimationStartTime == 0 || SystemClock.elapsedRealtime() < openAnimationStartTime + 150)) {
                 animated = false;
@@ -18591,7 +18612,8 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (sideControlsButtonsLayout == null) {
             return;
         }
-        boolean show = !getMediaDataController().searchResultMessages.isEmpty() && searching && !searchingFiltered || chatMode == MODE_SEARCH && searchType == SEARCH_PUBLIC_POSTS && !messages.isEmpty();
+        boolean show = !isFeedSearch() && (!getMediaDataController().searchResultMessages.isEmpty() && searching && !searchingFiltered
+                || chatMode == MODE_SEARCH && searchType == SEARCH_PUBLIC_POSTS && !messages.isEmpty());
 
         sideControlsButtonsLayout.showButton(ChatActivitySideControlsButtonsLayout.BUTTON_SEARCH_UP, show, animated);
         sideControlsButtonsLayout.showButton(ChatActivitySideControlsButtonsLayout.BUTTON_SEARCH_DOWN, show, animated);
@@ -19074,8 +19096,14 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     final View view = searchViewPager.getChildAt(a);
                     if (view instanceof ChatActivityContainer && view.getVisibility() == View.VISIBLE) {
                         ChatActivityContainer container = (ChatActivityContainer) view;
-                        Blur3Utils.captureRelativeParent(container.chatActivity.contentView::drawList, blurCanvas, position,
-                            container.chatActivity.contentView, container);
+                        // A visible search-page container can exist before its
+                        // chat view is created (including failed onFragmentCreate).
+                        // Check before constructing the bound method reference.
+                        final ChatActivityFragmentView childContent = container.chatActivity.contentView;
+                        if (childContent != null) {
+                            Blur3Utils.captureRelativeParent(childContent::drawList, blurCanvas, position,
+                                childContent, container);
+                        }
                     }
                 }
             }
@@ -26901,15 +26929,23 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         chatActivityEnterView.updateSendAsButton(animatedUpdate);
     }
 
-    private TLRPC.Chat getSendingChat() {
+    public int getSendingAccount() {
         int account = AccountSendAs.get(currentAccount, dialog_id);
-        return account >= 0 ? MessagesController.getInstance(account).getChat(-dialog_id) : currentChat;
+        return account >= 0 ? account : currentAccount;
+    }
+
+    public TLRPC.Chat getSendingChat() {
+        int account = getSendingAccount();
+        return account != currentAccount ? MessagesController.getInstance(account).getChat(-dialog_id) : currentChat;
     }
 
     public void onAccountSendAsChanged() {
         if (chatActivityEnterView == null) return;
         loadSendAsPeers(false);
+        chatActivityEnterView.checkRoundVideo();
+        chatActivityEnterView.checkChannelRights();
         updateBottomOverlay(false);
+        checkRaiseSensors();
         updateSecretStatus();
     }
 
@@ -29373,7 +29409,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             showScheduledOrNoSoundHint();
 
             if (!backward && firstOpen) {
-                if (chatActivityEnterView != null && (threadMessageObject != null && threadMessageObject.getRepliesCount() == 0 && ChatObject.canSendMessages(currentChat) && !isTopic || chatMode == MODE_EDIT_BUSINESS_LINK)) {
+                if (chatActivityEnterView != null && (threadMessageObject != null && threadMessageObject.getRepliesCount() == 0 && ChatObject.canSendMessages(getSendingChat()) && !isTopic || chatMode == MODE_EDIT_BUSINESS_LINK)) {
                     chatActivityEnterView.setFieldFocused();
                     chatActivityEnterView.openKeyboard();
                 }
@@ -31752,7 +31788,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     private void checkRaiseSensors() {
         if (chatActivityEnterView != null && chatActivityEnterView.isStickersExpanded()) {
             MediaController.getInstance().setAllowStartRecord(false);
-        } else if (currentChat != null && !ChatObject.canSendVoice(currentChat)) {
+        } else if (currentChat != null && !ChatObject.canSendVoice(getSendingChat())) {
             MediaController.getInstance().setAllowStartRecord(false);
         } else if (!ApplicationLoader.mainInterfacePaused && (bottomChannelButtonsLayout == null || bottomChannelButtonsLayout.getVisibility() != View.VISIBLE) && (bottomOverlay == null || bottomOverlay.getVisibility() != View.VISIBLE) && (searchContainer == null || searchContainer.getVisibility() != View.VISIBLE)) {
             MediaController.getInstance().setAllowStartRecord(true);
@@ -36598,7 +36634,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 break;
             }
             case OPTION_ADD_TO_STICKERS_OR_MASKS: {
-                StickersAlert alert = new StickersAlert(getParentActivity(), this, selectedObject.getInputStickerSet(), null, bottomChannelButtonsLayout.getVisibility() != View.VISIBLE && (currentChat == null || ChatObject.canSendStickers(currentChat)) ? chatActivityEnterView : null, themeDelegate, false);
+                StickersAlert alert = new StickersAlert(getParentActivity(), this, selectedObject.getInputStickerSet(), null, bottomChannelButtonsLayout.getVisibility() != View.VISIBLE && (currentChat == null || ChatObject.canSendStickers(getSendingChat())) ? chatActivityEnterView : null, themeDelegate, false);
                 alert.setCalcMandatoryInsets(isKeyboardVisible());
                 preserveDim = true;
                 alert.setDimBehind(false);
@@ -38612,6 +38648,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     private org.telegram.messenger.feed.FeedChatIntegration feedIntegration;
+    private final Runnable feedLayoutUpdateRunnable = () -> {
+        if (!isFinished && isFeedSearch() && feedIntegration != null) {
+            feedIntegration.onVisiblePartInvalidated();
+        }
+    };
     private View feedFolderTabs;
 
     public void setFeedFolderTabs(View tabs, boolean visible) {
@@ -42168,7 +42209,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 if (topicCreateItem != null) {
                     topicCreateItem.setVisibility(View.GONE);
                 }
-            } else if (chatActivityEnterView.hasText() && TextUtils.isEmpty(chatActivityEnterView.getSlowModeTimer()) && (currentChat == null || ChatObject.canSendPlain(currentChat))) {
+            } else if (chatActivityEnterView.hasText() && TextUtils.isEmpty(chatActivityEnterView.getSlowModeTimer()) && (currentChat == null || ChatObject.canSendPlain(getSendingChat()))) {
                 if (headerItem != null) {
                     headerItem.setVisibility(View.GONE);
                 }
@@ -45184,7 +45225,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 alert.setCalcMandatoryInsets(isKeyboardVisible());
                 showDialog(alert);
             } else if (message.getInputStickerSet() != null) {
-                StickersAlert alert = new StickersAlert(getParentActivity(), ChatActivity.this, message.getInputStickerSet(), null, bottomChannelButtonsLayout.getVisibility() != View.VISIBLE && (currentChat == null || ChatObject.canSendStickers(currentChat)) ? chatActivityEnterView : null, themeDelegate, false);
+                StickersAlert alert = new StickersAlert(getParentActivity(), ChatActivity.this, message.getInputStickerSet(), null, bottomChannelButtonsLayout.getVisibility() != View.VISIBLE && (currentChat == null || ChatObject.canSendStickers(getSendingChat())) ? chatActivityEnterView : null, themeDelegate, false);
                 alert.setCalcMandatoryInsets(isKeyboardVisible());
                 showDialog(alert);
             } else if (message.type == MessageObject.TYPE_STICKER || message.type == MessageObject.TYPE_ANIMATED_STICKER) {
@@ -45269,7 +45310,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     return;
                 }
                 if (message.isLiveLocation()) {
-                    LocationActivity fragment = new LocationActivity(currentChat == null || ChatObject.canSendMessages(currentChat) || currentChat.megagroup ? 2 : LocationActivity.LOCATION_TYPE_LIVE_VIEW);
+                    LocationActivity fragment = new LocationActivity(currentChat == null || ChatObject.canSendMessages(getSendingChat()) || currentChat.megagroup ? 2 : LocationActivity.LOCATION_TYPE_LIVE_VIEW);
                     fragment.setDelegate(ChatActivity.this);
                     fragment.setMessageObject(message);
                     presentFragment(fragment);
@@ -48094,7 +48135,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
     @Override
     protected boolean hideKeyboardOnShow() {
-        if (threadMessageObject != null && threadMessageObject.getRepliesCount() == 0 && ChatObject.canSendMessages(currentChat)) {
+        if (threadMessageObject != null && threadMessageObject.getRepliesCount() == 0 && ChatObject.canSendMessages(getSendingChat())) {
             return false;
         }
         return super.hideKeyboardOnShow();

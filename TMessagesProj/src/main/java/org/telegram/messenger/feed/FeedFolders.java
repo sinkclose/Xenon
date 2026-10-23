@@ -78,6 +78,12 @@ public final class FeedFolders {
     public synchronized int getDefaultId() { return defaultId; }
     public synchronized int getActiveId() { return activeId; }
     public synchronized boolean isAllHidden() { return hideAll; }
+    public synchronized boolean isOnlyUnread(int id) {
+        return getFolder(id) != null && preferences.getBoolean("feed_only_unread_" + id, false);
+    }
+    public synchronized void setOnlyUnread(int id, boolean enabled) {
+        if (getFolder(id) != null) preferences.edit().putBoolean("feed_only_unread_" + id, enabled).apply();
+    }
     public synchronized boolean setActive(int id) {
         int next = visibleId(id);
         if (activeId == next) return false;
@@ -107,6 +113,7 @@ public final class FeedFolders {
         Folder folder = getFolder(id);
         if (folder == null) return;
         folders.remove(folder);
+        preferences.edit().remove("feed_only_unread_" + id).apply();
         if (folders.size() == 1) hideAll = false;
         defaultId = visibleId(defaultId);
         activeId = visibleId(activeId);

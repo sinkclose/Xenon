@@ -20,8 +20,10 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.res.Configuration;
 import android.net.ConnectivityManager;
+import android.net.LinkProperties;
 import android.net.Network;
 import android.net.NetworkCapabilities;
+import android.net.NetworkRequest;
 import android.net.NetworkInfo;
 import android.os.Build;
 import android.os.Handler;
@@ -71,7 +73,8 @@ public class ApplicationLoader extends Application {
 
     private static ConnectivityManager connectivityManager;
     private static volatile boolean applicationInited = false;
-    private static volatile  ConnectivityManager.NetworkCallback networkCallback;
+    private static volatile ConnectivityManager.NetworkCallback networkCallback;
+    private static volatile ConnectivityManager.NetworkCallback underlyingNetworkCallback;
     private static long lastNetworkCheckTypeTime;
     private static int lastKnownNetworkType = -1;
 
@@ -217,22 +220,12 @@ public class ApplicationLoader extends Application {
             BroadcastReceiver networkStateReceiver = new BroadcastReceiver() {
                 @Override
                 public void onReceive(Context context, Intent intent) {
-                    try {
-                        currentNetworkInfo = connectivityManager.getActiveNetworkInfo();
-                    } catch (Throwable ignore) {
-
-                    }
-
-                    boolean isSlow = isConnectionSlow();
-                    for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-                        if (!UserConfig.getInstance(a).isClientActivated()) continue;
-                        ConnectionsManager.getInstance(a).checkConnection();
-                        FileLoader.getInstance(a).onNetworkChanged(isSlow);
-                    }
+                    scheduleNetworkStateUpdate();
                 }
             };
             IntentFilter filter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
             ApplicationLoader.applicationContext.registerReceiver(networkStateReceiver, filter);
+            registerNetworkCallbacks();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -521,6 +514,87 @@ public class ApplicationLoader extends Application {
         return true;
     }
 
+    private static final Runnable updateNetworkState = () -> {
+        // Read the current default route after the handover, never the network from
+        // onLost(): a replacement may already be available (including a VPN).
+        lastKnownNetworkType = -1;
+        currentNetworkInfo = null;
+        ensureCurrentNetworkGet(true);
+        boolean isSlow = isConnectionSlow();
+        for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+            if (!UserConfig.getInstance(a).isClientActivated()) continue;
+            ConnectionsManager.getInstance(a).checkConnection();
+            FileLoader.getInstance(a).onNetworkChanged(isSlow);
+        }
+    };
+
+    private static void scheduleNetworkStateUpdate() {
+        // Both callbacks and legacy broadcasts can report the same handover.
+        // Serialize and coalesce them on the UI thread, outside the system callback.
+        AndroidUtilities.runOnUIThread(() -> {
+            AndroidUtilities.cancelRunOnUIThread(updateNetworkState);
+            AndroidUtilities.runOnUIThread(updateNetworkState, 200);
+        });
+    }
+
+    private static ConnectivityManager.NetworkCallback createNetworkCallback() {
+        return new ConnectivityManager.NetworkCallback() {
+            @Override
+            public void onAvailable(@NonNull Network network) {
+                scheduleNetworkStateUpdate();
+            }
+
+            @Override
+            public void onLost(@NonNull Network network) {
+                scheduleNetworkStateUpdate();
+            }
+
+            @Override
+            public void onCapabilitiesChanged(@NonNull Network network, @NonNull NetworkCapabilities capabilities) {
+                scheduleNetworkStateUpdate();
+            }
+
+            @Override
+            public void onLinkPropertiesChanged(@NonNull Network network, @NonNull LinkProperties properties) {
+                scheduleNetworkStateUpdate();
+            }
+
+            @Override
+            public void onBlockedStatusChanged(@NonNull Network network, boolean blocked) {
+                scheduleNetworkStateUpdate();
+            }
+        };
+    }
+
+    private static synchronized void registerNetworkCallbacks() {
+        if (connectivityManager == null) return;
+        if (networkCallback == null) {
+            try {
+                ConnectivityManager.NetworkCallback callback = createNetworkCallback();
+                connectivityManager.registerDefaultNetworkCallback(callback);
+                networkCallback = callback;
+            } catch (Exception e) {
+                FileLog.e(e);
+            }
+        }
+        if (underlyingNetworkCallback == null) {
+            try {
+                // A third-party VPN may keep the same default Network throughout
+                // Wi-Fi -> mobile. Observe physical networks too, without binding
+                // sockets to them or bypassing the VPN.
+                NetworkRequest request = new NetworkRequest.Builder()
+                        .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                        .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+                        .build();
+                ConnectivityManager.NetworkCallback callback = createNetworkCallback();
+                connectivityManager.registerNetworkCallback(request, callback);
+                underlyingNetworkCallback = callback;
+            } catch (Exception e) {
+                FileLog.e(e);
+            }
+        }
+    }
+
     private static long lastNetworkCheck = -1;
     private static void ensureCurrentNetworkGet() {
         final long now = System.currentTimeMillis();
@@ -535,22 +609,7 @@ public class ApplicationLoader extends Application {
                     connectivityManager = (ConnectivityManager) ApplicationLoader.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE);
                 }
                 currentNetworkInfo = connectivityManager.getActiveNetworkInfo();
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    if (networkCallback == null) {
-                        networkCallback = new ConnectivityManager.NetworkCallback() {
-                            @Override
-                            public void onAvailable(@NonNull Network network) {
-                                lastKnownNetworkType = -1;
-                            }
-
-                            @Override
-                            public void onCapabilitiesChanged(@NonNull Network network, @NonNull NetworkCapabilities networkCapabilities) {
-                                lastKnownNetworkType = -1;
-                            }
-                        };
-                        connectivityManager.registerDefaultNetworkCallback(networkCallback);
-                    }
-                }
+                if (networkCallback == null || underlyingNetworkCallback == null) registerNetworkCallbacks();
             } catch (Throwable ignore) {
 
             }

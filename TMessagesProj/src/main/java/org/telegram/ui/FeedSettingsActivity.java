@@ -39,6 +39,7 @@ public class FeedSettingsActivity extends BaseNekoSettingsActivity {
     private final boolean channelsOnly;
     private int foldersOrderSection;
     private static final int ADD_FOLDER = -10;
+    private static final int ONLY_UNREAD = -11;
 
     public FeedSettingsActivity() {
         folderId = FeedFolders.ALL;
@@ -136,6 +137,11 @@ public class FeedSettingsActivity extends BaseNekoSettingsActivity {
 
     @Override
     protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
+        if (channelsOnly && searchQuery.isEmpty()) {
+            items.add(UItem.asCheck(ONLY_UNREAD, LocaleController.getString(R.string.FeedShowOnlyUnread))
+                    .setChecked(FeedFolders.getInstance(currentAccount).isOnlyUnread(folderId)));
+            items.add(UItem.asShadow(null));
+        }
         if (!channelsOnly && searchQuery.isEmpty()) {
             FeedFolders folders = FeedFolders.getInstance(currentAccount);
             items.add(UItem.asHeader(LocaleController.getString(R.string.FeedFolders)));
@@ -179,6 +185,13 @@ public class FeedSettingsActivity extends BaseNekoSettingsActivity {
 
     @Override
     protected void onItemClick(UItem item, View view, int position, float x, float y) {
+        if (item.id == ONLY_UNREAD) {
+            FeedFolders folders = FeedFolders.getInstance(currentAccount);
+            folders.setOnlyUnread(folderId, !folders.isOnlyUnread(folderId));
+            FeedController.getInstance(currentAccount).onFoldersChanged(folderId == folders.getActiveId());
+            updateRows();
+            return;
+        }
         if (item.id == ADD_FOLDER) {
             showFolderSheet(null);
             return;
@@ -237,6 +250,16 @@ public class FeedSettingsActivity extends BaseNekoSettingsActivity {
             });
         }
         if (folder != null) {
+            TextCheckCell unread = new TextCheckCell(context, getResourceProvider());
+            unread.setTextAndCheck(LocaleController.getString(R.string.FeedShowOnlyUnread), folders.isOnlyUnread(folder.id), true);
+            unread.setBackground(Theme.getSelectorDrawable(false));
+            unread.setOnClickListener(v -> {
+                boolean enabled = !folders.isOnlyUnread(folder.id);
+                folders.setOnlyUnread(folder.id, enabled);
+                unread.setChecked(enabled);
+                FeedController.getInstance(currentAccount).onFoldersChanged(folder.id == folders.getActiveId());
+            });
+            content.addView(unread, LayoutHelper.createLinear(-1, -2));
             sheet.setOnDismissListener((Runnable) () -> {
                 String title = name.getText().toString().trim();
                 FeedFolders.Folder current = folders.getFolder(folder.id);

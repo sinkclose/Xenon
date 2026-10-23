@@ -646,6 +646,7 @@
     <string name="UpdateDeleteFile">Delete file</string>
 
     <string name="FeedFolders">Folders</string>
+    <string name="FeedShowOnlyUnread">Show only unread</string>
     <string name="FeedFolder">Folder</string>
     <string name="FeedManageChannels">Manage channels</string>
     <string name="FeedMakeMain">Make default</string>

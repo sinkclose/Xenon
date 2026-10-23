@@ -634,6 +634,7 @@
     <string name="UpdateDeleteFile">Удалить файл</string>
 
     <string name="FeedFolders">Папки</string>
+    <string name="FeedShowOnlyUnread">Показывать только непрочитанные</string>
     <string name="FeedFolder">Папка</string>
     <string name="FeedAddFolder">Добавить папку</string>
     <string name="FeedFolderName">Название папки</string>
