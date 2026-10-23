@@ -14,6 +14,18 @@ public final class OsuReplayCompletion {
     /** ScorePanel resizes its backing for 200ms, then waits 100ms before revealing content. */
     public static float panelContentAlpha(long elapsed){return OsuScoreAnimation.progress(elapsed,300,50);}
     public static float panelTopExpansion(long elapsed){return OsuScoreAnimation.outQuint(OsuScoreAnimation.progress(elapsed,300,200));}
+    /** Invisible ExpandedPanelMiddleContent starts updating its children on the 300ms reveal. */
+    public static long panelAnimationTime(long elapsed){return elapsed-300;}
+    /** CoverBackground: LoadDelay=300, inner FadeInFromZero(400), wrapper OutQuint(1000). */
+    public static float panelCoverAlpha(long elapsed,long readyAt){
+        if(readyAt<0)return 0;long delay=Math.max(300,readyAt);
+        return OsuScoreAnimation.progress(elapsed,delay,400)*OsuScoreAnimation.outQuint(OsuScoreAnimation.progress(elapsed,delay,1000));
+    }
+    /** UpdateableAvatar starts 200ms after the top layer; inner/outer OutQuint fades. */
+    public static float panelAvatarAlpha(long elapsed,long readyAt){
+        if(readyAt<0)return 0;long delay=Math.max(500,readyAt);
+        return OsuScoreAnimation.outQuint(OsuScoreAnimation.progress(elapsed,delay,300))*OsuScoreAnimation.outQuint(OsuScoreAnimation.progress(elapsed,delay,1000));
+    }
     public static float panelExitAlpha(long elapsed){return 1-OsuScoreAnimation.progress(elapsed,0,100);}
     public static float panelAlpha(long elapsed){return OsuScoreAnimation.progress(elapsed,0,50);}
     /** Blur follows UserDimContainer: 800ms OutQuint, including an interrupted rewind. */

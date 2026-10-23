@@ -38,11 +38,11 @@ final class OsuScorePanel extends View {
 
         private Runnable dismissAction;
         private OsuScorePanelSounds sounds;
-        void setAvatar(File image){avatar.setImage(image.getAbsolutePath(),"80_80",null,null,0);invalidate();}
+        void setAvatar(File image){avatarReadyAt=-1;avatar.setImage(image.getAbsolutePath(),"80_80",null,null,0);invalidate();}
         void setDismissAction(Runnable action){dismissAction=action;}
-        void setPlayback(boolean value){playback=value;}
+        void setPlayback(boolean value){playback=value;avatar.setCrossfadeAlpha((byte)(value?0:1));}
         void setSounds(OsuScorePanelSounds value){sounds=value;}
-        void restart(long delay){closed=false;paused=false;if(replay!=null&&rankFont!=null&&rankGlyph==null)bind(replay);start=SystemClock.uptimeMillis()+delay;metadataStart=-1;haptics=new OsuScoreHaptics();if(sounds!=null)sounds.reset();removeCallbacks(audioTick);post(audioTick);invalidate();}
+        void restart(long delay){closed=false;paused=false;if(replay!=null&&rankFont!=null&&rankGlyph==null)bind(replay);start=SystemClock.uptimeMillis()+delay;metadataStart=-1;coverReadyAt=avatarReadyAt=-1;haptics=new OsuScoreHaptics();if(sounds!=null)sounds.reset();removeCallbacks(audioTick);post(audioTick);invalidate();}
         void stop(){closed=true;removeCallbacks(audioTick);if(sounds!=null)sounds.stop();}
         void dispose(){stop();if(sounds!=null){sounds.release();sounds=null;}}
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -51,6 +51,7 @@ final class OsuScorePanel extends View {
         private final ImageReceiver cover = new ImageReceiver(this);
         private static final DispatchQueue COVER_QUEUE=new DispatchQueue("osu-profile-covers");
         private long coverAttemptedUserId;
+        private long coverReadyAt=-1,avatarReadyAt=-1;
         private static final DispatchQueue FONT_QUEUE=new DispatchQueue("osu-result-fonts");
         private OsuBitmapFont regular,light,semibold,rankFont;
         private final Bitmap[] modeIcons = new Bitmap[4];
@@ -64,6 +65,8 @@ final class OsuScorePanel extends View {
         private final int[] colors = {0xffff5c66, 0xffff9c64, 0xffffd35b, 0xffc5ff68, 0xff7bf5ee, 0xffff9ad7};
         OsuScorePanel(Context context, String filename, Theme.ResourcesProvider resources) {
             super(context); this.filename = filename;scoreResources=resources;
+            // The source cover has its own two-stage fade. Avoid adding ImageReceiver's fade.
+            cover.setCrossfadeAlpha((byte)0);
             setFocusable(true); setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
             setContentDescription(LocaleController.getString(R.string.Loading));
             FONT_QUEUE.postRunnable(()->{
@@ -76,7 +79,7 @@ final class OsuScorePanel extends View {
             });
         }
         void bind(OsuReplay r) {
-            if(replay==null||replay.userId!=r.userId)currentUsername=null;replay=r;
+            if(replay==null||replay.userId!=r.userId){currentUsername=null;coverReadyAt=-1;}replay=r;
             if(r.userId>0&&coverAttemptedUserId!=r.userId){
                 coverAttemptedUserId=r.userId;long userId=r.userId;
                 COVER_QUEUE.postRunnable(()->{
@@ -142,7 +145,8 @@ final class OsuScorePanel extends View {
                 float top=555-400*h-layerOffset,bottom=555+400*h-layerOffset;
                 paint.setShader(new LinearGradient(0,155,0,955,0xff555555,0xff333333,Shader.TileMode.CLAMP));rect.set(left,top,right,bottom);c.drawRoundRect(rect,28,28,paint);paint.setShader(null);
                 if(cover.hasBitmapImage()){
-                    int layer=c.saveLayer(0,0,500,955,null);Path clip=new Path();clip.addRoundRect(new RectF(left,top,right,bottom),28,28,Path.Direction.CW);c.clipPath(clip);
+                    if(coverReadyAt<0)coverReadyAt=elapsed;
+                    int layer=c.saveLayerAlpha(0,0,500,955,Math.round(OsuReplayCompletion.panelCoverAlpha(elapsed,coverReadyAt)*255));Path clip=new Path();clip.addRoundRect(new RectF(left,top,right,bottom),28,28,Path.Direction.CW);c.clipPath(clip);
                     c.save();c.scale(1/scale,1/scale);cover.setImageCoords(0,155*scale,500*scale,800*scale);cover.draw(c);c.restore();
                     paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_IN));paint.setColor(Color.WHITE);paint.setShader(new LinearGradient(0,155,0,955,0x80ffffff,0x00444444,Shader.TileMode.CLAMP));c.drawRect(0,155,500,955,paint);paint.setShader(null);paint.setXfermode(null);c.restoreToCount(layer);
                 }
@@ -153,12 +157,17 @@ final class OsuScorePanel extends View {
                 label(c, filename, 250, 380, 14, muted, false, 420); c.restore(); return;
             }
             int contentLayer=c.saveLayerAlpha(0,0,500,955,playback?Math.round(OsuReplayCompletion.panelContentAlpha(elapsed)*255):255);
+            long panelElapsed=elapsed;
+            if(playback)elapsed=OsuReplayCompletion.panelAnimationTime(panelElapsed);
             c.save();c.translate(0,layerOffset);
+            if(avatarReadyAt<0&&(avatar.hasBitmapImage()||!avatar.hasImageSet()))avatarReadyAt=panelElapsed;
+            int avatarLayer=c.saveLayerAlpha(180,0,320,135,playback?Math.round(OsuReplayCompletion.panelAvatarAlpha(panelElapsed,avatarReadyAt)*255):255);
             rounded(c,194.5f,16,111,111,28,0xff333333);
             label(c, playerName().isEmpty() ? "?" : playerName().substring(0, 1).toUpperCase(Locale.ROOT),250,90,52,OsuUiColors.readable(0xffff9ad7,0xff333333,foreground,4.5),true,96);
             // ImageReceiver uses physical coordinates, independently of the score canvas scale.
             c.save(); c.scale(1 / scale, 1 / scale);
             avatar.setRoundRadius(Math.round(28*scale));avatar.setImageCoords(194.5f*scale,16*scale,111*scale,111*scale); avatar.draw(c); c.restore();
+            c.restoreToCount(avatarLayer);
             label(c,playerName(),250,145,18,foreground,true,420);
             c.restore();c.save();c.translate(0,-layerOffset);
             label(c,replay.title,250,184,26,foreground,true,460);
@@ -252,7 +261,9 @@ final class OsuScorePanel extends View {
             label(c,LocaleController.getString(R.string.OsuReplayPlayedOn)+" "+dateFormat.format(new Date(replay.playedAt)),250,925,11,muted,false,430);
             c.restore();c.restoreToCount(contentLayer);
             c.restore();
-            if (start>=0 && (elapsed<6000 || metadataStart>=0&&metaElapsed<3000) && !closed&&!paused) postInvalidateOnAnimation();
+            boolean coverFading=playback&&coverReadyAt>=0&&panelElapsed<Math.max(300,coverReadyAt)+1000;
+            boolean avatarFading=playback&&avatarReadyAt>=0&&panelElapsed<Math.max(500,avatarReadyAt)+1000;
+            if (start>=0 && (elapsed<6000 || metadataStart>=0&&metaElapsed<3000 || coverFading || avatarFading) && !closed&&!paused) postInvalidateOnAnimation();
         }
         String ratio(String hit,String miss,long elapsed,int index) { int n=replay.count(hit), max=Math.max(replay.max(hit),n+replay.count(miss)); return OsuScoreAnimation.counter(n,elapsed,index)+"/"+max; }
         void stat(Canvas c,float x,float y,float width,String title,String value,int color,long elapsed,int index) {

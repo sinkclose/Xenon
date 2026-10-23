@@ -13,7 +13,10 @@ final class OsuResultsPcm {
         final int frames;
         private final float gain;
         Sequence(OsuReplay replay,Map<String,OsuWave> samples,float focusRate){
-            OsuResultsAudioTimeline timeline=new OsuResultsAudioTimeline(false);
+            this(replay,samples,focusRate,false);
+        }
+        Sequence(OsuReplay replay,Map<String,OsuWave> samples,float focusRate,boolean postReplay){
+            OsuResultsAudioTimeline timeline=new OsuResultsAudioTimeline(false,postReplay);
             int end=5*RATE;
             for(int time=0;time<=5000;time++)for(OsuResultsAudioTimeline.Event event:timeline.update(time,replay)){
                 OsuWave wave=samples.get(event.name);if(wave==null)continue;

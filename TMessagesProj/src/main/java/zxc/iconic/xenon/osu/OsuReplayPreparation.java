@@ -32,7 +32,7 @@ final class OsuReplayPreparation {
             if(data.session.assets.background!=null){data.background=decodeBackground(data.session.assets.background);data.resultsBackground=decodeBackground(data.session.assets.background,10);if(android.os.Build.VERSION.SDK_INT>=31)data.rawBackground=decodeBackground(data.session.assets.background,0);}
             data.skin=new OsuReplaySkin(NekoConfig.osuReplaySkin);
             data.sounds=onMain(()->new OsuReplaySounds(context,NekoConfig.osuReplaySkin,data.session.sounds,true));
-            data.resultsSounds=onMain(()->new OsuScorePanelSounds(context,data.session.replay));
+            data.resultsSounds=onMain(()->new OsuScorePanelSounds(context,data.session.replay,true,true));
             OsuReplayPcmMixer mixer=new OsuReplayPcmMixer(session.sounds,session.effects,Math.min(session.map.duration()+1000,session.health.failureTime),OsuReplaySamples.load(context,NekoConfig.osuReplaySkin));
             mixer.musicVolume=NekoConfig.osuMapMusicVolume/100f;
             data.music=onMain(()->new OsuReplayMusic(context,data.session.assets.audio,mixer));data.music.awaitReady();

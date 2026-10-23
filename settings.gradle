@@ -35,5 +35,8 @@ include ':TMessagesProj_App'
 include ':jlatexmath'
 //project(':jlatexmath').projectDir = file('TMessagesProj/lib/jlatexmath/jlatexmath')
 
+// Keep the replay seek fix in this repository: local edits inside a submodule
+// are not included when CI checks out the recorded upstream commit.
+apply from: file('gradle/media3-replay-index-seeking.gradle')
 includeMedia3.execute(file('TMessagesProj_Modules/media'))
 include ':baselineprofile'

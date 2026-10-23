@@ -27,8 +27,11 @@ final class OsuScorePanelSounds {
     private float applauseVolume;
     OsuScorePanelSounds(Context context,OsuReplay replay){this(context,replay,true);}
     OsuScorePanelSounds(Context context,OsuReplay replay,boolean applauseEnabled){
+        this(context,replay,applauseEnabled,false);
+    }
+    OsuScorePanelSounds(Context context,OsuReplay replay,boolean applauseEnabled,boolean postReplay){
         if(android.os.Looper.myLooper()!=android.os.Looper.getMainLooper())throw new IllegalStateException("Result sounds must be created on the UI looper");
-        timeline=new OsuResultsAudioTimeline(applauseEnabled);
+        timeline=new OsuResultsAudioTimeline(applauseEnabled,postReplay);
         decoder.postRunnable(()->{
             AudioTrack prepared=null;
             try{
@@ -39,7 +42,7 @@ final class OsuScorePanelSounds {
                     sampleCache=Collections.unmodifiableMap(loaded);
                 }
                 if(released)return;
-                OsuResultsPcm.Sequence preparedSequence=new OsuResultsPcm.Sequence(replay,sampleCache,.99f+(float)Math.random()*.2f);
+                OsuResultsPcm.Sequence preparedSequence=new OsuResultsPcm.Sequence(replay,sampleCache,.99f+(float)Math.random()*.2f,postReplay);
                 AudioAttributes.Builder attributes=new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_GAME).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC);
                 if(android.os.Build.VERSION.SDK_INT>=29)attributes.setAllowedCapturePolicy(AudioAttributes.ALLOW_CAPTURE_BY_ALL);
                 AudioTrack.Builder builder=new AudioTrack.Builder().setAudioAttributes(attributes.build())

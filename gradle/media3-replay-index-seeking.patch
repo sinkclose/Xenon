@@ -1,0 +1,41 @@
+diff --git a/libraries/extractor/src/main/java/androidx/media3/extractor/mp3/Mp3Extractor.java b/libraries/extractor/src/main/java/androidx/media3/extractor/mp3/Mp3Extractor.java
+index cdf9173d54..5a806b205d 100644
+--- a/libraries/extractor/src/main/java/androidx/media3/extractor/mp3/Mp3Extractor.java
++++ b/libraries/extractor/src/main/java/androidx/media3/extractor/mp3/Mp3Extractor.java
+@@ -80,7 +80,8 @@ public final class Mp3Extractor implements Extractor {
+         FLAG_ENABLE_CONSTANT_BITRATE_SEEKING_ALWAYS,
+         FLAG_ENABLE_INDEX_SEEKING,
+         FLAG_DISABLE_ID3_METADATA,
+-        FLAG_DISABLE_ARTWORK_METADATA
++        FLAG_DISABLE_ARTWORK_METADATA,
++        FLAG_FORCE_INDEX_SEEKING
+       })
+   public @interface Flags {}
+ 
+@@ -126,6 +127,16 @@ public final class Mp3Extractor implements Extractor {
+    */
+   public static final int FLAG_ENABLE_INDEX_SEEKING = 1 << 2;
+ 
++  /**
++   * Builds a sample-based seek index even if Xing/VBRI/MLLT metadata is seekable.
++   *
++   * <p>For timing-sensitive local playback such as rhythm-game replays, coarse metadata seek
++   * tables can assign a wrong timestamp to the audio after a seek. This flag ignores those tables
++   * for positioning while preserving their duration and gapless information. The first forward
++   * seek may scan the compressed frames up to the requested time; subsequent seeks reuse the index.
++   */
++  public static final int FLAG_FORCE_INDEX_SEEKING = 1 << 5;
++
+   /**
+    * Flag to disable parsing of ID3 metadata. Can be set to save memory if ID3 metadata is not
+    * required.
+@@ -526,7 +537,8 @@ public final class Mp3Extractor implements Extractor {
+       resultSeeker = getConstantBitrateSeeker(input);
+     }
+ 
+-    if ((flags & FLAG_ENABLE_INDEX_SEEKING) != 0 && !resultSeeker.isSeekable()) {
++    if ((flags & FLAG_FORCE_INDEX_SEEKING) != 0
++        || ((flags & FLAG_ENABLE_INDEX_SEEKING) != 0 && !resultSeeker.isSeekable())) {
+       return new IndexSeeker(
+           resultSeeker.getDurationUs(),
+           /* dataStartPosition= */ input.getPosition(),
