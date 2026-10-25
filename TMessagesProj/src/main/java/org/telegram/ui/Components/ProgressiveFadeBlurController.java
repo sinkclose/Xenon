@@ -29,6 +29,34 @@ public class ProgressiveFadeBlurController {
     private final ChatActivityFadeView fadeView;
     private final CaptureLayout captureLayout;
     private View captureView;
+    private java.util.function.Consumer<Canvas> backgroundCapture;
+
+    public void setBackgroundCapture(java.util.function.Consumer<Canvas> capture) {
+        backgroundCapture = capture;
+    }
+
+    public void setAlpha(float alpha) {
+        fadeView.setAlpha(alpha);
+    }
+
+    public void setOpaqueFade(boolean opaque) {
+        fadeView.setOpaqueFade(opaque);
+    }
+
+    public void setFadeHeightTop(int height) {
+        fadeView.setFadeHeightTop(height, false);
+    }
+
+    private float strengthProgress = 1f;
+
+    /** Instance-local strength, leaving the configured target unchanged. */
+    public void setStrengthProgress(float progress) {
+        progress = Math.max(0f, Math.min(1f, progress));
+        if (strengthProgress != progress) {
+            strengthProgress = progress;
+            capturePending = true;
+        }
+    }
     private final List<View> additionalCaptureViews = new ArrayList<>();
     private boolean dimEnabled = true;
     private boolean flipped;
@@ -293,11 +321,12 @@ public class ProgressiveFadeBlurController {
         source.setPixelation(pixelation);
         final float topFraction = fadeZoneTop > AndroidUtilities.dp(48) ? Math.min(1f, (fadeZoneTop - AndroidUtilities.dp(48)) / (float) fh) : 1f;
         final float bottomFraction = fadeZoneBottom > 0 ? Math.min(1f, fadeZoneBottom / (float) fh) : 0f;
-        source.setProgressiveBlur(AndroidUtilities.dpf2(NekoConfig.progressiveFadeBlurMaxRadius) / pixelation, Math.max(1, Math.round(fw / (float) pixelation)), Math.max(1, Math.round(fh / (float) pixelation)), topFraction, bottomFraction, NekoConfig.progressiveFadeBlurSamples);
+        source.setProgressiveBlur(strengthProgress * AndroidUtilities.dpf2(NekoConfig.progressiveFadeBlurMaxRadius) / pixelation, Math.max(1, Math.round(fw / (float) pixelation)), Math.max(1, Math.round(fh / (float) pixelation)), topFraction, bottomFraction, NekoConfig.progressiveFadeBlurSamples);
         try {
             Canvas c = source.beginRecording(fw, fh);
             try {
                 c.drawColor(color);
+                if (backgroundCapture != null) backgroundCapture.accept(c);
                 drawCapturedView(c, captureView);
                 for (int i = 0; i < additionalCaptureViews.size(); i++) {
                     drawCapturedView(c, additionalCaptureViews.get(i));
@@ -389,6 +418,7 @@ public class ProgressiveFadeBlurController {
     }
 
     private void drawCapturedView(Canvas c, View view) {
+        if (view.getVisibility() != View.VISIBLE || view.getAlpha() <= 0f) return;
         if (c.isHardwareAccelerated() && view instanceof RecyclerListView) {
             captureLayout.capture(c, view);
             return;
@@ -404,7 +434,13 @@ public class ProgressiveFadeBlurController {
         if (sx != 1f || sy != 1f) {
             c.scale(sx, sy, view.getPivotX(), view.getPivotY());
         }
-        view.draw(c);
+        if (view.getAlpha() < 1f) {
+            int layer = c.saveLayerAlpha(0, 0, view.getWidth(), view.getHeight(), Math.round(255 * view.getAlpha()));
+            view.draw(c);
+            c.restoreToCount(layer);
+        } else {
+            view.draw(c);
+        }
         c.restore();
     }
 }

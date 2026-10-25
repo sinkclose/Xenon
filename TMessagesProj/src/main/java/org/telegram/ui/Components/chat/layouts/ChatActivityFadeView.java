@@ -207,8 +207,12 @@ public class ChatActivityFadeView extends View implements Theme.Colorable {
 
     @Override
     public void updateColors() {
+        updateColors(null);
+    }
+
+    public void updateColors(Theme.ResourcesProvider resourcesProvider) {
         if (sourceColor != null && colorKey != -1) {
-            sourceColor.setColor(Theme.getColor(colorKey));
+            sourceColor.setColor(Theme.getColor(colorKey, resourcesProvider));
             invalidate();
         }
     }

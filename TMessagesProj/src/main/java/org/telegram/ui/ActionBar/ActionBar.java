@@ -217,6 +217,10 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     private boolean plainBackCircle;
     private final Paint plainBackCirclePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
+    public boolean hasPlainButtonCircles() {
+        return plainBackCircle && !nonIsland;
+    }
+
     public void setPlainBackCircle(boolean enabled) {
         if (plainBackCircle == enabled) {
             return;
@@ -1744,20 +1748,19 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
         if (menu != null && menu.getVisibility() != GONE) {
             int menuLeft = menu.searchFieldVisible() ? dp(menuOccupyBack ? 0 : AndroidUtilities.isTablet() ? 74 : 66) : (getMeasuredWidth()) - menu.getMeasuredWidth();
-            if (plainBackCircle && !nonIsland && !menu.searchFieldVisible()) {
-                // Mirror the back circle's 35dp center inset for the rightmost icon.
-                for (int i = menu.getChildCount() - 1; i >= 0; i--) {
+            menu.layout(menuLeft, additionalTop, menuLeft + menu.getMeasuredWidth(), additionalTop + menu.getMeasuredHeight());
+            if (hasPlainButtonCircles() && !menu.searchFieldVisible()) {
+                float rightmostCenter = Float.NEGATIVE_INFINITY;
+                for (int i = 0; i < menu.getChildCount(); i++) {
                     View item = menu.getChildAt(i);
-                    if (item.getVisibility() != GONE) {
-                        MarginLayoutParams itemParams = (MarginLayoutParams) item.getLayoutParams();
-                        menuLeft -= Math.round(dp(35) - (menu.getPaddingRight()
-                                + itemParams.rightMargin + item.getMeasuredWidth() / 2f)
-                                + menu.getTranslationX());
-                        break;
+                    if (item instanceof ActionBarMenuItem && item.getVisibility() == VISIBLE && item.getAlpha() > 0f) {
+                        rightmostCenter = Math.max(rightmostCenter, item.getX() + item.getWidth() / 2f);
                     }
                 }
+                if (rightmostCenter != Float.NEGATIVE_INFINITY) {
+                    menu.offsetLeftAndRight(Math.round(getWidth() - dp(35) - menu.getX() - rightmostCenter));
+                }
             }
-            menu.layout(menuLeft, additionalTop, menuLeft + menu.getMeasuredWidth(), additionalTop + menu.getMeasuredHeight());
         }
 
         for (int i = 0; i < 2; i++) {
@@ -1826,6 +1829,12 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
                     break;
                 case Gravity.RIGHT:
                     childLeft = getMeasuredWidth() - width - lp.rightMargin;
+                    if (hasPlainButtonCircles() && !isSearchFieldVisible
+                            && child instanceof android.widget.ImageView) {
+                        // Media's search/options icons overlay a menu placeholder.
+                        // Align them to that circle, not the old 24dp edge inset.
+                        childLeft = getMeasuredWidth() - dp(35) - width / 2;
+                    }
                     break;
                 case Gravity.LEFT:
                 default:

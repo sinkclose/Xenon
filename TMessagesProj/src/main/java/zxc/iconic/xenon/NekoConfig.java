@@ -237,6 +237,8 @@ public class NekoConfig {
     public static int blurredFadePixelation = 1;
     public static boolean blurredFadeDimming = false;
     public static int blurredFadeDimStrength = 50;
+    public static boolean redesignedProfile = false;
+    public static boolean adaptProfileColorsToAvatar = false;
     public static boolean progressiveFadeBlur = false;
     public static int progressiveFadeBlurMaxRadius = 20;
     public static int progressiveFadeBlurSamples = 11;
@@ -545,6 +547,8 @@ public class NekoConfig {
             blurredFadePixelation = preferences.getInt("blurredFadePixelation", 1);
             blurredFadeDimming = preferences.getBoolean("blurredFadeDimming", false);
             blurredFadeDimStrength = preferences.getInt("blurredFadeDimStrength", 50);
+            redesignedProfile = preferences.getBoolean("redesignedProfile", false);
+            adaptProfileColorsToAvatar = preferences.getBoolean("adaptProfileColorsToAvatar", false);
             progressiveFadeBlur = preferences.getBoolean("progressiveFadeBlur", false);
             progressiveFadeBlurMaxRadius = preferences.getInt("progressiveFadeBlurMaxRadius", 20);
             progressiveFadeBlurSamples = preferences.getInt("progressiveFadeBlurSamples", 11);
@@ -802,6 +806,18 @@ public class NekoConfig {
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("bottomFilterTabs", bottomFilterTabs);
         editor.apply();
+    }
+
+    public static void toggleRedesignedProfile() {
+        redesignedProfile = !redesignedProfile;
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
+                .edit().putBoolean("redesignedProfile", redesignedProfile).apply();
+    }
+
+    public static void toggleAdaptProfileColorsToAvatar() {
+        adaptProfileColorsToAvatar = !adaptProfileColorsToAvatar;
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
+                .edit().putBoolean("adaptProfileColorsToAvatar", adaptProfileColorsToAvatar).apply();
     }
 
     public static void toggleDisableGooeyAvatarAnimation() {

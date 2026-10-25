@@ -407,6 +407,12 @@ public class ProfileActionsView extends View {
 
     private int lastColorFilterColor;
     private ColorFilter lastColorFilter;
+    private java.util.function.Supplier<Integer> iconColorProvider;
+
+    public void setIconColorProvider(java.util.function.Supplier<Integer> provider) {
+        iconColorProvider = provider;
+        invalidate();
+    }
 
     private void drawAction(Canvas canvas, Action action, float fraction, float alpha) {
         if (action == null || action.isDeleted) {
@@ -419,10 +425,13 @@ public class ProfileActionsView extends View {
             useFilledWhiteIcon = 0f;
         }
 
-        final int textColor = ColorUtils.blendARGB(Color.BLACK, Color.WHITE, useFilledWhiteIcon);
-        if (lastColorFilter == null || lastColorFilterColor != textColor) {
-            lastColorFilterColor = textColor;
-            lastColorFilter = new PorterDuffColorFilter(textColor, PorterDuff.Mode.SRC_IN);
+        Integer avatarIconColor = iconColorProvider == null ? null : iconColorProvider.get();
+        final int textColor = avatarIconColor == null
+                ? ColorUtils.blendARGB(Color.BLACK, Color.WHITE, useFilledWhiteIcon) : avatarIconColor;
+        int iconColor = textColor;
+        if (lastColorFilter == null || lastColorFilterColor != iconColor) {
+            lastColorFilterColor = iconColor;
+            lastColorFilter = new PorterDuffColorFilter(iconColor, PorterDuff.Mode.SRC_IN);
         }
 
         canvas.save();

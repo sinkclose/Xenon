@@ -456,4 +456,6 @@
     <string name="XrayProxySubscriptionSynced">Синхронизировано: профилей: %d.</string>
     <string name="XrayProxySubscriptionDeleteConfirm">Удалить эту подписку и все её профили?</string>
     <string name="XrayVpnPermissionDenied">Для включения режима VPN требуется разрешение системы.</string>
+    <string name="RedesignedProfile">Redesigned profile</string>
+    <string name="AdaptProfileColorsToAvatar">Адаптировать цвета под аватарку</string>
 </resources>

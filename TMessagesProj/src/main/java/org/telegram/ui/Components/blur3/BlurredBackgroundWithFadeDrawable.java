@@ -80,7 +80,11 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable {
     public void setOpaqueFade(boolean opaqueFade) {
         if (this.opaqueFade != opaqueFade) {
             this.opaqueFade = opaqueFade;
-            setFadeHeight(fadeHeight, opacity);
+            // The bounds can stay identical while the mask's shape changes.
+            int height = fadeHeight;
+            fadeHeight = Integer.MIN_VALUE;
+            dimGradientShader = null;
+            setFadeHeight(height, opacity);
         }
     }
 

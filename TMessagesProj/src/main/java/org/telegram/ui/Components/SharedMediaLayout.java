@@ -1770,7 +1770,8 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                         return;
                     }
                     View parent = (View) searchItem.getParent();
-                    searchItem.setTranslationX(parent.getMeasuredWidth() - searchItem.getRight());
+                    searchItem.setTranslationX(actionBar.hasPlainButtonCircles() ? 0
+                            : parent.getMeasuredWidth() - searchItem.getRight());
                 }
             });
             if (dialog_id == profileActivity.getUserConfig().getClientUserId() && profileActivity instanceof MediaActivity && canShowSearchItem()) {
@@ -1884,10 +1885,11 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                 @Override
                 public void onLayout(int l, int t, int r, int b) {
                     View parent = (View) searchItem.getParent();
-                    searchItem.setTranslationX(parent.getMeasuredWidth() - searchItem.getRight());
+                    searchItem.setTranslationX(actionBar.hasPlainButtonCircles() ? 0
+                            : parent.getMeasuredWidth() - searchItem.getRight());
                 }
             });
-            searchItem.setTranslationY(dp(10));
+            searchItem.setTranslationY(actionBar.hasPlainButtonCircles() ? 0 : dp(10));
             searchItem.setSearchFieldHint(getString(searchTagsList != null && searchTagsList.hasFilters() && getSelectedTab() == TAB_SAVED_DIALOGS ? R.string.SavedTagSearchHint : R.string.Search));
             searchItem.setContentDescription(getString("Search", R.string.Search));
             searchItem.setVisibility(isStoriesView() ? View.GONE : View.INVISIBLE);
@@ -1895,7 +1897,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
 
         photoVideoOptionsItem = new ImageView(context);
         photoVideoOptionsItem.setContentDescription(getString("AccDescrMoreOptions", R.string.AccDescrMoreOptions));
-        photoVideoOptionsItem.setTranslationY(dp(10));
+        photoVideoOptionsItem.setTranslationY(actionBar.hasPlainButtonCircles() ? 0 : dp(10));
         photoVideoOptionsItem.setVisibility(View.INVISIBLE);
 
         if (!isArchivedOnlyStoriesView() && !isSearchingStories()) {
@@ -2897,7 +2899,13 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
             mediaPages[a].itemAnimator.setDurations(280);
             mediaPages[a].itemAnimator.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
             mediaPages[a].itemAnimator.setSupportsChangeAnimations(false);
-            mediaPages[a].listView = new SharedMediaListView(context) {
+            mediaPages[a].listView = new SharedMediaListView(context, resourcesProvider) {
+
+                @Override
+                public float getSectionBackgroundAlpha() {
+                    return viewType == VIEW_TYPE_PROFILE_ACTIVITY && profileActivity instanceof ProfileActivity
+                            && ((ProfileActivity) profileActivity).isRedesignedProfileEnabled() ? 0.5f : 1f;
+                }
 
                 @Override
                 public RecyclerListView.FastScrollAdapter getMovingAdapter() {
@@ -3146,7 +3154,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
             mediaPages[a].listView.setSectionsType(RecyclerListView.SECTIONS_TYPE_DATE);
             mediaPages[a].listView.setLayoutManager(layoutManager);
             mediaPages[a].addView(mediaPages[a].listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
-            mediaPages[a].animationSupportingListView = new InternalListView(context);
+            mediaPages[a].animationSupportingListView = new InternalListView(context, resourcesProvider);
             mediaPages[a].animationSupportingListView.setLayoutManager(mediaPages[a].animationSupportingLayoutManager = new GridLayoutManager(context, 3) {
 
                 @Override
@@ -4981,6 +4989,12 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
 
     public ActionBarMenuItem getSearchItem() {
         return searchItem;
+    }
+
+    public void updateProfilePaletteIcons() {
+        int color = getThemedColor(Theme.key_actionBarDefaultIcon);
+        if (photoVideoOptionsItem != null) photoVideoOptionsItem.setColorFilter(new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN));
+        if (optionsSearchImageView != null) optionsSearchImageView.setColorFilter(new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN));
     }
 
     public RLottieImageView getSearchOptionsItem() {
@@ -11868,6 +11882,10 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
             super(context);
         }
 
+        public InternalListView(Context context, Theme.ResourcesProvider resourcesProvider) {
+            super(context, resourcesProvider);
+        }
+
         @Override
         public void updateClip(int[] clip) {
             clip[0] = getPaddingTop() - dp(2) - hintPaddingTop;
@@ -12018,6 +12036,10 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
 
         public SharedMediaListView(Context context) {
             super(context);
+        }
+
+        public SharedMediaListView(Context context, Theme.ResourcesProvider resourcesProvider) {
+            super(context, resourcesProvider);
         }
 
         final HashSet<SharedPhotoVideoCell2> excludeDrawViews = new HashSet<>();

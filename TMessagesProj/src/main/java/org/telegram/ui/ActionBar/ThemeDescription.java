@@ -203,6 +203,29 @@ public class ThemeDescription {
         return oldDelegate;
     }
 
+    /** Refresh view-owned text and icon colors without changing shared theme resources. */
+    public void applyLocalViewColor(int color) {
+        if (viewToInvalidate == null || paintToUpdate != null || drawablesToUpdate != null) return;
+        boolean localColor = (changeFlags & (FLAG_IMAGECOLOR | FLAG_TEXTCOLOR | FLAG_LINKCOLOR)) != 0;
+        if (!localColor && listClassesFieldName != null) {
+            for (String field : listClassesFieldName) {
+                if (field != null && (field.endsWith("TextView") || field.equals("textView")
+                        || field.endsWith("ImageView") || field.equals("imageView")
+                        || field.equals("optionsButton") || field.equals("playButton") || field.equals("closeButton"))) {
+                    localColor = true;
+                }
+            }
+        }
+        if (!localColor) return;
+        ThemeDescriptionDelegate previous = delegate;
+        delegate = null;
+        try {
+            setColor(color, false, false);
+        } finally {
+            delegate = previous;
+        }
+    }
+
     public void setColor(int color, boolean useDefault) {
         setColor(color, useDefault, true);
     }

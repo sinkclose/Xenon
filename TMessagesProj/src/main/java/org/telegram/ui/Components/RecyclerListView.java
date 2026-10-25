@@ -3669,8 +3669,13 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
             canvas.drawPath(sectionBackgroundPath, sectionBackgroundPaint);
         }
     }
+    /** Opacity of section surfaces; row contents and selectors retain their own alpha. */
+    public float getSectionBackgroundAlpha() {
+        return 1f;
+    }
+
     public void drawBackgroundRect(Canvas canvas, RectF rect, float topRadius, float bottomRadius, float alpha) {
-        drawBackgroundRect(canvas, rect, topRadius, bottomRadius, alpha, resourcesProvider);
+        drawBackgroundRect(canvas, rect, topRadius, bottomRadius, alpha * getSectionBackgroundAlpha(), resourcesProvider);
     }
 
     private final Path clipPath = new Path();
@@ -3772,7 +3777,8 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
         if (prev && next && !forceRound) {
             prev = top(child) >= rect.top;
             next = bottom(child) <= rect.bottom;
-            if (prev && next) return Theme.createRoundRectDrawable(0, Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider));
+            if (prev && next) return Theme.createRoundRectDrawable(0,
+                    multAlpha(Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider), getSectionBackgroundAlpha()));
         }
         final Path clipPath = new Path();
         if (!prev && !next || forceRound) {
@@ -3788,19 +3794,21 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
 
         return new Drawable() {
             private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            private int backgroundAlpha = 255;
             @Override
             public void draw(@NonNull Canvas canvas) {
                 canvas.save();
                 canvas.translate(-child.getX(), -child.getY());
                 canvas.clipPath(clipPath);
-                paint.setColor(ColorUtils.setAlphaComponent(Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider), paint.getAlpha()));
+                paint.setColor(ColorUtils.setAlphaComponent(Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider),
+                        Math.round(backgroundAlpha * getSectionBackgroundAlpha())));
                 canvas.drawRect(rect, paint);
                 canvas.restore();
             }
 
             @Override
             public void setAlpha(int alpha) {
-                paint.setAlpha(alpha);
+                backgroundAlpha = alpha;
             }
             @Override
             public void setColorFilter(@Nullable ColorFilter colorFilter) {}

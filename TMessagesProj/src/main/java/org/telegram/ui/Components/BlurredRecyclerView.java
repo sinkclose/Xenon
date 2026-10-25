@@ -21,6 +21,10 @@ public class BlurredRecyclerView extends RecyclerListView {
         super(context);
     }
 
+    public BlurredRecyclerView(Context context, org.telegram.ui.ActionBar.Theme.ResourcesProvider resourcesProvider) {
+        super(context, resourcesProvider);
+    }
+
     @Override
     protected void onMeasure(int widthSpec, int heightSpec) {
         globalIgnoreLayout = true;

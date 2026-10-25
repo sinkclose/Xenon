@@ -700,17 +700,37 @@ public class ActionBarMenu extends LinearLayout implements LiquidTouchDispatcher
         this.glassMode = glassMode;
     }
 
+    private final java.util.IdentityHashMap<View, int[]> plainCircleMargins = new java.util.IdentityHashMap<>();
+
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        if (glassMode) {
+        boolean circles = parentActionBar != null && parentActionBar.hasPlainButtonCircles() && !searchFieldVisible();
+        if (glassMode || circles || !plainCircleMargins.isEmpty()) {
             for (int a = 0, N = getChildCount(); a < N; a++) {
                 final View view = getChildAt(a);
                 if (view instanceof ActionBarMenuItem) {
                     final ViewGroup.LayoutParams lp = view.getLayoutParams();
                     if (lp instanceof MarginLayoutParams) {
                         MarginLayoutParams mlp = (MarginLayoutParams) lp;
-                        mlp.leftMargin = -dp(5);
-                        mlp.rightMargin = -dp(5);
+                        if (circles && mlp.width > 0 && ((ActionBarMenuItem) view).getIconView() != null) {
+                            if (!plainCircleMargins.containsKey(view)) {
+                                plainCircleMargins.put(view, new int[]{mlp.leftMargin, mlp.rightMargin});
+                            }
+                            // 46dp circles: 12dp gaps, matching their distance from the screen edge.
+                            int space = dp(58) - mlp.width;
+                            mlp.leftMargin = space / 2;
+                            mlp.rightMargin = space - mlp.leftMargin;
+                        } else {
+                            int[] original = plainCircleMargins.remove(view);
+                            if (original != null) {
+                                mlp.leftMargin = original[0];
+                                mlp.rightMargin = original[1];
+                            }
+                            if (glassMode) {
+                                mlp.leftMargin = -dp(5);
+                                mlp.rightMargin = -dp(5);
+                            }
+                        }
                     }
                 }
             }

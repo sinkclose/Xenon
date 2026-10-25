@@ -91,6 +91,7 @@ public class AboutLinkCell extends FrameLayout {
 
     private BaseFragment parentFragment;
     private Theme.ResourcesProvider resourcesProvider;
+    private final android.text.TextPaint aboutTextPaint;
 
     private FrameLayout container;
     private Drawable rippleBackground;
@@ -113,6 +114,8 @@ public class AboutLinkCell extends FrameLayout {
 
         this.resourcesProvider = resourcesProvider;
         parentFragment = fragment;
+        aboutTextPaint = new android.text.TextPaint(Theme.profile_aboutTextPaint);
+        updateColors();
 
         container = new FrameLayout(context);
         container.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -196,7 +199,9 @@ public class AboutLinkCell extends FrameLayout {
     }
 
     public void updateColors() {
-        Theme.profile_aboutTextPaint.linkColor = processColor(Theme.getColor(Theme.key_chat_messageLinkIn, resourcesProvider));
+        aboutTextPaint.set(Theme.profile_aboutTextPaint);
+        aboutTextPaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
+        aboutTextPaint.linkColor = processColor(Theme.getColor(Theme.key_chat_messageLinkIn, resourcesProvider));
     }
 
     @Override
@@ -253,10 +258,58 @@ public class AboutLinkCell extends FrameLayout {
         return false;
     }
 
+    private boolean translucentBackground;
+    private final Paint textFadePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+    public void setTranslucentBackground(boolean enabled) {
+        if (translucentBackground != enabled) {
+            translucentBackground = enabled;
+            invalidate();
+        }
+    }
+
+    private void drawTranslucentDescription(Canvas canvas) {
+        // Fade the glyphs themselves. Painting the theme's opaque background
+        // over a translucent card produces dark rectangles around "more".
+        int textLayer = canvas.saveLayer(0, 0, getWidth(), getHeight(), null);
+        drawText(canvas);
+        textFadePaint.setXfermode(new android.graphics.PorterDuffXfermode(PorterDuff.Mode.DST_OUT));
+        float moreAlpha = showMoreTextBackgroundView.getAlpha();
+        if (moreAlpha > 0 && showMoreTextView.getVisibility() == VISIBLE) {
+            float left = Math.max(dp(18), showMoreTextBackgroundView.getLeft() - dp(16));
+            float right = Math.max(left + 1, showMoreTextBackgroundView.getLeft() + showMoreTextBackgroundView.getPaddingLeft());
+            textFadePaint.setShader(new android.graphics.LinearGradient(left, 0, right, 0,
+                    0x00ffffff, 0xffffffff, android.graphics.Shader.TileMode.CLAMP));
+            textFadePaint.setAlpha(Math.round(255 * moreAlpha));
+            canvas.drawRect(left, showMoreTextBackgroundView.getTop(), getWidth(),
+                    showMoreTextBackgroundView.getBottom(), textFadePaint);
+        }
+        float bottomAlpha = bottomShadow.getAlpha();
+        if (bottomAlpha > 0 && bottomShadow.getHeight() > 0) {
+            textFadePaint.setShader(new android.graphics.LinearGradient(0, bottomShadow.getTop(),
+                    0, bottomShadow.getBottom(), 0x00ffffff, 0xffffffff, android.graphics.Shader.TileMode.CLAMP));
+            textFadePaint.setAlpha(Math.round(255 * bottomAlpha));
+            canvas.drawRect(0, bottomShadow.getTop(), getWidth(), bottomShadow.getBottom(), textFadePaint);
+        }
+        canvas.restoreToCount(textLayer);
+        if (moreAlpha > 0 && showMoreTextView.getVisibility() == VISIBLE) {
+            int labelLayer = canvas.saveLayerAlpha(0, 0, getWidth(), getHeight(), Math.round(255 * moreAlpha));
+            canvas.translate(showMoreTextBackgroundView.getLeft() + showMoreTextView.getLeft(),
+                    showMoreTextBackgroundView.getTop() + showMoreTextView.getTop());
+            showMoreTextView.draw(canvas);
+            canvas.restoreToCount(labelLayer);
+        }
+        container.draw(canvas);
+    }
+
     private Paint backgroundPaint = new Paint();
     @Override
     public void draw(Canvas canvas) {
         super.draw(canvas);
+        if (translucentBackground) {
+            drawTranslucentDescription(canvas);
+            return;
+        }
 
         View parent = (View) getParent();
         float alpha = parent == null ? 1f : (float) Math.pow(parent.getAlpha(), 2f);
@@ -295,7 +348,7 @@ public class AboutLinkCell extends FrameLayout {
         canvas.translate(0, textY = dp(8));
 
         try {
-            Theme.profile_aboutTextPaint.linkColor = processColor(Theme.getColor(Theme.key_chat_messageLinkIn, resourcesProvider));
+            updateColors();
             if (firstThreeLinesLayout == null || !shouldExpand) {
                 if (textLayout != null) {
                     textLayout.draw(canvas);
@@ -369,7 +422,7 @@ public class AboutLinkCell extends FrameLayout {
         stringBuilder = new SpannableStringBuilder(oldText);
         accessibilityText = null;
         MessageObject.addLinks(false, stringBuilder, false, false, !parseLinks);
-        Emoji.replaceEmoji(stringBuilder, Theme.profile_aboutTextPaint.getFontMetricsInt(), false);
+        Emoji.replaceEmoji(stringBuilder, aboutTextPaint.getFontMetricsInt(), false);
         if (lastMaxWidth <= 0) {
             lastMaxWidth = AndroidUtilities.displaySize.x - dp(18 + 18);
         }
@@ -689,13 +742,13 @@ public class AboutLinkCell extends FrameLayout {
 
     private StaticLayout makeTextLayout(CharSequence string, int width) {
         if (Build.VERSION.SDK_INT >= 24) {
-            return StaticLayout.Builder.obtain(string, 0, string.length(), Theme.profile_aboutTextPaint, Math.max(1, width))
+            return StaticLayout.Builder.obtain(string, 0, string.length(), aboutTextPaint, Math.max(1, width))
                     .setBreakStrategy(StaticLayout.BREAK_STRATEGY_SIMPLE)
                     .setHyphenationFrequency(StaticLayout.HYPHENATION_FREQUENCY_NONE)
                     .setAlignment(LocaleController.isRTL ? StaticLayoutEx.ALIGN_RIGHT() : StaticLayoutEx.ALIGN_LEFT())
                     .build();
         } else {
-            return new StaticLayout(string, Theme.profile_aboutTextPaint, width, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
+            return new StaticLayout(string, aboutTextPaint, width, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
         }
     }
 

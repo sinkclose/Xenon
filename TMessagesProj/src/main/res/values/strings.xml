@@ -11472,4 +11472,6 @@
     <string name="ShowAdvancedSettings">Show advanced settings</string>
     <string name="HideAdvancedSettings">Hide advanced settings</string>
     <string name="ProgressiveIntensity">Progressive intensity</string>
+    <string name="RedesignedProfile">Redesigned profile</string>
+    <string name="AdaptProfileColorsToAvatar">Adapt profile colors to avatar</string>
 </resources>

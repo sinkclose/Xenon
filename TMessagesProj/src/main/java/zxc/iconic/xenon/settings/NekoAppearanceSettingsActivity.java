@@ -110,6 +110,8 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
     private final int tabsPositionRow = rowId++;
 
     private final int blurSettingsRow = rowId++;
+    private final int redesignedProfileRow = rowId++;
+    private final int adaptProfileColorsToAvatarRow = rowId++;
     private final int disableGooeyAvatarAnimationRow = rowId++;
     private final int gooeyAvatarOffsetRow = rowId++;
     private final int keepUnreadChatsOnTopRow = rowId++;
@@ -173,6 +175,8 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.ChangeChannelNameColor2)));
         items.add(EmojiSetCellFactory.of(emojiSetsRow, LocaleController.getString(R.string.EmojiSets)).slug("emojiSets"));
+        items.add(UItem.asCheck(redesignedProfileRow, LocaleController.getString(R.string.RedesignedProfile)).setChecked(NekoConfig.redesignedProfile).slug("redesignedProfile"));
+        items.add(UItem.asCheck(adaptProfileColorsToAvatarRow, LocaleController.getString(R.string.AdaptProfileColorsToAvatar)).setChecked(NekoConfig.adaptProfileColorsToAvatar).slug("adaptProfileColorsToAvatar"));
         items.add(UItem.asCheck(disableGooeyAvatarAnimationRow, LocaleController.getString(R.string.DisableGooeyAvatarAnimation)).setChecked(NekoConfig.disableGooeyAvatarAnimation).slug("disableGooeyAvatarAnimation"));
         SeekbarConfig offsetConfig = new SeekbarConfig(
                 LocaleController.getString(R.string.GooeyAvatarOffset),
@@ -420,6 +424,14 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
             }, resourcesProvider);
         } else if (id == blurSettingsRow) {
             presentFragment(new NekoBlurSettingsActivity());
+        } else if (id == redesignedProfileRow) {
+            NekoConfig.toggleRedesignedProfile();
+            listView.adapter.update(true);
+            parentLayout.rebuildAllFragmentViews(false, false);
+        } else if (id == adaptProfileColorsToAvatarRow) {
+            NekoConfig.toggleAdaptProfileColorsToAvatar();
+            listView.adapter.update(true);
+            parentLayout.rebuildAllFragmentViews(false, false);
         } else if (id == disableGooeyAvatarAnimationRow) {
             NekoConfig.toggleDisableGooeyAvatarAnimation();
             if (view instanceof TextCheckCell) {

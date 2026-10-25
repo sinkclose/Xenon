@@ -255,6 +255,7 @@ import org.telegram.ui.Components.MediaActivity;
 import org.telegram.ui.Components.MessagePrivateSeenView;
 import org.telegram.ui.Components.ProfileActionsView;
 import org.telegram.ui.Components.ProfileGalleryBlurView;
+import org.telegram.ui.Components.ProfileBackdrop;
 import org.telegram.ui.Components.Paint.PersistColorPalette;
 import org.telegram.ui.Components.Premium.LimitPreviewView;
 import org.telegram.ui.Components.Premium.PremiumFeatureBottomSheet;
@@ -415,6 +416,13 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     private ImageView starBgItem, starFgItem;
     private TimerDrawable timerDrawable;
     private ProfileGalleryBlurView avatarsBlurView;
+    private final ProfileBackdrop profileBackdrop = new ProfileBackdrop();
+    private final ProfileBackdrop profilePhotoEffects = new ProfileBackdrop();
+    private ValueAnimator profileAppearanceAnimator;
+    private boolean profileAppearanceQueued;
+    private float profileBackdropScroll;
+    private float redesignedExitExpansion = Float.NaN;
+    private float redesignedExitScroll;
     private ProfileGalleryView avatarsViewPager;
     private PagerIndicatorView avatarsViewPagerIndicatorView;
     private AvatarDrawable avatarDrawable;
@@ -436,6 +444,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     private Paint actionBarBackgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private ActionBarPopupWindow scrimPopupWindow;
     private Theme.ResourcesProvider resourcesProvider;
+    private org.telegram.ui.Components.ProfileAvatarColors avatarColors;
+    private boolean avatarColorsNeedRefresh = true;
+    private boolean avatarColorsRefreshPosted;
 
     private int overlayCountVisible;
 
@@ -905,6 +916,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
     public static class AvatarImageView extends BackupImageView implements SizeNotifierFrameLayout.IViewWithInvalidateCallback {
 
+        protected boolean useRedesignedProfile() {
+            return false;
+        }
+
         private boolean isPulledDown;
         private float blurSizeFraction;
         private float avatarScale;
@@ -1151,7 +1166,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 }
             }
 
-            if (shouldDrawBlur) {
+            if (shouldDrawBlur && !useRedesignedProfile()) {
                 canvas.translate(inset, inset + thisHeight);
                 float fraction = !isPulledDown && !blurView.isUsingRenderNode() && avatarsViewPager.getRealPosition() != 0 ? 1f : (1f - blurSizeFraction);
                 blurView.draw(canvas, this, thisWidth - inset * 2f, thisHeight - inset * 2f, true, fraction, alpha);
@@ -1264,7 +1279,14 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         private final Paint backgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
         public void setBackgroundColorId(MessagesController.PeerColor peerColor, boolean animated) {
-            if (peerColor != null) {
+            if (avatarColors != null && avatarColors.isReady()) {
+                hasColorById = true;
+                color1 = getThemedColor(Theme.key_actionBarDefault);
+                color2 = getThemedColor(Theme.key_windowBackgroundWhite);
+                actionBarBackgroundColor = color1;
+                emojiColor = getThemedColor(Theme.key_windowBackgroundWhiteBlueIcon);
+                btnColor = Theme.multAlpha(color2, .65f);
+            } else if (peerColor != null) {
                 hasColorById = true;
                 color1 = peerColor.getBgColor1(Theme.isCurrentThemeDark());
                 color2 = peerColor.getBgColor2(Theme.isCurrentThemeDark());
@@ -1367,6 +1389,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
         @Override
         protected void onDraw(Canvas canvas) {
+            if (isRedesignedProfileEnabled()) {
+                updateBackgroundPaint();
+                return;
+            }
             final int height = ActionBar.getCurrentActionBarHeight() + (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0);
             final float v = height + extraHeight + searchTransitionOffset;
 
@@ -1416,6 +1442,201 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         }
 
         private Rect blurBounds = new Rect();
+    }
+
+    public boolean isRedesignedProfileEnabled() {
+        return NekoConfig.redesignedProfile && hasProfileAvatarPhoto();
+    }
+
+    private boolean hasProfileAvatarPhoto() {
+        if (isTopic) return false;
+        if (userId != 0) {
+            TLRPC.User user = getMessagesController().getUser(userId);
+            return user != null && user.photo != null
+                    && (user.photo.photo_big != null || user.photo.photo_small != null);
+        }
+        TLRPC.Chat chat = currentChat != null ? currentChat : getMessagesController().getChat(chatId);
+        return chat != null && chat.photo != null
+                && (chat.photo.photo_big != null || chat.photo.photo_small != null);
+    }
+
+    private void installAvatarColorProvider() {
+        if (!NekoConfig.adaptProfileColorsToAvatar) {
+            if (resourcesProvider == avatarColors && avatarColors != null) resourcesProvider = avatarColors.getBase();
+            avatarColors = null;
+        } else if (resourcesProvider != avatarColors || avatarColors == null) {
+            if (avatarColors == null) avatarColors = new org.telegram.ui.Components.ProfileAvatarColors(resourcesProvider);
+            else avatarColors.setBase(resourcesProvider);
+            resourcesProvider = avatarColors;
+        }
+    }
+
+    private void updateProfileAvatarColors() {
+        if (avatarColors == null || avatarImage == null) return;
+        ImageReceiver receiver = avatarImage.getImageReceiver();
+        if (avatarsViewPager != null && avatarsViewPager.getCurrentItemView() != null
+                && avatarsViewPager.getCurrentItemView().getImageReceiver().getBitmap() != null) {
+            receiver = avatarsViewPager.getCurrentItemView().getImageReceiver();
+        }
+        if (avatarColors.update(receiver, hasProfileAvatarPhoto())) avatarColorsNeedRefresh = true;
+        if (!avatarColorsNeedRefresh || avatarColorsRefreshPosted || !fragmentViewAttached) return;
+        final View root = contentView;
+        final org.telegram.ui.Components.ProfileAvatarColors palette = avatarColors;
+        // Refresh after drawing, outside RecyclerView's layout/draw traversal.
+        avatarColorsRefreshPosted = true;
+        root.post(() -> {
+            avatarColorsRefreshPosted = false;
+            if (contentView != root || avatarColors != palette || !fragmentViewAttached) return;
+            avatarColorsNeedRefresh = false;
+            refreshAvatarColorViews(root);
+            for (ThemeDescription description : getProfileThemeDescriptions(true)) {
+                description.applyLocalViewColor(getThemedColor(description.getCurrentKey()));
+            }
+            if (sharedMediaLayout != null) sharedMediaLayout.updateProfilePaletteIcons();
+            if (sharedMediaLayout != null && sharedMediaLayout.giftsContainer != null) {
+                sharedMediaLayout.giftsContainer.updateColors();
+            }
+            if (topView != null) {
+                topView.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundGray));
+                topView.setBackgroundColorId(peerColor, false);
+            }
+            if (actionBar != null) {
+                actionBar.setItemsColor(peerColor != null ? Color.WHITE
+                        : ColorUtils.blendARGB(getThemedColor(Theme.key_actionBarDefaultIcon),
+                                Color.WHITE, currentExpandAnimatorValue), false);
+            }
+            if (listAdapter != null) listAdapter.notifyDataSetChanged();
+            root.invalidate();
+        });
+    }
+
+    private void refreshAvatarColorViews(View view) {
+        if (view instanceof TextView) {
+            TextView text = (TextView) view;
+            // Preserve multistate selectors; their provider supplies their colors.
+            if (!text.getTextColors().isStateful()) text.setTextColor(avatarColors.replace(text.getCurrentTextColor()));
+            if (text.getLinkTextColors() != null && !text.getLinkTextColors().isStateful()) {
+                text.setLinkTextColor(avatarColors.replace(text.getLinkTextColors().getDefaultColor()));
+            }
+        } else if (view instanceof SimpleTextView) {
+            SimpleTextView text = (SimpleTextView) view;
+            text.setTextColor(avatarColors.replace(text.getTextColor()));
+        }
+        if (view.getBackground() instanceof ColorDrawable) {
+            ColorDrawable background = (ColorDrawable) view.getBackground();
+            int color = avatarColors.replace(background.getColor());
+            if (color != background.getColor()) view.setBackgroundColor(color);
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) refreshAvatarColorViews(group.getChildAt(i));
+        }
+        view.invalidate();
+    }
+
+    private boolean isPredictiveProfileTransition() {
+        if (parentLayout == null || !(parentLayout.getView() instanceof org.telegram.ui.ActionBar.ActionBarLayout)) return false;
+        org.telegram.ui.ActionBar.ActionBarLayout layout = (org.telegram.ui.ActionBar.ActionBarLayout) parentLayout.getView();
+        return layout.predictiveBackInProgress || layout.m3PredictiveActive || layout.predictiveInput;
+    }
+
+    private float getRedesignedProfileExpansion() {
+        if (!Float.isNaN(redesignedExitExpansion)) return redesignedExitExpansion;
+        // The screen entrance reuses currentExpandAnimatorValue for a different
+        // animation. Its final reset must not change the background's state.
+        if (playProfileAnimation != 0 && (!fragmentOpened || openAnimationInProgress)) {
+            return playProfileAnimation == 2 ? 1f : 0f;
+        }
+        return Utilities.clamp01(currentExpandAnimatorValue);
+    }
+
+    private void drawRedesignedProfileBackdrop(Canvas canvas) {
+        drawRedesignedProfileBackdrop(canvas, false, 0);
+    }
+
+    private void drawRedesignedProfileBackdrop(Canvas canvas, boolean photo, float photoBottom) {
+        if (!isRedesignedProfileEnabled() || avatarImage == null || contentView == null) return;
+        ImageReceiver receiver = avatarImage.getImageReceiver();
+        if (avatarsViewPager != null && avatarsViewPager.getCurrentItemView() != null) {
+            ImageReceiver galleryReceiver = avatarsViewPager.getCurrentItemView().getImageReceiver();
+            if (galleryReceiver.getBitmap() != null) receiver = galleryReceiver;
+        }
+        Bitmap bitmap = receiver.getBitmap();
+        if (bitmap == null && avatarImage.foregroundImageReceiver != null) {
+            bitmap = avatarImage.foregroundImageReceiver.getBitmap();
+        }
+        if (bitmap == null && avatarImage.animateFromImageReceiver != null) {
+            bitmap = avatarImage.animateFromImageReceiver.getBitmap();
+        }
+        float collapse = 1f - getRedesignedProfileExpansion();
+        float scroll = 1f - calculateHeaderExtraDiff()
+                + profileBackdropScroll / Math.max(1, contentView.getMeasuredHeight());
+        if (!Float.isNaN(redesignedExitExpansion)) scroll = redesignedExitScroll;
+        else if (playProfileAnimation != 0 && (!fragmentOpened || openAnimationInProgress)) scroll = 0;
+        // The background square stays anchored at the top regardless
+        // of the foreground avatar's expansion or the list's scroll.
+        float squareBottom = contentView.getMeasuredWidth();
+        float titleHeight = nameTextView[1] != null && nameTextView[1].getMeasuredHeight() > 0
+                ? nameTextView[1].getMeasuredHeight() : dp(30);
+        // Use the expanded endpoint, not the title's temporary entrance-animation coordinates.
+        float expandedBlurStart = Math.max(0, squareBottom - dp(30) - titleHeight);
+        float blurStart = AndroidUtilities.lerp(expandedBlurStart, 0, collapse);
+        if (isPredictiveProfileTransition()) {
+            if (profileAppearanceAnimator != null) profileAppearanceAnimator.cancel();
+            profileBackdrop.showImmediately();
+        } else if (isFragmentOpened && !profileBackdrop.hasAppearanceStarted()) profileBackdrop.startAppearance();
+        ProfileBackdrop renderer = photo ? profilePhotoEffects : profileBackdrop;
+        if (!photo) {
+            float photoHeight = squareBottom;
+            // Collapsing and scrolling never resize the stationary square.
+            // Only overscrolling an already expanded photo can enlarge it.
+            if (getRedesignedProfileExpansion() >= 1f && avatarsViewPager != null
+                    && avatarsViewPager.getVisibility() == View.VISIBLE) {
+                photoHeight = Math.max(squareBottom,
+                        avatarsViewPager.getHeight() - avatarsViewPager.getPaddingBottom());
+            }
+            renderer.setBackgroundPhotoBounds(0, 0, squareBottom, photoHeight);
+        }
+        if (photo) {
+            renderer.setPhotoHeight(photoBottom);
+            renderer.syncAppearanceFrom(profileBackdrop);
+            blurStart = Math.max(0, nameTextView[1].getY());
+        }
+        renderer.draw(canvas, bitmap, contentView.getMeasuredWidth(), contentView.getMeasuredHeight(),
+                squareBottom, blurStart, collapse, scroll, getThemedColor(Theme.key_windowBackgroundGray));
+        if (!photo && bitmap != null && profileBackdrop.needsAppearanceAnimation()) queueProfileAppearance();
+        if (!photo && profileBackdrop.isAppearing()) {
+            contentView.postInvalidateOnAnimation();
+            if (avatarContainer2 != null) avatarContainer2.postInvalidateOnAnimation();
+        }
+    }
+
+    private void queueProfileAppearance() {
+        if (profileAppearanceQueued || contentView == null) return;
+        profileAppearanceQueued = true;
+        final View root = contentView;
+        Runnable begin = () -> root.post(() -> {
+            if (root != contentView || !fragmentViewAttached || !isFragmentOpened
+                    || !profileBackdrop.needsAppearanceAnimation()) return;
+            if (isPredictiveProfileTransition()) {
+                profileBackdrop.showImmediately();
+                return;
+            }
+            profileAppearanceAnimator = ValueAnimator.ofFloat(0f, 1f);
+            profileAppearanceAnimator.setDuration(300);
+            profileAppearanceAnimator.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
+            profileAppearanceAnimator.addUpdateListener(animation -> {
+                profileBackdrop.setAppearanceOpacity((float) animation.getAnimatedValue());
+                contentView.invalidate();
+                if (avatarContainer2 != null) avatarContainer2.invalidate();
+            });
+            profileAppearanceAnimator.start();
+        });
+        if (Build.VERSION.SDK_INT >= 29 && root.isHardwareAccelerated()) {
+            root.getViewTreeObserver().registerFrameCommitCallback(begin);
+        } else {
+            root.postOnAnimation(begin);
+        }
     }
 
     private class OverlaysView extends View implements ProfileGalleryView.Callback {
@@ -1565,9 +1786,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             }
 
             topOverlayGradient.draw(canvas);
-            bottomOverlayGradient.draw(canvas);
+            if (!isRedesignedProfileEnabled()) bottomOverlayGradient.draw(canvas);
             canvas.drawRect(topOverlayRect, backgroundPaint);
-            canvas.drawRect(bottomOverlayRect, backgroundPaint);
+            if (!isRedesignedProfileEnabled()) canvas.drawRect(bottomOverlayRect, backgroundPaint);
 
             int count = avatarsViewPager.getRealCount();
             selectedPosition = avatarsViewPager.getRealPosition();
@@ -2408,6 +2629,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         if (avatarsViewPager != null) {
             avatarsViewPager.onDestroy();
         }
+        if (profileAppearanceAnimator != null) profileAppearanceAnimator.cancel();
+        profileBackdrop.destroy();
+        profilePhotoEffects.destroy();
         if (avatarsBlurView != null) {
             avatarsBlurView.destroy();
         }
@@ -2460,6 +2684,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         if (lastFragment instanceof ChatActivity && ((ChatActivity) lastFragment).themeDelegate != null && ((ChatActivity) lastFragment).themeDelegate.getCurrentTheme() != null && !((ChatActivity) lastFragment).themeDelegate.isGiftTheme()) {
             resourcesProvider = lastFragment.getResourceProvider();
         }
+        installAvatarColorProvider();
         ActionBar actionBar = new ActionBar(context, resourcesProvider) {
             @Override
             public boolean onTouchEvent(MotionEvent event) {
@@ -2546,12 +2771,20 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
     @Override
     public View createView(Context context) {
+        avatarColorsNeedRefresh = true;
+        if (profileAppearanceAnimator != null) profileAppearanceAnimator.cancel();
+        profileAppearanceQueued = false;
+        if (isRedesignedProfileEnabled()) {
+            redesignedExitExpansion = Float.NaN;
+            profileBackdrop.resetAppearance();
+        }
         Theme.createProfileResources(context);
         Theme.createChatResources(context, false);
         BaseFragment lastFragment = parentLayout.getLastFragment();
         if (lastFragment instanceof ChatActivity && ((ChatActivity) lastFragment).themeDelegate != null && ((ChatActivity) lastFragment).themeDelegate.getCurrentTheme() != null && !((ChatActivity) lastFragment).themeDelegate.isGiftTheme()) {
             resourcesProvider = lastFragment.getResourceProvider();
         }
+        installAvatarColorProvider();
         searchTransitionOffset = 0;
         searchTransitionProgress = 1f;
         searchMode = false;
@@ -3315,6 +3548,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
             @Override
             protected void dispatchDraw(Canvas canvas) {
+                updateProfileAvatarColors();
+                drawRedesignedProfileBackdrop(canvas);
                 if (Build.VERSION.SDK_INT >= 31 && scrollableViewNoiseSuppressor != null) {
                     blur3_InvalidateBlur();
 
@@ -3324,6 +3559,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                         //if (iBlur3SourceGlass.needUpdateDisplayList(width, height) || iBlur3Invalidated) {
                         final Canvas c = iBlur3SourceGlass.beginRecording(width, height);
                         c.drawColor(getThemedColor(Theme.key_windowBackgroundGray));
+                        if (isRedesignedProfileEnabled()) profileBackdrop.drawCached(c);
                         if (SharedConfig.chatBlurEnabled()) {
                             scrollableViewNoiseSuppressor.draw(c, DownscaleScrollableNoiseSuppressor.DRAW_GLASS);
                         }
@@ -3900,6 +4136,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             });
 
             actionsView = new ProfileActionsView(context, dp(74));
+            actionsView.setIconColorProvider(() -> avatarColors != null && avatarColors.isReady()
+                    ? getThemedColor(Theme.key_windowBackgroundWhiteBlueIcon) : null);
             setActionsMode();
             updateNotifications(false);
 
@@ -4113,6 +4351,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
         listView = new ClippedListView(context, resourcesProvider) {
 
+            @Override
+            public float getSectionBackgroundAlpha() {
+                return isRedesignedProfileEnabled() ? 0.5f : 1f;
+            }
+
             private VelocityTracker velocityTracker;
 
             @Override
@@ -4243,7 +4486,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         };
         listView.setSections();
         listView.applyPaddingToSections = false;
-        listView.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundGray));
+        listView.setBackgroundColor(isRedesignedProfileEnabled() ? Color.TRANSPARENT : getThemedColor(Theme.key_windowBackgroundGray));
         listView.setVerticalScrollBarEnabled(false);
         final IBlur3Capture listViewCapture = new ViewGroupPartRenderer(listView, (ViewGroup) fragmentView, (canvas, child, drawingTime) -> {
             if (child == sharedMediaLayout) {
@@ -5258,6 +5501,30 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             CanvasButton canvasButton;
 
             @Override
+            protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
+                if (isRedesignedProfileEnabled() && child == overlaysView
+                        && getRedesignedProfileExpansion() > 0 && nameTextView[1] != null) {
+                    // Above the photo, below the title, buttons and gallery controls.
+                    float titleTop = Math.max(0, nameTextView[1].getY());
+                    // Cover only the photo. Buttons and the list use the root
+                    // backdrop, with no moving layer edge at their junction.
+                    float bottom = avatarsViewPager != null && avatarsViewPager.getVisibility() == View.VISIBLE
+                            && avatarsViewPager.getAlpha() > 0f
+                            ? avatarsViewPager.getHeight() - avatarsViewPager.getPaddingBottom()
+                            : Math.min(getWidth(), ActionBar.getCurrentActionBarHeight()
+                                    + (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0)
+                                    + extraHeight - getActionsExtraHeight());
+                    if (bottom <= titleTop) return super.drawChild(canvas, child, drawingTime);
+                    int save = canvas.saveLayerAlpha(0, 0, getWidth(), getHeight(),
+                            Math.round(255 * getRedesignedProfileExpansion()));
+                    drawRedesignedProfileBackdrop(canvas, true, bottom);
+                    profilePhotoEffects.maskTitleBlur(canvas, getWidth(), bottom, titleTop);
+                    canvas.restoreToCount(save);
+                }
+                return super.drawChild(canvas, child, drawingTime);
+            }
+
+            @Override
             protected void dispatchDraw(Canvas canvas) {
                 super.dispatchDraw(canvas);
                 if (transitionOnlineText != null) {
@@ -5353,6 +5620,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         avatarContainer2.addView(avatarGooey, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 //        avatarContainer2.addView(avatarContainer, LayoutHelper.createFrame(100, 100, Gravity.TOP | Gravity.LEFT, 64, 0, 0, 0));
         avatarImage = new AvatarImageView(context) {
+            @Override
+            protected boolean useRedesignedProfile() {
+                return ProfileActivity.this.isRedesignedProfileEnabled();
+            }
+
             @Override
             public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
                 super.onInitializeAccessibilityNodeInfo(info);
@@ -5474,15 +5746,39 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 //            metaball.destroy();
 //        }
         overlaysView = new OverlaysView(context);
-        avatarsBlurView = new ProfileGalleryBlurView(context);
+        avatarsBlurView = new ProfileGalleryBlurView(context) {
+            @Override
+            protected void onDraw(Canvas canvas) {
+                if (!isRedesignedProfileEnabled()) super.onDraw(canvas);
+            }
+        };
         avatarsBlurView.setSize(getActionsExtraHeight());
         avatarsViewPager = new ProfileGalleryView(context, userId != 0 ? userId : -chatId, actionBar, listView, avatarImage, getClassGuid(), overlaysView, avatarsBlurView) {
+            @Override
+            public void invalidate() {
+                super.invalidate();
+                if (isRedesignedProfileEnabled() && contentView != null) {
+                    contentView.invalidate();
+                    if (avatarContainer2 != null) avatarContainer2.invalidate();
+                }
+            }
+
+            @Override
+            public void invalidate(int left, int top, int right, int bottom) {
+                super.invalidate(left, top, right, bottom);
+                if (isRedesignedProfileEnabled() && contentView != null) {
+                    contentView.invalidate();
+                    if (avatarContainer2 != null) avatarContainer2.invalidate();
+                }
+            }
+
             @Override
             protected void setCustomAvatarProgress(float progress) {
                 customAvatarProgress = progress;
                 checkPhotoDescriptionAlpha();
             }
         };
+        if (isRedesignedProfileEnabled()) avatarsViewPager.setInvalidateWithParent(true);
         if (userId != getUserConfig().clientUserId && userInfo != null) {
             customAvatarProgress = userInfo.profile_photo == null ? 0 : 1;
         }
@@ -5828,6 +6124,13 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
             @Override
             public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
+                if (isRedesignedProfileEnabled()) {
+                    // Continue fading after the header has reached its minimum
+                    // height; reverse scrolling restores exactly the same state.
+                    if (extraHeight <= 0) profileBackdropScroll = Math.max(0, profileBackdropScroll + dy);
+                    else profileBackdropScroll = 0;
+                    contentView.invalidate();
+                }
                 if (fwdRestrictedHint != null) {
                     fwdRestrictedHint.hide();
                 }
@@ -8913,7 +9216,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                         this.onlineX = onlineX;
                         this.idX = idX;
                     }
-                    nameX = AndroidUtilities.lerp(minimizedX, nameX, diff); //
+                    nameX = AndroidUtilities.lerp(minimizedX, nameX, diff);
                     onlineX = AndroidUtilities.lerp(minimizedX, onlineX, diff);
                     idX = AndroidUtilities.lerp(minimizedX, idX, diff);
 
@@ -8956,6 +9259,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     }
 
     private void updateExtraViews(float newTop) {
+        if (isRedesignedProfileEnabled() && avatarContainer2 != null) avatarContainer2.invalidate();
         if (isPulledDown || (overlaysView != null && overlaysView.animator != null && overlaysView.animator.isRunning())) {
             final ViewGroup.LayoutParams overlaysLp = overlaysView.getLayoutParams();
             overlaysLp.width = listView.getMeasuredWidth();
@@ -9876,6 +10180,23 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     @Override
     public void onTransitionAnimationStart(boolean isOpen, boolean backward) {
         super.onTransitionAnimationStart(isOpen, backward);
+        if (isRedesignedProfileEnabled()) {
+            if (isPredictiveProfileTransition()) {
+                profileBackdrop.showImmediately();
+            } else if (!isOpen && backward) {
+                if (profileAppearanceAnimator != null) profileAppearanceAnimator.cancel();
+                // Keep the current blur/fade state while only its opacity exits.
+                redesignedExitExpansion = getRedesignedProfileExpansion();
+                redesignedExitScroll = 1f - calculateHeaderExtraDiff()
+                        + profileBackdropScroll / Math.max(1, contentView.getMeasuredHeight());
+                profileBackdrop.startDisappearance();
+            } else if (isOpen) {
+                redesignedExitExpansion = Float.NaN;
+                if (!backward) profileBackdrop.startAppearance();
+                else profileBackdrop.cancelDisappearance();
+            }
+            if (contentView != null) contentView.invalidate();
+        }
         isFragmentOpened = isOpen;
 
         if (isOpen && actionsView != null) {
@@ -9970,6 +10291,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     @Keep
     public void setAvatarAnimationProgress(float progress) {
         avatarAnimationProgress = currentExpandAnimatorValue = progress;
+        if (isRedesignedProfileEnabled() && contentView != null) {
+            contentView.invalidate();
+            if (avatarContainer2 != null) avatarContainer2.invalidate();
+        }
         checkPhotoDescriptionAlpha();
         if (playProfileAnimation == 2) {
             avatarImage.setProgressToExpand(progress);
@@ -10123,7 +10448,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             updateStar();
         }
         final AnimatorSet animatorSet = new AnimatorSet();
-        animatorSet.setDuration(playProfileAnimation == 2 ? 250 : 180);
+        animatorSet.setDuration(isRedesignedProfileEnabled() && !isPredictiveProfileTransition() && !isOpen ? 300 : playProfileAnimation == 2 ? 250 : 180);
         listView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         ActionBarMenu menu = actionBar.createMenu();
         if (menu.getItem(10) == null) {
@@ -12294,6 +12619,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     }
 
     private int applyPeerColor(int color, boolean actionBar, Boolean online) {
+        if (avatarColors != null && avatarColors.isReady()) return color;
         if (!actionBar && isSettings()) return color;
         if (peerColor != null) {
             if (!actionBar) {
@@ -12319,6 +12645,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     }
 
     private int applyPeerColor2(int color) {
+        if (avatarColors != null && avatarColors.isReady()) return color;
         if (peerColor != null) {
             int accentColor = peerColor.getBgColor2(Theme.isCurrentThemeDark());
             return Theme.changeColorAccent(getThemedColor(Theme.key_windowBackgroundWhiteBlueIcon), accentColor, color, Theme.isCurrentThemeDark(), accentColor);
@@ -13678,6 +14005,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
         @Override
         public void onViewAttachedToWindow(RecyclerView.ViewHolder holder) {
+            if (avatarColors != null && avatarColors.isReady()) {
+                if (holder.itemView instanceof TextDetailCell) {
+                    ((TextDetailCell) holder.itemView).updateColors();
+                }
+                refreshAvatarColorViews(holder.itemView);
+            }
             if (holder.itemView == sharedMediaLayout) {
                 sharedMediaLayoutAttached = true;
             }
@@ -13949,6 +14282,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     break;
                 case VIEW_TYPE_ABOUT_LINK:
                     AboutLinkCell aboutLinkCell = (AboutLinkCell) holder.itemView;
+                    aboutLinkCell.setTranslucentBackground(isRedesignedProfileEnabled());
                     if (position == userInfoRow) {
                         TLRPC.User user = userInfo.user != null ? userInfo.user : getMessagesController().getUser(userInfo.id);
                         boolean addlinks = isBot || (user != null && user.premium && userInfo.about != null);
@@ -15564,7 +15898,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
     @Override
     public ArrayList<ThemeDescription> getThemeDescriptions() {
-        if (resourcesProvider != null) {
+        return getProfileThemeDescriptions(false);
+    }
+
+    private ArrayList<ThemeDescription> getProfileThemeDescriptions(boolean localPalette) {
+        if (resourcesProvider != null && !localPalette) {
             return null;
         }
         ThemeDescription.ThemeDescriptionDelegate themeDelegate = () -> {
@@ -15576,7 +15914,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                         ((UserCell) child).update(0);
                     }
                 }
-                listView.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundGray));
+                listView.setBackgroundColor(isRedesignedProfileEnabled() ? Color.TRANSPARENT : getThemedColor(Theme.key_windowBackgroundGray));
             }
             if (!isPulledDown) {
                 if (onlineTextView[1] != null) {
@@ -15843,6 +16181,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         super.onBecomeFullyVisible();
         writeButtonSetBackground();
         fullyVisible = true;
+        if (contentView != null) contentView.invalidate();
         createBirthdayEffect();
     }
 

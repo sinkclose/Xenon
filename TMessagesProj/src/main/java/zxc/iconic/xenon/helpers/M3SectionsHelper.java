@@ -129,7 +129,7 @@ public class M3SectionsHelper {
             setRadii(tR, bR);
             path.rewind();
             path.addRoundRect(rect, radii, Path.Direction.CW);
-            paint.setColor(multAlpha(bgColor, child.getAlpha()));
+            paint.setColor(multAlpha(bgColor, child.getAlpha() * listView.getSectionBackgroundAlpha()));
             canvas.drawPath(path, paint);
         }
     }
@@ -192,6 +192,7 @@ public class M3SectionsHelper {
         float[] radiiArr = new float[]{tR, tR, tR, tR, bR, bR, bR, bR};
         return new Drawable() {
             private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+            private int backgroundAlpha = 255;
             private final Path clipPath = new Path();
             private final RectF tmp = new RectF();
 
@@ -203,14 +204,14 @@ public class M3SectionsHelper {
                 clipPath.addRoundRect(tmp, radiiArr, Path.Direction.CW);
                 canvas.clipPath(clipPath);
                 int bgColor = Theme.getColor(Theme.key_windowBackgroundWhite, listView.resourcesProvider);
-                p.setColor(ColorUtils.setAlphaComponent(bgColor, p.getAlpha()));
+                p.setColor(ColorUtils.setAlphaComponent(bgColor, Math.round(backgroundAlpha * listView.getSectionBackgroundAlpha())));
                 canvas.drawRect(tmp, p);
                 canvas.restore();
             }
 
             @Override
             public void setAlpha(int alpha) {
-                p.setAlpha(alpha);
+                backgroundAlpha = alpha;
             }
 
             @Override
