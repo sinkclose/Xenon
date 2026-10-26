@@ -354,7 +354,7 @@ public class OAuthSheet {
                 }
             }
         }
-        accountSelectorLayout.setOnClickListener(v -> {
+        accountSelectorLayout.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(accountSelectorLayout, v -> {
             ItemOptions i = ItemOptions.makeOptions(sheet.container, sheet.getResourcesProvider(), accountSelectorInnerLayout);
             for (int account : accountNumbers) {
                 final TLRPC.User user = UserConfig.getInstance(account).getCurrentUser();
@@ -368,7 +368,7 @@ public class OAuthSheet {
                 .setGravity(Gravity.LEFT)
                 .translate(-dp(8), -dp(8))
                 .show();
-        });
+        }));
         final boolean[] processed = new boolean[1];
         cancel.setOnClickListener(v -> {
             if (request == null || TextUtils.isEmpty(request.url)) {

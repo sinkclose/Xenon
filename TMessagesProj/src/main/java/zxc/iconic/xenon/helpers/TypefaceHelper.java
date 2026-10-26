@@ -123,7 +123,18 @@ public class TypefaceHelper {
         return null;
     }
 
+    public static void clearFontSupportCache() {
+        mediumWeightSupported = null;
+        italicSupported = null;
+    }
+
     public static Typeface createTypeface(int weight, boolean italic) {
+        Typeface custom = ClientFonts.get(weight, italic);
+        if (custom != null) return custom;
+        return createSystemTypeface(weight, italic);
+    }
+
+    public static Typeface createSystemTypeface(int weight, boolean italic) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             return Typeface.create(null, weight, italic);
         }

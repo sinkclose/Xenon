@@ -812,6 +812,14 @@
     <string name="PluginAccessLimited">Restricted: safe Java value classes</string>
     <string name="PluginAccessTrusted">Trusted: unrestricted Java and native code</string>
     <string name="PluginPermissionsWarning">Restricted Java exposes only value classes, without reflection, Android, files or sockets. File access is limited to this plugin’s own storage. Trusted Java requires God Mode and can bypass all switches, including files, internet and native libraries. Changing permissions reloads plugins. Messaging controls the five message permissions below it.</string>
+
+    <!-- Client font selection -->
+    <string name="ClientFont">Font</string>
+    <string name="ClientSelectFont">Select font</string>
+    <string name="ClientFontHint">Choose a TTF, OTF, TTC font or a ZIP archive. Default restores the standard font.</string>
+    <string name="ClientFontImportFailed">Could not import this file. Choose a valid TTF, OTF, TTC font or a ZIP containing fonts.</string>
+    <string name="IosPopups">Popups</string>
+    <string name="Material3Popups">Popups</string>
 </resources>
 
 

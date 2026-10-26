@@ -1416,6 +1416,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        org.telegram.ui.Components.IosPopupOpener.registerWindow(getWindow());
         super.onCreate(savedInstanceState);
         onCreateInternal();
     }
@@ -1798,6 +1799,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
             onCreateInternal();
         } else {
             super.show();
+            zxc.iconic.xenon.helpers.ClientFonts.observeWindow(getWindow().getDecorView());
         }
         if (Build.VERSION.SDK_INT >= 34 && zxc.iconic.xenon.NekoConfig.predictiveBackAnimation) {
             registerPredictiveBack();

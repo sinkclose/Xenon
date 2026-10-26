@@ -805,5 +805,13 @@
     <string name="PluginAccessLimited">Ограниченный: безопасные Java-классы значений</string>
     <string name="PluginAccessTrusted">Доверенный: полный доступ к Java и нативному коду</string>
     <string name="PluginPermissionsWarning">Ограниченный Java даёт только классы значений: без рефлексии, Android, файлов и сокетов. Файлы доступны только в личном хранилище плагина. Доверенный Java требует God Mode и позволяет обойти все переключатели, включая файлы, интернет и нативные библиотеки. Изменение разрешений перезагружает плагины. Messaging управляет пятью разрешениями сообщений ниже.</string>
+
+    <!-- Client font selection -->
+    <string name="ClientFont">Шрифт</string>
+    <string name="ClientSelectFont">Выбрать шрифт</string>
+    <string name="ClientFontHint">Выберите шрифт TTF, OTF, TTC или ZIP-архив. «По умолчанию» вернёт стандартный шрифт.</string>
+    <string name="ClientFontImportFailed">Не удалось импортировать файл. Выберите корректный шрифт TTF, OTF, TTC или ZIP-архив со шрифтами.</string>
+    <string name="IosPopups">Всплывающие меню</string>
+    <string name="Material3Popups">Popups</string>
 </resources>
 

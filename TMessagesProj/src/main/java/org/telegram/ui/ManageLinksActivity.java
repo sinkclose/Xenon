@@ -1075,7 +1075,7 @@ public class ManageLinksActivity extends BaseFragment implements NotificationCen
             optionsView.setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_ab_other));
             optionsView.setScaleType(ImageView.ScaleType.CENTER);
             optionsView.setColorFilter(Theme.getColor(Theme.key_stickers_menu));
-            optionsView.setOnClickListener(view -> {
+            optionsView.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(optionsView, view -> {
                 if (invite == null) {
                     return;
                 }
@@ -1146,7 +1146,7 @@ public class ManageLinksActivity extends BaseFragment implements NotificationCen
                 }
                 options.setScrimViewBackground(listView.getClipBackground(LinkCell.this));
                 options.show();
-            });
+            }));
             optionsView.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector), 1));
             addView(optionsView, LayoutHelper.createFrame(48, 48, Gravity.RIGHT | Gravity.CENTER_VERTICAL, 0, 0, 8, 0));
 

@@ -1,6 +1,7 @@
 package org.telegram.ui.Components;
 
 import android.animation.Animator;
+import android.animation.AnimatorSet;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Context;
@@ -43,6 +44,7 @@ public class MessagePopupPreviewLayout extends FrameLayout {
     private final int[] location = new int[2], targetLocation = new int[2];
     private float preferredX, preferredY;
     private ValueAnimator animator;
+    private AnimatorSet menuAnimator;
     private float progress, sourceY;
     private long lastFrame;
     private boolean sourceInitialized, closing, overflow, drawingMessage, opening;
@@ -207,7 +209,10 @@ public class MessagePopupPreviewLayout extends FrameLayout {
         scroll.setSmoothScrollingEnabled(false);
         scroll.setOverScrollMode(OVER_SCROLL_NEVER);
         scroll.setClipToPadding(false);
+        scroll.setClipChildren(false);
         column = new LinearLayout(context);
+        column.setClipChildren(false);
+        column.setClipToPadding(false);
         column.setOrientation(LinearLayout.VERTICAL);
         placeholder = new View(context);
         placeholder.setClickable(true);
@@ -215,7 +220,7 @@ public class MessagePopupPreviewLayout extends FrameLayout {
         column.addView(menu, new LinearLayout.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
         scroll.addView(column, new ScrollView.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
         addView(scroll, new FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
-        menu.setAlpha(0f);
+        menu.setAlpha(zxc.iconic.xenon.NekoConfig.iosPopups ? 1f : 0f);
     }
 
     private int dp(float value) {
@@ -322,6 +327,7 @@ public class MessagePopupPreviewLayout extends FrameLayout {
     }
 
     public void close(Runnable afterReturn) {
+        if (menuAnimator != null) { menuAnimator.cancel(); menuAnimator = null; }
         if (closing) return;
         closing = true;
         clearTextSelection();
@@ -374,11 +380,15 @@ public class MessagePopupPreviewLayout extends FrameLayout {
             animator.cancel();
         }
         animator = ValueAnimator.ofFloat(progress, target);
-        animator.setDuration(320);
+        boolean ios = zxc.iconic.xenon.NekoConfig.iosPopups;
+        if (menuAnimator != null) { menuAnimator.cancel(); menuAnimator = null; }
+        if (!ios && target == 1) menuAnimator = org.telegram.ui.ActionBar.ActionBarPopupWindow.startMenuAnimation(menu);
+        if (ios && target == 0) IosPopupMorph.closeEmbedded(menu);
+        animator.setDuration(ios ? (target == 0 ? IosPopupMorphGeometry.CLOSE_DURATION : IosPopupMorphGeometry.OPEN_DURATION) : 320);
         animator.setInterpolator(new PathInterpolator(.22f, 0f, .18f, 1f));
         animator.addUpdateListener(animation -> {
             progress = (float) animation.getAnimatedValue();
-            menu.setAlpha(progress);
+            if (ios || target == 0) menu.setAlpha(ios ? 1f : progress);
             invalidate();
         });
         animator.addListener(new AnimatorListenerAdapter() {
@@ -591,6 +601,7 @@ public class MessagePopupPreviewLayout extends FrameLayout {
     }
 
     public void dispose() {
+        if (menuAnimator != null) { menuAnimator.cancel(); menuAnimator = null; }
         clearTextSelection();
         removeCallbacks(selectionScrollStopped);
         cancelOverscrollAnimation();

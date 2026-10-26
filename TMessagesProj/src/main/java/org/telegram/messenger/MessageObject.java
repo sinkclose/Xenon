@@ -362,6 +362,7 @@ public class MessageObject {
     private int generatedWithMinSize;
     private float generatedWithDensity;
     private float generatedWithFontSize;
+    private int generatedWithClientFont;
     public boolean wasJustSent;
     public boolean isBotPendingDraft;
 
@@ -6814,7 +6815,7 @@ public class MessageObject {
         if (layoutCreated) {
             int newMinSize = AndroidUtilities.isTablet() ? AndroidUtilities.getMinTabletSide() : AndroidUtilities.displaySize.x;
             float newFontSize = Theme.chat_msgTextPaint != null ? Theme.chat_msgTextPaint.getTextSize() : 0;
-            if (Math.abs(generatedWithMinSize - newMinSize) > dp(52) || generatedWithDensity != AndroidUtilities.density || generatedWithFontSize != newFontSize) {
+            if (Math.abs(generatedWithMinSize - newMinSize) > dp(52) || generatedWithDensity != AndroidUtilities.density || generatedWithFontSize != newFontSize || generatedWithClientFont != zxc.iconic.xenon.helpers.ClientFonts.generation()) {
                 layoutCreated = false;
             }
         }
@@ -8702,6 +8703,8 @@ public class MessageObject {
     }
 
     public void generateLayout(TLRPC.User fromUser) {
+        if (generatedWithClientFont != zxc.iconic.xenon.helpers.ClientFonts.generation()) richLayout = null;
+        generatedWithClientFont = zxc.iconic.xenon.helpers.ClientFonts.generation();
         if (type == TYPE_ARTICLE) {
             final int maxWidth = getMaxMessageTextWidth();
             if (richLayout == null || messageOwner != null && richLayout.needsUpdate(getDisplayRichMessage(), maxWidth)) {

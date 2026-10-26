@@ -85,7 +85,7 @@ public class CaptionStory extends CaptionContainerView {
         periodButton.setContentDescription(LocaleController.getString(R.string.StoryPeriodHint));
         setPeriod(86400, false);
         addView(periodButton, LayoutHelper.createFrame(44, 44, Gravity.RIGHT | Gravity.BOTTOM, 0, 0, 11 + 44 - 4, 6));
-        periodButton.setOnClickListener(e -> {
+        periodButton.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(periodButton, e -> {
             if (periodPopup != null && periodPopup.isShown()) {
                 return;
             }
@@ -125,7 +125,7 @@ public class CaptionStory extends CaptionContainerView {
                 }
             }
             periodPopup.setDimAlpha(0).show();
-        });
+        }));
     }
 
     private void checkFlipButton() {

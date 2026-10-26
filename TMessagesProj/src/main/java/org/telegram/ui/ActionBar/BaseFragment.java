@@ -547,6 +547,8 @@ public abstract class BaseFragment {
     @CallSuper
     public void onResume() {
         isPaused = false;
+        if (fragmentView != null) zxc.iconic.xenon.helpers.ClientFonts.observeWindow(fragmentView);
+        if (actionBar != null) zxc.iconic.xenon.helpers.ClientFonts.applyToView(actionBar);
         if (actionBar != null) {
             actionBar.onResume();
         }

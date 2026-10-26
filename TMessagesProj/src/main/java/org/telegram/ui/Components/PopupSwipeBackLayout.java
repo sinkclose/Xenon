@@ -129,11 +129,18 @@ public class PopupSwipeBackLayout extends FrameLayout {
         onSwipeBackProgressListeners.add(onSwipeBackProgressListener);
     }
 
+    private boolean iosSurfaceContent;
+
+    public void setIosSurfaceContent(boolean enabled) {
+        iosSurfaceContent = enabled;
+        invalidate();
+    }
+
     @Override
     protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
         int i = indexOfChild(child);
         int s = canvas.save();
-        if (i != 0) {
+        if (i != 0 && !iosSurfaceContent && !zxc.iconic.xenon.NekoConfig.material3Popups) {
             if (foregroundColor == 0) {
                 foregroundPaint.setColor(Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground, resourcesProvider));
             } else {

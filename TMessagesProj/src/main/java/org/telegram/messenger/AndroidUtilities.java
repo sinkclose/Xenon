@@ -263,6 +263,8 @@ public class AndroidUtilities {
     public static ThreadLocal<byte[]> bufferLocal = new ThreadLocal<>();
 
     public static Typeface bold() {
+        Typeface custom = zxc.iconic.xenon.helpers.ClientFonts.get(500, false);
+        if (custom != null) return custom;
         if (mediumTypeface == null) {
             if (SharedConfig.useSystemBoldFont && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 mediumTypeface = Typeface.create(null, 500, false);
@@ -2393,7 +2395,20 @@ public class AndroidUtilities {
         return result;
     }
 
+    public static void clearTypefaceCache() {
+        synchronized (typefaceCache) {
+            typefaceCache.clear();
+            mediumTypeface = null;
+        }
+    }
+
     public static Typeface getTypeface(String assetPath) {
+        if (assetPath != null && !TYPEFACE_ROBOTO_MONO.equals(assetPath)
+                && (assetPath.startsWith("fonts/r") || assetPath.startsWith("fonts/mw_"))) {
+            int weight = assetPath.contains("extra") ? 800 : assetPath.contains("medium") ? 500 : assetPath.contains("bold") ? 700 : 400;
+            Typeface custom = zxc.iconic.xenon.helpers.ClientFonts.get(weight, assetPath.contains("italic"));
+            if (custom != null) return custom;
+        }
         synchronized (typefaceCache) {
             if (!typefaceCache.containsKey(assetPath)) {
                 try {

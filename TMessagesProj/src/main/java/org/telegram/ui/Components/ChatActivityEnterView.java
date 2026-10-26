@@ -4709,7 +4709,7 @@ public class ChatActivityEnterView extends FrameLayout implements
             return;
         }
         senderSelectView = new SenderSelectView(getContext());
-        senderSelectView.setOnClickListener(v -> {
+        senderSelectView.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(senderSelectView, v -> {
             if (isLiveComment ? isPopupShowing() : getTranslationY() != 0) {
                 onEmojiSearchClosed = () -> senderSelectView.callOnClick();
                 if (isLiveComment) {
@@ -5060,7 +5060,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                 senderSelectPopupWindow.showAtLocation(v, Gravity.LEFT | Gravity.TOP, this.popupX = popupX, this.popupY = popupY);
                 senderSelectView.setProgress(1);
             }
-        });
+        }));
         senderSelectView.setVisibility(GONE);
         messageEditTextContainer.addView(senderSelectView, LayoutHelper.createFrame(36, 36, Gravity.BOTTOM | Gravity.LEFT, 4.66f, 4, 4.66f, 4));
     }

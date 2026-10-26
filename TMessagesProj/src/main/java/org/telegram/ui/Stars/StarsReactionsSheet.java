@@ -572,7 +572,7 @@ public class StarsReactionsSheet extends BottomSheet implements NotificationCent
             });
         }
 
-        dialogSelectorLayout.setOnClickListener(v -> {
+        dialogSelectorLayout.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(dialogSelectorLayout, v -> {
             final ArrayList<TLObject> chats = BotStarsController.getInstance(currentAccount).getAdminedChannels();
             chats.add(0, UserConfig.getInstance(currentAccount).getCurrentUser());
 
@@ -607,7 +607,7 @@ public class StarsReactionsSheet extends BottomSheet implements NotificationCent
                 .setDimAlpha(0)
                 .setGravity(Gravity.RIGHT)
                 .show();
-        });
+        }));
 
         LinkSpanDrawable.LinksTextView termsView = new LinkSpanDrawable.LinksTextView(context, resourcesProvider);
         termsView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);

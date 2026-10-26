@@ -154,7 +154,7 @@ public class CaptionPhotoViewer extends CaptionContainerView {
                 .show();
         });
 
-        timerButton.setOnClickListener(e -> {
+        timerButton.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(timerButton, e -> {
             if (timerPopup != null && timerPopup.isShown()) {
                 timerPopup.dismiss();
                 timerPopup = null;
@@ -187,7 +187,7 @@ public class CaptionPhotoViewer extends CaptionContainerView {
                 }
             }
             timerPopup.show();
-        });
+        }));
     }
 
     @Override

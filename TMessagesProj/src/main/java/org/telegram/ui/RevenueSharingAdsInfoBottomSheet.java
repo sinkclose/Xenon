@@ -87,14 +87,14 @@ public class RevenueSharingAdsInfoBottomSheet extends BottomSheetWithRecyclerLis
             optionsView.setScaleType(ImageView.ScaleType.CENTER);
             optionsView.setColorFilter(Theme.getColor(Theme.key_dialogTextGray3));
             optionsView.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector), 1));
-            optionsView.setOnClickListener(v -> {
+            optionsView.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(optionsView, v -> {
                 options.run(
                     ItemOptions.makeOptions(container, resourcesProvider, optionsView, true)
                         .setGravity(Gravity.RIGHT)
                         .setDrawScrim(false)
                         .translate(dp(12), dp(-32))
                 );
-            });
+            }));
             topView.addView(optionsView, LayoutHelper.createFrame(24, 24, Gravity.RIGHT | Gravity.TOP, 12, 14, 14, 12));
         }
 

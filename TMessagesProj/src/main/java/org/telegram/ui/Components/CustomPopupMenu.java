@@ -59,6 +59,7 @@ public abstract class CustomPopupMenu {
 
     public void show(View anchorView, int x, int y) {
         isShowing = true;
+        popupWindow.setAnimationEnabled(zxc.iconic.xenon.NekoConfig.iosPopups);
         popupWindow.showAsDropDown(anchorView, x, y);
     }
 

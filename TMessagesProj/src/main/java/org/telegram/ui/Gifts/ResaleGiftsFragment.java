@@ -336,7 +336,7 @@ public class ResaleGiftsFragment extends BaseFragment implements FactorAnimator.
         sortButton = new Filter(context, resourceProvider);
         sortButton.setSorting(list.getSorting());
         filtersContainer.addView(sortButton, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL, 0, 0, 6, 0));
-        sortButton.setOnClickListener(v -> {
+        sortButton.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(sortButton, v -> {
             if (!filtersShown) return;
             ItemOptions.makeOptions(this, sortButton)
                 .add(R.drawable.menu_sort_value, getString(ResaleGiftsList.Sorting.BY_PRICE.buttonStringResId), () -> {
@@ -367,12 +367,12 @@ public class ResaleGiftsFragment extends BaseFragment implements FactorAnimator.
                 .setOnTopOfScrim()
                 .translate(0, dp(-8))
                 .show();
-        });
+        }));
 
         modelButton = new Filter(context, resourceProvider);
         modelButton.setValue(getString(R.string.Gift2AttributeModel));
         filtersContainer.addView(modelButton, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL, 0, 0, 6, 0));
-        modelButton.setOnClickListener(v -> {
+        modelButton.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(modelButton, v -> {
             if (!filtersShown) return;
             if (list.modelAttributes.isEmpty()) return;
             final ItemOptions ie = ItemOptions.makeOptions(this, modelButton, false, true)
@@ -480,12 +480,12 @@ public class ResaleGiftsFragment extends BaseFragment implements FactorAnimator.
             }
             ie.addView(listView);
             ie.show();
-        });
+        }));
 
         backdropButton = new Filter(context, resourceProvider);
         backdropButton.setValue(getString(R.string.Gift2AttributeBackdrop));
         filtersContainer.addView(backdropButton, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL, 0, 0, 6, 0));
-        backdropButton.setOnClickListener(v -> {
+        backdropButton.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(backdropButton, v -> {
             if (!filtersShown) return;
             if (list.backdropAttributes.isEmpty()) return;
             final ItemOptions ie = ItemOptions.makeOptions(this, backdropButton, false, true)
@@ -593,12 +593,12 @@ public class ResaleGiftsFragment extends BaseFragment implements FactorAnimator.
             }
             ie.addView(listView);
             ie.show();
-        });
+        }));
 
         patternButton = new Filter(context, resourceProvider);
         patternButton.setValue(getString(R.string.Gift2AttributeSymbol));
         filtersContainer.addView(patternButton, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL, 0, 0, 0, 0));
-        patternButton.setOnClickListener(v -> {
+        patternButton.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(patternButton, v -> {
             if (!filtersShown) return;
             if (list.patternAttributes.isEmpty()) return;
             final ItemOptions ie = ItemOptions.makeOptions(this, patternButton, false, true)
@@ -706,7 +706,7 @@ public class ResaleGiftsFragment extends BaseFragment implements FactorAnimator.
             }
             ie.addView(listView);
             ie.show();
-        });
+        }));
 
         fireworksOverlay = new FireworksOverlay(getContext());
         fragmentView.addView(fireworksOverlay, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
@@ -1677,7 +1677,7 @@ public class ResaleGiftsFragment extends BaseFragment implements FactorAnimator.
             sortButton = new Filter(context, resourcesProvider);
             sortButton.setSorting(state.resaleList.getSorting());
             filtersContainer.addView(sortButton, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL, 0, 0, 6, 0));
-            sortButton.setOnClickListener(v -> {
+            sortButton.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(sortButton, v -> {
                 ItemOptions.makeOptions(container, resourcesProvider, sortButton)
                     .add(R.drawable.menu_sort_value, getString(ResaleGiftsList.Sorting.BY_PRICE.buttonStringResId), () -> {
                         state.resaleList.setSorting(ResaleGiftsList.Sorting.BY_PRICE);
@@ -1692,12 +1692,12 @@ public class ResaleGiftsFragment extends BaseFragment implements FactorAnimator.
                     .setOnTopOfScrim()
                     .translate(0, dp(-8))
                     .show();
-            });
+            }));
 
             modelButton = new Filter(context, resourcesProvider);
             modelButton.setValue(getString(R.string.Gift2AttributeModel));
             filtersContainer.addView(modelButton, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL, 0, 0, 6, 0));
-            modelButton.setOnClickListener(v -> {
+            modelButton.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(modelButton, v -> {
                 if (state.resaleList.modelAttributes.isEmpty()) return;
                 final ItemOptions ie = ItemOptions.makeOptions(container, resourcesProvider, modelButton, false, true)
                         .setDrawScrim(false)
@@ -1804,12 +1804,12 @@ public class ResaleGiftsFragment extends BaseFragment implements FactorAnimator.
                 }
                 ie.addView(listView);
                 ie.show();
-            });
+            }));
 
             backdropButton = new Filter(context, resourcesProvider);
             backdropButton.setValue(getString(R.string.Gift2AttributeBackdrop));
             filtersContainer.addView(backdropButton, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL, 0, 0, 6, 0));
-            backdropButton.setOnClickListener(v -> {
+            backdropButton.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(backdropButton, v -> {
                 if (state.resaleList.backdropAttributes.isEmpty()) return;
                 final ItemOptions ie = ItemOptions.makeOptions(container, resourcesProvider, backdropButton, false, true)
                         .setDrawScrim(false)
@@ -1916,12 +1916,12 @@ public class ResaleGiftsFragment extends BaseFragment implements FactorAnimator.
                 }
                 ie.addView(listView);
                 ie.show();
-            });
+            }));
 
             patternButton = new Filter(context, resourcesProvider);
             patternButton.setValue(getString(R.string.Gift2AttributeSymbol));
             filtersContainer.addView(patternButton, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL, 0, 0, 0, 0));
-            patternButton.setOnClickListener(v -> {
+            patternButton.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(patternButton, v -> {
                 if (state.resaleList.patternAttributes.isEmpty()) return;
                 final ItemOptions ie = ItemOptions.makeOptions(container, resourcesProvider, patternButton, false, true)
                         .setDrawScrim(false)
@@ -2028,7 +2028,7 @@ public class ResaleGiftsFragment extends BaseFragment implements FactorAnimator.
                 }
                 ie.addView(listView);
                 ie.show();
-            });
+            }));
 
             final GridLayoutManager layoutManager = new GridLayoutManager(getContext(), 3);
             layoutManager.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {

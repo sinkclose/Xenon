@@ -34,6 +34,17 @@ public class LiquidGlassEffect {
     private final float[] highlightCornerRadii = new float[8];
     private boolean highlightGeometryInitialized;
     private float highlightGeometryLeft, highlightGeometryTop, highlightGeometryRight, highlightGeometryBottom;
+    private float refractionScale = 1f;
+
+    /** Local lens depth, used while a popup changes from a droplet to a settled sheet. */
+    public void setRefractionScale(float scale) {
+        scale = Math.max(.25f, Math.min(3f, scale));
+        if (refractionScale != scale) {
+            refractionScale = scale;
+            uniformsInvalidated = true;
+            refractionUniformsInitialized = false;
+        }
+    }
     private boolean refractionUniformsInitialized;
 
     public static void prewarmShaders() {
@@ -199,8 +210,8 @@ public class LiquidGlassEffect {
                     // The navigation capsule uses the settings slider's 50 value.
                     final float fresnel = fixedRefraction ? 0.5f
                             : Math.max(0.25f, refractionSetting);
-                    final float refractionHeight = AndroidUtilities.dp(16f) * fresnel;
-                    final float refractionAmount = -AndroidUtilities.dp(32f) * fresnel;
+                    final float refractionHeight = AndroidUtilities.dp(16f) * fresnel * refractionScale;
+                    final float refractionAmount = -AndroidUtilities.dp(32f) * fresnel * refractionScale;
                     final float dispersion = Math.max(0.0f, Math.min(1.0f, dispersionSetting));
 
                     shader.setFloatUniform("resolution", resX, resY);

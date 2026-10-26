@@ -316,13 +316,20 @@ public class ActionBarMenuItem extends FrameLayout {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+        if (event.getActionMasked() == MotionEvent.ACTION_CANCEL) AndroidUtilities.cancelRunOnUIThread(showMenuRunnable);
+        if (popupWindow != null && popupWindow.isShowing()
+                && event.getActionMasked() != MotionEvent.ACTION_DOWN && popupWindow.forwardIosTouch(event)) {
+            AndroidUtilities.cancelRunOnUIThread(showMenuRunnable);
+            return true;
+        }
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
-            if (longClickEnabled && hasSubMenu() && (popupWindow == null || !popupWindow.isShowing())) {
+            if (hasSubMenu() && (popupWindow == null || !popupWindow.isShowing())) {
                 showMenuRunnable = () -> {
                     if (getParent() != null) {
                         getParent().requestDisallowInterceptTouchEvent(true);
                     }
-                    toggleSubMenu();
+                    if (hasOnClickListeners()) performClick();
+                    else toggleSubMenu();
                 };
                 AndroidUtilities.runOnUIThread(showMenuRunnable, 200);
             }
@@ -366,7 +373,7 @@ public class ActionBarMenuItem extends FrameLayout {
                     }
                 }
             }
-        } else if (longClickEnabled && hasSubMenu() && (popupWindow == null || !popupWindow.isShowing()) && event.getActionMasked() == MotionEvent.ACTION_UP) {
+        } else if (hasSubMenu() && (popupWindow == null || !popupWindow.isShowing()) && event.getActionMasked() == MotionEvent.ACTION_UP) {
             AndroidUtilities.cancelRunOnUIThread(showMenuRunnable);
         } else if (popupWindow != null && popupWindow.isShowing() && event.getActionMasked() == MotionEvent.ACTION_UP) {
             if (selectedMenuView != null) {
@@ -1927,6 +1934,7 @@ public class ActionBarMenuItem extends FrameLayout {
             popupLayout.scrollToTop();
         }
         View fromView = showSubMenuFrom == null ? this : showSubMenuFrom;
+        if (show) popupWindow.setAnimationSource(fromView);
         if (parentMenu != null) {
             View parent = parentMenu.parentActionBar;
             if (subMenuOpenSide == 0) {

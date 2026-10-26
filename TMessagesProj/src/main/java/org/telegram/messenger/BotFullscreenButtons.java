@@ -303,6 +303,19 @@ public class BotFullscreenButtons extends View {
         onMenuClickListener = listener;
     }
 
+    private final Runnable holdMenu = () -> {
+        if (this.pressed == 3 && zxc.iconic.xenon.NekoConfig.iosPopups && onMenuClickListener != null) {
+            getBounce(this.pressed).setPressed(false);
+            this.pressed = 0;
+            onMenuClickListener.run();
+        }
+    };
+
+    @Override protected void onDetachedFromWindow() {
+        AndroidUtilities.cancelRunOnUIThread(holdMenu);
+        super.onDetachedFromWindow();
+    }
+
     public void setParentRenderNode(Object renderNode) {
         parentRenderNode = renderNode;
     }
@@ -349,12 +362,15 @@ public class BotFullscreenButtons extends View {
             getBounce(pressed).setPressed(false);
             pressed = getButton(event);
             getBounce(pressed).setPressed(true);
+            if (pressed == 3 && zxc.iconic.xenon.NekoConfig.iosPopups) AndroidUtilities.runOnUIThread(holdMenu, 200);
         } else if (event.getAction() == MotionEvent.ACTION_MOVE) {
             if (getButton(event) != pressed) {
+                AndroidUtilities.cancelRunOnUIThread(holdMenu);
                 pressed = 0;
                 getBounce(pressed).setPressed(false);
             }
         } else if (event.getAction() == MotionEvent.ACTION_UP) {
+            AndroidUtilities.cancelRunOnUIThread(holdMenu);
             if (pressed == 1 && onCloseClickListener != null) {
                 onCloseClickListener.run();
             } else if (pressed == 2 && onCollapseClickListener != null) {
@@ -365,6 +381,7 @@ public class BotFullscreenButtons extends View {
             getBounce(pressed).setPressed(false);
             pressed = 0;
         } else if (event.getAction() == MotionEvent.ACTION_CANCEL) {
+            AndroidUtilities.cancelRunOnUIThread(holdMenu);
             getBounce(pressed).setPressed(false);
             pressed = 0;
         }

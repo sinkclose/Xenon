@@ -123,7 +123,7 @@ public class SenderSelectPopup extends ActionBarPopupWindow {
 
         Drawable shadowDrawable = ContextCompat.getDrawable(context, R.drawable.popup_fixed_alert4).mutate();
         shadowDrawable.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground, resourcesProvider), PorterDuff.Mode.MULTIPLY));
-        scrimPopupContainerLayout.setBackground(shadowDrawable);
+        if (!zxc.iconic.xenon.NekoConfig.material3Popups) scrimPopupContainerLayout.setBackground(shadowDrawable);
 
         Rect padding = new Rect();
         shadowDrawable.getPadding(padding);
@@ -153,7 +153,11 @@ public class SenderSelectPopup extends ActionBarPopupWindow {
         headerText.setTypeface(AndroidUtilities.bold(), Typeface.BOLD);
         int dp = AndroidUtilities.dp(18);
         headerText.setPadding(dp, AndroidUtilities.dp(12), dp, AndroidUtilities.dp(12));
-        recyclerContainer.addView(headerText);
+        if (zxc.iconic.xenon.NekoConfig.material3Popups) {
+            headerText.setBackground(new MaterialPopupRowDrawable(
+                    Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider), true, sendAsPeers.peers.isEmpty()));
+        }
+        recyclerContainer.addView(headerText, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
         FrameLayout recyclerFrameLayout = new FrameLayout(context);
 
@@ -162,6 +166,9 @@ public class SenderSelectPopup extends ActionBarPopupWindow {
         recyclerView = new RecyclerListView(context);
         layoutManager = new LinearLayoutManager(context);
         recyclerView.setLayoutManager(layoutManager);
+        if (zxc.iconic.xenon.NekoConfig.material3Popups) {
+            recyclerView.setSelectorDrawableColor(android.graphics.Color.TRANSPARENT);
+        }
         recyclerView.setAdapter(new RecyclerListView.SelectionAdapter() {
             @Override
             public boolean isEnabled(RecyclerView.ViewHolder holder) {
@@ -177,6 +184,9 @@ public class SenderSelectPopup extends ActionBarPopupWindow {
             @Override
             public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
                 SenderView senderView = (SenderView) holder.itemView;
+                if (zxc.iconic.xenon.NekoConfig.material3Popups) {
+                    senderView.applyMaterialStyle(resourcesProvider, false, position == peers.size() - 1);
+                }
                 TLRPC.TL_sendAsPeer peerObj = peers.get(position);
                 TLRPC.Peer peer = peerObj.peer;
                 long peerId = 0;
@@ -349,7 +359,7 @@ public class SenderSelectPopup extends ActionBarPopupWindow {
         headerShadow = new View(context);
         shadowDrawable = ContextCompat.getDrawable(context, R.drawable.header_shadow);
         shadowDrawable.setAlpha(0x99);
-        headerShadow.setBackground(shadowDrawable);
+        if (!zxc.iconic.xenon.NekoConfig.material3Popups) headerShadow.setBackground(shadowDrawable);
         headerShadow.setAlpha(0);
         recyclerFrameLayout.addView(headerShadow, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 4));
 
@@ -386,6 +396,7 @@ public class SenderSelectPopup extends ActionBarPopupWindow {
     @Override
     public void showAtLocation(View parent, int gravity, int x, int y) {
         super.showAtLocation(parent, gravity, popupX = x, popupY = y);
+        if (zxc.iconic.xenon.NekoConfig.material3Popups && isShowing()) dimBehind(.32f);
     }
 
     public void startShowAnimation() {
@@ -423,47 +434,14 @@ public class SenderSelectPopup extends ActionBarPopupWindow {
             }
         }
 
-        scrimPopupContainerLayout.setScaleX(SCALE_START);
-        scrimPopupContainerLayout.setScaleY(SCALE_START);
-        recyclerContainer.setAlpha(SCALE_START);
-
-//        dimView.setAlpha(0);
-
-        List<SpringAnimation> newSpringAnimations = Arrays.asList(
-                new SpringAnimation(scrimPopupContainerLayout, DynamicAnimation.SCALE_X)
-                        .setSpring(new SpringForce(1f)
-                            .setStiffness(SPRING_STIFFNESS)
-                            .setDampingRatio(SpringForce.DAMPING_RATIO_NO_BOUNCY))
-                        .addUpdateListener((animation, value, velocity) -> recyclerContainer.setScaleX(1f / value)),
-                new SpringAnimation(scrimPopupContainerLayout, DynamicAnimation.SCALE_Y)
-                        .setSpring(new SpringForce(1f)
-                                .setStiffness(SPRING_STIFFNESS)
-                                .setDampingRatio(SpringForce.DAMPING_RATIO_NO_BOUNCY))
-                        .addUpdateListener((animation, value, velocity) -> recyclerContainer.setScaleY(1f / value)),
-                new SpringAnimation(scrimPopupContainerLayout, DynamicAnimation.ALPHA)
-                        .setSpring(new SpringForce(1f)
-                                .setStiffness(SPRING_STIFFNESS)
-                                .setDampingRatio(SpringForce.DAMPING_RATIO_NO_BOUNCY)),
-                new SpringAnimation(recyclerContainer, DynamicAnimation.ALPHA)
-                        .setSpring(new SpringForce(1f)
-                                .setStiffness(SPRING_STIFFNESS)
-                                .setDampingRatio(SpringForce.DAMPING_RATIO_NO_BOUNCY))
-//                new SpringAnimation(dimView, DynamicAnimation.ALPHA)
-//                        .setSpring(new SpringForce(1f)
-//                                .setStiffness(SPRING_STIFFNESS)
-//                                .setDampingRatio(SpringForce.DAMPING_RATIO_NO_BOUNCY))
-        );
-
-        for (SpringAnimation animation : newSpringAnimations) {
-            springAnimations.add(animation);
-            animation.addEndListener((animation1, canceled, value, velocity) -> {
-                if (!canceled) {
-                    springAnimations.remove(animation);
-                    animation1.cancel();
-                }
-            });
-            animation.start();
-        }
+        // PopupContextAnimation already animates the native window. Counter-scaling
+        // its children here made custom rows overflow the visible menu surface.
+        scrimPopupContainerLayout.setScaleX(1);
+        scrimPopupContainerLayout.setScaleY(1);
+        scrimPopupContainerLayout.setAlpha(1);
+        recyclerContainer.setScaleX(1);
+        recyclerContainer.setScaleY(1);
+        recyclerContainer.setAlpha(1);
     }
 
     public void startDismissAnimation(SpringAnimation... animations) {
@@ -540,6 +518,15 @@ public class SenderSelectPopup extends ActionBarPopupWindow {
         public final SimpleAvatarView avatar;
         public final TextView title;
         public final TextView subtitle;
+
+        public void applyMaterialStyle(Theme.ResourcesProvider resourcesProvider, boolean top, boolean bottom) {
+            if (getBackground() instanceof MaterialPopupRowDrawable) {
+                ((MaterialPopupRowDrawable) getBackground()).setCorners(top, bottom);
+            } else {
+                setBackground(new MaterialPopupRowDrawable(
+                        Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider), top, bottom));
+            }
+        }
 
         public SenderView(Context context, Theme.ResourcesProvider resourcesProvider) {
             super(context);

@@ -126,7 +126,7 @@ public class BusinessBotButton extends FrameLayout {
         menuView.setImageResource(R.drawable.msg_mini_customize);
         menuView.setBackground(Theme.createCircleSelectorDrawable(Theme.getColor(Theme.key_listSelector, resourcesProvider), 0, 0));
         menuView.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_chat_topPanelClose, resourcesProvider), PorterDuff.Mode.MULTIPLY));
-        menuView.setOnClickListener(e -> {
+        menuView.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(menuView, e -> {
             ItemOptions itemOptions = ItemOptions.makeOptions(chatActivity.getLayoutContainer(), resourcesProvider, menuView);
             itemOptions.add(R.drawable.msg_cancel, LocaleController.getString(R.string.BizBotRemove), true, () -> {
                 TL_account.disablePeerConnectedBot req = new TL_account.disablePeerConnectedBot();
@@ -149,7 +149,7 @@ public class BusinessBotButton extends FrameLayout {
             itemOptions.translate(dp(10), dp(7));
             itemOptions.setDimAlpha(0);
             itemOptions.show();
-        });
+        }));
         addView(menuView, LayoutHelper.createFrame(32, 32, Gravity.RIGHT | Gravity.CENTER_VERTICAL, 8, 0, 6, 0));
     }
 

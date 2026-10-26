@@ -1488,7 +1488,7 @@ public class ItemOptions {
             }
         }
 
-        if (blurForMenu && scrimBlur3SourceBitmap != null) {
+        if (blurForMenu && scrimBlur3SourceBitmap != null && !zxc.iconic.xenon.NekoConfig.material3Popups) {
             setGapBackgroundColor(Theme.multAlpha(Theme.getColor(Theme.key_actionBarDefaultSubmenuItem, resourcesProvider), 0.06f));
             BlurredBackgroundDrawableViewFactory factory = new BlurredBackgroundDrawableViewFactory(scrimBlur3SourceBitmap);
             factory.setSourceRootView(new ViewPositionWatcher(container), container);
@@ -1502,10 +1502,17 @@ public class ItemOptions {
         }
 
         actionBarPopupWindow.setScaleOut(scaleOut);
+        actionBarPopupWindow.setAnimationSource(scrimView);
+        final android.graphics.Rect popupVisibleFrame = new android.graphics.Rect();
+        final int[] popupRootLocation = new int[2];
+        container.getWindowVisibleDisplayFrame(popupVisibleFrame);
+        container.getRootView().getLocationOnScreen(popupRootLocation);
+        int popupLeft = IosPopupMorphGeometry.clampMenuPosition((int) (X + this.translateX) + popupRootLocation[0],
+                layout.getMeasuredWidth(), popupVisibleFrame.left, popupVisibleFrame.right, dp(6)) - popupRootLocation[0];
         actionBarPopupWindow.showAtLocation(
             container,
             0,
-            (int) (offsetX = (X + this.translateX)),
+            (int) (offsetX = popupLeft),
             (int) (offsetY = (Y + this.translateY))
         );
 
@@ -1851,6 +1858,13 @@ public class ItemOptions {
                 v.getParent().requestDisallowInterceptTouchEvent(true);
             }
             final int action = event.getActionMasked();
+            if (self.actionBarPopupWindow.forwardIosTouch(event)) {
+                if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                    v.setOnTouchListener(null);
+                    self.hoverReleaseListener = null;
+                }
+                return true;
+            }
             if (action == MotionEvent.ACTION_MOVE) {
                 self.updateHover((int) event.getRawX(), (int) event.getRawY());
             } else if (action == MotionEvent.ACTION_UP) {

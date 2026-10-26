@@ -1446,9 +1446,9 @@ public class BotWebViewSheet extends Dialog implements NotificationCenter.Notifi
             menu.addItem(R.id.menu_collapse_bot, R.drawable.arrow_more);
         }
         optionsItem = menu.addItem(0, optionsIcon = new BotFullscreenButtons.OptionsIcon(getContext()));
-        optionsItem.setOnClickListener(v -> {
+        optionsItem.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(optionsItem, v -> {
             openOptions();
-        });
+        }));
 
         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
             @Override

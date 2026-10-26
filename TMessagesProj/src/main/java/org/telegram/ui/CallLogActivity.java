@@ -1833,7 +1833,7 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
 				}));
 			});
 		};
-		linkOptionsView.setOnClickListener(v ->
+		linkOptionsView.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(linkOptionsView, v ->
 			ItemOptions.makeOptions(sheet.container, resourcesProvider, linkContainer)
 				.add(R.drawable.msg_copy, getString(R.string.Copy), () -> {
 					AndroidUtilities.addToClipboard(currentLink[0]);
@@ -1855,7 +1855,7 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
 				})
 				.addIf(creator, R.drawable.msg_delete, getString(R.string.RevokeLink), true, revoke)
 				.show()
-		);
+		));
 		shareButton.setOnClickListener(v -> new ShareAlert(context, null, link, false, currentLink[0], false, resourcesProvider) {
             @Override
             protected void onSend(LongSparseArray<TLRPC.Dialog> dids, int count, TLRPC.TL_forumTopic topic, boolean showToast) {
@@ -1877,12 +1877,12 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
             }
         }.show());
 		if (creator) {
-			optionsView.setOnClickListener(v -> ItemOptions.makeOptions(sheet.getContainer(), resourcesProvider, optionsView)
+			optionsView.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(optionsView, v -> ItemOptions.makeOptions(sheet.getContainer(), resourcesProvider, optionsView)
                 .add(R.drawable.menu_link_revoke, getString(R.string.GroupCallCreatedLinkRevoke), revoke)
                 .setOnTopOfScrim()
                 .translate(0, -dp(6))
                 .setDimAlpha(0)
-                .show());
+                .show()));
 		}
 	}
 

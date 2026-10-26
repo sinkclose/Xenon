@@ -43,6 +43,8 @@ import zxc.iconic.xenon.helpers.PopupHelper;
 public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity implements NotificationCenter.NotificationCenterDelegate {
 
     private ProfileGooeyView gooeyOffsetPreview;
+    private final int selectFontRow = rowId++;
+    private ClientFontPicker fontPicker;
     private final int material3Row = rowId++;
     private boolean material3Expanded;
     private final int ios26Row = rowId++;
@@ -52,6 +54,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
     private final int iosListItemsRow = rowId++;
     private final int iosSlidersRow = rowId++;
     private final int iosBottomBarRow = rowId++;
+    private final int material3PopupsRow = rowId++;
     private boolean ios26Expanded;
 
     @Override
@@ -201,7 +204,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         items.add(UItem.asCheck(appBarShadowRow, LocaleController.getString(R.string.DisableAppBarShadow)).slug("appBarShadow").setChecked(NekoConfig.disableAppBarShadow));
         items.add(UItem.asCheck(formatTimeWithSecondsRow, LocaleController.getString(R.string.FormatWithSeconds)).slug("formatTimeWithSeconds").setChecked(NekoConfig.formatTimeWithSeconds));
         items.add(UItem.asCheck(disableNumberRoundingRow, LocaleController.getString(R.string.DisableNumberRounding), "4.8K -> 4777").slug("disableNumberRounding").setChecked(NekoConfig.disableNumberRounding));
-        items.add(UItem.asExpandableSwitch(material3Row, "Material Design 3", material3Count() + "/8")
+        items.add(UItem.asExpandableSwitch(material3Row, "Material Design 3", material3Count() + "/9")
                 .setChecked(material3Count() > 0).setCollapsed(!material3Expanded)
                 .setClickCallback(v -> setMaterial3Enabled(material3Count() == 0)).slug("material3"));
         if (material3Expanded) {
@@ -214,6 +217,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         if (NekoConfig.wavyEnabled) {
             items.add(UItem.asRoundCheckbox(wavyProgressRow, LocaleController.getString(R.string.WavyProgressIndicator)).setChecked(NekoConfig.wavyProgressEnabled).slug("wavyProgress"));
         }
+        items.add(UItem.asRoundCheckbox(material3PopupsRow, LocaleController.getString(R.string.Material3Popups)).setChecked(NekoConfig.material3Popups).slug("material3Popups"));
         items.add(InfoCheckboxCellFactory.of(material3DialogsRow, LocaleController.getString(R.string.Material3Dialogs), NekoConfig.material3Dialogs, this::showDialogsInfo).slug("material3Dialogs"));
         }
         items.add(UItem.asExpandableSwitch(ios26Row, "iOS 26 design", ios26Count() + "/6")
@@ -262,6 +266,10 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         items.add(TextSettingsCellFactory.of(tabsPositionRow, LocaleController.getString(R.string.TabsPosition), LocaleController.getString(NekoConfig.bottomFilterTabs ? R.string.TabsPositionBottom : R.string.TabsPositionTop)).slug("tabsPosition"));
         items.add(UItem.asShadow(null));
 
+        items.add(UItem.asHeader(LocaleController.getString(R.string.ClientFont)));
+        items.add(TextSettingsCellFactory.of(selectFontRow, LocaleController.getString(R.string.ClientSelectFont), selectedFontName()).slug("selectFont"));
+        items.add(UItem.asShadow(LocaleController.getString(R.string.ClientFontHint)));
+
     }
 
     private void refreshActivitySwitches() {
@@ -300,7 +308,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
     }
 
     private int material3Count() {
-        return (NekoConfig.material3Switches ? 1 : 0) + (NekoConfig.m3SectionsStyle ? 1 : 0) + (NekoConfig.materialSliders ? 1 : 0) + (NekoConfig.material3BottomNavigationBar ? 1 : 0) + (NekoConfig.md3Folders ? 1 : 0) + (NekoConfig.wavyEnabled ? 1 : 0) + (NekoConfig.wavyProgressEnabled ? 1 : 0) + (NekoConfig.material3Dialogs ? 1 : 0);
+        return (NekoConfig.material3Switches ? 1 : 0) + (NekoConfig.m3SectionsStyle ? 1 : 0) + (NekoConfig.materialSliders ? 1 : 0) + (NekoConfig.material3BottomNavigationBar ? 1 : 0) + (NekoConfig.md3Folders ? 1 : 0) + (NekoConfig.wavyEnabled ? 1 : 0) + (NekoConfig.wavyProgressEnabled ? 1 : 0) + (NekoConfig.material3Dialogs ? 1 : 0) + (NekoConfig.material3Popups ? 1 : 0);
     }
 
     private void setMaterial3Enabled(boolean enabled) {
@@ -313,6 +321,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         if (NekoConfig.wavyEnabled != enabled) NekoConfig.toggleWavyEnabled();
         if (NekoConfig.wavyProgressEnabled != enabled) NekoConfig.toggleWavyProgressEnabled();
         if (NekoConfig.material3Dialogs != enabled) NekoConfig.toggleMaterial3Dialogs();
+        if (NekoConfig.material3Popups != enabled) NekoConfig.toggleMaterial3Popups();
         refreshListStyle();
         showRestartBulletin();
     }
@@ -320,7 +329,9 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
     @Override
     protected void onItemClick(UItem item, View view, int position, float x, float y) {
         var id = item.id;
-        if (id == material3Row) {
+        if (id == selectFontRow) {
+            fontPicker().show();
+        } else if (id == material3Row) {
             material3Expanded = !material3Expanded;
             listView.adapter.update(true);
         } else if (id == ios26Row) {
@@ -345,6 +356,9 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
             listView.adapter.update(true);
             parentLayout.rebuildAllFragmentViews(false, false);
             refreshActivitySwitches();
+        } else if (id == material3PopupsRow) {
+            NekoConfig.toggleMaterial3Popups();
+            listView.adapter.update(true);
         } else if (id == iosBottomBarRow) {
             NekoConfig.toggleIosBottomBar();
             NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.mainTabsConfigUpdated);
@@ -578,7 +592,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         }
         if (id == material3SwitchesRow || id == m3SectionsStyleRow || id == materialSlidersRow
                 || id == material3BottomNavigationBarRow || id == md3FoldersRow
-                || id == loadingIndicatorsRow || id == wavyProgressRow || id == material3DialogsRow) {
+                || id == loadingIndicatorsRow || id == wavyProgressRow || id == material3DialogsRow || id == material3PopupsRow) {
             listView.adapter.update(true);
         }
     }
@@ -920,4 +934,24 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
             return item;
         }
     }
+    private String selectedFontName() {
+        String selected = zxc.iconic.xenon.helpers.ClientFonts.selectedId();
+        for (var font : zxc.iconic.xenon.helpers.ClientFonts.list()) if (font.id.equals(selected)) return font.name;
+        return LocaleController.getString(R.string.Default);
+    }
+
+    private ClientFontPicker fontPicker() {
+        if (fontPicker == null) fontPicker = new ClientFontPicker(this, () -> {
+            if (getParentActivity() instanceof org.telegram.ui.LaunchActivity activity) activity.rebuildAllFragments(false);
+            if (listView != null) listView.adapter.update(false);
+        });
+        return fontPicker;
+    }
+
+    @Override
+    public void onActivityResultFragment(int requestCode, int resultCode, android.content.Intent data) {
+        super.onActivityResultFragment(requestCode, resultCode, data);
+        if (requestCode == ClientFontPicker.REQUEST_FONT) fontPicker().onResult(resultCode, data);
+    }
+
 }

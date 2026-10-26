@@ -3655,6 +3655,7 @@ public class AlertsCreator {
                 break;
             }
         }
+        popupWindow.setAnimationSource(anhcorView);
         popupWindow.showAtLocation(anhcorView.getRootView(), 0, (int) (viewX + x - popupView.getMeasuredWidth() / 2f), (int) (viewY + y - popupView.getMeasuredHeight() / 2f));
         popupWindow.dimBehind();
         return popupWindow;
@@ -4734,7 +4735,7 @@ public class AlertsCreator {
         bottomSheet.fixNavigationBar(datePickerColors.backgroundColor);
 
         if (repeatTextView != null) {
-            repeatTextView.setOnClickListener(v -> {
+            repeatTextView.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(repeatTextView, v -> {
                 if (!UserConfig.getInstance(UserConfig.selectedAccount).isPremium()) {
                     BulletinFactory.of(bulletinContainer, resourcesProvider)
                         .createSimpleBulletin(R.raw.star_premium_2, AndroidUtilities.premiumText(LocaleController.getString(R.string.MessageScheduledRepeatPremium), () -> {
@@ -4759,7 +4760,7 @@ public class AlertsCreator {
                 }
                 o.setGravity(Gravity.CENTER_HORIZONTAL);
                 o.show();
-            });
+            }));
         }
         final HintView2[] notifyHint = new HintView2[1];
         notifyItem.setOnClickListener(v -> {

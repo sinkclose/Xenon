@@ -326,7 +326,7 @@ public class EditTextEmoji extends FrameLayout implements NotificationCenter.Not
             addView(emojiButton, LayoutHelper.createFrame(48, 48, Gravity.BOTTOM | Gravity.LEFT, 0, 0, 0, 0));
         }
         emojiButton.setBackground(Theme.createSelectorDrawable(getThemedColor(Theme.key_listSelector)));
-        emojiButton.setOnClickListener(view -> {
+        emojiButton.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(emojiButton, () -> shownFormatButton, view -> {
             if (!emojiButton.isEnabled() || emojiButton.getAlpha() < 0.5f || (adjustPanLayoutHelper != null && adjustPanLayoutHelper.animationInProgress())) {
                 return;
             }
@@ -358,7 +358,7 @@ public class EditTextEmoji extends FrameLayout implements NotificationCenter.Not
                 }
                 openKeyboardInternal();
             }
-        });
+        }));
         emojiButton.setContentDescription(LocaleController.getString(R.string.Emoji));
     }
 

@@ -349,6 +349,7 @@ public class ApplicationLoader extends Application {
         }
 
         NativeLoader.initNativeLibs(ApplicationLoader.applicationContext);
+        zxc.iconic.xenon.helpers.ClientFonts.initialize(this);
 
         try {
             ConnectionsManager.native_setJava(false);

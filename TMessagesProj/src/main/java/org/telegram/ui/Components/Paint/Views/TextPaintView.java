@@ -35,7 +35,7 @@ import org.telegram.ui.Components.Paint.PaintTypeface;
 import org.telegram.ui.Components.Paint.Swatch;
 import org.telegram.ui.Components.RectOld;
 
-public class TextPaintView extends EntityView {
+public class TextPaintView extends EntityView implements zxc.iconic.xenon.helpers.ClientFonts.PreserveTypeface {
 
     private EditTextOutline editText;
     private Swatch swatch;

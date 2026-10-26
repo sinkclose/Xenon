@@ -50,10 +50,20 @@ public class ActionBarMenuSubItem extends FrameLayout {
     private int selectorColor;
 
     int selectorRad = 12;
+    private boolean iosPopupStyle;
+    private org.telegram.ui.Components.MaterialPopupRowDrawable materialPopupBackground;
+    private boolean materialPopupStyle = zxc.iconic.xenon.NekoConfig.material3Popups;
+    private boolean customItemHeight;
+
+    public void setIosPopupStyle(boolean enabled) {
+        if (iosPopupStyle == enabled) return;
+        iosPopupStyle = enabled;
+        updateBackground();
+    }
     boolean top;
     boolean bottom;
 
-    private int itemHeight = 48;
+    private int itemHeight = zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48;
     protected final Theme.ResourcesProvider resourcesProvider;
     public Runnable openSwipeBackLayout;
 
@@ -136,6 +146,7 @@ public class ActionBarMenuSubItem extends FrameLayout {
     }
 
     public void setItemHeight(int itemHeight) {
+        customItemHeight = true;
         this.itemHeight = itemHeight;
     }
 
@@ -444,8 +455,28 @@ public class ActionBarMenuSubItem extends FrameLayout {
         updateBackground();
     }
 
+    public void refreshPopupStyle() {
+        boolean material = zxc.iconic.xenon.NekoConfig.material3Popups;
+        if (materialPopupStyle == material) return;
+        materialPopupStyle = material;
+        if (!customItemHeight) itemHeight = material ? 56 : 48;
+        updateBackground();
+        requestLayout();
+    }
+
     public void updateBackground() {
-        setBackground(Theme.createRadSelectorDrawable(selectorColor, top ? selectorRad : 0, bottom ? selectorRad : 0));
+        if (!iosPopupStyle && zxc.iconic.xenon.NekoConfig.material3Popups) {
+            if (materialPopupBackground == null) {
+                materialPopupBackground = new org.telegram.ui.Components.MaterialPopupRowDrawable(
+                        getThemedColor(Theme.key_windowBackgroundWhite), top, bottom);
+            }
+            materialPopupBackground.setCorners(top, bottom);
+            if (getBackground() != materialPopupBackground) setBackground(materialPopupBackground);
+            return;
+        }
+        setBackground(iosPopupStyle
+                ? null
+                : Theme.createRadSelectorDrawable(selectorColor, top ? selectorRad : 0, bottom ? selectorRad : 0));
     }
 
     private int getThemedColor(int key) {

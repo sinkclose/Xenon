@@ -1912,7 +1912,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
             optionsSearchImageView.setVisibility(GONE);
             actionBar.addView(optionsSearchImageView, LayoutHelper.createFrame(48, 56, Gravity.RIGHT | Gravity.BOTTOM));
         }
-        photoVideoOptionsItem.setOnClickListener(new OnClickListener() {
+        photoVideoOptionsItem.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(photoVideoOptionsItem, new OnClickListener() {
             @Override
             public void onClick(View view) {
                 int tab = getClosestTab();
@@ -2216,7 +2216,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                     .setDimAlpha(0)
                     .show();
             }
-        });
+        }));
 
         if (searchItem != null) {
             EditTextBoldCursor editText = searchItem.getSearchField();

@@ -685,6 +685,7 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
         }
         dismissed = false;
         super.show();
+        zxc.iconic.xenon.helpers.ClientFonts.observeWindow(getWindow().getDecorView());
         if (progressViewContainer != null && progressViewStyle == ALERT_TYPE_SPINNER) {
             progressViewContainer.setScaleX(0);
             progressViewContainer.setScaleY(0);
@@ -1752,6 +1753,7 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        org.telegram.ui.Components.IosPopupOpener.registerWindow(getWindow());
         super.onCreate(savedInstanceState);
         inflateContent(true);
         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.emojiLoaded);

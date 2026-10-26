@@ -26,6 +26,8 @@ public class ChatScrimPopupContainerLayout extends LinearLayout {
     public ChatScrimPopupContainerLayout(Context context) {
         super(context);
         setOrientation(LinearLayout.VERTICAL);
+        setClipChildren(false);
+        setClipToPadding(false);
     }
 
     @Override
@@ -180,7 +182,7 @@ public class ChatScrimPopupContainerLayout extends LinearLayout {
     }
 
     public void setPopupAlpha(float alpha) {
-        popupWindowLayout.setAlpha(alpha);
+        popupWindowLayout.setAlpha(zxc.iconic.xenon.NekoConfig.iosPopups ? 1f : alpha);
         if (bottomView != null) {
             bottomView.setAlpha(alpha);
         }

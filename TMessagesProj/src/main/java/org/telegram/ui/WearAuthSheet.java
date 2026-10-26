@@ -275,7 +275,7 @@ public class WearAuthSheet {
         sheet.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundGray, resourcesProvider));
         sheet.fixNavigationBar(Theme.getColor(Theme.key_windowBackgroundGray, resourcesProvider));
 
-        accountSelectorLayout.setOnClickListener(v -> {
+        accountSelectorLayout.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(accountSelectorLayout, v -> {
             ItemOptions i = ItemOptions.makeOptions(sheet.container, sheet.getResourcesProvider(), accountSelectorInnerLayout);
             for (int account : accountNumbers) {
                 final TLRPC.User user = UserConfig.getInstance(account).getCurrentUser();
@@ -293,7 +293,7 @@ public class WearAuthSheet {
                 .setGravity(Gravity.LEFT)
                 .translate(-dp(8), -dp(8))
                 .show();
-        });
+        }));
 
         button.setOnClickListener(v -> {
             if (button.isLoading()) return;

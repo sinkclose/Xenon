@@ -270,7 +270,7 @@ public class PaintTextOptionsView extends FrameLayout implements NotificationCen
         }
     }
 
-    public final static class TypefaceCell extends TextView {
+    public final static class TypefaceCell extends TextView implements zxc.iconic.xenon.helpers.ClientFonts.PreserveTypeface {
         private boolean isCurrent;
         private Drawable expandDrawable;
 

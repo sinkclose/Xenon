@@ -1,5 +1,7 @@
 package zxc.iconic.xenon.helpers;
 
+import zxc.iconic.xenon.NekoConfig;
+
 import static org.telegram.messenger.AndroidUtilities.dp;
 
 import android.content.Context;
@@ -65,6 +67,17 @@ public class AccountsHelper {
         var previewWindow = activity.fragmentPreviewWindow;
         var recyclerView = new RecyclerView(context) {
             @Override
+            protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                if (NekoConfig.material3Popups && View.MeasureSpec.getMode(widthMeasureSpec) != View.MeasureSpec.EXACTLY) {
+                    // Establish the natural menu width first; LinearLayout's uniform-width
+                    // pass then expands this list to match the widest neighbouring button.
+                    widthMeasureSpec = View.MeasureSpec.makeMeasureSpec(
+                            View.resolveSize(dp(230), widthMeasureSpec), View.MeasureSpec.EXACTLY);
+                }
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+            }
+
+            @Override
             public boolean dispatchTouchEvent(MotionEvent ev) {
                 if (previewWindow != null && previewWindow.dispatchTouchEvent(ev, super::dispatchTouchEvent)) {
                     return true;
@@ -81,8 +94,21 @@ public class AccountsHelper {
         });
         recyclerView.setAdapter(adapter);
         recyclerView.setLayoutManager(new LinearLayoutManager(context));
-        recyclerView.setBackground(Theme.createRoundRectDrawable(0, dp(12), 0));
-        recyclerView.setClipToOutline(true);
+        recyclerView.setBackground(NekoConfig.material3Popups ? null : Theme.createRoundRectDrawable(0, dp(12), 0));
+        recyclerView.setClipToOutline(!NekoConfig.material3Popups);
+        if (NekoConfig.material3Popups) {
+            recyclerView.addItemDecoration(new RecyclerView.ItemDecoration() {
+                @Override public void onDraw(@NonNull Canvas canvas, @NonNull RecyclerView parent, @NonNull RecyclerView.State state) {
+                    for (int i = 0; i < parent.getChildCount(); i++) {
+                        View child = parent.getChildAt(i);
+                        int position = parent.getChildAdapterPosition(child);
+                        if (position != RecyclerView.NO_POSITION && child instanceof AccountView) {
+                            ((AccountView) child).applyMaterialStyle(position == 0, position == adapter.getItemCount() - 1);
+                        }
+                    }
+                }
+            });
+        }
         recyclerView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         var touchHelper = new ItemTouchHelper(new ItemTouchHelper.SimpleCallback(ItemTouchHelper.UP | ItemTouchHelper.DOWN, 0) {
 
@@ -183,7 +209,7 @@ public class AccountsHelper {
             var accountView = new AccountView(parent.getContext(), resourcesProvider);
             accountView.setOnClickListener(onClickListener);
             accountView.setOnLongClickListener(onLongClickListener);
-            accountView.setLayoutParams(new RecyclerView.LayoutParams(adaptive ? ViewGroup.LayoutParams.MATCH_PARENT : dp(230), dp(48)));
+            accountView.setLayoutParams(new RecyclerView.LayoutParams((adaptive || NekoConfig.material3Popups) ? ViewGroup.LayoutParams.MATCH_PARENT : dp(230), dp(NekoConfig.material3Popups ? 56 : 48)));
             return new ViewHolder(accountView);
         }
 
@@ -191,6 +217,7 @@ public class AccountsHelper {
         public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
             var account = accountNumbers.get(position);
             holder.accountView.setAccount(account, account == currentAccount);
+            if (NekoConfig.material3Popups) holder.accountView.applyMaterialStyle(position == 0, position == getItemCount() - 1);
         }
 
         @Override
@@ -226,6 +253,7 @@ public class AccountsHelper {
 
     private static class AccountView extends LinearLayout {
 
+        private final Theme.ResourcesProvider resourcesProvider;
         private int account = -1;
         private boolean selected = false;
 
@@ -236,6 +264,7 @@ public class AccountsHelper {
 
         public AccountView(Context context, Theme.ResourcesProvider resourcesProvider) {
             super(context);
+            this.resourcesProvider = resourcesProvider;
 
             setOrientation(LinearLayout.HORIZONTAL);
             var stateListDrawable = new StateListDrawable();
@@ -272,6 +301,15 @@ public class AccountsHelper {
             textView.setEllipsize(TextUtils.TruncateAt.END);
             addView(textView, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, Gravity.CENTER_VERTICAL, 14, 0, 14, 0));
 
+        }
+
+        public void applyMaterialStyle(boolean top, boolean bottom) {
+            if (getBackground() instanceof org.telegram.ui.Components.MaterialPopupRowDrawable) {
+                ((org.telegram.ui.Components.MaterialPopupRowDrawable) getBackground()).setCorners(top, bottom);
+            } else {
+                setBackground(new org.telegram.ui.Components.MaterialPopupRowDrawable(
+                        Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider), top, bottom));
+            }
         }
 
         public void setAccount(int account, boolean selected) {

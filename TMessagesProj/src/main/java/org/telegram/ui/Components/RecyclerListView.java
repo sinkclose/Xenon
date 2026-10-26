@@ -2495,6 +2495,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
             child.setAccessibilityDelegate(null);
         }
         super.onChildAttachedToWindow(child);
+        zxc.iconic.xenon.helpers.ClientFonts.applyToView(child);
     }
 
     @Override

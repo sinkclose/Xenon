@@ -24464,6 +24464,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         @Override
         protected void onAttachedToWindow() {
             super.onAttachedToWindow();
+            zxc.iconic.xenon.helpers.ClientFonts.observeWindow(this);
             centerImage.onAttachedToWindow();
             leftImage.onAttachedToWindow();
             rightImage.onAttachedToWindow();

@@ -11985,7 +11985,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             searchFilterButton.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_chat_searchPanelIcons), PorterDuff.Mode.MULTIPLY));
             searchFilterButton.setBackground(Theme.createSelectorDrawable(getThemedColor(Theme.key_actionBarActionModeDefaultSelector), 1));
             searchContainer.addView(searchFilterButton, LayoutHelper.createFrame(44, 44, Gravity.LEFT | Gravity.TOP, searchUserButton != null ? (96 - 2.66f) : 48, 0, 0, 0));
-            searchFilterButton.setOnClickListener(view -> {
+            searchFilterButton.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(searchFilterButton, view -> {
                 if (getParentActivity() == null) {
                     return;
                 }
@@ -12010,7 +12010,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     }
                 }
                 filterPopup.show();
-            });
+            }));
         }
     }
 
@@ -32983,6 +32983,10 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             cancelHold();
             holdPopupOpened = false;
         } else if (holdPopupOpened) {
+            if (NekoConfig.iosPopups && scrimPopupWindow != null && scrimPopupWindow.isShowing()) {
+                if (!scrimPopupWindow.forwardIosTouch(event))
+                    org.telegram.ui.Components.IosPopupMorph.forwardEmbedded(scrimPopupWindow.getContentView(), event);
+            }
             if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
                 holdPopupOpened = false;
             }
@@ -35130,6 +35134,22 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             if (reactionsLayout != null) {
                 reactionsLayout.setParentLayout(scrimPopupContainerLayout);
             }
+            final RectF iosMessageMenuSource = new RectF();
+            if (NekoConfig.iosPopups) {
+                int[] sourceLocation = new int[2];
+                v.getLocationOnScreen(sourceLocation);
+                if (v instanceof ChatMessageCell) {
+                    ChatMessageCell cell = (ChatMessageCell) v;
+                    iosMessageMenuSource.set(sourceLocation[0] + cell.getBackgroundDrawableLeft(),
+                            sourceLocation[1] + cell.getBackgroundDrawableTop(),
+                            sourceLocation[0] + cell.getBackgroundDrawableRight(),
+                            sourceLocation[1] + cell.getBackgroundDrawableBottom());
+                } else {
+                    iosMessageMenuSource.set(sourceLocation[0], sourceLocation[1],
+                            sourceLocation[0] + v.getWidth(), sourceLocation[1] + v.getHeight());
+                }
+                if (showMessagePreview) popupLayout.enableIosMessageSurface(v, iosMessageMenuSource);
+            }
             final MessagePopupPreviewLayout previewLayout;
             if (showMessagePreview) {
                 scrimPopupContainerLayout.measure(View.MeasureSpec.makeMeasureSpec(contentView.getWidth() - dp(16), View.MeasureSpec.AT_MOST),
@@ -35199,6 +35219,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 }
 
             };
+            if (NekoConfig.iosPopups && previewLayout == null) {
+                scrimPopupWindow.setAnimationSource(v, iosMessageMenuSource, popupLayout);
+            }
             scrimPopupWindow.setPauseNotifications(true);
             scrimPopupWindow.setDismissAnimationDuration(220);
             scrimPopupWindow.setOutsideTouchable(true);
@@ -48159,7 +48182,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (text != null && LanguageDetector.hasSupport()) {
             LanguageDetector.detectLanguage(text.toString(), lang -> {
                 if (lang != null && !Translator.isLanguageRestricted(lang)) {
-                    cell.setOnClickListener(e -> {
+                    cell.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(cell, e -> {
 
                         ActionBarPopupWindow.ActionBarPopupWindowLayout layout = new ActionBarPopupWindow.ActionBarPopupWindowLayout(getContext());
                         Drawable shadowDrawable2 = ContextCompat.getDrawable(getContext(), R.drawable.popup_fixed_alert4).mutate();
@@ -48186,7 +48209,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                         window.setAnimationStyle(R.style.PopupContextAnimation);
                         window.setFocusable(true);
                         window.showAsDropDown(cell, cell.getWidth() / 2 - AndroidUtilities.dp(90), AndroidUtilities.dp(-16), Gravity.BOTTOM | Gravity.LEFT);
-                    });
+                    }));
                 } else {
                     cell.setClickable(false);
                 }

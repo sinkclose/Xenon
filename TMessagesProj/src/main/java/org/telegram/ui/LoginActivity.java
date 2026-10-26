@@ -10163,7 +10163,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
             cells[2].setSubtitle(premium_days == 7 ? getString(R.string.SMSFee3Text) : formatPluralStringComma("SMSFee3TextDays", premium_days));
 
-            optionsButton.setOnClickListener(v -> {
+            optionsButton.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(optionsButton, v -> {
                 ItemOptions.makeOptions(LoginActivity.this, optionsButton)
                     .add(R.drawable.msg_help, getString(R.string.SettingsHelp), () -> {
                         try {
@@ -10290,7 +10290,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                     })
                     .setGravity(Gravity.RIGHT)
                     .show();
-            });
+            }));
 
             button.setEnabled(true);
             button.setOnClickListener(null);

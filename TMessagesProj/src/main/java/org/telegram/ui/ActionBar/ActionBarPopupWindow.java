@@ -28,6 +28,8 @@ import android.graphics.PorterDuffColorFilter;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.ColorDrawable;
+import android.os.Build;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -52,12 +54,16 @@ import org.telegram.messenger.R;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.utils.ViewOutlineProviderImpl;
 import org.telegram.ui.Components.LayoutHelper;
+import org.telegram.ui.Components.IosPopupMorph;
+import org.telegram.ui.Components.IosPopupMorphGeometry;
 import org.telegram.ui.Components.PopupSwipeBackLayout;
+import org.telegram.ui.Components.PopupMenuSurface;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 
 public class ActionBarPopupWindow extends PopupWindow {
 
@@ -72,6 +78,195 @@ public class ActionBarPopupWindow extends PopupWindow {
     private boolean pauseNotifications;
     private long outEmptyTime = -1;
     private boolean scaleOut;
+    private java.lang.ref.WeakReference<View> animationSource;
+    private RectF animationSourceBounds;
+    private View animationSurface;
+    private IosPopupMorph iosSurface;
+    private PopupMenuSurface nativeSurface;
+    private View nativeContent;
+    private View iosContent;
+    private int iosSavedWidth, iosSavedHeight, iosSavedStyle;
+    private float iosSavedElevation;
+    private Drawable iosSavedBackground;
+    private boolean iosSavedClipping, iosSavedInScreen;
+
+    /** The actual button, which can differ from the PopupWindow positioning anchor. */
+    public void setAnimationSource(View source) {
+        animationSource = source == null ? null : new java.lang.ref.WeakReference<>(source);
+        animationSourceBounds = null;
+        animationSurface = null;
+    }
+
+    public void setAnimationSource(View source, RectF screenBounds, View menuSurface) {
+        setAnimationSource(source);
+        animationSourceBounds = new RectF(screenBounds);
+        animationSurface = menuSurface;
+    }
+
+    private View morphSource(View fallback) {
+        View source = animationSource == null ? null : animationSource.get();
+        return source != null ? source : fallback;
+    }
+
+    private boolean useIosMorph(View source) {
+        return zxc.iconic.xenon.NekoConfig.iosPopups && source != null && source.isAttachedToWindow()
+                && (animationSourceBounds != null || IosPopupMorph.canAnimate(source));
+    }
+
+    /** Continue the gesture owned by the source button after its popup window opens. */
+    public boolean forwardIosTouch(MotionEvent event) {
+        return iosSurface != null ? iosSurface.forwardTouch(event)
+                : nativeSurface != null && nativeSurface.forwardTouch(event);
+    }
+
+    @Override public View getContentView() {
+        return iosContent != null ? iosContent : nativeContent != null ? nativeContent : super.getContentView();
+    }
+
+    private void prepareNativeSurface(View source) {
+        if (nativeSurface != null || isShowing()) return;
+        // The full-screen message preview animates its menu separately from the message.
+        if (super.getContentView() instanceof org.telegram.ui.Components.MessagePopupPreviewLayout) {
+            setAnimationStyle(0);
+            return;
+        }
+        setAnimationStyle(animationEnabled || getAnimationStyle() != 0 ? R.style.PopupContextAnimation : 0);
+        nativeContent = super.getContentView();
+        nativeContent.setAlpha(1);
+        nativeContent.setScaleX(1);
+        nativeContent.setScaleY(1);
+        nativeContent.setTranslationY(0);
+        resetMenuAnimation(nativeContent);
+        nativeSurface = new PopupMenuSurface(nativeContent, source);
+        super.setContentView(nativeSurface);
+    }
+
+    private void restoreNativeContent() {
+        if (nativeSurface == null) return;
+        nativeSurface.release();
+        nativeSurface = null;
+        super.setContentView(nativeContent);
+        nativeContent = null;
+    }
+
+    private static void resetMenuAnimation(View view) {
+        if (view instanceof ActionBarPopupWindowLayout) {
+            ActionBarPopupWindowLayout menu = (ActionBarPopupWindowLayout) view;
+            menu.setAlpha(1);
+            menu.setScaleX(1);
+            menu.setScaleY(1);
+            menu.setTranslationY(0);
+            menu.startAnimationPending = false;
+            menu.positions.clear();
+            menu.setBackScaleY(1);
+            menu.setBackAlpha(255);
+            for (int i = 0; i < menu.getItemsCount(); i++) {
+                View item = menu.getItemAt(i);
+                item.setAlpha(item.isEnabled() ? 1f : .5f);
+                item.setTranslationY(0);
+            }
+        } else if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) resetMenuAnimation(group.getChildAt(i));
+        }
+    }
+
+    private void measureIosContent(View source) {
+        View content = getContentView();
+        if (content.getMeasuredWidth() == 0 || content.getMeasuredHeight() == 0) {
+            View root = source.getRootView();
+            content.measure(View.MeasureSpec.makeMeasureSpec(Math.max(1, root.getWidth() - dp(24)), View.MeasureSpec.AT_MOST),
+                    View.MeasureSpec.makeMeasureSpec(Math.max(1, root.getHeight() - dp(24)), View.MeasureSpec.AT_MOST));
+        }
+    }
+
+    private boolean showIosSurface(View parent, View source, int screenX, int screenY) {
+        if (!useIosMorph(source) || isShowing()) return false;
+        measureIosContent(source);
+        View root = source.getRootView();
+        Rect visible = new Rect();
+        root.getWindowVisibleDisplayFrame(visible);
+        screenX = IosPopupMorphGeometry.clampMenuPosition(screenX, getContentView().getMeasuredWidth(), visible.left, visible.right, dp(6));
+        screenY = IosPopupMorphGeometry.clampMenuPosition(screenY, getContentView().getMeasuredHeight(), visible.top, visible.bottom, dp(6));
+        iosSavedWidth = super.getWidth();
+        iosSavedHeight = super.getHeight();
+        iosSavedStyle = getAnimationStyle();
+        iosSavedElevation = getElevation();
+        iosSavedBackground = getBackground();
+        iosSavedClipping = isClippingEnabled();
+        iosSavedInScreen = Build.VERSION.SDK_INT >= 29 && isLaidOutInScreen();
+        iosContent = super.getContentView();
+        try {
+            iosSurface = new IosPopupMorph(iosContent, source, screenX, screenY, this::dismiss, animationSourceBounds, animationSurface);
+            super.setContentView(iosSurface);
+            setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            setElevation(0);
+            setAnimationStyle(0);
+            setClippingEnabled(false);
+            if (Build.VERSION.SDK_INT >= 29) setIsLaidOutInScreen(true);
+            super.setWidth(root.getWidth());
+            super.setHeight(root.getHeight());
+            int[] point = new int[2];
+            root.getLocationOnScreen(point);
+            // One native window owns both the travelling lens and the final interactive menu.
+            super.showAtLocation(parent, Gravity.TOP | Gravity.LEFT,
+                    Build.VERSION.SDK_INT >= 29 ? point[0] : 0,
+                    Build.VERSION.SDK_INT >= 29 ? point[1] : 0);
+            windowAnimatorSet = iosSurface.opening();
+        } catch (RuntimeException | OutOfMemoryError e) {
+            FileLog.e(e);
+            if (isShowing()) super.dismiss();
+            restoreIosContent();
+            return false;
+        }
+        windowAnimatorSet.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(Animator animation) {
+                if (windowAnimatorSet == animation) windowAnimatorSet = null;
+            }
+        });
+        windowAnimatorSet.start();
+        return true;
+    }
+
+    private void restoreIosContent() {
+        if (iosSurface != null) iosSurface.release();
+        iosSurface = null;
+        if (iosContent != null) {
+            super.setContentView(iosContent);
+            iosContent = null;
+            super.setWidth(iosSavedWidth);
+            super.setHeight(iosSavedHeight);
+            setAnimationStyle(iosSavedStyle);
+            setElevation(iosSavedElevation);
+            setBackgroundDrawable(iosSavedBackground);
+            setClippingEnabled(iosSavedClipping);
+            if (Build.VERSION.SDK_INT >= 29) setIsLaidOutInScreen(iosSavedInScreen);
+        }
+    }
+
+    private void dismissIosSurface(boolean animated) {
+        if (isClosingAnimated && animated) return;
+        if (windowAnimatorSet != null) {
+            windowAnimatorSet.cancel();
+            windowAnimatorSet = null;
+        }
+        Runnable finish = () -> {
+            windowAnimatorSet = null;
+            isClosingAnimated = false;
+            try { ActionBarPopupWindow.super.dismiss(); }
+            finally {
+                restoreIosContent();
+                unregisterListener();
+                if (pauseNotifications) notificationsLocker.unlock();
+            }
+        };
+        if (animated && animationEnabled) {
+            isClosingAnimated = true;
+            windowAnimatorSet = iosSurface.closing(finish);
+            if (pauseNotifications) notificationsLocker.lock();
+            windowAnimatorSet.start();
+        } else finish.run();
+    }
 
     static {
         Field f = null;
@@ -124,6 +319,53 @@ public class ActionBarPopupWindow extends PopupWindow {
         private final Rect bgPaddings = new Rect();
         private onSizeChangedListener onSizeChangedListener;
         private float reactionsEnterProgress = 1f;
+        private boolean iosSurfaceContent;
+        private boolean iosExternalSurface, iosSurfaceRecording;
+        private IosPopupMorph.Embedded iosEmbeddedSurface;
+
+        public void setIosExternalSurface(boolean external) {
+            iosExternalSurface = external;
+            invalidate();
+        }
+
+        public void setIosSurfaceRecording(boolean recording) { iosSurfaceRecording = recording; }
+
+        public void closeIosMessageSurface() {
+            if (iosEmbeddedSurface != null) iosEmbeddedSurface.close();
+        }
+
+        public boolean forwardIosMessageTouch(MotionEvent event) {
+            return iosEmbeddedSurface != null && iosEmbeddedSurface.forwardTouch(event);
+        }
+
+        @Override public boolean dispatchTouchEvent(MotionEvent event) {
+            return iosEmbeddedSurface != null && iosEmbeddedSurface.touch(event) || super.dispatchTouchEvent(event);
+        }
+
+        public void enableIosMessageSurface(View sourceView, RectF screenBounds) {
+            if (iosEmbeddedSurface != null) iosEmbeddedSurface.release();
+            iosEmbeddedSurface = new IosPopupMorph.Embedded(this, sourceView, screenBounds,
+                    getThemedColor(Theme.key_actionBarDefaultSubmenuBackground));
+        }
+
+        @Override public void draw(Canvas canvas) {
+            if (!iosSurfaceRecording && iosExternalSurface) return;
+            if (!iosSurfaceRecording && iosEmbeddedSurface != null) iosEmbeddedSurface.draw(canvas);
+            else super.draw(canvas);
+        }
+
+        @Override protected void onDetachedFromWindow() {
+            if (iosEmbeddedSurface != null) {
+                iosEmbeddedSurface.release();
+                iosEmbeddedSurface = null;
+            }
+            super.onDetachedFromWindow();
+        }
+
+        public void setIosSurfaceContent(boolean enabled) {
+            iosSurfaceContent = enabled;
+            invalidate();
+        }
 
         private PopupSwipeBackLayout swipeBackLayout;
         @Nullable
@@ -132,6 +374,10 @@ public class ActionBarPopupWindow extends PopupWindow {
 
         private int backgroundColor = Color.WHITE;
         protected Drawable backgroundDrawable;
+        private Drawable regularBackgroundDrawable;
+        private boolean materialPanelStyle;
+        private final Drawable materialTransparentBackground = new ColorDrawable(Color.TRANSPARENT);
+        private final IdentityHashMap<View, Drawable> materialRowBackgrounds = new IdentityHashMap<>();
 
         private boolean fitItems;
         private final Theme.ResourcesProvider resourcesProvider;
@@ -170,6 +416,9 @@ public class ActionBarPopupWindow extends PopupWindow {
                 setBackgroundColor(getThemedColor(Theme.key_actionBarDefaultSubmenuBackground));
             }
 
+
+            regularBackgroundDrawable = backgroundDrawable;
+            refreshPanelStyle();
 
             setWillNotDraw(false);
 
@@ -291,7 +540,28 @@ public class ActionBarPopupWindow extends PopupWindow {
             return backgroundColor;
         }
 
+        private void refreshPanelStyle() {
+            boolean material = zxc.iconic.xenon.NekoConfig.material3Popups;
+            if (material) {
+                materialPanelStyle = true;
+                backgroundDrawable = materialTransparentBackground;
+                // Keep menu placement and touch padding, without a panel behind the rows.
+                if (regularBackgroundDrawable != null) bgPaddings.set(dp(8), dp(8), dp(8), dp(8));
+            } else if (materialPanelStyle) {
+                materialPanelStyle = false;
+                backgroundDrawable = regularBackgroundDrawable;
+                if (backgroundDrawable != null) {
+                    backgroundDrawable.setColorFilter(new PorterDuffColorFilter(backgroundColor, PorterDuff.Mode.MULTIPLY));
+                    backgroundDrawable.getPadding(bgPaddings);
+                }
+            }
+        }
+
         public void setBackgroundColor(int color) {
+            if (zxc.iconic.xenon.NekoConfig.material3Popups) {
+                backgroundColor = color;
+                return;
+            }
             if (backgroundColor != color && backgroundDrawable != null) {
                 backgroundDrawable.setColorFilter(new PorterDuffColorFilter(backgroundColor = color, PorterDuff.Mode.MULTIPLY));
             }
@@ -371,10 +641,10 @@ public class ActionBarPopupWindow extends PopupWindow {
         @Override
         public void setBackgroundDrawable(Drawable drawable) {
             backgroundColor = Color.WHITE;
+            regularBackgroundDrawable = drawable;
             backgroundDrawable = drawable;
-            if (backgroundDrawable != null) {
-                backgroundDrawable.getPadding(bgPaddings);
-            }
+            if (backgroundDrawable != null) backgroundDrawable.getPadding(bgPaddings);
+            refreshPanelStyle();
         }
 
         private void startChildAnimation(View child) {
@@ -464,7 +734,7 @@ public class ActionBarPopupWindow extends PopupWindow {
             if (swipeBackGravityBottom) {
                 setTranslationY(getMeasuredHeight() * (1f - backScaleY));
             }
-            if (backgroundDrawable != null) {
+            if (backgroundDrawable != null && !iosSurfaceContent) {
                 int start = gapStartY - (scrollView == null ? 0 : scrollView.getScrollY());
                 int end = gapEndY - (scrollView == null ? 0 : scrollView.getScrollY());
                 boolean hasGap = false;
@@ -572,7 +842,7 @@ public class ActionBarPopupWindow extends PopupWindow {
                     canvas.restoreToCount(saveCount);
                 }
             }
-            if (reactionsEnterProgress != 1f) {
+            if (reactionsEnterProgress != 1f && !iosSurfaceContent) {
                 canvas.saveLayerAlpha((float) AndroidUtilities.rectTmp2.left, (float) AndroidUtilities.rectTmp2.top, AndroidUtilities.rectTmp2.right, AndroidUtilities.rectTmp2.bottom, (int) (255 * reactionsEnterProgress), Canvas.ALL_SAVE_FLAG);
                 float scale = 0.5f + reactionsEnterProgress * 0.5f;
                 canvas.scale(scale, scale, AndroidUtilities.rectTmp2.right, AndroidUtilities.rectTmp2.top);
@@ -609,36 +879,43 @@ public class ActionBarPopupWindow extends PopupWindow {
             }
         }
 
+        private static boolean isPopupRow(View view) {
+            return view != null && !(view instanceof GapView)
+                    && !(view instanceof androidx.recyclerview.widget.RecyclerView)
+                    && (view.getClass() != View.class || view.hasOnClickListeners());
+        }
+
         public void updateRadialSelectors() {
             int count = linearLayout.getChildCount();
-            View firstVisible = null;
-            View lastVisible = null;
-            for (int a = 0; a < count; a++) {
-                View child = linearLayout.getChildAt(a);
-                if (child.getVisibility() != View.VISIBLE) {
-                    continue;
+            View previous = null;
+            boolean material = zxc.iconic.xenon.NekoConfig.material3Popups;
+            for (int i = 0; i < count; i++) {
+                View child = linearLayout.getChildAt(i);
+                if (child.getVisibility() != View.VISIBLE) continue;
+                View next = null;
+                for (int j = i + 1; j < count; j++) {
+                    if (linearLayout.getChildAt(j).getVisibility() == View.VISIBLE) {
+                        next = linearLayout.getChildAt(j);
+                        break;
+                    }
                 }
-                if (firstVisible == null) {
-                    firstVisible = child;
-                }
-                lastVisible = child;
-            }
-
-            boolean prevGap = false;
-            for (int a = 0; a < count; a++) {
-                View child = linearLayout.getChildAt(a);
-                if (child.getVisibility() != View.VISIBLE) {
-                    continue;
-                }
-                Object tag = child.getTag(R.id.object_tag);
+                boolean top = !isPopupRow(previous), bottom = !isPopupRow(next);
                 if (child instanceof ActionBarMenuSubItem) {
-                    ((ActionBarMenuSubItem) child).updateSelectorBackground(child == firstVisible || prevGap, child == lastVisible);
+                    ((ActionBarMenuSubItem) child).refreshPopupStyle();
+                    ((ActionBarMenuSubItem) child).updateSelectorBackground(top, bottom);
+                } else if (material && isPopupRow(child)) {
+                    Drawable background = child.getBackground();
+                    if (!materialRowBackgrounds.containsKey(child)) materialRowBackgrounds.put(child, background);
+                    if (background instanceof org.telegram.ui.Components.MaterialPopupRowDrawable) {
+                        ((org.telegram.ui.Components.MaterialPopupRowDrawable) background).setCorners(top, bottom);
+                    } else {
+                        child.setBackground(new org.telegram.ui.Components.MaterialPopupRowDrawable(
+                                getThemedColor(Theme.key_windowBackgroundWhite), top, bottom));
+                    }
+                } else if (!material && materialRowBackgrounds.containsKey(child)) {
+                    child.setBackground(materialRowBackgrounds.remove(child));
                 }
-                if (tag != null) {
-                    prevGap = true;
-                } else {
-                    prevGap = false;
-                }
+                previous = child;
             }
         }
 
@@ -664,6 +941,8 @@ public class ActionBarPopupWindow extends PopupWindow {
 
         @Override
         protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            refreshPanelStyle();
+            updateRadialSelectors();
             super.onMeasure(widthMeasureSpec, heightMeasureSpec);
             if (swipeBackLayout != null) {
                 swipeBackLayout.invalidateTransforms(!startAnimationPending);
@@ -731,6 +1010,7 @@ public class ActionBarPopupWindow extends PopupWindow {
         View contentView = getContentView();
         if (contentView instanceof ActionBarPopupWindowLayout && ((ActionBarPopupWindowLayout) contentView).getSwipeBack() != null) {
             setTouchInterceptor((v, e) -> {
+                if (iosSurface != null) return false;
                 if (e.getAction() == MotionEvent.ACTION_DOWN) {
                     Drawable backgroundDrawable = ((ActionBarPopupWindowLayout) contentView).getBackgroundDrawable();
                     AndroidUtilities.rectTmp.set(backgroundDrawable.getBounds());
@@ -833,6 +1113,16 @@ public class ActionBarPopupWindow extends PopupWindow {
     @Override
     public void showAsDropDown(View anchor, int xoff, int yoff) {
         try {
+            View source = morphSource(anchor);
+            if (useIosMorph(source)) {
+                measureIosContent(source);
+                int[] position = iosDropdownPosition(anchor, xoff, yoff);
+                if (showIosSurface(anchor, source, position[0], position[1])) {
+                    registerListener(anchor);
+                    return;
+                }
+            }
+            prepareNativeSurface(source);
             super.showAsDropDown(anchor, xoff, yoff);
             registerListener(anchor);
         } catch (Exception e) {
@@ -840,176 +1130,134 @@ public class ActionBarPopupWindow extends PopupWindow {
         }
     }
 
+    @Override public void showAsDropDown(View anchor, int xoff, int yoff, int gravity) {
+        View source = morphSource(anchor);
+        if (useIosMorph(source)) {
+            showAsDropDown(anchor, xoff, yoff);
+            return;
+        }
+        prepareNativeSurface(source);
+        super.showAsDropDown(anchor, xoff, yoff, gravity);
+        registerListener(anchor);
+    }
+
+    /** Match the menu opened by the three-dot button in DialogsActivity. */
     public static AnimatorSet startAnimation(ActionBarPopupWindowLayout content) {
-        content.startAnimationPending = true;
-        content.setTranslationY(0);
-        content.setAlpha(1.0f);
+        boolean nativeWindowAnimation = false;
+        for (android.view.ViewParent parent = content.getParent(); parent != null; parent = parent.getParent()) {
+            if (parent instanceof PopupMenuSurface) { nativeWindowAnimation = true; break; }
+        }
+        if (content.iosSurfaceContent || nativeWindowAnimation) {
+            AnimatorSet animation = new AnimatorSet();
+            animation.start();
+            return animation;
+        }
+        return startMenuAnimation(content);
+    }
+
+    public static AnimatorSet startMenuAnimation(View content) {
+        resetMenuAnimation(content);
         content.setPivotX(content.getMeasuredWidth());
-        content.setPivotY(0);
-        final int count = content.getItemsCount();
-        content.positions.clear();
-        int visibleCount = 0;
-        for (int a = 0; a < count; a++) {
-            View child = content.getItemAt(a);
-            if (child instanceof GapView) {
-                continue;
-            }
-            child.setAlpha(0.0f);
-            if (child.getVisibility() != View.VISIBLE) {
-                continue;
-            }
-            content.positions.put(child, visibleCount);
-            visibleCount++;
-        }
-        if (content.shownFromBottom) {
-            content.lastStartedChild = count - 1;
-        } else {
-            content.lastStartedChild = 0;
-        }
-        float finalScaleY = 1f;
-        if (content.getSwipeBack() != null) {
-            content.getSwipeBack().invalidateTransforms();
-            finalScaleY = content.backScaleY;
-        }
-        AnimatorSet windowAnimatorSet = new AnimatorSet();
-        ValueAnimator childtranslations = ValueAnimator.ofFloat(0, 1);
-        childtranslations.addUpdateListener(anm -> {
-            final int count2 = content.getItemsCount();
-            final float t = (float) anm.getAnimatedValue();
-            for (int a = 0; a < count2; a++) {
-                View child = content.getItemAt(a);
-                if (child instanceof GapView) {
-                    continue;
-                }
-                float at = AndroidUtilities.cascade(t, content.shownFromBottom ? count2 - 1 - a : a, count2, 4);
-                child.setTranslationY((1f - at) * dp(-6));
-                child.setAlpha(at * (child.isEnabled() ? 1f : 0.5f));
-            }
-        });
-        content.updateAnimation = false;
-        content.clipChildren = true;
-        windowAnimatorSet.playTogether(
-                ObjectAnimator.ofFloat(content, "backScaleY", 0.0f, finalScaleY),
-                ObjectAnimator.ofInt(content, "backAlpha", 0, 255),
-                childtranslations
-        );
-        windowAnimatorSet.setDuration(150 + 16 * visibleCount);
-        windowAnimatorSet.addListener(new AnimatorListenerAdapter() {
-            @Override
-            public void onAnimationEnd(Animator animation) {
-                content.startAnimationPending = false;
-                int count = content.getItemsCount();
-                for (int a = 0; a < count; a++) {
-                    View child = content.getItemAt(a);
-                    if (child instanceof GapView) {
-                        continue;
-                    }
-                    child.setTranslationY(0);
-                    child.setAlpha(child.isEnabled() ? 1f : 0.5f);
-                }
-            }
-        });
-        windowAnimatorSet.start();
-        return windowAnimatorSet;
+        content.setPivotY(content.getMeasuredHeight());
+        ObjectAnimator scaleX = ObjectAnimator.ofFloat(content, View.SCALE_X, .95f, 1f);
+        ObjectAnimator scaleY = ObjectAnimator.ofFloat(content, View.SCALE_Y, .95f, 1f);
+        scaleX.setInterpolator(new android.view.animation.OvershootInterpolator());
+        scaleY.setInterpolator(new android.view.animation.OvershootInterpolator());
+        scaleX.setDuration(200);
+        scaleY.setDuration(200);
+        ObjectAnimator alpha = ObjectAnimator.ofFloat(content, View.ALPHA, 0f, 1f);
+        alpha.setDuration(150);
+        AnimatorSet animation = new AnimatorSet();
+        animation.playTogether(scaleX, scaleY, alpha);
+        animation.start();
+        return animation;
     }
 
     public void startAnimation() {
-        if (animationEnabled) {
-            if (windowAnimatorSet != null) {
-                return;
-            }
-
-            ViewGroup viewGroup = (ViewGroup) getContentView();
-            ActionBarPopupWindowLayout content = null;
-            if (viewGroup instanceof ActionBarPopupWindowLayout) {
-                content = (ActionBarPopupWindowLayout) viewGroup;
-                content.startAnimationPending = true;
-            } else {
-                for (int i = 0; i < viewGroup.getChildCount(); i++) {
-                    if (viewGroup.getChildAt(i) instanceof ActionBarPopupWindowLayout) {
-                        content = (ActionBarPopupWindowLayout) viewGroup.getChildAt(i);
-                        content.startAnimationPending = true;
-                    }
-                }
-            }
-            content.setTranslationY(0);
-            content.setAlpha(1.0f);
-            content.setPivotX(content.getMeasuredWidth());
-            content.setPivotY(0);
-            int count = content.getItemsCount();
-            content.positions.clear();
-            int visibleCount = 0;
-            for (int a = 0; a < count; a++) {
-                View child = content.getItemAt(a);
-                child.setAlpha(0.0f);
-                if (child.getVisibility() != View.VISIBLE) {
-                    continue;
-                }
-                content.positions.put(child, visibleCount);
-                visibleCount++;
-            }
-            if (content.shownFromBottom) {
-                content.lastStartedChild = count - 1;
-            } else {
-                content.lastStartedChild = 0;
-            }
-            float finalScaleY = 1f;
-            if (content.getSwipeBack() != null) {
-                content.getSwipeBack().invalidateTransforms();
-                finalScaleY = content.backScaleY;
-            }
-            windowAnimatorSet = new AnimatorSet();
-            windowAnimatorSet.playTogether(
-                    ObjectAnimator.ofFloat(content, "backScaleY", 0.0f, finalScaleY),
-                    ObjectAnimator.ofInt(content, "backAlpha", 0, 255));
-            windowAnimatorSet.setDuration(150 + 16 * visibleCount);
-            windowAnimatorSet.addListener(new AnimatorListenerAdapter() {
-                @Override
-                public void onAnimationEnd(Animator animation) {
-                    windowAnimatorSet = null;
-                    ViewGroup viewGroup = (ViewGroup) getContentView();
-                    ActionBarPopupWindowLayout content = null;
-                    if (viewGroup instanceof ActionBarPopupWindowLayout) {
-                        content = (ActionBarPopupWindowLayout) viewGroup;
-                        content.startAnimationPending = false;
-                    } else {
-                        for (int i = 0; i < viewGroup.getChildCount(); i++) {
-                            if (viewGroup.getChildAt(i) instanceof ActionBarPopupWindowLayout) {
-                                content = (ActionBarPopupWindowLayout) viewGroup.getChildAt(i);
-                                content.startAnimationPending = false;
-                            }
-                        }
-                    }
-                    int count = content.getItemsCount();
-                    for (int a = 0; a < count; a++) {
-                        View child = content.getItemAt(a);
-                        if (child instanceof GapView) {
-                            continue;
-                        }
-                        child.setAlpha(child.isEnabled() ? 1f : 0.5f);
-                    }
-                }
-            });
-            windowAnimatorSet.start();
-        }
+        // The native window runs PopupContextAnimation once, for all menu styles.
+        // Keep the old call sites, without layering the former height reveal over it.
+        if (iosSurface == null) resetMenuAnimation(getContentView());
     }
 
     @Override
     public void update(View anchor, int xoff, int yoff, int width, int height) {
+        if (iosSurface != null) {
+            int[] position = iosDropdownPosition(anchor, xoff, yoff);
+            iosSurface.updateTarget(position[0], position[1], width, height);
+            return;
+        }
         super.update(anchor, xoff, yoff, width, height);
         registerListener(anchor);
     }
 
     @Override
     public void update(View anchor, int width, int height) {
+        if (iosSurface != null) {
+            iosSurface.updateTarget(iosContent.getLeft() + iosSurfaceScreenX(), iosContent.getTop() + iosSurfaceScreenY(), width, height);
+            return;
+        }
         super.update(anchor, width, height);
         registerListener(anchor);
     }
 
     @Override
     public void showAtLocation(View parent, int gravity, int x, int y) {
+        View source = morphSource(parent);
+        if (useIosMorph(source)) {
+            measureIosContent(source);
+            int[] location = new int[2];
+            View root = parent.getRootView();
+            root.getLocationOnScreen(location);
+            int horizontal = Gravity.getAbsoluteGravity(gravity, parent.getLayoutDirection()) & Gravity.HORIZONTAL_GRAVITY_MASK;
+            int vertical = gravity & Gravity.VERTICAL_GRAVITY_MASK;
+            int left = horizontal == Gravity.RIGHT ? root.getWidth() - x - getContentView().getMeasuredWidth()
+                    : horizontal == Gravity.CENTER_HORIZONTAL ? (root.getWidth() - getContentView().getMeasuredWidth()) / 2 + x : x;
+            int top = vertical == Gravity.BOTTOM ? root.getHeight() - y - getContentView().getMeasuredHeight()
+                    : vertical == Gravity.CENTER_VERTICAL ? (root.getHeight() - getContentView().getMeasuredHeight()) / 2 + y : y;
+            if (showIosSurface(parent, source, location[0] + left, location[1] + top)) {
+                unregisterListener();
+                return;
+            }
+        }
+        prepareNativeSurface(source);
         super.showAtLocation(parent, gravity, x, y);
         unregisterListener();
+    }
+
+    private int[] iosDropdownPosition(View anchor, int xoff, int yoff) {
+        int[] point = new int[2];
+        anchor.getLocationOnScreen(point);
+        int width = getContentView().getMeasuredWidth(), height = getContentView().getMeasuredHeight();
+        int x = point[0] + xoff, y = point[1] + (getOverlapAnchor() ? 0 : anchor.getHeight()) + yoff;
+        Rect visible = new Rect();
+        anchor.getWindowVisibleDisplayFrame(visible);
+        x = Math.max(visible.left, Math.min(x, visible.right - width));
+        if (y + height > visible.bottom && point[1] - height + yoff >= visible.top) y = point[1] - height + yoff;
+        y = Math.max(visible.top, Math.min(y, visible.bottom - height));
+        return new int[] {x, y};
+    }
+
+    private int iosSurfaceScreenX() {
+        int[] p = new int[2];
+        iosSurface.getLocationOnScreen(p);
+        return p[0];
+    }
+
+    private int iosSurfaceScreenY() {
+        int[] p = new int[2];
+        iosSurface.getLocationOnScreen(p);
+        return p[1];
+    }
+
+    @Override public void update(int x, int y, int width, int height) {
+        if (iosSurface != null) {
+            View source = animationSource == null ? null : animationSource.get();
+            int[] point = new int[2];
+            if (source != null) source.getRootView().getLocationOnScreen(point);
+            iosSurface.updateTarget(point[0] + x, point[1] + y, width, height);
+            return;
+        }
+        super.update(x, y, width, height);
     }
 
     @Override
@@ -1022,6 +1270,10 @@ public class ActionBarPopupWindow extends PopupWindow {
     }
 
     public void dismiss(boolean animated) {
+        if (iosSurface != null) {
+            dismissIosSurface(animated);
+            return;
+        }
         setFocusable(false);
         dismissDim();
         if (windowAnimatorSet != null) {
@@ -1076,6 +1328,7 @@ public class ActionBarPopupWindow extends PopupWindow {
                     setFocusable(false);
                     try {
                         ActionBarPopupWindow.super.dismiss();
+                        restoreNativeContent();
                     } catch (Exception ignore) {
 
                     }
@@ -1092,6 +1345,7 @@ public class ActionBarPopupWindow extends PopupWindow {
         } else {
             try {
                 super.dismiss();
+                restoreNativeContent();
             } catch (Exception ignore) {
 
             }
@@ -1110,6 +1364,12 @@ public class ActionBarPopupWindow extends PopupWindow {
     public static class GapView extends FrameLayout {
 
         Drawable shadowDrawable;
+        private boolean iosSurfaceContent;
+
+        public void setIosSurfaceContent(boolean enabled) {
+            iosSurfaceContent = enabled;
+            invalidate();
+        }
 
         public GapView(Context context, Theme.ResourcesProvider resourcesProvider) {
             this(context, resourcesProvider, Theme.key_actionBarDefaultSubmenuSeparator);
@@ -1125,6 +1385,10 @@ public class ActionBarPopupWindow extends PopupWindow {
             this(context, Theme.getColor(colorKey, resourcesProvider), Theme.getColor(Theme.key_windowBackgroundGrayShadow, resourcesProvider));
         }
 
+        @Override public void setBackgroundColor(int color) {
+            super.setBackgroundColor(zxc.iconic.xenon.NekoConfig.material3Popups ? Color.TRANSPARENT : color);
+        }
+
         public void setColor(int color) {
             setBackgroundColor(color);
         }
@@ -1132,7 +1396,7 @@ public class ActionBarPopupWindow extends PopupWindow {
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
-            if (shadowDrawable != null) {
+            if (shadowDrawable != null && !iosSurfaceContent && !zxc.iconic.xenon.NekoConfig.material3Popups) {
                 shadowDrawable.setBounds(0, 0, getWidth(), getHeight());
                 shadowDrawable.draw(canvas);
             }

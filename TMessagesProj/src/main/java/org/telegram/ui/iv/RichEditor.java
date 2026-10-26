@@ -677,7 +677,8 @@ public class RichEditor extends BaseFragment implements NotificationCenter.Notif
         emojiButton.setContentDescription(getString(R.string.AccDescrEmojiButton));
         emojiButton.setOnClickListener(v -> toggleEmojiPopup());
 
-        addBlockButton(R.drawable.iv_text, 1).setOnClickListener(v -> {
+        final View textPopupButton = addBlockButton(R.drawable.iv_text, 1);
+        textPopupButton.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(textPopupButton, v -> {
             if (currentMenuVisible != null) {
                 currentMenuVisible.dismiss();
                 currentMenuVisible = null;
@@ -726,8 +727,9 @@ public class RichEditor extends BaseFragment implements NotificationCenter.Notif
             o.addChecked(row != null && row.block instanceof TL_iv.pageBlockFooter, new RequiresPremiumDrawable(context, R.drawable.iv_footer).setPremium(premiumLock).setCutoutColorKey(Theme.key_actionBarDefaultSubmenuBackground), getString(R.string.ArticleFooter), () -> { listView.turnIntoKeepList(row, new TL_iv.pageBlockFooter()); });;
             o.getLast().setPadding(dp(LocaleController.isRTL ? 18 : 9), 0, dp(LocaleController.isRTL ? 9 : 18), 0);
             currentMenuVisible = o.show();
-        });
-        addBlockButton(R.drawable.iv_lists, 2, true).setOnClickListener(v -> {
+        }));
+        final View listsPopupButton = addBlockButton(R.drawable.iv_lists, 2, true);
+        listsPopupButton.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(listsPopupButton, v -> {
             if (currentMenuVisible != null) {
                 currentMenuVisible.dismiss();
                 currentMenuVisible = null;
@@ -752,8 +754,9 @@ public class RichEditor extends BaseFragment implements NotificationCenter.Notif
                 }
             }
             currentMenuVisible = o.forceTop(true).show();
-        });
-        addBlockButton(R.drawable.iv_table, 4, true).setOnClickListener(v -> {
+        }));
+        final View tablePopupButton = addBlockButton(R.drawable.iv_table, 4, true);
+        tablePopupButton.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(tablePopupButton, v -> {
             if (currentMenuVisible != null) {
                 currentMenuVisible.dismiss();
                 currentMenuVisible = null;
@@ -774,7 +777,7 @@ public class RichEditor extends BaseFragment implements NotificationCenter.Notif
             } else {
                 listView.addBlock(RichTextCell.newEmptyTable(2, 2));
             }
-        });
+        }));
         addBlockButton(R.drawable.iv_math, 7, true).setOnClickListener(v -> {
             if (currentMenuVisible != null) {
                 currentMenuVisible.dismiss();

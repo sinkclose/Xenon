@@ -916,7 +916,7 @@ public class ChannelAffiliateProgramsFragment extends GradientHeaderActivity imp
             BotStarsController.getInstance(currentAccount).loadAdminedBots();
             BotStarsController.getInstance(currentAccount).loadAdminedChannels();
             final View chip = chipLayout;
-            chipLayout.setOnClickListener(v -> {
+            chipLayout.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(chipLayout, v -> {
                 ArrayList<TLObject> chats = BotStarsController.getInstance(currentAccount).getAdmined();
                 chats.add(0, UserConfig.getInstance(currentAccount).getCurrentUser());
 
@@ -941,7 +941,7 @@ public class ChannelAffiliateProgramsFragment extends GradientHeaderActivity imp
                     .setGravity(Gravity.RIGHT)
                     .translate(dp(24), 0)
                     .show();
-            });
+            }));
         }
 
         botChip.setOnClickListener(v -> {
@@ -1167,7 +1167,7 @@ public class ChannelAffiliateProgramsFragment extends GradientHeaderActivity imp
             BotStarsController.getInstance(currentAccount).loadAdminedBots();
             BotStarsController.getInstance(currentAccount).loadAdminedChannels();
             final View chip = chipLayout;
-            chipLayout.setOnClickListener(v -> {
+            chipLayout.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(chipLayout, v -> {
                 ArrayList<TLObject> chats = BotStarsController.getInstance(currentAccount).getAdmined();
                 chats.add(0, UserConfig.getInstance(currentAccount).getCurrentUser());
 
@@ -1206,7 +1206,7 @@ public class ChannelAffiliateProgramsFragment extends GradientHeaderActivity imp
                         .setGravity(Gravity.RIGHT)
                         .translate(dp(24), 0)
                         .show();
-            });
+            }));
         }
         botChip.setOnClickListener(v -> {
             sheet.dismiss();

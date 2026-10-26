@@ -195,7 +195,7 @@ public class WebActionBar extends FrameLayout {
         menuButton.setScaleType(ImageView.ScaleType.CENTER);
         menuButton.setImageResource(R.drawable.ic_ab_other);
         menuButton.setColorFilter(new PorterDuffColorFilter(0, PorterDuff.Mode.SRC_IN));
-        menuButton.setOnClickListener(v -> {
+        menuButton.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(menuButton, v -> {
             if (!(getParent() instanceof ViewGroup)) return;
             Utilities.CallbackReturn<Integer, Runnable> click = id -> () -> menuListener.run(id);
             ItemOptions o = ItemOptions.makeOptions((ViewGroup) getParent(), menuButton);
@@ -252,7 +252,7 @@ public class WebActionBar extends FrameLayout {
             });
             o.show();
             isMenuShown = true;
-        });
+        }));
         menuButton.setBackground(menuButtonSelector = Theme.createSelectorDrawable(Theme.ACTION_BAR_WHITE_SELECTOR_COLOR));
         menuButton.setContentDescription(getString("AccDescrMoreOptions", R.string.AccDescrMoreOptions));
         rightmenu.addView(menuButton, LayoutHelper.createLinear(54, 56));

@@ -1354,8 +1354,8 @@ public class PhotoFilterView extends FrameLayout implements FilterShaders.Filter
 
     public static class EnhanceView extends View {
 
-        private TextPaint topTextPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
-        private TextPaint bottomTextPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+        private TextPaint topTextPaint = zxc.iconic.xenon.helpers.ClientFonts.newTextPaint(Paint.ANTI_ALIAS_FLAG);
+        private TextPaint bottomTextPaint = zxc.iconic.xenon.helpers.ClientFonts.newTextPaint(Paint.ANTI_ALIAS_FLAG);
 
         private StaticLayout topText;
         private float topTextWidth, topTextLeft;

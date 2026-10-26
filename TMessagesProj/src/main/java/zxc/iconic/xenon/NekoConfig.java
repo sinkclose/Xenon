@@ -229,6 +229,8 @@ public class NekoConfig {
     public static boolean materialSliders = false;
     public static boolean iosSliders = false;
     public static boolean iosBottomBar = false;
+    public static boolean iosPopups = false;
+    public static boolean material3Popups = false;
     public static boolean centerChatHeader = false;
     public static boolean centerTitle = false;
     public static boolean biggerAvatar = false;
@@ -582,6 +584,9 @@ public class NekoConfig {
             }
             disableScrimBlur = preferences.getBoolean("disableScrimBlur", false);
             iosBottomBar = preferences.getBoolean("iosBottomBar", false);
+            // The experimental iOS popup switch is temporarily hidden; keep its implementation.
+            iosPopups = false;
+            material3Popups = preferences.getBoolean("material3Popups", false);
             material3BottomNavigationBar = preferences.getBoolean("material3BottomNavigationBar", false) && !iosBottomBar;
             md3Folders = preferences.getBoolean("md3Folders", false);
             avatarShape = preferences.getInt("avatarShape", 0);
@@ -938,6 +943,18 @@ public class NekoConfig {
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         preferences.edit().putBoolean("iosSliders", iosSliders)
                 .putBoolean("materialSliders", materialSliders).apply();
+    }
+
+    public static void toggleMaterial3Popups() {
+        material3Popups = !material3Popups;
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
+                .edit().putBoolean("material3Popups", material3Popups).apply();
+    }
+
+    public static void toggleIosPopups() {
+        iosPopups = !iosPopups;
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
+                .edit().putBoolean("iosPopups", iosPopups).apply();
     }
 
     public static void toggleCenterChatHeader() {

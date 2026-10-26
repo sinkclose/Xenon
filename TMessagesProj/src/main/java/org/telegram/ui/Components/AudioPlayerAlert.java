@@ -1095,7 +1095,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
         optionsButton.setLongClickEnabled(false);
         optionsButton.setAdditionalYOffset(-dp(157 + 40));
         optionsButton.setBackgroundDrawable(Theme.createSelectorDrawable(getThemedColor(Theme.key_listSelector), 1, dp(18)));
-        optionsButton.setOnClickListener(this::showMenuOptions);
+        optionsButton.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(optionsButton, this::showMenuOptions));
 
         bottomView.addView(optionsButton, LayoutHelper.createFrame(48, 48, Gravity.LEFT | Gravity.TOP));
 

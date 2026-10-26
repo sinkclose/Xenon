@@ -1077,6 +1077,7 @@ public class UniversalAdapter extends AdapterWithDiffUtils {
         if (item.bind != null) {
             item.bind.run(holder.itemView);
         }
+        zxc.iconic.xenon.helpers.ClientFonts.applyToView(holder.itemView);
     }
 
     private View findViewByItemObject(Object object) {

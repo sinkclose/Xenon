@@ -218,6 +218,7 @@ public class ActionBarMenu extends LinearLayout implements LiquidTouchDispatcher
         if (title != null) {
             menuItem.setContentDescription(title);
         }
+        if (icon == org.telegram.messenger.R.drawable.ic_ab_other) org.telegram.ui.Components.IosPopupOpener.install(menuItem);
         return menuItem;
     }
 

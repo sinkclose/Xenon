@@ -146,7 +146,7 @@ public class SimpleTextView extends View implements Drawable.Callback {
 
     public SimpleTextView(Context context) {
         super(context);
-        textPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+        textPaint = zxc.iconic.xenon.helpers.ClientFonts.newTextPaint(Paint.ANTI_ALIAS_FLAG);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
     }
 
@@ -308,7 +308,7 @@ public class SimpleTextView extends View implements Drawable.Callback {
     }
 
     public void setTypeface(Typeface typeface) {
-        textPaint.setTypeface(typeface);
+        textPaint.setTypeface(zxc.iconic.xenon.helpers.ClientFonts.resolve(typeface));
     }
 
     public int getSideDrawablesSize() {

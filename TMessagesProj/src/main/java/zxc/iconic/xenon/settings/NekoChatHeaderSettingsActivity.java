@@ -77,7 +77,7 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
                 .getBoolean("headerBlurAdvanced", false);
         View result = super.createView(context);
         org.telegram.ui.ActionBar.ActionBarMenuItem more = actionBar.createMenu().addItem(900, R.drawable.ic_ab_other);
-        more.setOnClickListener(v -> {
+        more.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(more, v -> {
             ItemOptions options = ItemOptions.makeOptions(this, more);
             options.add(0, LocaleController.getString(advancedSettings
                     ? R.string.HideAdvancedSettings : R.string.ShowAdvancedSettings), () -> {
@@ -89,7 +89,7 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
                 listView.adapter.update(true);
             });
             options.show();
-        });
+        }));
         return result;
     }
 
