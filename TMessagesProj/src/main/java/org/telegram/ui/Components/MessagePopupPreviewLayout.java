@@ -498,9 +498,13 @@ public class MessagePopupPreviewLayout extends FrameLayout {
         sourceY += (sourceBounds.top - sourceY) * follow;
         sourceInitialized = true;
         lastFrame = now;
-        placeholder.getLocationOnScreen(targetLocation);
+        scroll.getLocationOnScreen(targetLocation);
         float x = MessagePopupPreviewGeometry.horizontalPosition(sourceBounds.left, location[0]);
-        float targetY = MessagePopupPreviewGeometry.destinationTop(viewport.top, targetLocation[1], scroll.getScrollY());
+        // Keep the spring's subpixel translation: getLocationOnScreen on the
+        // placeholder rounds it to whole pixels and makes slow motion step.
+        float placeholderTop = targetLocation[1] + column.getTop() + placeholder.getTop()
+                - scroll.getScrollY() + column.getTranslationY();
+        float targetY = MessagePopupPreviewGeometry.destinationTop(viewport.top, placeholderTop, scroll.getScrollY());
         float y = MessagePopupPreviewGeometry.position(sourceY, targetY, progress) - location[1];
         drawnBounds.set(x, y, x + sourceBounds.width(), y + sourceBounds.height());
         int saved = canvas.save();

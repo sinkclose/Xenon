@@ -1109,6 +1109,7 @@ public class ChatActivity extends BaseFragment implements
     private ActionBarMenuSubItem[] scrimPopupWindowItems;
     private ActionBarMenuSubItem menuDeleteItem;
     private zxc.iconic.xenon.helpers.WindowBackdropBlur popupBackdropBlur;
+    private PopupPreviewBackdrop popupPreviewBackdrop;
     private Runnable holdPopupRunnable;
     private View holdPopupView;
     private MessagePopupPreviewLayout messagePopupPreviewLayout;
@@ -32875,9 +32876,25 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         View popupContent = scrimPopupWindow.getContentView();
         if (popupContent == null) return;
         removePopupBlur(false);
+        float target = NekoConfig.disableBlurBs ? 0f : NekoConfig.blurOverlayRadius * 4f;
+        if (popupContent == messagePopupPreviewLayout && target > 0f) {
+            // Keep blur in the preview surface. Cross-window blur changes window
+            // attributes during its animation and composites the full live chat.
+            try {
+                popupPreviewBackdrop = new PopupPreviewBackdrop(getContext(),
+                        getParentActivity().getWindow().getDecorView(), popupContent, target);
+                messagePopupPreviewLayout.addView(popupPreviewBackdrop, 0,
+                        new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                popupPreviewBackdrop.fadeTo(1f, NekoConfig.blurSmoothly ? NekoConfig.blurAnimationDuration : 0);
+                return;
+            } catch (RuntimeException e) {
+                FileLog.e(e);
+                removePopupBlur(false);
+                return;
+            }
+        }
         popupBackdropBlur = new zxc.iconic.xenon.helpers.WindowBackdropBlur(popupContent,
                 getParentActivity().findViewById(android.R.id.content));
-        float target = NekoConfig.disableBlurBs ? 0f : NekoConfig.blurOverlayRadius * 4f;
         popupBackdropBlur.animateTo(target, NekoConfig.blurSmoothly ? NekoConfig.blurAnimationDuration : 0, false);
     }
 
@@ -33049,6 +33066,17 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     private void removePopupBlur(boolean animated) {
+        if (popupPreviewBackdrop != null) {
+            if (animated && NekoConfig.blurSmoothly) {
+                popupPreviewBackdrop.fadeTo(0f, NekoConfig.blurAnimationDuration);
+            } else {
+                popupPreviewBackdrop.release();
+                if (popupPreviewBackdrop.getParent() instanceof ViewGroup) {
+                    ((ViewGroup) popupPreviewBackdrop.getParent()).removeView(popupPreviewBackdrop);
+                }
+                popupPreviewBackdrop = null;
+            }
+        }
         if (Build.VERSION.SDK_INT < 31 || popupBackdropBlur == null) return;
         if (animated && NekoConfig.blurSmoothly) {
             popupBackdropBlur.animateTo(0f, NekoConfig.blurAnimationDuration, true);
@@ -33105,7 +33133,12 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             private final HashMap<ChatMessageCell, Float> avatarOffsets = new HashMap<>();
             private final HashMap<ChatMessageCell, Boolean> avatarVisibility = new HashMap<>();
             private final Rect visibleFrame = new Rect();
+            private android.view.WindowInsets viewportInsets;
+            private int viewportRootWidth, viewportRootHeight, viewportBottomInset = -1;
             private ChatMessageCell textTouchCell;
+            private final Runnable invalidatePreview = () -> {
+                if (messagePopupPreviewLayout != null) messagePopupPreviewLayout.postInvalidateOnAnimation();
+            };
 
             @Override
             public void onTextTouchEvent(MotionEvent event) {
@@ -33214,11 +33247,24 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             @Override
             public void getViewport(RectF bounds) {
                 contentView.getLocationOnScreen(position);
-                contentView.getWindowVisibleDisplayFrame(visibleFrame);
+                View root = contentView.getRootView();
+                android.view.WindowInsets insets = root.getRootWindowInsets();
+                int bottomInset = windowInsetsStateHolder.getCurrentMaxBottomInset();
+                // Fetching the display frame is a synchronous WindowManager IPC.
+                // Reuse it while geometry is stable, but follow keyboard/inset changes.
+                if (visibleFrame.isEmpty() || insets == null || !insets.equals(viewportInsets)
+                        || viewportRootWidth != root.getWidth() || viewportRootHeight != root.getHeight()
+                        || viewportBottomInset != bottomInset) {
+                    contentView.getWindowVisibleDisplayFrame(visibleFrame);
+                    viewportInsets = insets;
+                    viewportRootWidth = root.getWidth();
+                    viewportRootHeight = root.getHeight();
+                    viewportBottomInset = bottomInset;
+                }
                 // The content's top can include the action bar. Only system insets bound the preview.
                 float top = visibleFrame.top + dp(12);
                 float bottom = Math.min(visibleFrame.bottom,
-                        position[1] + contentView.getHeight() - windowInsetsStateHolder.getCurrentMaxBottomInset()) - dp(20);
+                        position[1] + contentView.getHeight() - bottomInset) - dp(20);
                 bounds.set(position[0], top, position[0] + contentView.getWidth(), bottom);
             }
 
@@ -33257,7 +33303,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                         cell.drawBackgroundInternal(canvas, true);
                         canvas.restore();
                     }
-                    cell.drawMessagePopup(canvas);
+                    cell.drawMessagePopup(canvas, invalidatePreview);
                     if (videoPlayerContainer != null && videoPlayerContainer.getWidth() > 0 && videoPlayerContainer.getHeight() > 0
                             && MediaController.getInstance().isPlayingMessageAndReadyToDraw(object)
                             && (object.isVideo() || object.isRoundVideo())) {
@@ -35048,6 +35094,30 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     previewLayout != null ? contentView.getRootView().getWidth() : LayoutHelper.WRAP_CONTENT,
                     previewLayout != null ? contentView.getRootView().getHeight() : LayoutHelper.WRAP_CONTENT) {
                 private boolean previewReturned;
+                private ViewGroup previewHost;
+                private View previousFocus;
+
+                @Override
+                public boolean isShowing() {
+                    return previewHost != null || super.isShowing();
+                }
+
+                @Override
+                public void showAtLocation(View parent, int gravity, int x, int y) {
+                    View decor = getParentActivity().getWindow().getDecorView();
+                    if (previewLayout == null || !(decor instanceof FrameLayout)) {
+                        super.showAtLocation(parent, gravity, x, y);
+                        return;
+                    }
+                    if (isShowing()) return;
+                    // Share the activity's surface and frame clock with the chat.
+                    // Some devices throttle a focused application popup independently.
+                    previewHost = (ViewGroup) decor;
+                    previousFocus = decor.findFocus();
+                    previewHost.addView(previewLayout, new FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                    previewLayout.requestFocus();
+                }
 
                 @Override
                 public void dismiss() {
@@ -35075,7 +35145,15 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                             contentView.invalidate();
                         }
                     }
-                    super.dismiss(previewLayout == null && animated);
+                    if (previewHost != null) {
+                        ViewGroup host = previewHost;
+                        previewHost = null;
+                        host.removeView(previewLayout);
+                        if (previousFocus != null && previousFocus.isAttachedToWindow()) previousFocus.requestFocus();
+                        previousFocus = null;
+                    } else {
+                        super.dismiss(previewLayout == null && animated);
+                    }
                     if (finalReactionsLayout1 != null) {
                         finalReactionsLayout1.dismissParent(animated);
                     }
@@ -35197,6 +35275,30 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 scrimPopupWindow.showAtLocation(chatListView, Gravity.LEFT | Gravity.TOP,
                         previewLayout != null ? previewWindowLocation[0] : finalPopupX,
                         previewLayout != null ? previewWindowLocation[1] : finalPopupY);
+                View popupRoot = scrimPopupWindow.getContentView().getRootView();
+                if (popupRoot.getLayoutParams() instanceof WindowManager.LayoutParams) {
+                    // PopupWindow has its own surface; the activity's refresh-rate vote
+                    // does not apply to this focused window.
+                    WindowManager.LayoutParams popupParams = (WindowManager.LayoutParams) popupRoot.getLayoutParams();
+                    android.view.Display display = popupRoot.getDisplay();
+                    if (display != null) {
+                        android.view.Display.Mode currentMode = display.getMode(), fastestMode = currentMode;
+                        for (android.view.Display.Mode mode : display.getSupportedModes()) {
+                            if (mode.getPhysicalWidth() == currentMode.getPhysicalWidth()
+                                    && mode.getPhysicalHeight() == currentMode.getPhysicalHeight()
+                                    && mode.getRefreshRate() > fastestMode.getRefreshRate()) {
+                                fastestMode = mode;
+                            }
+                        }
+                        popupParams.preferredDisplayModeId = fastestMode.getModeId();
+                    }
+                    AndroidUtilities.setPreferredMaxRefreshRate(
+                            (WindowManager) popupRoot.getContext().getSystemService(Context.WINDOW_SERVICE),
+                            popupRoot, popupParams);
+                }
+                if (Build.VERSION.SDK_INT >= 35) {
+                    popupRoot.setRequestedFrameRate(AndroidUtilities.screenMaxRefreshRate);
+                }
                 if (previewLayout != null) {
                     previewLayout.open(() -> {
                         dimBehindView(v, true);

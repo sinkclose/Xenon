@@ -5866,6 +5866,17 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         }
     }
 
+    /** Animation invalidations from a preview draw belong to its overlay, not the chat list. */
+    public void drawMessagePopup(Canvas canvas, Runnable previewInvalidate) {
+        Runnable previous = overrideInvalidate;
+        overrideInvalidate = previewInvalidate;
+        try {
+            drawMessagePopup(canvas);
+        } finally {
+            overrideInvalidate = previous;
+        }
+    }
+
     private void setMessageAlphaBounds(RectF bounds, int left, int top, int right, int bottom) {
         // Alpha layers normally discard the part outside the chat list. The popup
         // draws this cell at a different position and scrolls it independently.
