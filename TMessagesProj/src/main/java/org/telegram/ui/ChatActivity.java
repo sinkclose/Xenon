@@ -53,7 +53,6 @@ import android.graphics.PorterDuffColorFilter;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Region;
-import android.graphics.RenderEffect;
 import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.graphics.drawable.BitmapDrawable;
@@ -1109,14 +1108,7 @@ public class ChatActivity extends BaseFragment implements
     private int scrimPopupX, scrimPopupY;
     private ActionBarMenuSubItem[] scrimPopupWindowItems;
     private ActionBarMenuSubItem menuDeleteItem;
-    private boolean popupBlurApplied;
-    private ValueAnimator popupBlurAnimator;
-    private float popupBlurRadius;
-    private ViewTreeObserver.OnDrawListener popupBlurDrawListener;
-    private Runnable popupBlurAfterDrawRunnable;
-    private Runnable popupBlurStartRunnable;
-    private View popupBlurWaitingView;
-    private boolean popupBlurPending;
+    private zxc.iconic.xenon.helpers.WindowBackdropBlur popupBackdropBlur;
     private Runnable holdPopupRunnable;
     private View holdPopupView;
     private MessagePopupPreviewLayout messagePopupPreviewLayout;
@@ -32878,99 +32870,15 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     private void applyPopupBlur(View cellView) {
-        if (!NekoConfig.blurPopupInChat || getParentActivity() == null) return;
-        if (Build.VERSION.SDK_INT < 31 || contentView == null) return;
-        final ActionBarPopupWindow popupWindow = scrimPopupWindow;
-        final View popupContent = popupWindow != null ? popupWindow.getContentView() : null;
-        if (popupContent == null || !popupWindow.isShowing()) return;
-        cancelPopupBlur();
-        popupBlurApplied = true;
-        popupBlurRadius = 0f;
-        contentView.setRenderEffect(null);
-        final float targetBlur = NekoConfig.disableBlurBs ? 0f : NekoConfig.blurOverlayRadius * 8f;
-        popupBlurWaitingView = popupContent;
-        popupBlurPending = true;
-        popupBlurStartRunnable = new Runnable() {
-            @Override
-            public void run() {
-                if (popupBlurStartRunnable != this || !popupBlurPending) return;
-                cancelPopupBlur();
-                if (scrimPopupWindow != popupWindow || !popupWindow.isShowing() || !popupContent.isAttachedToWindow()) return;
-                startPopupBlur(targetBlur);
-            }
-        };
-        popupBlurAfterDrawRunnable = new Runnable() {
-            @Override
-            public void run() {
-                if (popupBlurAfterDrawRunnable != this || !popupBlurPending) return;
-                popupBlurAfterDrawRunnable = null;
-                ViewTreeObserver observer = popupContent.getViewTreeObserver();
-                if (popupBlurDrawListener != null && observer.isAlive()) {
-                    observer.removeOnDrawListener(popupBlurDrawListener);
-                }
-                popupBlurDrawListener = null;
-                // The first draw has finished. Start blur on a fresh frame so
-                // popup preparation cannot consume the animation's initial time.
-                popupContent.postOnAnimation(popupBlurStartRunnable);
-            }
-        };
-        popupBlurDrawListener = new ViewTreeObserver.OnDrawListener() {
-            private boolean drawn;
-
-            @Override
-            public void onDraw() {
-                if (drawn || popupBlurDrawListener != this || !popupBlurPending) return;
-                drawn = true;
-                popupContent.post(popupBlurAfterDrawRunnable);
-            }
-        };
-        popupContent.getViewTreeObserver().addOnDrawListener(popupBlurDrawListener);
-        popupContent.invalidate();
-    }
-
-    private void startPopupBlur(float targetBlur) {
-        if (contentView == null || !popupBlurApplied) return;
-        if (targetBlur <= 0f) {
-            contentView.setRenderEffect(null);
-            return;
-        }
-        contentView.setRenderEffect(null);
-        popupBlurAnimator = ValueAnimator.ofFloat(0f, targetBlur);
-        popupBlurAnimator.setDuration(NekoConfig.blurAnimationDuration);
-        popupBlurAnimator.setInterpolator(new CubicBezierInterpolator(0.3f, 0.8f, 0f, 1f));
-        popupBlurAnimator.addUpdateListener(a -> {
-            if (contentView != null) {
-                float val = (float) a.getAnimatedValue();
-                popupBlurRadius = val;
-                contentView.setRenderEffect(val > 0f ? RenderEffect.createBlurEffect(val, val, Shader.TileMode.CLAMP) : null);
-            }
-        });
-        popupBlurAnimator.start();
-    }
-
-    private void cancelPopupBlur() {
-        if (popupBlurWaitingView != null) {
-            ViewTreeObserver observer = popupBlurWaitingView.getViewTreeObserver();
-            if (popupBlurDrawListener != null && observer.isAlive()) {
-                observer.removeOnDrawListener(popupBlurDrawListener);
-            }
-            if (popupBlurAfterDrawRunnable != null) {
-                popupBlurWaitingView.removeCallbacks(popupBlurAfterDrawRunnable);
-            }
-        }
-        if (popupBlurStartRunnable != null && popupBlurWaitingView != null) {
-            popupBlurWaitingView.removeCallbacks(popupBlurStartRunnable);
-        }
-        popupBlurDrawListener = null;
-        popupBlurAfterDrawRunnable = null;
-        popupBlurStartRunnable = null;
-        popupBlurWaitingView = null;
-        popupBlurPending = false;
-        if (popupBlurAnimator != null) {
-            ValueAnimator animator = popupBlurAnimator;
-            popupBlurAnimator = null;
-            animator.cancel();
-        }
+        if (Build.VERSION.SDK_INT < 31 || !NekoConfig.blurPopupInChat
+                || getParentActivity() == null || scrimPopupWindow == null || !scrimPopupWindow.isShowing()) return;
+        View popupContent = scrimPopupWindow.getContentView();
+        if (popupContent == null) return;
+        removePopupBlur(false);
+        popupBackdropBlur = new zxc.iconic.xenon.helpers.WindowBackdropBlur(popupContent,
+                getParentActivity().findViewById(android.R.id.content));
+        float target = NekoConfig.disableBlurBs ? 0f : NekoConfig.blurOverlayRadius * 4f;
+        popupBackdropBlur.animateTo(target, NekoConfig.blurSmoothly ? NekoConfig.blurAnimationDuration : 0, false);
     }
 
     private void removePopupBlur() {
@@ -33141,38 +33049,12 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     private void removePopupBlur(boolean animated) {
-        if (Build.VERSION.SDK_INT < 31 || !popupBlurApplied) return;
-        popupBlurApplied = false;
-        float currentBlur = popupBlurRadius;
-        cancelPopupBlur();
-        if (contentView == null) return;
-        if (animated && NekoConfig.blurSmoothly && !NekoConfig.disableBlurBs && currentBlur > 0f) {
-            ValueAnimator blurAnim = ValueAnimator.ofFloat(currentBlur, 0f);
-            popupBlurAnimator = blurAnim;
-            blurAnim.setDuration(250);
-            blurAnim.setInterpolator(CubicBezierInterpolator.EASE_OUT);
-            blurAnim.addUpdateListener(a -> {
-                if (contentView != null) {
-                    float val = (float) a.getAnimatedValue();
-                    popupBlurRadius = val;
-                    contentView.setRenderEffect(val > 0f ? RenderEffect.createBlurEffect(val, val, Shader.TileMode.CLAMP) : null);
-                }
-            });
-            blurAnim.addListener(new AnimatorListenerAdapter() {
-                @Override
-                public void onAnimationEnd(Animator animation) {
-                    if (popupBlurAnimator != animation) return;
-                    popupBlurAnimator = null;
-                    popupBlurRadius = 0f;
-                    if (contentView != null) {
-                        contentView.setRenderEffect(null);
-                    }
-                }
-            });
-            blurAnim.start();
+        if (Build.VERSION.SDK_INT < 31 || popupBackdropBlur == null) return;
+        if (animated && NekoConfig.blurSmoothly) {
+            popupBackdropBlur.animateTo(0f, NekoConfig.blurAnimationDuration, true);
         } else {
-            popupBlurRadius = 0f;
-            contentView.setRenderEffect(null);
+            popupBackdropBlur.release();
+            popupBackdropBlur = null;
         }
     }
 

@@ -89,7 +89,7 @@ import org.telegram.ui.Components.ItemOptions;
 import android.annotation.SuppressLint;
 import java.util.ArrayList;
 
-import zxc.iconic.xenon.helpers.BottomSheetBlurView;
+import zxc.iconic.xenon.helpers.WindowBackdropBlur;
 
 public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
     private final static boolean AVOID_SYSTEM_CUTOUT_FULLSCREEN = false;
@@ -140,8 +140,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
     private int cellType;
     private Integer selectedPos;
     protected SheetBackDrawable backDrawable = new SheetBackDrawable();
-    private BottomSheetBlurView blurOverlayView;
-    private ValueAnimator blurRadiusAnimator;
+    private WindowBackdropBlur backdropBlur;
 
     protected static class SheetBackDrawable extends Drawable {
         private final Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -1706,100 +1705,46 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
     }
 
     @RequiresApi(api = Build.VERSION_CODES.S)
-    private void setupGpuBlur(Activity activity, int radius) {
-        // Immediately remove any lingering popup blur overlay to prevent it
-        // from being captured in our own PixelCopy and shifting the blur.
-        ViewGroup contentRoot = (ViewGroup) activity.findViewById(android.R.id.content);
-        boolean wasPopupBlurShowing = false;
-        if (contentRoot != null) {
-            View popupOverlay = contentRoot.findViewWithTag("popup_blur_overlay");
-            if (popupOverlay != null) {
-                wasPopupBlurShowing = true;
-                contentRoot.removeView(popupOverlay);
-                FileLog.d("XenonBlur: removed lingering popup blur overlay before BottomSheet capture");
-            }
-        }
-
-        Window window = activity.getWindow();
-        if (window == null) {
-            FileLog.d("XenonBlur: window is null, skipping GPU blur");
-            return;
-        }
-        // Screen behind was already blurred by the popup; skip our fade/ramp-in below.
-        final boolean skipFadeIn = wasPopupBlurShowing;
-        final BottomSheetBlurView overlay = new BottomSheetBlurView(getContext(), window);
-        overlay.setLayoutParams(new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, window.getDecorView().getHeight()));
-        blurOverlayView = overlay;
-        overlay.start(() -> {
-            if (dismissed || blurOverlayView != overlay) return;
-            attachBlurView(overlay, radius, skipFadeIn);
-        });
-    }
-
-    @RequiresApi(api = Build.VERSION_CODES.S)
-    private void setGpuBlurRadius(BottomSheetBlurView view, float radius) {
-        view.setBlurRadius(radius);
-    }
-
-    @RequiresApi(api = Build.VERSION_CODES.S)
-    private void attachBlurView(BottomSheetBlurView overlay, int radius, boolean skipFadeIn) {
-        boolean disableBlur = zxc.iconic.xenon.NekoConfig.disableBlurBs;
-        float targetBlur = disableBlur ? 0f : radius * 8f;
-        boolean animateRadius = !skipFadeIn && zxc.iconic.xenon.NekoConfig.blurSmoothly && !disableBlur;
-        setGpuBlurRadius(overlay, animateRadius ? 0f : targetBlur);
-        container.addView(overlay, 0);
-        if (animateRadius) {
-            blurRadiusAnimator = ValueAnimator.ofFloat(0f, targetBlur);
-            blurRadiusAnimator.setDuration(zxc.iconic.xenon.NekoConfig.blurAnimationDuration);
-            blurRadiusAnimator.setInterpolator(new CubicBezierInterpolator(0.3f, 0.8f, 0f, 1f));
-            blurRadiusAnimator.addUpdateListener(a -> setGpuBlurRadius(overlay, (float) a.getAnimatedValue()));
-            blurRadiusAnimator.start();
-        } else if (!skipFadeIn) {
-            overlay.setAlpha(0f);
-            overlay.animate().alpha(1f).setDuration(200)
-                    .setInterpolator(CubicBezierInterpolator.DEFAULT).start();
-        }
+    private void setupBackdropBlur(Activity activity) {
+        if (getWindow() == null) return;
+        backdropBlur = new WindowBackdropBlur(getWindow(), activity.findViewById(android.R.id.content));
+        float target = zxc.iconic.xenon.NekoConfig.disableBlurBs ? 0f
+                : zxc.iconic.xenon.NekoConfig.blurOverlayRadius * 4f;
+        backdropBlur.animateTo(target, zxc.iconic.xenon.NekoConfig.blurSmoothly
+                ? zxc.iconic.xenon.NekoConfig.blurAnimationDuration : 0, false);
     }
 
     private void cancelBlurRadiusAnimation() {
-        if (blurRadiusAnimator != null) {
-            blurRadiusAnimator.removeAllListeners();
-            blurRadiusAnimator.removeAllUpdateListeners();
-            blurRadiusAnimator.cancel();
-            blurRadiusAnimator = null;
+        if (backdropBlur != null) backdropBlur.cancelAnimation();
+    }
+
+    private void dismissBackdropBlur() {
+        if (backdropBlur != null) {
+            backdropBlur.animateTo(0f, zxc.iconic.xenon.NekoConfig.blurSmoothly
+                    ? zxc.iconic.xenon.NekoConfig.blurAnimationDuration : 0, true);
         }
     }
 
     @RequiresApi(api = Build.VERSION_CODES.S)
     public void applyBlurRadius(int radius) {
         cancelBlurRadiusAnimation();
-        if (blurOverlayView != null) {
-            float blur = zxc.iconic.xenon.NekoConfig.disableBlurBs ? 0f : radius * 8f;
-            setGpuBlurRadius(blurOverlayView, blur);
+        if (backdropBlur != null) {
+            backdropBlur.setRadius(zxc.iconic.xenon.NekoConfig.disableBlurBs ? 0f : radius * 4f);
         }
     }
 
     @Override
     public void show() {
         if (!AndroidUtilities.isSafeToShow(getContext())) return;
-        if (zxc.iconic.xenon.NekoConfig.blurOverlay && blurOverlayView == null) {
-            if (Build.VERSION.SDK_INT >= 31 && attachedFragment == null) {
-                Activity activity = AndroidUtilities.findActivity(getContext());
-                if (activity != null && !activity.isFinishing()) {
-                    setupGpuBlur(activity, zxc.iconic.xenon.NekoConfig.blurOverlayRadius);
-                } else {
-                    FileLog.d("XenonBlur: skip GPU blur — activity=" + activity + " finishing=" + (activity != null && activity.isFinishing()));
-                }
-            } else {
-                FileLog.d("XenonBlur: skip GPU blur — SDK=" + Build.VERSION.SDK_INT + " attached=" + (attachedFragment != null));
-            }
-        }
         if (attachedFragment != null) {
             onCreateInternal();
         } else {
             super.show();
             zxc.iconic.xenon.helpers.ClientFonts.observeWindow(getWindow().getDecorView());
+            if (Build.VERSION.SDK_INT >= 31 && zxc.iconic.xenon.NekoConfig.blurOverlay && backdropBlur == null) {
+                Activity activity = AndroidUtilities.findActivity(getContext());
+                if (activity != null && !activity.isFinishing()) setupBackdropBlur(activity);
+            }
         }
         if (Build.VERSION.SDK_INT >= 34 && zxc.iconic.xenon.NekoConfig.predictiveBackAnimation) {
             registerPredictiveBack();
@@ -2130,9 +2075,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
         }
         dismissed = true;
         cancelBlurRadiusAnimation();
-        if (blurOverlayView != null) {
-            blurOverlayView.stopUpdates();
-        }
+        dismissBackdropBlur();
         cancelSheetAnimation();
         currentSheetAnimationType = 2;
         currentSheetAnimation = new AnimatorSet();
@@ -2253,50 +2196,8 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
         }
         dismissed = true;
         cancelBlurRadiusAnimation();
-        if (blurOverlayView != null) {
-            blurOverlayView.stopUpdates();
-        }
         final boolean predictiveDismiss = predictiveBackDismissProgress >= 0f;
-        if (blurOverlayView != null && !predictiveDismiss) {
-            if (zxc.iconic.xenon.NekoConfig.blurSmoothly && !zxc.iconic.xenon.NekoConfig.disableBlurBs) {
-                float currentBlur = blurOverlayView.getBlurRadius();
-                ValueAnimator reverseBlurAnim = ValueAnimator.ofFloat(currentBlur, 0f);
-                blurRadiusAnimator = reverseBlurAnim;
-                reverseBlurAnim.setDuration(zxc.iconic.xenon.NekoConfig.blurAnimationDuration);
-                reverseBlurAnim.setInterpolator(new CubicBezierInterpolator(0.3f, 0.8f, 0f, 1f));
-                reverseBlurAnim.addUpdateListener(a -> {
-                    if (blurOverlayView != null) {
-                        float val = (float) a.getAnimatedValue();
-                        setGpuBlurRadius(blurOverlayView, val);
-                    }
-                });
-                blurOverlayView.animate()
-                        .alpha(0f)
-                        .setDuration(zxc.iconic.xenon.NekoConfig.blurAnimationDuration)
-                        .setInterpolator(new CubicBezierInterpolator(0.3f, 0.8f, 0f, 1f))
-                        .start();
-                reverseBlurAnim.addListener(new AnimatorListenerAdapter() {
-                    @Override
-                    public void onAnimationEnd(Animator animation) {
-                        if (blurOverlayView != null && container != null) {
-                            container.removeView(blurOverlayView);
-                        }
-                    }
-                });
-                reverseBlurAnim.start();
-            } else {
-                blurOverlayView.animate()
-                        .alpha(0f)
-                        .setDuration(250)
-                        .setInterpolator(CubicBezierInterpolator.EASE_OUT)
-                        .withEndAction(() -> {
-                            if (blurOverlayView != null && container != null) {
-                                container.removeView(blurOverlayView);
-                            }
-                        })
-                        .start();
-            }
-        }
+        dismissBackdropBlur();
         if (onHideListener != null) {
             onHideListener.onDismiss(this);
         }
@@ -2475,14 +2376,8 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
             unregisterPredictiveBack();
         }
         cancelBlurRadiusAnimation();
-        if (blurOverlayView != null) {
-            blurOverlayView.release();
-            blurOverlayView.animate().cancel();
-            if (container != null) {
-                container.removeView(blurOverlayView);
-            }
-        }
-        blurOverlayView = null;
+        if (backdropBlur != null) backdropBlur.release();
+        backdropBlur = null;
         if (attachedFragment != null) {
             attachedFragment.removeSheet(this);
             AndroidUtilities.removeFromParent(container);
@@ -2725,14 +2620,11 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
 
     public void setPredictiveBackProgress(float progress) {
         float p = Math.max(0f, Math.min(1f, progress));
-        if (blurOverlayView != null) {
+        if (backdropBlur != null) {
             cancelBlurRadiusAnimation();
-            blurOverlayView.animate().cancel();
-            if (zxc.iconic.xenon.NekoConfig.blurSmoothly && Build.VERSION.SDK_INT >= 31) {
-                float targetBlur = zxc.iconic.xenon.NekoConfig.disableBlurBs ? 0f : zxc.iconic.xenon.NekoConfig.blurOverlayRadius * 8f;
-                setGpuBlurRadius(blurOverlayView, targetBlur * (1f - p));
-            }
-            blurOverlayView.setAlpha(1f - p);
+            float target = zxc.iconic.xenon.NekoConfig.disableBlurBs ? 0f
+                    : zxc.iconic.xenon.NekoConfig.blurOverlayRadius * 4f;
+            backdropBlur.setRadius(target * (1f - p));
         }
         if (dimBehind) {
             backDrawable.setAlpha((int) (dimBehindAlpha * (1f - p)));

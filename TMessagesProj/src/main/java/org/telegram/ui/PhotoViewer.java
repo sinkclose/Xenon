@@ -7586,6 +7586,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             final boolean multipleSelected = placeProvider != null && placeProvider.getSelectedCount() > 1;
 
             final ItemOptions options = ItemOptions.makeOptions(containerView, new DarkThemeResourceProvider(), view)
+                .addIf(!canEdit && !canReplace && !multipleSelected && parentChatActivity != null
+                    && placeProvider != null && placeProvider.getSelectedPhotos() != null
+                    && (placeProvider.getSelectedCount() == 0 || placeProvider.isPhotoChecked(currentIndex))
+                    && (parentChatActivity.getCurrentChat() == null || ChatObject.canSendStickers(parentChatActivity.getCurrentChat()))
+                    && !captionEdit.hasTimer() && zxc.iconic.xenon.helpers.PhotoGifConverter.canConvert(currentObject),
+                    R.drawable.msg_gif, getString(R.string.SendAsGif), this::sendCurrentPhotoAsGif)
                 .addIf(showSendAsFile, R.drawable.msg_sendfile, getString(multipleSelected ? R.string.SendAsFiles : R.string.SendAsFile), () -> sendPressed(true, 0, 0, false, true, false))
                 .addIf(canReplace, R.drawable.msg_send, getString(R.string.SendAsNewPhoto), () -> sendPressed(true, 0, 0))
                 .addIf(canReplace, R.drawable.msg_replace, getString(R.string.ReplacePhoto), this::replacePressed)
@@ -8124,6 +8130,35 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         }
         final AlertsCreator.ScheduleDatePickerColors colors = new AlertsCreator.ScheduleDatePickerColors(0xffffffff, 0xff252525, 0xffffffff, 0x1effffff, 0xffffffff, 0xf9222222, 0x24ffffff);
         AlertsCreator.createScheduleDatePickerDialog(parentActivity, dialogId, (notify, scheduleDate, scheduleRepeatPeriod) -> sendPressed(notify, scheduleDate, scheduleRepeatPeriod), colors);
+    }
+
+    private void sendCurrentPhotoAsGif() {
+        if (placeProvider == null || doneButtonPressed || captionEdit.isCaptionOverLimit() || isCaptionOpen()) return;
+        Object object = imagesArrLocals.get(currentIndex);
+        if (!zxc.iconic.xenon.helpers.PhotoGifConverter.canConvert(object)) return;
+        if (!placeProvider.isPhotoChecked(currentIndex)) setPhotoChecked();
+        if (placeProvider.getSelectedPhotos() == null || placeProvider.getSelectedPhotos().size() != 1) return;
+        final int index = currentIndex;
+        final PhotoViewerProvider provider = placeProvider;
+        zxc.iconic.xenon.helpers.PhotoGifConverter.convert(parentActivity, resourcesProvider,
+            (MediaController.PhotoEntry) object, currentAccount, result -> {
+                if (placeProvider != provider || !isVisible) {
+                    new File(result.path).delete();
+                    return;
+                }
+                HashMap<Object, Object> selected = provider.getSelectedPhotos();
+                if (selected == null || selected.size() != 1) {
+                    new File(result.path).delete();
+                    return;
+                }
+                Object key = selected.keySet().iterator().next();
+                selected.put(key, result);
+                doneButtonPressed = true;
+                VideoEditedInfo originalInfo = ((MediaController.PhotoEntry) object).editedInfo;
+                provider.sendButtonPressed(index, result.editedInfo, true, 0, 0, false);
+                ((MediaController.PhotoEntry) object).editedInfo = originalInfo;
+                if (closePhotoAfterSelect) closePhoto(closePhotoAfterSelectWithAnimation, false);
+            });
     }
 
     private void sendPressed(boolean notify, int scheduleDate, int scheduleRepeatPeriod) {

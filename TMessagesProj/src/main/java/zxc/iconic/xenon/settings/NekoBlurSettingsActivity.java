@@ -2,7 +2,6 @@ package zxc.iconic.xenon.settings;
 
 import android.view.View;
 import android.widget.FrameLayout;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import org.telegram.messenger.AndroidUtilities;
@@ -29,10 +28,8 @@ public class NekoBlurSettingsActivity extends BaseNekoSettingsActivity {
     private final int replaceDialogsWithSheetRow = rowId++;
     private final int blurPopupInChatRow = rowId++;
     private final int blurOverlayRadiusRow = rowId++;
-    private final int blurPixelationRow = rowId++;
     private final int blurSmoothlyRow = rowId++;
     private final int blurAnimationDurationRow = rowId++;
-    private final int disableBlurBsRow = rowId++;
 
     @Override
     public View createView(android.content.Context context) {
@@ -46,10 +43,7 @@ public class NekoBlurSettingsActivity extends BaseNekoSettingsActivity {
             options.add(0, LocaleController.getString(advancedSettings
                     ? R.string.HideAdvancedSettings : R.string.ShowAdvancedSettings), () -> {
                 advancedSettings = !advancedSettings;
-                if (!advancedSettings) {
-                    saveAdvancedSettings(false);
-                    applySimpleIntensity(NekoConfig.blurOverlayRadius);
-                }
+                saveAdvancedSettings(advancedSettings);
                 listView.adapter.update(true);
             });
             options.show();
@@ -67,11 +61,6 @@ public class NekoBlurSettingsActivity extends BaseNekoSettingsActivity {
         saveAdvancedSettings(true);
     }
 
-    private void applySimpleIntensity(int blur) {
-        NekoConfig.setBlurOverlayRadius(blur);
-        NekoConfig.setBlurPixelation(BlurIntensity.sheetPixelation(blur));
-    }
-
     @Override
     protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
         items.add(UItem.asButton(testBottomSheetRow, R.drawable.msg_settings, LocaleController.getString(R.string.TestBottomSheet)).slug("testBottomSheet"));
@@ -82,36 +71,21 @@ public class NekoBlurSettingsActivity extends BaseNekoSettingsActivity {
         items.add(UItem.asShadow(null));
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.BlurSettingsHeader)));
-        if (NekoConfig.blurOverlay || NekoConfig.blurPopupInChat) {
-            SeekbarConfig radiusConfig = new SeekbarConfig(
-                    LocaleController.getString(R.string.BlurOverlayRadius),
-                    "2", "20", 2, 20, 1,
-                    progress -> {
-                        int blur = Math.round(progress);
-                        if (advancedSettings) {
-                            markAdvancedChange();
-                            NekoConfig.setBlurOverlayRadius(blur);
-                        } else {
-                            applySimpleIntensity(blur);
-                        }
-                    });
-            items.add(SeekbarCellFactory.of(blurOverlayRadiusRow, radiusConfig, NekoConfig.blurOverlayRadius).slug("blurOverlayRadius"));
-            if (advancedSettings) {
-            SeekbarConfig pixelationConfig = new SeekbarConfig(
-                    LocaleController.getString(R.string.BlurPixelation),
-                    "0", "100", 0, 100, 1,
-                    progress -> { markAdvancedChange(); NekoConfig.setBlurPixelation(Math.round(progress)); });
-            items.add(SeekbarCellFactory.of(blurPixelationRow, pixelationConfig, NekoConfig.blurPixelation).slug("blurPixelation"));
-            }
-            items.add(UItem.asCheck(blurSmoothlyRow, LocaleController.getString(R.string.BlurSmoothly)).setChecked(NekoConfig.blurSmoothly).slug("blurSmoothly"));
-            if (NekoConfig.blurSmoothly && advancedSettings) {
-                SeekbarConfig animDurationConfig = new SeekbarConfig(
-                        LocaleController.getString(R.string.BlurAnimationDuration),
-                        "100", "1000", 100, 1000, 10,
-                        progress -> { markAdvancedChange(); NekoConfig.setBlurAnimationDuration(Math.round(progress / 10f) * 10); });
-                items.add(SeekbarCellFactory.of(blurAnimationDurationRow, animDurationConfig, NekoConfig.blurAnimationDuration).slug("blurAnimationDuration"));
-            }
-
+        SeekbarConfig radiusConfig = new SeekbarConfig(
+                LocaleController.getString(R.string.BlurOverlayRadius),
+                "2", "20", 2, 20, 1,
+                progress -> {
+                    int blur = Math.round(progress);
+                    NekoConfig.setBlurOverlayRadius(blur);
+                });
+        items.add(SeekbarCellFactory.of(blurOverlayRadiusRow, radiusConfig, NekoConfig.blurOverlayRadius).slug("blurOverlayRadius"));
+        items.add(UItem.asCheck(blurSmoothlyRow, LocaleController.getString(R.string.BlurSmoothly)).setChecked(NekoConfig.blurSmoothly).slug("blurSmoothly"));
+        if (NekoConfig.blurSmoothly && advancedSettings) {
+            SeekbarConfig animDurationConfig = new SeekbarConfig(
+                    LocaleController.getString(R.string.BlurAnimationDuration),
+                    "100", "1000", 100, 1000, 10,
+                    progress -> { markAdvancedChange(); NekoConfig.setBlurAnimationDuration(Math.round(progress / 10f) * 10); });
+            items.add(SeekbarCellFactory.of(blurAnimationDurationRow, animDurationConfig, NekoConfig.blurAnimationDuration).slug("blurAnimationDuration"));
         }
     }
 
@@ -169,12 +143,6 @@ public class NekoBlurSettingsActivity extends BaseNekoSettingsActivity {
                 ((TextCheckCell) view).setChecked(NekoConfig.blurSmoothly);
             }
             listView.adapter.update(true);
-        } else if (id == disableBlurBsRow) {
-            NekoConfig.toggleDisableBlurBs();
-            item.checked = NekoConfig.disableBlurBs;
-            if (view instanceof TextCheckCell) {
-                ((TextCheckCell) view).setChecked(NekoConfig.disableBlurBs);
-            }
         }
     }
 

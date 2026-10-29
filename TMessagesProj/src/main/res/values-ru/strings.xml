@@ -458,4 +458,7 @@
     <string name="XrayVpnPermissionDenied">Для включения режима VPN требуется разрешение системы.</string>
     <string name="RedesignedProfile">Redesigned profile</string>
     <string name="AdaptProfileColorsToAvatar">Адаптировать цвета под аватарку</string>
+    <string name="SendAsGif">Отправить как GIF</string>
+    <string name="ConvertingPhotoToGif">Конвертация фото в GIF…</string>
+    <string name="PhotoToGifFailed">Не удалось преобразовать фото в GIF. Попробуйте ещё раз.</string>
 </resources>

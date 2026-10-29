@@ -11474,4 +11474,7 @@
     <string name="ProgressiveIntensity">Progressive intensity</string>
     <string name="RedesignedProfile">Redesigned profile</string>
     <string name="AdaptProfileColorsToAvatar">Adapt profile colors to avatar</string>
+    <string name="SendAsGif">Send as GIF</string>
+    <string name="ConvertingPhotoToGif">Converting photo to GIF…</string>
+    <string name="PhotoToGifFailed">Could not convert the photo to GIF. Please try again.</string>
 </resources>

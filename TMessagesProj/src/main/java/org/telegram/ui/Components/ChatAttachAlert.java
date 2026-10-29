@@ -3992,6 +3992,15 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                     options.addGap();
                 }
             }
+            if ((currentAttachLayout == photoLayout || currentAttachLayout == photoPreviewLayout) && photoLayout.canSendAsGif()) {
+                options.add(R.drawable.msg_gif, getString(R.string.SendAsGif), () -> {
+                    if (messageSendPreview != null) {
+                        messageSendPreview.dismiss(false);
+                        messageSendPreview = null;
+                    }
+                    photoLayout.sendAsGif();
+                });
+            }
             final boolean self = UserObject.isUserSelf(user);
             if (editingMessageObject == null && (chatActivity == null || !ChatObject.isMonoForum(chatActivity.getCurrentChat())) && ((chatActivity != null && chatActivity.canScheduleMessage()) || currentAttachLayout.canScheduleMessages())) {
                 final long finalDialogId = dialogId;
@@ -4516,6 +4525,15 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
             return;
         }
         currentAttachLayout.applyCaption(getCommentView().getText());
+    }
+
+    public void sendConvertedGif() {
+        if (baseFragment instanceof ChatActivity && ((ChatActivity) baseFragment).isInScheduleMode()) {
+            AlertsCreator.createScheduleDatePickerDialog(getContext(), getDialogId(),
+                (notify, date, repeat) -> sendPressed(notify, date, repeat, 0, isCaptionAbove()), resourcesProvider);
+        } else {
+            sendPressed(true, 0, 0, 0, isCaptionAbove());
+        }
     }
 
     private boolean sendPressed(boolean notify, int scheduleDate, int scheduleRepeatPeriod, long effectId, boolean invertMedia) {

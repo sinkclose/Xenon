@@ -244,6 +244,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
     public final static int preview = 7;
     public final static int caption = 8;
     public final static int stars = 9;
+    public final static int send_as_gif = 11;
 
     private ActionBarMenuSubItem spoilerItem;
     private ActionBarMenuSubItem compressItem;
@@ -791,6 +792,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
 
         parentAlert.selectedMenuItem.addColoredGap(preview_gap);
         parentAlert.selectedMenuItem.addSubItem(open_in, R.drawable.msg_openin, LocaleController.getString(R.string.OpenInExternalApp));
+        parentAlert.selectedMenuItem.addSubItem(send_as_gif, R.drawable.msg_gif, getString(R.string.SendAsGif));
         compressItem = parentAlert.selectedMenuItem.addSubItem(compress, R.drawable.msg_filehq, LocaleController.getString(R.string.SendWithoutCompression));
         parentAlert.selectedMenuItem.addSubItem(group, R.drawable.msg_ungroup, LocaleController.getString(R.string.SendWithoutGrouping));
         parentAlert.selectedMenuItem.addColoredGap(media_gap);
@@ -3281,6 +3283,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
 
     @Override
     public void onMenuItemClick(int id) {
+        if (id == send_as_gif) { sendAsGif(); return; }
         if (id == caption) {
             parentAlert.setCaptionAbove(!parentAlert.captionAbove);
             captionItem.setState(!parentAlert.captionAbove, true);
@@ -3512,8 +3515,32 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
         return count;
     }
 
+    public boolean canSendAsGif() {
+        return parentAlert.editingMessageObject == null && parentAlert.avatarPicker == 0
+            && parentAlert.baseFragment instanceof ChatActivity
+            && (parentAlert.getChat() == null || ChatObject.canSendStickers(parentAlert.getChat()))
+            && selectedPhotosOrder.size() == 1
+            && zxc.iconic.xenon.helpers.PhotoGifConverter.canConvert(selectedPhotos.get(selectedPhotosOrder.get(0)));
+    }
+
+    public void sendAsGif() {
+        if (!canSendAsGif() || parentAlert.checkCaption(parentAlert.getCommentView().getText())) return;
+        Object key = selectedPhotosOrder.get(0);
+        MediaController.PhotoEntry source = (MediaController.PhotoEntry) selectedPhotos.get(key);
+        zxc.iconic.xenon.helpers.PhotoGifConverter.convert(getContext(), resourcesProvider, source, parentAlert.currentAccount, result -> {
+            if (parentAlert.isDismissed() || selectedPhotos.get(key) != source) {
+                new File(result.path).delete();
+                return;
+            }
+            selectedPhotos.put(key, result);
+            parentAlert.sendConvertedGif();
+        });
+    }
+
     @Override
     public void onSelectedItemsCountChanged(int count) {
+        if (canSendAsGif()) parentAlert.selectedMenuItem.showSubItem(send_as_gif);
+        else parentAlert.selectedMenuItem.hideSubItem(send_as_gif);
         final boolean hasCompress;
         final boolean hasGroup;
         if (count <= 1 || parentAlert.editingMessageObject != null) {

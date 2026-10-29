@@ -261,7 +261,7 @@ public class MediaCodecVideoConvertor {
                                             firstEncode = false;
                                         }
                                         long availableSize = muxer.writeSampleData(videoTrackIndex, encodedData, info, true);
-                                        if (availableSize != 0) {
+                                        if (availableSize != 0 || convertVideoParams.reportProgressOnEveryFrame) {
                                             if (callback != null) {
                                                 if (info.presentationTimeUs > currentPts) {
                                                     currentPts = info.presentationTimeUs;
@@ -1539,6 +1539,8 @@ public class MediaCodecVideoConvertor {
     }
 
     public static class ConvertVideoParams {
+        // Small photo animations may never reach the muxer's 32 KiB flush threshold.
+        public boolean reportProgressOnEveryFrame;
         String videoPath;
         long videoOffset;
         File cacheFile;
