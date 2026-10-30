@@ -1656,7 +1656,9 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
         for (int i = 0; i < 2; i++) {
             if (titleTextView[0] != null && titleTextView[0].getVisibility() != GONE || subtitleTextView != null && subtitleTextView.getVisibility() != GONE) {
-                int availableWidth = width - (menu != null ? menu.getMeasuredWidth() : 0) - dp(16) - textLeft - titleRightMargin;
+                // A closing search field keeps filling the menu during its fade-out; don't squeeze the title for it.
+                int titleMenuWidth = menu != null ? menu.getMeasuredWidth() - (isSearchFieldVisible ? 0 : menu.getClosingSearchFieldWidth()) : 0;
+                int availableWidth = width - titleMenuWidth - dp(16) - textLeft - titleRightMargin;
                 availableWidth = Math.max(availableWidth, 0);
 
                 if (((fromBottom && i == 0) || (!fromBottom && i == 1)) && overlayTitleAnimation && titleAnimationRunning) {
@@ -2605,6 +2607,15 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
                 ? effect.begin(canvas) : -1;
     }
 
+    private boolean drawGlassTitle = true;
+
+    public void setDrawGlassTitle(boolean draw) {
+        if (drawGlassTitle != draw) {
+            drawGlassTitle = draw;
+            invalidate();
+        }
+    }
+
     @Override
     public void observeLiquidTouch(MotionEvent event) {
         if (liquidBack == null) return;
@@ -2741,7 +2752,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             glassDrawable.setBounds(nonIsland ? 0 : left, nonIsland ? 0 : t,
                     nonIsland ? getWidth() : right, nonIsland ? getHeight() : b);
             // Remove header pill suppresses this surface in the shared union too.
-            glassDrawable.setAlpha(m3ChatHeader ? 0 : chatAvatarContainer != null && !nonIsland
+            glassDrawable.setAlpha(m3ChatHeader || !drawGlassTitle ? 0 : chatAvatarContainer != null && !nonIsland
                     ? (int) (255 * (1f - searchFactor)) : 255);
         }
         if (glassDrawableBack != null) {
@@ -2764,7 +2775,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         final int menuWidth = liquidGlassMenuWidth;
         final boolean hasBackButton = liquidGlassHasBack;
 
-        if (glassDrawable != null && !glassOnlyBack && !m3ChatHeader && !liquidGlassGroupDrawn) {
+        if (glassDrawable != null && !glassOnlyBack && drawGlassTitle && !m3ChatHeader && !liquidGlassGroupDrawn) {
             if (nonIsland) {
                 glassDrawable.setBounds(0, 0, getWidth(), getHeight());
             } else {

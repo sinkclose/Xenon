@@ -290,6 +290,8 @@ public class NotificationCenter {
     public static final int feedChannelsChanged = totalEvents++;
     public static final int feedNeedReload = totalEvents++;
     public static final int feedUnreadCountChanged = totalEvents++;
+    public static final int walletUpdate = totalEvents++;
+    public static final int walletTransactionsUpdate = totalEvents++;
 
     //global
     public static final int activeAccountChanged = totalEvents++;

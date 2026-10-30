@@ -1586,9 +1586,8 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
                 container.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_FULLSCREEN);
             }
             params.height = ViewGroup.LayoutParams.MATCH_PARENT;
-            if (Build.VERSION.SDK_INT >= 28) {
-                params.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
-            }
+            // same as the activity window: SHORT_EDGES keeps the window out of a cutout on a long edge (e.g. top in landscape), so it ends up below the status bar
+            AndroidUtilities.applyEdgeToEdgeLayoutParams(params);
             window.setAttributes(params);
         }
     }
@@ -1687,11 +1686,11 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
         shadowDrawable.setColorFilter(color, PorterDuff.Mode.MULTIPLY);
         if (internalBackgroundColor != color) {
             internalBackgroundColor = color;
+            behindKeyboardColorKey = -1;
+            behindKeyboardColor = color;
             if (usesSystemMonetSurface()) {
                 navBarColorKey = -1;
                 navBarColor = color;
-                behindKeyboardColorKey = -1;
-                behindKeyboardColor = color;
                 setOverlayNavBarColor(color);
             }
             if (container != null) {

@@ -42,6 +42,12 @@ android {
         }
     }
 
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     buildTypes {
         debug {
             if (localProperties.getProperty("storeFile") != null) {
@@ -72,12 +78,6 @@ android {
         multiDexEnabled true
 
         manifestPlaceholders = [MAPS_API_KEY: localProperties.getProperty("mapsApiKey", "")]
-    }
-
-    bundle {
-        language {
-            enableSplit = false
-        }
     }
 
     splits.abi {
