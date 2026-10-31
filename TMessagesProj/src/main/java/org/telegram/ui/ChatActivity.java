@@ -14171,6 +14171,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (getParentActivity() == null || getContext() == null) {
             return;
         }
+        if (chatAttachAlert != null && !chatAttachAlert.isShowing()
+                && (chatAttachAlert.getPhotoLayout() instanceof org.telegram.ui.Components.ChatAttachAlertPhotoLayoutV2) != NekoConfig.experimentalMediaPicker) {
+            chatAttachAlert.onDestroy();
+            chatAttachAlert = null;
+        }
         if (chatAttachAlert == null) {
             chatAttachAlert = new ChatAttachAlert(getParentActivity(), this, false, false, true, themeDelegate) {
                 @Override

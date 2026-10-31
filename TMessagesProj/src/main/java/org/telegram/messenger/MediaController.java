@@ -652,6 +652,20 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
         private boolean parsedXmp;
         public boolean isLivePhoto;
 
+        public boolean hasLivePhotoMetadata() {
+            return isVideo || parsedXmp;
+        }
+
+        /** Publish a background probe on the UI thread without replacing edits on this entry. */
+        public void applyLivePhotoMetadata(PhotoEntry probe) {
+            if (parsedXmp || isVideo || !probe.parsedXmp) return;
+            isLivePhoto = probe.isLivePhoto;
+            if (isLivePhoto) isVideo = true;
+            livePhotoVideoOffset = probe.livePhotoVideoOffset;
+            livePhotoTimestampUs = probe.livePhotoTimestampUs;
+            parsedXmp = true;
+        }
+
         @Override
         public boolean isLivePhoto() {
             if (isVideo || parsedXmp) return isLivePhoto;

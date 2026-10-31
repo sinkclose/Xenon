@@ -108,6 +108,7 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
     private final int disableOpeningFailureBottomsheetRow = rowId++;
 
     private final int useCamera2ApiRow = rowId++;
+    private final int experimentalMediaPickerRow = rowId++;
 
     private final int downloadSpeedBoostRow = rowId++;
     private final int localCustomEmojiRow = rowId++;
@@ -157,6 +158,8 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
                 .slug("osuClearLocalFiles").red().setEnabled(!osuCacheBusy));
         items.add(UItem.asShadow(LocaleController.getString(R.string.OsuClearLocalFilesHint)));
         items.add(UItem.asHeader(LocaleController.getString(R.string.Experiment)));
+        items.add(UItem.asCheck(experimentalMediaPickerRow, LocaleController.getString(R.string.ExperimentalMediaPicker), LocaleController.getString(R.string.ExperimentalMediaPickerHint))
+                .slug("experimentalMediaPicker").setChecked(NekoConfig.experimentalMediaPicker));
         items.add(UItem.asCheck(disableTypingRow, LocaleController.getString(R.string.DisableTypingIndicator), LocaleController.getString(R.string.DisableTypingIndicatorDesc)).slug("disableTyping").setChecked(NekoConfig.disableTypingIndicator));
         items.add(UItem.asCheck(ghostModeRow, LocaleController.getString(R.string.GhostMode), LocaleController.getString(R.string.GhostModeDesc)).slug("ghostMode").setChecked(NekoConfig.ghostModeEnabled));
         items.add(UItem.asCheck(telegaDetectorRow, LocaleController.getString(R.string.TelegaDetectorEnabled), LocaleController.getString(R.string.TelegaDetectorHint)).slug("telegaDetector").setChecked(NekoConfig.telegaDetectorEnabled));
@@ -245,6 +248,11 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
             NekoConfig.toggleDisableOpeningFailureBottomsheet();
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.disableOpeningFailureBottomsheet);
+            }
+        } else if (id == experimentalMediaPickerRow) {
+            NekoConfig.toggleExperimentalMediaPicker();
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.experimentalMediaPicker);
             }
         } else if (id == useCamera2ApiRow) {
             NekoConfig.toggleUseCamera2Api();

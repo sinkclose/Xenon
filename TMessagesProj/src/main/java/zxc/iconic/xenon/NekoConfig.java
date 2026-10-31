@@ -145,6 +145,7 @@ public class NekoConfig {
     public static boolean voiceEnhancements = false;
     public static boolean disableInstantCamera = false;
     public static boolean hideCameraInMediaPicker = false;
+    public static boolean experimentalMediaPicker = false;
     public static boolean tryToOpenAllLinksInIV = false;
     public static boolean formatTimeWithSeconds = false;
     public static boolean accentAsNotificationColor = false;
@@ -433,6 +434,7 @@ public class NekoConfig {
             voiceEnhancements = preferences.getBoolean("voiceEnhancements", false);
             disableInstantCamera = preferences.getBoolean("disableInstantCamera", false);
             hideCameraInMediaPicker = preferences.getBoolean("hideCameraInMediaPicker", false);
+            experimentalMediaPicker = preferences.getBoolean("experimentalMediaPicker", false);
             tryToOpenAllLinksInIV = preferences.getBoolean("tryToOpenAllLinksInIV", false);
             formatTimeWithSeconds = preferences.getBoolean("formatTimeWithSeconds", false);
             accentAsNotificationColor = preferences.getBoolean("accentAsNotificationColor", false);
@@ -1815,6 +1817,12 @@ public class NekoConfig {
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("useCamera2Api", useCamera2Api);
         editor.apply();
+    }
+
+    public static void toggleExperimentalMediaPicker() {
+        experimentalMediaPicker = !experimentalMediaPicker;
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
+                .edit().putBoolean("experimentalMediaPicker", experimentalMediaPicker).apply();
     }
 
     public static void toggleVoiceEnhancements() {
