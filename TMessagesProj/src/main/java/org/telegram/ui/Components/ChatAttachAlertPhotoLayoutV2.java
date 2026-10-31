@@ -7,6 +7,7 @@ import android.os.CancellationSignal;
 import android.provider.MediaStore;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.MediaController;
 import org.telegram.messenger.MediaPickerGalleryLoader;
@@ -47,7 +48,7 @@ public class ChatAttachAlertPhotoLayoutV2 extends ChatAttachAlertPhotoLayout {
             onGalleryLoaded();
         }
     };
-    private final ContentObserver galleryObserver = new ContentObserver(AndroidUtilities.applicationHandler) {
+    private final ContentObserver galleryObserver = new ContentObserver(ApplicationLoader.applicationHandler) {
         @Override
         public void onChange(boolean selfChange, Uri uri) {
             invalidateGallery();

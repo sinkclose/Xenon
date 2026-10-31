@@ -272,8 +272,10 @@ class MediaPickerV2Test(unittest.TestCase):
         }
         static void load(Context context,CancellationSignal signal,Callback callback) { jobs.add(new Job(signal,callback)); }
     }
-    static class AndroidUtilities {
+    static class ApplicationLoader {
         static final Object applicationHandler=new Object();
+    }
+    static class AndroidUtilities {
         static final List<Runnable> immediate=new ArrayList<>(),delayed=new ArrayList<>();
         static synchronized void runOnUIThread(Runnable r) { immediate.add(r); }
         static synchronized void runOnUIThread(Runnable r,long delay) { delayed.add(r); }
