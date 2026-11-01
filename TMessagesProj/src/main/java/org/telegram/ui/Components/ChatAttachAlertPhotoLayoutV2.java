@@ -4,14 +4,19 @@ import android.content.Context;
 import android.database.ContentObserver;
 import android.net.Uri;
 import android.os.CancellationSignal;
+import android.os.OperationCanceledException;
 import android.provider.MediaStore;
+
+import androidx.recyclerview.widget.DiffUtil;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.MediaController;
 import org.telegram.messenger.MediaPickerGalleryLoader;
+import org.telegram.messenger.MediaPickerGalleryDiff;
 import org.telegram.messenger.NotificationCenter;
+import org.telegram.messenger.Utilities;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.PhotoViewer;
 
@@ -32,8 +37,18 @@ public class ChatAttachAlertPhotoLayoutV2 extends ChatAttachAlertPhotoLayout {
     private boolean destroyed;
     private boolean observingGallery;
     private int permissions = -1;
+    private CancellationSignal diffQuery;
+    private Runnable diffTask;
+    private MediaController.AlbumEntry diffPreviousAlbum;
+    private MediaController.AlbumEntry diffNextAlbum;
+    private DiffUtil.DiffResult galleryDiff;
+    private boolean diffReady;
+    private boolean refreshScheduled;
 
-    private final Runnable refresh = this::loadGalleryPhotos;
+    private final Runnable refresh = () -> {
+        refreshScheduled = false;
+        loadGalleryPhotos();
+    };
     private final Runnable applyGallery = new Runnable() {
         @Override
         public void run() {
@@ -43,9 +58,35 @@ public class ChatAttachAlertPhotoLayoutV2 extends ChatAttachAlertPhotoLayout {
                 AndroidUtilities.runOnUIThread(this, 250);
                 return;
             }
+            MediaController.AlbumEntry previous = getSelectedGalleryAlbum();
+            MediaController.AlbumEntry next = resolveGalleryAlbum(shouldLoadAllMedia() ? pendingGallery.allMedia : pendingGallery.allPhotos,
+                    shouldLoadAllMedia() ? pendingGallery.mediaAlbums : pendingGallery.photoAlbums);
+            if (MediaPickerGalleryDiff.sameAlbum(previous, next) && !isGalleryPrefix(previous, next)
+                    && (!diffReady || diffPreviousAlbum != previous || diffNextAlbum != next)) {
+                if (diffQuery != null && diffPreviousAlbum == previous && diffNextAlbum == next) return;
+                cancelDiff();
+                diffPreviousAlbum = previous;
+                diffNextAlbum = next;
+                CancellationSignal cancellation = diffQuery = new CancellationSignal();
+                Utilities.globalQueue.postRunnable(diffTask = () -> {
+                    try {
+                        DiffUtil.DiffResult difference = MediaPickerGalleryDiff.calculate(previous, next, cancellation);
+                        AndroidUtilities.runOnUIThread(() -> {
+                            if (destroyed || diffQuery != cancellation || cancellation.isCanceled()) return;
+                            galleryDiff = difference;
+                            diffReady = true;
+                            // Recheck the album and viewer: either can change while diffing.
+                            applyGallery.run();
+                        });
+                    } catch (OperationCanceledException ignored) {
+                    }
+                });
+                return;
+            }
             gallery = pendingGallery;
             pendingGallery = null;
             onGalleryLoaded();
+            cancelDiff();
         }
     };
     private final ContentObserver galleryObserver = new ContentObserver(ApplicationLoader.applicationHandler) {
@@ -79,16 +120,22 @@ public class ChatAttachAlertPhotoLayoutV2 extends ChatAttachAlertPhotoLayout {
     private void invalidateGallery() {
         if (destroyed) return;
         dirty = true;
-        cancelQuery();
-        AndroidUtilities.cancelRunOnUIThread(refresh);
-        if (parentAlert.isShowing() && !parentAlert.isDismissed()) {
-            AndroidUtilities.runOnUIThread(refresh, 250);
-        }
+        // Finish the current pass. A burst of notifications needs at most one follow-up.
+        if (!inFlight) scheduleRefresh();
+    }
+
+    private void scheduleRefresh() {
+        // Do not postpone an already scheduled refresh during continuous downloads.
+        if (refreshScheduled || !parentAlert.isShowing() || parentAlert.isDismissed()) return;
+        refreshScheduled = true;
+        AndroidUtilities.runOnUIThread(refresh, 250);
     }
 
     @Override
     public void loadGalleryPhotos() {
         if (destroyed) return;
+        AndroidUtilities.cancelRunOnUIThread(refresh);
+        refreshScheduled = false;
         int granted = MediaPickerGalleryLoader.getAccessSignature(applicationContext);
         if (permissions != granted) {
             permissions = granted;
@@ -102,21 +149,24 @@ public class ChatAttachAlertPhotoLayoutV2 extends ChatAttachAlertPhotoLayout {
         boolean needsPreview = gallery == null;
         CancellationSignal cancellation = query = new CancellationSignal();
         inFlight = true;
+        dirty = false;
         Thread worker = new Thread(() -> MediaPickerGalleryLoader.load(applicationContext, cancellation, (result, complete) -> {
             AndroidUtilities.runOnUIThread(() -> {
                 if (destroyed || query != cancellation || cancellation.isCanceled()) return;
                 if (complete) {
                     inFlight = false;
                     // Keep failed queries retryable on the next opening.
-                    dirty = result == null;
+                    dirty |= result == null;
                 }
                 if (result != null && (needsPreview || complete)) {
+                    cancelDiff();
                     pendingGallery = result;
                     AndroidUtilities.cancelRunOnUIThread(applyGallery);
                     applyGallery.run();
                 } else if (complete && gallery == null) {
                     onGalleryLoaded();
                 }
+                if (complete && result != null && dirty) scheduleRefresh();
             });
         }), "media-picker-v2");
         worker.setPriority(Thread.MIN_PRIORITY);
@@ -130,7 +180,23 @@ public class ChatAttachAlertPhotoLayoutV2 extends ChatAttachAlertPhotoLayout {
         }
         inFlight = false;
         pendingGallery = null;
+        cancelDiff();
         AndroidUtilities.cancelRunOnUIThread(applyGallery);
+    }
+
+    private void cancelDiff() {
+        if (diffQuery != null) diffQuery.cancel();
+        if (diffTask != null) Utilities.globalQueue.cancelRunnable(diffTask);
+        diffQuery = null;
+        diffTask = null;
+        galleryDiff = null;
+        diffReady = false;
+        diffPreviousAlbum = diffNextAlbum = null;
+    }
+
+    @Override
+    protected DiffUtil.DiffResult getGalleryDiff(MediaController.AlbumEntry previous, MediaController.AlbumEntry next) {
+        return diffReady && diffPreviousAlbum == previous && diffNextAlbum == next ? galleryDiff : null;
     }
 
     @Override
@@ -189,6 +255,7 @@ public class ChatAttachAlertPhotoLayoutV2 extends ChatAttachAlertPhotoLayout {
         if (inFlight || pendingGallery != null) dirty = true;
         cancelQuery();
         AndroidUtilities.cancelRunOnUIThread(refresh);
+        refreshScheduled = false;
     }
 
     @Override

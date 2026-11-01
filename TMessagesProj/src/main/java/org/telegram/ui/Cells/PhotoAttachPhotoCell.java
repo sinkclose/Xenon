@@ -568,6 +568,31 @@ public class PhotoAttachPhotoCell extends FrameLayout {
         invalidate();
     }
 
+    /** Retarget an unchanged thumbnail after an album refresh. All content checks stay on UI. */
+    public boolean updatePhotoEntry(MediaController.PhotoEntry entry, boolean last) {
+        MediaController.PhotoEntry previous = photoEntry;
+        if (previous == null || previous.imageId != entry.imageId || previous.dateTaken != entry.dateTaken
+                || previous.size != entry.size || previous.width != entry.width || previous.height != entry.height
+                || !TextUtils.equals(previous.path, entry.path)) return false;
+        entry.applyLivePhotoMetadata(previous);
+        if (previous.isVideo != entry.isVideo || previous.duration != entry.duration
+                || previous.orientation != entry.orientation || previous.invert != entry.invert
+                || !TextUtils.equals(previous.coverPath, entry.coverPath) || !TextUtils.equals(previous.thumbPath, entry.thumbPath)
+                || previous.hasSpoiler != entry.hasSpoiler || previous.starsAmount != entry.starsAmount
+                || previous.isHighQuality() != entry.isHighQuality()) return false;
+        if (previous != entry) {
+            cancelLivePhotoTask();
+            photoEntry = entry;
+            loadLivePhotoMetadata();
+            imageView.invalidate();
+        }
+        if (isLast != last) {
+            isLast = last;
+            requestLayout();
+        }
+        return true;
+    }
+
     public void setPhotoEntry(MediaController.PhotoEntry entry, boolean selectedMultiple, boolean needCheckShow, boolean last, boolean allowLivePhotos) {
         cancelLivePhotoTask();
         pressed = false;

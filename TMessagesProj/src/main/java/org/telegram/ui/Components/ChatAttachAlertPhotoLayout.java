@@ -68,9 +68,11 @@ import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.LinearSmoothScroller;
+import androidx.recyclerview.widget.ListUpdateCallback;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
@@ -123,6 +125,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeSet;
 
 import zxc.iconic.xenon.NekoConfig;
 
@@ -4353,6 +4356,26 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
         }
     }
 
+    protected MediaController.AlbumEntry getSelectedGalleryAlbum() {
+        return selectedAlbumEntry;
+    }
+
+    protected MediaController.AlbumEntry resolveGalleryAlbum(MediaController.AlbumEntry nextGallery, ArrayList<MediaController.AlbumEntry> albums) {
+        if (selectedAlbumEntry != null && selectedAlbumEntry != galleryAlbumEntry && !parentAlert.isStickerMode) {
+            for (MediaController.AlbumEntry entry : albums) {
+                if (entry.bucketId == selectedAlbumEntry.bucketId && entry.videoOnly == selectedAlbumEntry.videoOnly
+                        && (entry.bucketId != 0 || TextUtils.equals(entry.bucketName, selectedAlbumEntry.bucketName))) {
+                    return entry;
+                }
+            }
+        }
+        return nextGallery;
+    }
+
+    protected DiffUtil.DiffResult getGalleryDiff(MediaController.AlbumEntry previous, MediaController.AlbumEntry next) {
+        return null;
+    }
+
     /** Apply a finished snapshot on the UI thread; shared with the independent V2 loader. */
     protected void onGalleryLoaded() {
         if (adapter == null) return;
@@ -4362,19 +4385,9 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
         boolean previousCameraSpace = adapter.hasCameraSpaceRow;
         boolean previousNoPermissions = noGalleryPermissions;
         noGalleryPermissions = isNoGalleryPermissions();
-        MediaController.AlbumEntry previousGallery = galleryAlbumEntry;
-        galleryAlbumEntry = getGalleryAlbumEntry(shouldLoadAllMedia());
-        MediaController.AlbumEntry nextAlbum = galleryAlbumEntry;
-        if (selectedAlbumEntry != null && selectedAlbumEntry != previousGallery && !parentAlert.isStickerMode) {
-            for (MediaController.AlbumEntry entry : getGalleryAlbums(shouldLoadAllMedia())) {
-                if (entry.bucketId == selectedAlbumEntry.bucketId && entry.videoOnly == selectedAlbumEntry.videoOnly
-                        && (entry.bucketId != 0 || TextUtils.equals(entry.bucketName, selectedAlbumEntry.bucketName))) {
-                    nextAlbum = entry;
-                    break;
-                }
-            }
-        }
-        selectedAlbumEntry = nextAlbum;
+        MediaController.AlbumEntry nextGallery = getGalleryAlbumEntry(shouldLoadAllMedia());
+        selectedAlbumEntry = resolveGalleryAlbum(nextGallery, getGalleryAlbums(shouldLoadAllMedia()));
+        galleryAlbumEntry = nextGallery;
         // Restore edits before binding cells from a new snapshot.
         if (galleryAlbumEntry != null) {
             for (Object key : selectedPhotosOrder) {
@@ -4385,6 +4398,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
                     if (currentEntry instanceof MediaController.PhotoEntry && entry != currentEntry) {
                         MediaController.PhotoEntry edited = (MediaController.PhotoEntry) currentEntry;
                         entry.copyFrom(edited);
+                        entry.applyLivePhotoMetadata(edited);
                         entry.isVideo = edited.isVideo;
                         entry.orientation = edited.orientation;
                         entry.invert = edited.invert;
@@ -4406,8 +4420,13 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
         loading = false;
         progressView.showTextView();
         adapter.getItemCount();
-        if (incrementalGallery && mediaEnabled && !previousNoPermissions && !noGalleryPermissions
-                && previousCameraSpace == adapter.hasCameraSpaceRow && isGalleryPrefix(previousAlbum, selectedAlbumEntry)) {
+        DiffUtil.DiffResult difference = getGalleryDiff(previousAlbum, selectedAlbumEntry);
+        boolean canUpdateGallery = incrementalGallery && mediaEnabled && !previousNoPermissions && !noGalleryPermissions
+                && previousCameraSpace == adapter.hasCameraSpaceRow;
+        if (canUpdateGallery && difference != null) {
+            adapter.notifyGalleryChanged(difference, previousAlbum.photos.size());
+            cameraAttachAdapter.notifyGalleryChanged(difference, previousAlbum.photos.size());
+        } else if (canUpdateGallery && isGalleryPrefix(previousAlbum, selectedAlbumEntry)) {
             adapter.notifyGalleryAppended(previousGridCount);
             cameraAttachAdapter.notifyGalleryAppended(previousCameraCount);
         } else {
@@ -4421,7 +4440,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
     }
 
     /** Preview entries keep their identity in later snapshots; never scan a full library on UI. */
-    private boolean isGalleryPrefix(MediaController.AlbumEntry previous, MediaController.AlbumEntry next) {
+    protected boolean isGalleryPrefix(MediaController.AlbumEntry previous, MediaController.AlbumEntry next) {
         if (previous == null || next == null || previous.photos.isEmpty() || previous.photos.size() > 96
                 || previous.bucketId != next.bucketId || previous.videoOnly != next.videoOnly
                 || !TextUtils.equals(previous.bucketName, next.bucketName) || previous.photos.size() > next.photos.size()) return false;
@@ -4432,6 +4451,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
     }
 
     private class PhotoAttachAdapter extends RecyclerListView.FastScrollAdapter {
+        private static final String GALLERY_BINDING = "gallery-binding";
         private static final int VIEW_TYPE_CELL_PERMISSION = 3;
         private static final int VIEW_TYPE_CAMERA_PERMISSION_BUTTON = 8;
         private static final int VIEW_TYPE_EMPTY = 7;
@@ -4583,18 +4603,35 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
         }
 
         @Override
+        public void onBindViewHolder(RecyclerView.ViewHolder holder, int position, List payloads) {
+            boolean galleryBinding = !payloads.isEmpty();
+            for (Object payload : payloads) galleryBinding &= GALLERY_BINDING.equals(payload);
+            if (holder.getItemViewType() == 0 && galleryBinding) {
+                int photoPosition = getPhotoPosition(position);
+                MediaController.PhotoEntry entry = getPhotoEntryAtPosition(photoPosition);
+                PhotoAttachPhotoCell cell = (PhotoAttachPhotoCell) holder.itemView;
+                if (entry != null && cell.updatePhotoEntry(entry, photoPosition == getItemCount() - 1)) {
+                    cell.getImageView().setTag(photoPosition);
+                    cell.setTag(photoPosition);
+                    cell.invalidateOutline();
+                    return;
+                }
+            }
+            onBindViewHolder(holder, position);
+        }
+
+        private int getPhotoPosition(int position) {
+            if (hasCameraSpaceRow && position > itemsPerRow) position--;
+            if (needCamera && selectedAlbumEntry == galleryAlbumEntry) position--;
+            if (showAvatarConstructor) position--;
+            return position;
+        }
+
+        @Override
         public void onBindViewHolder(RecyclerView.ViewHolder holder, int position) {
             switch (holder.getItemViewType()) {
                 case 0: {
-                    if (hasCameraSpaceRow && position > itemsPerRow) {
-                        position--;
-                    }
-                    if (needCamera && selectedAlbumEntry == galleryAlbumEntry) {
-                        position--;
-                    }
-                    if (showAvatarConstructor) {
-                        position--;
-                    }
+                    position = getPhotoPosition(position);
                     PhotoAttachPhotoCell cell = (PhotoAttachPhotoCell) holder.itemView;
                     if (this == adapter) {
                         cell.setItemSize(itemSize);
@@ -4826,6 +4863,41 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
                 // The camera strip has no footer; its former last cell loses the end padding.
                 if (this == cameraAttachAdapter && insertAt > 0) notifyItemChanged(insertAt - 1);
             }
+            updateEmptyView();
+        }
+
+        private void notifyGalleryChanged(DiffUtil.DiffResult difference, int previousGalleryCount) {
+            getItemCount();
+            final int offset = photosStartRow + cameraPhotos.size();
+            RecyclerListView list = this == adapter ? gridView : cameraPhotoRecyclerView;
+            TreeSet<Integer> bindings = new TreeSet<>();
+            int children = list.getChildCount();
+            int cached = list.getCachedChildCount();
+            for (int i = 0; i < children + cached; i++) {
+                View child = i < children ? list.getChildAt(i) : list.getCachedChildAt(i - children);
+                int position = list.getChildAdapterPosition(child);
+                if (position < photosStartRow) continue;
+                if (position >= offset) {
+                    if (position >= offset + previousGalleryCount) continue;
+                    position = difference.convertOldPositionToNew(position - offset);
+                    if (position == DiffUtil.DiffResult.NO_POSITION) continue;
+                    position += offset;
+                }
+                bindings.add(position);
+            }
+            difference.dispatchUpdatesTo(new ListUpdateCallback() {
+                @Override
+                public void onInserted(int position, int count) { notifyItemRangeInserted(offset + position, count); }
+                @Override
+                public void onRemoved(int position, int count) { notifyItemRangeRemoved(offset + position, count); }
+                @Override
+                public void onMoved(int from, int to) { notifyItemMoved(offset + from, offset + to); }
+                @Override
+                public void onChanged(int position, int count, Object payload) { notifyItemRangeChanged(offset + position, count); }
+            });
+            // Refresh only existing views. A whole-album payload can make RecyclerView's
+            // update preprocessing walk every item, even though binding itself is cheap.
+            for (int position : bindings) notifyItemChanged(position, GALLERY_BINDING);
             updateEmptyView();
         }
 

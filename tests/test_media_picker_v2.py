@@ -82,6 +82,8 @@ COMMON = r'''
                 this.duration=duration; isVideo=video; this.width=width; this.height=height; this.size=size;
             }
             Boolean discardLivePhoto;
+            String coverPath,thumbPath; boolean hasSpoiler,highQuality; long starsAmount;
+            boolean isHighQuality() { return highQuality; }
             int invert,gradientTopColor,gradientBottomColor; boolean isMuted,isAttachSpoilerRevealed;
             Object emojiMarkup,coverPhoto,coverPhotoParentObject; long coverSavedPosition,effectId;
             void copyFrom(PhotoEntry other) { caption=other.caption; }
@@ -144,13 +146,42 @@ _metadata_source = (JAVA / 'org/telegram/messenger/MediaController.java').read_t
 COMMON = COMMON.replace('HAS_METADATA', method(_metadata_source, 'public boolean hasLivePhotoMetadata()'))
 COMMON = COMMON.replace('APPLY_METADATA', method(_metadata_source, 'public void applyLivePhotoMetadata(PhotoEntry probe)'))
 
+DIFF_SOURCES = r'''
+    @interface NonNull {}
+    @interface Nullable {}
+    @interface VisibleForTesting {}
+    @interface IntRange { long from() default Long.MIN_VALUE; }
+    static class RecyclerView {
+        static class ViewHolder {
+            Object itemView; int viewType;
+            int getItemViewType() { return viewType; }
+        }
+        static class Adapter<VH extends ViewHolder> {
+            public void onBindViewHolder(VH holder,int position) {}
+            public void onBindViewHolder(VH holder,int position,List<Object> payloads) {}
+            public void notifyItemRangeInserted(int position,int count) {}
+            public void notifyItemRangeRemoved(int position,int count) {}
+            public void notifyItemMoved(int from,int to) {}
+            public void notifyItemRangeChanged(int position,int count,Object payload) {}
+        }
+    }
+'''
+for _file, _declaration in (
+    ('androidx/recyclerview/widget/DiffUtil.java', 'public class DiffUtil'),
+    ('androidx/recyclerview/widget/ListUpdateCallback.java', 'public interface ListUpdateCallback'),
+    ('androidx/recyclerview/widget/BatchingListUpdateCallback.java', 'public class BatchingListUpdateCallback'),
+    ('androidx/recyclerview/widget/AdapterListUpdateCallback.java', 'public final class AdapterListUpdateCallback'),
+    ('org/telegram/messenger/MediaPickerGalleryDiff.java', 'public final class MediaPickerGalleryDiff'),
+):
+    DIFF_SOURCES += nested_source(JAVA / _file, _declaration)
+
 
 class MediaPickerV2Test(unittest.TestCase):
     def run_java(self, body):
         self.assertIsNotNone(shutil.which('javac'), 'Put JDK 17+ on PATH')
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'MediaPickerHarness.java'
-            path.write_text('import java.util.*;\npublic class MediaPickerHarness {\n' + COMMON + body + '\n}')
+            path.write_text('import java.util.*;\npublic class MediaPickerHarness {\n' + COMMON + DIFF_SOURCES + body + '\n}')
             compiled = subprocess.run(['javac', str(path)], capture_output=True, text=True)
             self.assertEqual(compiled.returncode, 0, compiled.stderr)
             result = subprocess.run(['java', '-cp', directory, 'MediaPickerHarness'],
@@ -275,12 +306,26 @@ class MediaPickerV2Test(unittest.TestCase):
     static class ApplicationLoader {
         static final Object applicationHandler=new Object();
     }
+    static class Utilities {
+        static class Queue {
+            final ArrayList<Runnable> tasks=new ArrayList<>();
+            void postRunnable(Runnable r) { tasks.add(r); }
+            void cancelRunnable(Runnable r) { tasks.remove(r); }
+            void drain() { while(!tasks.isEmpty()) tasks.remove(0).run(); }
+        }
+        static final Queue globalQueue=new Queue();
+    }
     static class AndroidUtilities {
         static final List<Runnable> immediate=new ArrayList<>(),delayed=new ArrayList<>();
         static synchronized void runOnUIThread(Runnable r) { immediate.add(r); }
         static synchronized void runOnUIThread(Runnable r,long delay) { delayed.add(r); }
         static synchronized void cancelRunOnUIThread(Runnable r) { immediate.removeIf(x->x==r); delayed.removeIf(x->x==r); }
         static void drain() {
+            for(;;) { Utilities.globalQueue.drain(); Runnable r; synchronized(AndroidUtilities.class) {
+                if(immediate.isEmpty()) return; r=immediate.remove(0);
+            } r.run(); }
+        }
+        static void drainUIOnly() {
             for(;;) { Runnable r; synchronized(AndroidUtilities.class) {
                 if(immediate.isEmpty()) return; r=immediate.remove(0);
             } r.run(); }
@@ -315,6 +360,8 @@ class MediaPickerV2Test(unittest.TestCase):
     }
     static class ChatAttachAlertPhotoLayout {
         final ChatAttachAlert parentAlert; final Context context; final Grid gridView=new Grid();
+        MediaController.AlbumEntry selectedAlbumEntry;
+        DiffUtil.DiffResult lastDiff;
         int changes,loading,destroyCalls; boolean dismissConsumed;
         ChatAttachAlertPhotoLayout(ChatAttachAlert alert,Context context,boolean dark,boolean camera,Theme.ResourcesProvider provider,boolean incremental) {
             parentAlert=alert; this.context=context; check(incremental,"V2 grid path");
@@ -324,7 +371,19 @@ class MediaPickerV2Test(unittest.TestCase):
         protected boolean isNoGalleryPermissions() { return false; }
         protected MediaController.AlbumEntry getGalleryAlbumEntry(boolean all) { return null; }
         protected ArrayList<MediaController.AlbumEntry> getGalleryAlbums(boolean all) { return null; }
-        protected void onGalleryLoaded() { changes++; }
+        protected MediaController.AlbumEntry getSelectedGalleryAlbum() { return selectedAlbumEntry; }
+        protected boolean isGalleryPrefix(MediaController.AlbumEntry previous,MediaController.AlbumEntry next) { return false; }
+        protected MediaController.AlbumEntry resolveGalleryAlbum(MediaController.AlbumEntry next,ArrayList<MediaController.AlbumEntry> albums) {
+            if(selectedAlbumEntry!=null && selectedAlbumEntry.bucketId!=0) {
+                for(var album:albums) if(album.bucketId==selectedAlbumEntry.bucketId) return album;
+            }
+            return next;
+        }
+        protected DiffUtil.DiffResult getGalleryDiff(MediaController.AlbumEntry previous,MediaController.AlbumEntry next) { return null; }
+        protected void onGalleryLoaded() {
+            var next=resolveGalleryAlbum(getGalleryAlbumEntry(true),getGalleryAlbums(true)); lastDiff=getGalleryDiff(selectedAlbumEntry,next);
+            selectedAlbumEntry=next; changes++;
+        }
         protected void onGalleryLoading() { loading++; }
         public void loadGalleryPhotos() {}
         public void onInit(boolean video,boolean photo,boolean document) {}
@@ -361,7 +420,7 @@ class MediaPickerV2Test(unittest.TestCase):
         picker.onPause(); picker.onResume();
         picker.loadGalleryPhotos(); check(MediaPickerGalleryLoader.jobs.size()==1,"full-access resume reuses completed gallery without querying");
 
-        picker.galleryObserver.onChange(false); check(first.signal().isCanceled(),"invalidate old query");
+        picker.galleryObserver.onChange(false); check(!first.signal().isCanceled(),"notification does not cancel completed work");
         AndroidUtilities.advanceTime(); var second=job(1);
         first.callback().onLoaded(preview,true); AndroidUtilities.drain();
         check(picker.getGalleryAlbumEntry(true)==full.allMedia,"ignore stale callback");
@@ -388,15 +447,247 @@ class MediaPickerV2Test(unittest.TestCase):
         fullAccess.callback().onLoaded(full,true); AndroidUtilities.drain();
         check(fullAccess.signal().isCanceled() && picker.changes==changes,"ignore callbacks after destroy");
         check(context.resolver.registrations==0 && picker.destroyCalls==1,"release observers exactly once");
+
+        var burst=new ChatAttachAlertPhotoLayoutV2(new ChatAttachAlert(),new Context(),false,true,null);
+        int offset=MediaPickerGalleryLoader.jobs.size();
+        burst.loadGalleryPhotos(); var active=job(offset);
+        for(int i=0;i<50;i++) burst.galleryObserver.onChange(false);
+        AndroidUtilities.advanceTime();
+        check(!active.signal().isCanceled() && MediaPickerGalleryLoader.jobs.size()==offset+1,"burst keeps active scan running");
+        active.callback().onLoaded(new MediaPickerGalleryLoader.Gallery(),true); AndroidUtilities.drain();
+        check(burst.gallery!=null && burst.dirty,"publish completed scan without losing invalidations");
+        AndroidUtilities.advanceTime(); var followup=job(offset+1);
+        check(MediaPickerGalleryLoader.jobs.size()==offset+2,"one follow-up for the entire burst");
+        followup.callback().onLoaded(new MediaPickerGalleryLoader.Gallery(),true); AndroidUtilities.drain();
+        check(burst.lastDiff!=null,"refresh applies prepared background diff");
+        AndroidUtilities.advanceTime();
+        check(MediaPickerGalleryLoader.jobs.size()==offset+2 && !burst.dirty,"clean follow-up does not loop");
+
+        burst.galleryObserver.onChange(false);
+        Runnable scheduled=AndroidUtilities.delayed.get(0);
+        for(int i=0;i<50;i++) burst.galleryObserver.onChange(false);
+        check(AndroidUtilities.delayed.size()==1 && AndroidUtilities.delayed.get(0)==scheduled,"notifications retain the first refresh deadline");
+        AndroidUtilities.advanceTime(); var deferred=job(offset+2);
+        var previous=burst.gallery;
+        var pending=new MediaPickerGalleryLoader.Gallery();
+        deferred.callback().onLoaded(pending,true); AndroidUtilities.drainUIOnly();
+        check(!Utilities.globalQueue.tasks.isEmpty() && burst.gallery==previous,"diff preparation is asynchronous");
+        PhotoViewer.instance.visible=true;
+        AndroidUtilities.drain();
+        check(burst.gallery==previous && burst.diffReady,"viewer opened during diff defers publication");
+        PhotoViewer.instance.visible=false; AndroidUtilities.advanceTime();
+        check(burst.gallery==pending,"publish prepared update after viewer closes");
+
+        var oldFolder=new MediaController.AlbumEntry(7,"folder",null);
+        var newFolder=new MediaController.AlbumEntry(7,"folder",null);
+        burst.galleryObserver.onChange(false); AndroidUtilities.advanceTime(); var switched=job(offset+3);
+        var switchedGallery=new MediaPickerGalleryLoader.Gallery(); switchedGallery.mediaAlbums.add(newFolder);
+        switched.callback().onLoaded(switchedGallery,true); AndroidUtilities.drainUIOnly();
+        CancellationSignal superseded=burst.diffQuery;
+        burst.selectedAlbumEntry=oldFolder; AndroidUtilities.drain();
+        check(superseded.isCanceled() && burst.lastDiff!=null && burst.selectedAlbumEntry==newFolder,"album switch while diffing recomputes for selected folder");
+
+        burst.galleryObserver.onChange(false); AndroidUtilities.advanceTime(); var stale=job(offset+4);
+        var staleGallery=new MediaPickerGalleryLoader.Gallery(); staleGallery.mediaAlbums.add(new MediaController.AlbumEntry(7,"folder",null));
+        stale.callback().onLoaded(staleGallery,true); AndroidUtilities.drainUIOnly();
+        CancellationSignal diffSignal=burst.diffQuery;
+        burst.onDismiss(); AndroidUtilities.drain();
+        check(diffSignal.isCanceled() && burst.gallery==switchedGallery,"dismiss cancels queued diff without replacing gallery");
+        burst.onDestroy();
         System.out.println("OK");
     }
 ''')
 
+    def test_diff_dispatch_handles_insert_delete_reorder_and_adapter_offsets(self):
+        source = (JAVA / 'org/telegram/ui/Components/ChatAttachAlertPhotoLayout.java').read_text()
+        dispatch = method(source, 'private void notifyGalleryChanged(')
+        self.run_java(r'''
+    static class View { int position; View(int position) { this.position=position; } }
+    static class RecyclerListView {
+        final ArrayList<View> children=new ArrayList<>(),cached=new ArrayList<>();
+        int getChildCount() { return children.size(); }
+        int getCachedChildCount() { return cached.size(); }
+        View getChildAt(int index) { return children.get(index); }
+        View getCachedChildAt(int index) { return cached.get(index); }
+        int getChildAdapterPosition(View view) { return view.position; }
+    }
+    static class Adapter {
+        static final String GALLERY_BINDING="gallery-binding";
+        final ArrayList<Integer> rows=new ArrayList<>();
+        final ArrayList<Integer> cameraPhotos=new ArrayList<>();
+        final Adapter adapter=this;
+        final RecyclerListView gridView=new RecyclerListView(),cameraPhotoRecyclerView=new RecyclerListView();
+        final TreeSet<Integer> notified=new TreeSet<>();
+        int photosStartRow,photosEndRow,newSize,payloads,events;
+        int getItemCount() { photosEndRow=photosStartRow+cameraPhotos.size()+newSize; return photosEndRow+1; }
+        void notifyItemRangeInserted(int position,int count) {
+            events++; for(int i=0;i<count;i++) rows.add(position,null);
+        }
+        void notifyItemRangeRemoved(int position,int count) {
+            events++; for(int i=0;i<count;i++) rows.remove(position);
+        }
+        void notifyItemMoved(int from,int to) { throw new AssertionError("move detection is disabled"); }
+        void notifyItemRangeChanged(int position,int count) { throw new AssertionError("structural diff does not rebind content"); }
+        void notifyItemChanged(int position,Object payload) {
+            check(position>=photosStartRow && position<photosStartRow+cameraPhotos.size()+newSize,"payload excludes header/footer");
+            notified.add(position);
+            check(payload==GALLERY_BINDING,"lightweight binding payload"); payloads++;
+        }
+        void updateEmptyView() {}
+        DISPATCH
+    }
+    static MediaController.AlbumEntry album(List<Integer> ids) {
+        var album=new MediaController.AlbumEntry(7,"folder",null);
+        for(int id:ids) album.photos.add(new MediaController.PhotoEntry(7,id,123,"photo"+id,0,0,false,100,100,100));
+        return album;
+    }
+    static void verify(List<Integer> oldIds,List<Integer> newIds,int headers,int cameras) {
+        var before=album(oldIds); var after=album(newIds);
+        var diff=MediaPickerGalleryDiff.calculate(before,after,new CancellationSignal());
+        var adapter=new Adapter(); adapter.photosStartRow=headers; adapter.newSize=newIds.size();
+        for(int i=0;i<headers;i++) adapter.rows.add(-100-i);
+        for(int i=0;i<cameras;i++) { adapter.cameraPhotos.add(-200-i); adapter.rows.add(-200-i); }
+        adapter.rows.addAll(oldIds); adapter.rows.add(-999);
+        adapter.gridView.children.add(new View(0)); // header or first photo
+        adapter.gridView.children.add(new View(adapter.rows.size()-1)); // footer
+        for(int i=headers;i<Math.min(adapter.rows.size()-1,headers+12);i++) adapter.gridView.children.add(new View(i));
+        if(!oldIds.isEmpty()) adapter.gridView.cached.add(new View(headers+cameras+oldIds.size()-1));
+        TreeSet<Integer> expectedBindings=new TreeSet<>();
+        for(var collection:List.of(adapter.gridView.children,adapter.gridView.cached)) for(var view:collection) {
+            int position=view.position;
+            if(position<headers || position>=headers+cameras+oldIds.size()) continue;
+            if(position>=headers+cameras) {
+                position=diff.convertOldPositionToNew(position-headers-cameras);
+                if(position==DiffUtil.DiffResult.NO_POSITION) continue;
+                position+=headers+cameras;
+            }
+            expectedBindings.add(position);
+        }
+        adapter.notifyGalleryChanged(diff,oldIds.size());
+        check(adapter.rows.size()==headers+cameras+newIds.size()+1,"adapter row count");
+        for(int i=0;i<headers;i++) check(adapter.rows.get(i)==-100-i,"header preserved");
+        for(int i=0;i<cameras;i++) check(adapter.rows.get(headers+i)==-200-i,"camera selection preserved");
+        for(int i=0;i<newIds.size();i++) {
+            Integer retained=adapter.rows.get(headers+cameras+i);
+            check(retained==null || retained.equals(newIds.get(i)),"retained cell tracks its media after structural edits");
+            int from=diff.convertNewPositionToOld(i);
+            check(from==DiffUtil.DiffResult.NO_POSITION || oldIds.get(from).equals(newIds.get(i)),"position mapping");
+        }
+        check(adapter.rows.get(adapter.rows.size()-1)==-999,"footer preserved");
+        check(adapter.notified.equals(expectedBindings) && adapter.payloads<=14,"payload work is bounded by attached/cached views");
+        if(oldIds.equals(newIds)) check(adapter.events==0,"unchanged library has no structural notifications");
+    }
+    public static void main(String[] args) {
+        verify(List.of(3,2,1),List.of(4,3,2,1),1,2);
+        verify(List.of(3,2,1),List.of(3,1),0,0);
+        verify(List.of(3,2,1),List.of(),1,2);
+        verify(List.of(),List.of(1,2,3),0,0);
+        verify(List.of(3,2,1),List.of(1,2,3),1,0);
+        verify(List.of(3,2,1),List.of(3,2,1),1,0);
+        Random random=new Random(42);
+        for(int round=0;round<200;round++) {
+            ArrayList<Integer> oldIds=new ArrayList<>(),newIds=new ArrayList<>();
+            for(int id=0;id<100;id++) { if(random.nextBoolean()) oldIds.add(id); if(random.nextBoolean()) newIds.add(id); }
+            Collections.shuffle(oldIds,random); Collections.shuffle(newIds,random);
+            verify(oldIds,newIds,round%2,round%3);
+        }
+        ArrayList<Integer> large=new ArrayList<>(); for(int id=40000;id>0;id--) large.add(id);
+        var added=new ArrayList<>(large); added.add(0,40001); verify(large,added,1,2);
+        CancellationSignal cancelled=new CancellationSignal(); cancelled.cancel();
+        try { MediaPickerGalleryDiff.calculate(album(List.of(1)),album(List.of(2)),cancelled); throw new AssertionError("cancel"); }
+        catch(OperationCanceledException expected) {}
+        check(!MediaPickerGalleryDiff.sameAlbum(album(List.of()),new MediaController.AlbumEntry(8,"folder",null)),"album switches are not structural updates");
+        System.out.println("OK");
+    }
+'''.replace('DISPATCH', dispatch))
+
+    def test_unchanged_cell_retargets_without_reloading_thumbnail(self):
+        source = (JAVA / 'org/telegram/ui/Cells/PhotoAttachPhotoCell.java').read_text()
+        update = method(source, 'public boolean updatePhotoEntry(')
+        self.run_java(r'''
+    static class Image { int redraws; void invalidate() { redraws++; } }
+    static class Cell {
+        MediaController.PhotoEntry photoEntry;
+        boolean isLast; int cancellations,loads,layouts;
+        final Image imageView=new Image();
+        void cancelLivePhotoTask() { cancellations++; }
+        void loadLivePhotoMetadata() { loads++; }
+        void requestLayout() { layouts++; }
+        UPDATE
+    }
+    static MediaController.PhotoEntry photo(String path) {
+        return new MediaController.PhotoEntry(7,1,123,path,90,0,false,100,100,500);
+    }
+    public static void main(String[] args) {
+        var cell=new Cell(); var old=photo("live.jpg"); old.isLivePhoto(); cell.photoEntry=old;
+        var fresh=photo("live.jpg"); int reads=MediaController.PhotoEntry.metadataReads;
+        check(cell.updatePhotoEntry(fresh,false) && cell.photoEntry==fresh,"retarget unchanged thumbnail");
+        check(fresh.isLivePhoto && fresh.isVideo && fresh.parsedXmp,"keep existing live metadata on UI");
+        check(MediaController.PhotoEntry.metadataReads==reads && cell.layouts==0,"no file read or layout for unchanged content");
+        check(cell.updatePhotoEntry(fresh,true) && cell.layouts==1 && cell.cancellations==1,"update end padding without rebinding the same entry");
+        var changed=photo("live.jpg"); changed.size++;
+        check(!cell.updatePhotoEntry(changed,true) && cell.photoEntry==fresh,"changed file requires full bind");
+        changed=photo("live.jpg"); changed.thumbPath="edited.jpg";
+        check(!cell.updatePhotoEntry(changed,true),"edited thumbnail requires full bind");
+        changed=photo("live.jpg"); changed.orientation=180;
+        check(!cell.updatePhotoEntry(changed,true),"orientation change requires full bind");
+        old=photo("plain.jpg"); old.isLivePhoto(); cell.photoEntry=old;
+        fresh=photo("plain.jpg"); cell.updatePhotoEntry(fresh,false);
+        check(fresh.parsedXmp && !fresh.isLivePhoto,"keep negative metadata result");
+        System.out.println("OK");
+    }
+'''.replace('UPDATE', update))
+
+    def test_adapter_payload_keeps_images_and_refreshes_position_tags(self):
+        source = (JAVA / 'org/telegram/ui/Components/ChatAttachAlertPhotoLayout.java').read_text()
+        binding = method(source, 'public void onBindViewHolder(RecyclerView.ViewHolder holder, int position, List payloads)')
+        position = method(source, 'private int getPhotoPosition(')
+        self.run_java(r'''
+    static class PhotoAttachPhotoCell {
+        int tag=-1,outlineUpdates,lightUpdates; boolean unchanged=true;
+        MediaController.PhotoEntry photoEntry;
+        static class Image { int tag=-1; void setTag(int value) { tag=value; } }
+        final Image image=new Image();
+        Image getImageView() { return image; }
+        void setTag(int value) { tag=value; }
+        void invalidateOutline() { outlineUpdates++; }
+        boolean updatePhotoEntry(MediaController.PhotoEntry entry,boolean last) { lightUpdates++; photoEntry=entry; return unchanged; }
+    }
+    // Match FastScrollAdapter's raw RecyclerView.Adapter inheritance, including erasure.
+    static class Adapter extends RecyclerView.Adapter {
+        static final String GALLERY_BINDING="gallery-binding";
+        boolean hasCameraSpaceRow,needCamera,showAvatarConstructor=true; int itemsPerRow=3,fullBinds;
+        MediaController.AlbumEntry selectedAlbumEntry,galleryAlbumEntry;
+        final ArrayList<MediaController.PhotoEntry> entries=new ArrayList<>();
+        int getItemCount() { return entries.size()+1; }
+        MediaController.PhotoEntry getPhotoEntryAtPosition(int position) { return entries.get(position); }
+        @Override public void onBindViewHolder(RecyclerView.ViewHolder holder,int position) { fullBinds++; }
+        @Override BIND_METHOD
+        POSITION
+    }
+    public static void main(String[] args) {
+        var adapter=new Adapter();
+        for(int id=0;id<3;id++) adapter.entries.add(new MediaController.PhotoEntry(7,id,123,"photo"+id,0,0,false,100,100,100));
+        var holder=new RecyclerView.ViewHolder(); var cell=new PhotoAttachPhotoCell(); holder.itemView=cell;
+        adapter.onBindViewHolder(holder,2,List.of(Adapter.GALLERY_BINDING));
+        check(adapter.fullBinds==0 && cell.photoEntry==adapter.entries.get(1),"payload skips thumbnail reload and retargets entry");
+        check(cell.tag==1 && cell.image.tag==1 && cell.outlineUpdates==1,"position tags follow inserted rows after header");
+        adapter.onBindViewHolder(holder,3,List.of(Adapter.GALLERY_BINDING,Adapter.GALLERY_BINDING));
+        check(adapter.fullBinds==0 && cell.tag==2,"merged refresh payloads still use lightweight binding");
+        cell.unchanged=false; adapter.onBindViewHolder(holder,3,List.of(Adapter.GALLERY_BINDING));
+        check(adapter.fullBinds==1,"changed content falls back to full binding");
+        adapter.onBindViewHolder(holder,3,List.of("other"));
+        check(adapter.fullBinds==2,"unrelated payloads retain normal binding");
+        System.out.println("OK");
+    }
+'''.replace('BIND_METHOD', binding).replace('POSITION', position))
+
     def test_snapshot_keeps_selected_album_and_edit_state(self):
         source = (JAVA / 'org/telegram/ui/Components/ChatAttachAlertPhotoLayout.java').read_text()
         apply_snapshot = method(source, 'protected void onGalleryLoaded()')
+        resolve_album = method(source, 'protected MediaController.AlbumEntry resolveGalleryAlbum(')
         loading = method(source, 'protected void onGalleryLoading()')
-        prefix = method(source, 'private boolean isGalleryPrefix(')
+        prefix = method(source, 'protected boolean isGalleryPrefix(')
         append = method(source, 'private void notifyGalleryAppended(')
         self.run_java(r'''
     static class ChatGalleryResources { static final int ChatGallery=1; }
@@ -416,7 +707,8 @@ class MediaPickerV2Test(unittest.TestCase):
         final ArrayList<Object> selectedPhotosOrder=new ArrayList<>();
         final Parent parentAlert=new Parent();
         final Progress progressView=new Progress(); final Text dropDown=new Text();
-        int notifications,menus;
+        int notifications,menus,diffUpdates;
+        DiffUtil.DiffResult preparedDiff;
         final ArrayList<String> inserts=new ArrayList<>();
         Object expected;
         class Adapter {
@@ -428,6 +720,7 @@ class MediaPickerV2Test(unittest.TestCase):
             void notifyItemRangeInserted(int position,int count) { inserts.add((this==adapter?"grid":"strip")+":"+position+":"+count); }
             void notifyItemChanged(int position) {}
             void updateEmptyView() {}
+            void notifyGalleryChanged(DiffUtil.DiffResult difference,int previousCount) { check(difference==preparedDiff,"use prepared diff"); diffUpdates++; }
             APPEND
             void notifyDataSetChanged() {
                 notifications++;
@@ -440,6 +733,8 @@ class MediaPickerV2Test(unittest.TestCase):
         MediaController.AlbumEntry getGalleryAlbumEntry(boolean all) { return nextGallery; }
         ArrayList<MediaController.AlbumEntry> getGalleryAlbums(boolean all) { return albums; }
         void updateAlbumsDropDown() { menus++; }
+        protected DiffUtil.DiffResult getGalleryDiff(MediaController.AlbumEntry previous,MediaController.AlbumEntry next) { return preparedDiff; }
+        RESOLVE
         APPLY_SNAPSHOT
         LOADING
         PREFIX
@@ -483,6 +778,12 @@ class MediaPickerV2Test(unittest.TestCase):
         check(appended.notifications==0,"dosing gallery does not rebind visible thumbnails");
         check(appended.inserts.equals(List.of("grid:24:72","strip:24:72")),"append before footer and at strip end");
         check(!appended.isGalleryPrefix(firstScreen,newGallery),"replacement is not an append");
+        var refreshed=new MediaController.AlbumEntry(0,"all",null);
+        refreshed.photos.add(new MediaController.PhotoEntry(1,100,101,"new",0,0,false,1,1,1));
+        for(var photo:nextScreen.photos) refreshed.photos.add(new MediaController.PhotoEntry(1,photo.imageId,photo.dateTaken,photo.path,0,0,false,1,1,1));
+        appended.preparedDiff=MediaPickerGalleryDiff.calculate(nextScreen,refreshed,new CancellationSignal());
+        appended.nextGallery=refreshed; appended.onGalleryLoaded();
+        check(appended.notifications==0 && appended.diffUpdates==2,"completed refresh updates both adapters without full invalidation");
         nextScreen.photos.set(0,fresh);
         check(!appended.isGalleryPrefix(firstScreen,nextScreen),"reordered prefix forces refresh");
         var allPhotos=new MediaController.AlbumEntry(0,"photos",null);
@@ -497,7 +798,7 @@ class MediaPickerV2Test(unittest.TestCase):
         System.out.println("OK");
     }
 '''.replace('APPLY_SNAPSHOT', apply_snapshot.replace('R.string.ChatGallery', 'ChatGalleryResources.ChatGallery'))
-            .replace('LOADING', loading).replace('PREFIX', prefix).replace('APPEND', append))
+            .replace('LOADING', loading).replace('PREFIX', prefix).replace('APPEND', append).replace('RESOLVE', resolve_album))
 
     def test_live_photo_metadata_never_reads_disk_during_drawing(self):
         cell = (JAVA / 'org/telegram/ui/Cells/PhotoAttachPhotoCell.java').read_text()
