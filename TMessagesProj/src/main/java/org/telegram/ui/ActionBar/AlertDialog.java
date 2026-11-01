@@ -540,6 +540,22 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
         showAsMaterialDialogInternalWithRed(null, externalDismiss1, externalDismiss2);
     }
 
+    private void setMaterialDialogItems(MaterialAlertDialogBuilder builder) {
+        if (items == null) return;
+        ArrayList<CharSequence> visibleItems = new ArrayList<>(items.length);
+        ArrayList<Integer> itemIndices = new ArrayList<>(items.length);
+        for (int i = 0; i < items.length; i++) {
+            if (items[i] == null) continue;
+            visibleItems.add(items[i]);
+            itemIndices.add(i);
+        }
+        if (visibleItems.isEmpty()) return;
+        // Legacy dialogs hide null rows but keep their original indices for click callbacks.
+        builder.setItems(visibleItems.toArray(new CharSequence[0]), (d, which) -> {
+            if (onClickListener != null) onClickListener.onClick(AlertDialog.this, itemIndices.get(which));
+        });
+    }
+
     private boolean showAsMaterialDialogInternalWithRed(boolean[] red, OnDismissListener externalDismiss1, OnDismissListener externalDismiss2) {
         // fallback for 4 buttons
         if (neutralButtonText != null && negative2ButtonText != null) {
@@ -569,11 +585,7 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
             customContainer.addView(customView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, customViewHeight));
             builder.setView(customContainer);
         }
-        if (items != null) {
-            builder.setItems(items, (d, which) -> {
-                if (onClickListener != null) onClickListener.onClick(AlertDialog.this, which);
-            });
-        }
+        setMaterialDialogItems(builder);
         if (positiveButtonText != null) {
             builder.setPositiveButton(positiveButtonText, (d, w) -> {
                 if (positiveButtonListener != null)
