@@ -29,8 +29,12 @@ public class GcmPushListenerService extends FirebaseMessagingService {
             FileLog.d("FCM received data: " + data + " from: " + from);
         }
 
-        if (data.containsKey("n")) {
-            PushHelper.processRemoteMessage(data.get("n"));
+        if (!data.containsKey("p") && data.containsKey("n")) {
+            String remoteAction = data.get("n");
+            AndroidUtilities.runOnUIThread(() -> {
+                ApplicationLoader.postInitApplication();
+                PushHelper.processRemoteMessage(remoteAction);
+            });
             return;
         }
 

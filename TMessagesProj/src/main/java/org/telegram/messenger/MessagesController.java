@@ -16264,30 +16264,16 @@ private boolean hasImportantUnread(TLRPC.Dialog dialog) {
             }
         }
         getConnectionsManager().sendRequest(req, (response, error) -> {
-            final boolean registered = response instanceof TLRPC.TL_boolTrue;
-            if (registered) {
+            if (response instanceof TLRPC.TL_boolTrue) {
                 if (BuildVars.LOGS_ENABLED) {
                     FileLog.d("account " + currentAccount + " registered for push, push type: " + pushType);
                 }
                 getUserConfig().registeredForPush = true;
                 SharedConfig.pushString = regid;
                 SharedConfig.pushType = pushType;
-                SharedConfig.pushRegistrationFailed = false;
-                getUserConfig().saveConfig(false);
-            } else {
-                if (BuildVars.LOGS_ENABLED) {
-                    FileLog.d("account " + currentAccount + " failed to register for push, push type: " + pushType + (error != null && error.text != null ? ", error: " + error.text : ""));
-                }
-                // The server refused the token (e.g. APP_PUSH_APIKEY_MISSING): FCM will
-                // not wake the app up, so the push mode has to be re-evaluated below.
-                getUserConfig().registeredForPush = false;
-                SharedConfig.pushRegistrationFailed = true;
                 getUserConfig().saveConfig(false);
             }
-            AndroidUtilities.runOnUIThread(() -> {
-                registeringForPush = false;
-                ApplicationLoader.startPushService();
-            });
+            AndroidUtilities.runOnUIThread(() -> registeringForPush = false);
         });
     }
 
