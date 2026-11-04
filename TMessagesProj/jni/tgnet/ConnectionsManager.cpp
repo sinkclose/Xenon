@@ -1784,7 +1784,7 @@ void ConnectionsManager::processServerResponse(TLObject *message, int64_t messag
 }
 
 void ConnectionsManager::sendPing(Datacenter *datacenter, bool usePushConnection) {
-    if (usePushConnection && (currentUserId == 0 || !usePushConnection)) {
+    if (usePushConnection && (currentUserId == 0 || !pushConnectionEnabled)) {
         return;
     }
     Connection *connection = nullptr;
@@ -1801,6 +1801,7 @@ void ConnectionsManager::sendPing(Datacenter *datacenter, bool usePushConnection
     if (usePushConnection) {
         request->disconnect_delay = 60 * 7;
         sendingPushPingTime = getCurrentTimeMonotonicMillis();
+        lastPushPingTime = sendingPushPingTime;
     } else {
         request->disconnect_delay = testBackend ? 10 : 35;
         pingTimeMs = getCurrentTimeMonotonicMillis();
@@ -3586,19 +3587,25 @@ void ConnectionsManager::setDelegate(ConnectiosManagerDelegate *connectiosManage
 }
 
 void ConnectionsManager::setPushConnectionEnabled(bool value) {
-    pushConnectionEnabled = value;
-    Datacenter *datacenter = getDatacenterWithId(currentDatacenterId);
-    if (datacenter != nullptr) {
-        if (!pushConnectionEnabled) {
-            Connection *connection = datacenter->getPushConnection(false);
-            if (connection != nullptr) {
-                connection->suspendConnection();
-            }
-        } else {
-            datacenter->createPushConnection()->setSessionId(pushSessionId);
-            sendPing(datacenter, true);
+    // JNI callers may be on the UI thread; socket state belongs to the network thread.
+    scheduleTask([&, value] {
+        if (pushConnectionEnabled == value) {
+            return;
         }
-    }
+        pushConnectionEnabled = value;
+        Datacenter *datacenter = getDatacenterWithId(currentDatacenterId);
+        if (datacenter != nullptr) {
+            if (!pushConnectionEnabled) {
+                Connection *connection = datacenter->getPushConnection(false);
+                if (connection != nullptr) {
+                    connection->suspendConnection();
+                }
+            } else {
+                datacenter->createPushConnection()->setSessionId(pushSessionId);
+                sendPing(datacenter, true);
+            }
+        }
+    });
 }
 
 inline bool checkPhoneByPrefixesRules(std::string phone, std::string rules) {

@@ -15,6 +15,8 @@ import org.telegram.messenger.FileLog;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.messenger.SharedConfig;
+import org.telegram.messenger.UserConfig;
+import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.ui.ActionBar.Theme;
 
 import java.util.ArrayList;
@@ -2199,6 +2201,12 @@ public class NekoConfig {
         editor.apply();
         try {
             ApplicationLoader.startPushService();
+            for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+                if (UserConfig.getInstance(a).isClientActivated()) {
+                    ConnectionsManager connectionsManager = ConnectionsManager.getInstance(a);
+                    connectionsManager.setPushConnectionEnabled(connectionsManager.isPushConnectionEnabled());
+                }
+            }
         } catch (Exception ignore) {
         }
     }

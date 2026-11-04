@@ -390,12 +390,10 @@ public class ApplicationLoader extends Application {
 
     public static void startPushService() {
         if (NekoConfig.optimizedPushService) {
-            // Opt-in low-power mode: MTProto push connection only, no keep-alive service.
-            // The process can be killed by the OS, FCM wakes it up when a push arrives.
             if (BuildVars.LOGS_ENABLED) {
                 FileLog.d("push service: low-power mode (optimizedPushService)");
             }
-            stopPushServiceAndEnablePushConnection();
+            applicationContext.stopService(new Intent(applicationContext, NotificationsService.class));
             return;
         }
         SharedPreferences preferences = MessagesController.getGlobalNotificationsSettings();
@@ -413,19 +411,6 @@ public class ApplicationLoader extends Application {
             }
         } else {
             applicationContext.stopService(new Intent(applicationContext, NotificationsService.class));
-        }
-    }
-
-    private static void stopPushServiceAndEnablePushConnection() {
-        try {
-            applicationContext.stopService(new Intent(applicationContext, NotificationsService.class));
-        } catch (Throwable ignore) {
-        }
-        for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-            if (UserConfig.getInstance(a).isClientActivated()) {
-                MessagesController.getNotificationsSettings(a).edit().putBoolean("pushConnection", true).apply();
-                ConnectionsManager.getInstance(a).setPushConnectionEnabled(true);
-            }
         }
     }
 

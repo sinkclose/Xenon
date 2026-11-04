@@ -8,6 +8,8 @@
 
 package org.telegram.messenger;
 
+import android.text.TextUtils;
+
 import androidx.annotation.NonNull;
 
 import com.google.firebase.messaging.FirebaseMessagingService;
@@ -38,7 +40,10 @@ public class GcmPushListenerService extends FirebaseMessagingService {
             return;
         }
 
-        PushListenerController.processRemoteMessage(PushListenerController.PUSH_TYPE_FIREBASE, data.get("p"), time);
+        String payload = data.get("p");
+        if (!TextUtils.isEmpty(payload)) {
+            PushListenerController.processRemoteMessage(PushListenerController.PUSH_TYPE_FIREBASE, payload, time);
+        }
     }
 
     @Override

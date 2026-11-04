@@ -299,11 +299,11 @@ public class ConnectionsManager extends BaseController {
     }
 
     public boolean isPushConnectionEnabled() {
-        SharedPreferences preferences = MessagesController.getGlobalNotificationsSettings();
+        SharedPreferences preferences = MessagesController.getNotificationsSettings(currentAccount);
         if (preferences.contains("pushConnection")) {
             return preferences.getBoolean("pushConnection", true);
         } else {
-            return MessagesController.getMainSettings(UserConfig.selectedAccount).getBoolean("backgroundConnection", false);
+            return NekoConfig.optimizedPushService || MessagesController.getMainSettings(currentAccount).getBoolean("backgroundConnection", false);
         }
     }
 
