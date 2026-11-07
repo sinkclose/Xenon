@@ -4,6 +4,8 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.app.Activity;
+import android.content.res.Configuration;
+import android.graphics.Color;
 import android.graphics.Outline;
 import android.graphics.Path;
 import android.graphics.RectF;
@@ -28,55 +30,64 @@ import androidx.annotation.RequiresApi;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.ui.ActionBar.ActionBarLayout;
+import org.telegram.ui.ActionBar.BaseFragment;
+import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.DialogsActivity;
+import org.telegram.ui.ProfileActivity;
+import org.telegram.ui.ViewPagerActivity;
 
 import java.util.ArrayList;
 
 import zxc.iconic.xenon.NekoConfig;
 
 /**
- * Predictive-back animation ported 1:1 from AOSP Android 17
+ * Predictive-back animation ported from AOSP Android 17
  * (android-17.0.0_r1, frameworks/base/libs/WindowManager/Shell/src/com/android/wm/shell/back/
- * {@code CrossTaskBackAnimation.java}) — the canonical Android predictive back: the closing window
- * and the entering window shrink into two cards side by side (14dp gap) over a dark background,
- * the closing card hugging the gesture edge. On commit the closing card continues into a small
- * centered card while the entering window expands to full screen on top of it — the closing window
- * never moves backwards. On release with velocity a critically damped spring shrinks both cards a
- * bit further (pivoted at the closing card's right edge). Cancel springs the raw progress back to
- * 0 ({@code BackProgressAnimator}) — which the system dispatcher already does before delivering
- * {@link #onBackCancelled()}, so on real dispatchers cancel settles through the regular progress
- * frames.
+ * {@code CrossActivityBackAnimation.kt} + {@code DefaultCrossActivityBackAnimation.kt}).
  *
- * <p>All constants and per-frame math mirror the AOSP source; the SurfaceControl rect math is
- * re-expressed as View transforms (scale around the origin + translation, outline clip in local
- * space), which reproduces the identical on-screen result.
+ * <p>The gesture phase is the system cross-activity animation 1:1: the closing window scales down
+ * to 0.85 (sliding toward the right edge for a left-edge gesture), the entering window starts
+ * offset off the left edge and both rects shrink together while following the touch Y, over a
+ * black scrim (0.2 light / 0.8 dark).
  *
- * <p>It drives {@link org.telegram.ui.ActionBar.ActionBarLayout} directly through the same hooks
- * the stock callback uses ({@code onBackStarted}, {@code predictiveInput},
- * {@code onSlideAnimationEnd}), so it must run on API 34+ where {@link OnBackAnimationCallback}
- * is available.
+ * <p>Commit deliberately deviates from {@code DefaultCrossActivityBackAnimation} in one point:
+ * the AOSP fling spring is not started. Its shrink-dip in the first frames after the finger lifts
+ * read as a backward jerk. Everything else matches the system: the closing window grows back to
+ * full size while sliding off to the right and fades within the first 20% of the 450ms emphasized
+ * animation, and the entering window expands to full screen.
+ *
+ * <p>Cancel springs the raw progress back to 0 ({@code BackProgressAnimator}) — which the system
+ * dispatcher already does before delivering {@link #onBackCancelled()}, so on real dispatchers
+ * cancel settles through the regular progress frames.
+ *
+ * <p>The SurfaceControl rect math is re-expressed as View transforms (scale around the origin +
+ * translation, outline clip in local space), reproducing the identical on-screen result. It drives
+ * {@link ActionBarLayout} through the same hooks the stock callback uses ({@code onBackStarted},
+ * {@code predictiveInput}, {@code onSlideAnimationEnd}), so it must run on API 34+ where
+ * {@link OnBackAnimationCallback} is available.
  */
 @RequiresApi(api = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
 public final class Material3PredictiveBack {
 
-    // ==== AOSP android-17.0.0_r1 com.android.wm.shell.back.CrossTaskBackAnimation constants ====
+    // ==== AOSP android-17.0.0_r1 com.android.wm.shell.back constants ====
 
-    /** Minimum scale of the entering and closing window. */
-    private static final float MIN_WINDOW_SCALE = 0.8f;
-    /** Duration of post animation after gesture committed. */
-    private static final long POST_COMMIT_DURATION = 500L;
-    /** Shell R.dimen.cross_task_back_inter_window_margin — gap between the two cards. */
-    private static final float INTER_WINDOW_MARGIN_DP = 14f;
-    /** Shell R.dimen.cross_task_back_vertical_margin — also the closing card's edge pull-in. */
+    /** CrossActivityBackAnimation.MAX_SCALE — max scale of the closing window. */
+    private static final float MAX_SCALE = 0.85f;
+    /** CrossActivityBackAnimation.INITIAL_ENTERING_SCALE. */
+    private static final float INITIAL_ENTERING_SCALE = 0.95f;
+    /** Shell R.dimen.cross_task_back_vertical_margin — 8dp. */
     private static final float DISPLAY_BOUNDS_MARGIN_DP = 8f;
-    /** CrossTaskBackAnimation.BACKGROUNDCOLOR, made opaque for the in-app background layer. */
-    private static final int BACKGROUND_COLOR = 0xFF43433A;
-    /** CrossTaskBackAnimation.SPRING_SCALE / DEFAULT_FLING_VELOCITY / MAX_FLING_VELOCITY. */
+    /** Shell R.dimen.cross_activity_back_entering_start_offset — 96dp. */
+    private static final float ENTERING_START_OFFSET_DP = 96f;
+    /** DefaultCrossActivityBackAnimation.POST_COMMIT_DURATION. */
+    private static final long POST_COMMIT_DURATION = 450L;
+    /** CrossActivityBackAnimation.MAX_SCRIM_ALPHA_LIGHT / MAX_SCRIM_ALPHA_DARK. */
+    private static final float MAX_SCRIM_ALPHA_LIGHT = 0.2f;
+    private static final float MAX_SCRIM_ALPHA_DARK = 0.8f;
+    /** DefaultCrossActivityBackAnimation: closing alpha = max(1 - 5 * linearProgress, 0). */
+    private static final float CLOSING_ALPHA_FADE_RATE = 5f;
+    /** BackProgressAnimator progress spring scale (progress runs in 0..100 spring units). */
     private static final float SPRING_SCALE = 100f;
-    private static final float DEFAULT_FLING_VELOCITY = 320f;
-    private static final float MAX_FLING_VELOCITY = 1000f;
-    /** Post-commit fling spring: SpringForce(100) stiffness 320, damping ratio 1 (no bounce). */
-    private static final float FLING_STIFFNESS = 320f;
-    private static final float FLING_DAMPING_RATIO = 1f;
     /** BackProgressAnimator gesture spring: SpringForce.STIFFNESS_MEDIUM / NO_BOUNCY. */
     private static final float CANCEL_SPRING_STIFFNESS = 1500f;
     /** Safety cap for the fallback cancel spring. */
@@ -86,9 +97,9 @@ public final class Material3PredictiveBack {
 
     /** Interpolators.BACK_GESTURE — android.view.animation.BackGestureInterpolator. */
     private static final Interpolator BACK_GESTURE = new PathInterpolator(0.1f, 0.1f, 0f, 1f);
-    /** CrossTaskBackAnimation.mVerticalMoveInterpolator. */
+    /** CrossActivityBackAnimation.verticalMoveInterpolator. */
     private static final Interpolator VERTICAL_INTERP = new DecelerateInterpolator();
-    /** Shell Interpolators.EMPHASIZED — post-commit motion (set on the commit animator). */
+    /** Shell Interpolators.EMPHASIZED — post-commit spatial motion. */
     private static final Interpolator EMPHASIZED = makeEmphasized();
 
     private Material3PredictiveBack() {
@@ -113,8 +124,20 @@ public final class Material3PredictiveBack {
         return v < min ? min : (Math.min(v, max));
     }
 
-    /** CrossActivityBackAnimationKt.scaleCentered — uniform scale around an arbitrary pivot. */
-    private static void scaleCentered(RectF rect, float scale, float pivotX, float pivotY) {
+    /** RectF.setInterpolatedRectF — element-wise lerp from {@code start} into {@code out}. */
+    private static void setInterpolatedRectF(RectF out, RectF start, RectF target, float progress) {
+        out.set(
+                start.left + (target.left - start.left) * progress,
+                start.top + (target.top - start.top) * progress,
+                start.right + (target.right - start.right) * progress,
+                start.bottom + (target.bottom - start.bottom) * progress
+        );
+    }
+
+    /** RectF.scaleCentered — uniform scale around the rect's own center. */
+    private static void scaleCentered(RectF rect, float scale) {
+        float pivotX = rect.left + rect.width() / 2f;
+        float pivotY = rect.top + rect.height() / 2f;
         rect.offset(-pivotX, -pivotY);
         rect.left *= scale;
         rect.right *= scale;
@@ -129,6 +152,31 @@ public final class Material3PredictiveBack {
             return event.getFrameTimeMillis();
         }
         return SystemClock.uptimeMillis();
+    }
+
+    // The entering fragment's own background to fill the M3 gap. ViewPagerActivity (e.g.
+    // MainTabsActivity) sets hasOwnBackground but draws nothing itself — the visible color comes
+    // from the current tab's inner fragment, so descend into it.
+    private static Drawable enteringBackground(BaseFragment fragment) {
+        BaseFragment f = fragment;
+        while (f instanceof ViewPagerActivity) {
+            f = ((ViewPagerActivity) f).getCurrentVisibleFragment();
+        }
+        // ProfileActivity and DialogsActivity (the Chats tab) both keep fragmentView background
+        // null/transparent and paint via their children (gray listView) instead — descending into
+        // fragmentView.getBackground() below would find nothing and fall back to the wrong
+        // (white) fill, showing up as a mismatched strip around the shrinking chat while the
+        // gesture is held. Use the gray window background directly for these.
+        if (f instanceof ProfileActivity || f instanceof DialogsActivity) {
+            return new ColorDrawable(Theme.getColor(Theme.key_windowBackgroundGray));
+        }
+        Drawable bg = (f != null && f.getFragmentView() != null) ? f.getFragmentView().getBackground() : null;
+        // A transparent fill can't fill the gap — it would show the black window behind. Reject it so
+        // the caller falls back to a solid color.
+        if (bg instanceof ColorDrawable && Color.alpha(((ColorDrawable) bg).getColor()) == 0) {
+            return null;
+        }
+        return bg;
     }
 
     /** Saved outline state of one containerViewBack child, restored on cleanup. */
@@ -152,30 +200,29 @@ public final class Material3PredictiveBack {
 
         // AOSP rect space: all rects live in the backAnimRect coordinate system.
         private final RectF backAnimRect = new RectF();
-        private final RectF currentClosingRect = new RectF();
-        private final RectF currentEnteringRect = new RectF();
         private final RectF startClosingRect = new RectF();
-        private final RectF startEnteringRect = new RectF();
         private final RectF targetClosingRect = new RectF();
+        private final RectF currentClosingRect = new RectF();
+        private final RectF startEnteringRect = new RectF();
         private final RectF targetEnteringRect = new RectF();
+        private final RectF currentEnteringRect = new RectF();
         private final RectF tmpRect = new RectF();
         private final ArrayList<SavedChildState> savedChildStates = new ArrayList<>();
 
         private boolean attached = false;
         private boolean invoked = false;
         private boolean finishCancel = false;
-        private boolean isRightEdge = false;
+        private int swipeEdge = BackEvent.EDGE_LEFT;
         private float startTouchY = 0f;
         private float lastTouchY = 0f;
         private int deviceCornerPx = 0;
         private float displayBoundsMarginPx = 0f;
-        private float interWindowMarginPx = 0f;
-        /** BACK_GESTURE-interpolated progress (AOSP mGestureProgress, used by the fling check). */
+        private float enteringStartOffsetPx = 0f;
+        private float maxScrimAlpha = MAX_SCRIM_ALPHA_LIGHT;
+        /** BACK_GESTURE-interpolated progress (AOSP gestureProgress, used by the fling check). */
         private float gestureProgress = 0f;
         private float lastRawProgress = 0f;
         /** Spring-space start velocity of the post-commit fling (negative = shrink). */
-        private float flingStartVelocity = 0f;
-        private long flingStartNanos = 0L;
 
         private VelocityTracker velocityTracker = null;
         private long velocityDownTime = -1L;
@@ -185,8 +232,7 @@ public final class Material3PredictiveBack {
         private boolean savedClipToOutline = false;
         private Drawable savedCvbBackground = null;
         private Drawable savedCvbForeground = null;
-        private float savedCvTranslationZ = 0f;
-        private float savedCvbTranslationZ = 0f;
+        private final ColorDrawable scrim = new ColorDrawable(Color.BLACK);
 
         /**
          * AOSP applies the device corner radius on the window surface, so the visible radius scales
@@ -200,7 +246,7 @@ public final class Material3PredictiveBack {
             }
         };
 
-        Callback(Activity activity, org.telegram.ui.ActionBar.ActionBarLayout layout, Runnable plainBack) {
+        Callback(Activity activity, ActionBarLayout layout, Runnable plainBack) {
             this.activity = activity;
             this.layout = layout;
             this.plainBack = plainBack;
@@ -225,12 +271,11 @@ public final class Material3PredictiveBack {
                 undoStockPrep();
             }
             invoked = false;
-            isRightEdge = backEvent.getSwipeEdge() == BackEvent.EDGE_RIGHT;
             startTouchY = backEvent.getTouchY();
             lastTouchY = startTouchY;
+            swipeEdge = backEvent.getSwipeEdge();
             gestureProgress = 0f;
             lastRawProgress = 0f;
-            flingStartVelocity = 0f;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 WindowInsets insets = activity.getWindow().getDecorView().getRootWindowInsets();
                 RoundedCorner rc = insets != null ? insets.getRoundedCorner(RoundedCorner.POSITION_TOP_LEFT) : null;
@@ -273,14 +318,14 @@ public final class Material3PredictiveBack {
             // The system dispatcher (WindowOnBackInvokedDispatcher -> BackProgressAnimator) already
             // spring-smooths the progress it delivers, exactly like the one the shell-side animator
             // uses. AOSP then applies the gesture interpolator and feeds the interpolated progress
-            // (in SPRING_SCALE units) both to the rects and to the velocity tracker.
+            // both to the rects and to the velocity tracker.
             float p = BACK_GESTURE.getInterpolation(rawP);
             gestureProgress = p;
             long frameTime = frameTimeMillis(backEvent);
             if (velocityDownTime == -1L) {
                 velocityDownTime = frameTime;
             }
-            MotionEvent motionEvent = MotionEvent.obtain(velocityDownTime, frameTime, MotionEvent.ACTION_MOVE, p * SPRING_SCALE, 0f, 0);
+            MotionEvent motionEvent = MotionEvent.obtain(velocityDownTime, frameTime, MotionEvent.ACTION_MOVE, p, 0f, 0);
             velocityTracker.addMovement(motionEvent);
             motionEvent.recycle();
             // Predictive-back intensity (slider /10 → 0.1..2.0, 1.0 default) is a Xenon-only knob:
@@ -329,6 +374,10 @@ public final class Material3PredictiveBack {
             if (cv == null) {
                 return;
             }
+            // CrossActivityBackAnimation#ensureScrimLayer — black scrim, dimmer in dark theme.
+            maxScrimAlpha = isDarkTheme() ? MAX_SCRIM_ALPHA_DARK : MAX_SCRIM_ALPHA_LIGHT;
+            scrim.setAlpha((int) (maxScrimAlpha * 255f));
+
             savedOutlineProvider = cv.getOutlineProvider();
             savedClipToOutline = cv.getClipToOutline();
             cv.setOutlineProvider(outlineProvider);
@@ -337,8 +386,8 @@ public final class Material3PredictiveBack {
             // Promote leaving screen to HW layer
             cv.setLayerType(View.LAYER_TYPE_HARDWARE, null);
 
-            // The AOSP background layer (CrossTaskBackAnimation.BACKGROUNDCOLOR) fills everything the
-            // two cards don't cover; no scrim in the cross-task animation.
+            // Translating cvb's children leaves the parent in place; paint it with the entering
+            // fragment's own background so the gap matches it, then overlay a black scrim.
             ViewGroup cvb = layout.containerViewBack;
             if (cvb == null) {
                 return;
@@ -352,10 +401,15 @@ public final class Material3PredictiveBack {
             cvb.setTranslationY(0f);
             savedCvbBackground = cvb.getBackground();
             savedCvbForeground = cvb.getForeground();
-            cvb.setBackground(new ColorDrawable(BACKGROUND_COLOR));
-            cvb.setForeground(null);
-            // Both cards are rounded just like the system windows (device corner radius); promote
-            // children to HW layers so per-frame scale/translate is texture-only.
+            Drawable enterBg = enteringBackground(layout.getBackgroundFragment());
+            Drawable newBg = null;
+            if (enterBg != null && enterBg.getConstantState() != null) {
+                newBg = enterBg.getConstantState().newDrawable();
+            }
+            cvb.setBackground(newBg != null ? newBg : new ColorDrawable(Theme.getColor(Theme.key_actionBarDefault)));
+            cvb.setForeground(scrim);
+            // The entering window is rounded just like the closing one (AOSP rounds both leashes);
+            // promote children to HW layers so per-frame scale/translate is texture-only.
             savedChildStates.clear();
             for (int i = 0; i < cvb.getChildCount(); i++) {
                 View child = cvb.getChildAt(i);
@@ -366,6 +420,7 @@ public final class Material3PredictiveBack {
             }
         }
 
+        /** DefaultCrossActivityBackAnimation#preparePreCommit{Closing,Entering}RectMovement. */
         private void prepareRects() {
             ViewGroup cv = layout.containerView;
             if (cv == null || cv.getWidth() <= 0 || cv.getHeight() <= 0) {
@@ -373,53 +428,71 @@ public final class Material3PredictiveBack {
             }
             backAnimRect.set(0f, 0f, cv.getWidth(), cv.getHeight());
             displayBoundsMarginPx = AndroidUtilities.dpf2(DISPLAY_BOUNDS_MARGIN_DP);
-            interWindowMarginPx = AndroidUtilities.dpf2(INTER_WINDOW_MARGIN_DP);
+            enteringStartOffsetPx = AndroidUtilities.dpf2(ENTERING_START_OFFSET_DP);
+
+            // Closing target: scaled to MAX_SCALE in place, pushed toward the right edge (minus the
+            // 8dp display margin) for a left-edge swipe; right-edge swipes stay centered.
+            startClosingRect.set(backAnimRect);
+            targetClosingRect.set(startClosingRect);
+            scaleCentered(targetClosingRect, MAX_SCALE);
+            if (swipeEdge != BackEvent.EDGE_RIGHT) {
+                targetClosingRect.offset(startClosingRect.right - targetClosingRect.right - displayBoundsMarginPx, 0f);
+            }
+
+            // Entering start: the same rect shifted left by max(15% width, 96dp), then scaled in
+            // sync with the closing window down to MAX_SCALE.
+            startEnteringRect.set(startClosingRect);
+            // fixCrossActivityBackAnimationInBubbles: the entering window starts slightly smaller
+            // than full so its top/bottom edges stay tucked behind the closing window's rounded
+            // corners while it is revealed.
+            float nonRoundedHeight = startClosingRect.height() - 2f * deviceCornerPx;
+            float startScale = Math.min(INITIAL_ENTERING_SCALE, nonRoundedHeight / startEnteringRect.height());
+            scaleCentered(startEnteringRect, startScale);
+            float startOffset = Math.max(startEnteringRect.width() * (1f - MAX_SCALE), enteringStartOffsetPx);
+            startEnteringRect.offset(-startOffset, 0f);
+            targetEnteringRect.set(startEnteringRect);
+            scaleCentered(targetEnteringRect, MAX_SCALE);
         }
 
-        /** CrossTaskBackAnimation#updateGestureBackProgress. */
+        /** CrossActivityBackAnimation#onGestureProgress. */
         private void onGestureProgress(float p, float touchY) {
             ViewGroup cv = layout.containerView;
             ViewGroup cvb = layout.containerViewBack;
             if (cv == null || cvb == null || backAnimRect.width() <= 0f) {
                 return;
             }
-            float width = backAnimRect.width();
-            float height = backAnimRect.height();
+            setInterpolatedRectF(currentClosingRect, startClosingRect, targetClosingRect, p);
+            float yOffset = computeYOffset(currentClosingRect, touchY);
+            currentClosingRect.offset(0f, yOffset);
+            applyTransform(cv, currentClosingRect, 1f);
+            setInterpolatedRectF(currentEnteringRect, startEnteringRect, targetEnteringRect, p);
+            currentEnteringRect.offset(0f, yOffset);
+            applyTransformChildren(cvb, currentEnteringRect, 1f);
+        }
 
-            float scale = 1f - (1f - MIN_WINDOW_SCALE) * p;
-            float scaledWidth = scale * width;
-            float scaledHeight = scale * height;
-
+        /** CrossActivityBackAnimation#getYOffset — vertical follow capped by an 8dp screen margin. */
+        private float computeYOffset(RectF centeredRect, float touchY) {
+            float screenHeight = backAnimRect.height();
+            if (screenHeight <= 0f) {
+                return 0f;
+            }
             // Base the window movement in the Y axis on the touch movement in the Y axis.
             float rawYDelta = touchY - startTouchY;
             float yDirection = rawYDelta < 0 ? -1f : 1f;
             // limit yDelta interpretation to 1/2 of screen height in either direction
-            float deltaYRatio = Math.min(height / 2f, Math.abs(rawYDelta)) / (height / 2f);
+            float deltaYRatio = Math.min(screenHeight / 2f, Math.abs(rawYDelta)) / (screenHeight / 2f);
             float interpolatedYRatio = VERTICAL_INTERP.getInterpolation(deltaYRatio);
             // limit y-shift so the surface never passes the 8dp screen margin
-            float deltaY = yDirection * interpolatedYRatio * Math.max(0f, (height - scaledHeight) / 2f - displayBoundsMarginPx);
-
-            float scaledTop = (height - scaledHeight) * 0.5f + deltaY;
-            // Move the window along the X axis: a right-edge gesture shrinks the card in place,
-            // a left-edge gesture pins it to the right edge (pulling in by up to 8dp).
-            float right;
-            if (isRightEdge) {
-                right = (width - scaledWidth) * 0.5f + scaledWidth;
-            } else {
-                right = width - p * displayBoundsMarginPx;
-            }
-            float left = right - scaledWidth;
-
-            currentClosingRect.set(left, scaledTop, right, scaledTop + scaledHeight);
-            applyTransform(cv, currentClosingRect);
-            // The entering card slides in right next to the closing one, 14dp behind it.
-            float enterRight = left - interWindowMarginPx;
-            currentEnteringRect.set(enterRight - scaledWidth, scaledTop, enterRight, scaledTop + scaledHeight);
-            applyTransformChildren(cvb, currentEnteringRect);
+            float room = Math.max(0f, (screenHeight - centeredRect.height()) / 2f - displayBoundsMarginPx);
+            return room * interpolatedYRatio * yDirection;
         }
 
-        /** CrossTaskBackAnimation#applyTransform — scale around the origin + translate to the rect. */
-        private void applyTransform(View view, RectF rect) {
+        /**
+         * CrossActivityBackAnimation#applyTransform — the AOSP matrix is postScale(scale, scale, 0, 0)
+         * followed by postTranslate(rect.left, rect.top); with the view pivot at the origin this is
+         * exactly scale + translation.
+         */
+        private void applyTransform(View view, RectF rect, float alpha) {
             if (view == null || backAnimRect.width() <= 0f) {
                 return;
             }
@@ -430,11 +503,12 @@ public final class Material3PredictiveBack {
             view.setScaleY(scale);
             view.setTranslationX(rect.left);
             view.setTranslationY(rect.top);
+            view.setAlpha(alpha);
         }
 
-        private void applyTransformChildren(ViewGroup cvb, RectF rect) {
+        private void applyTransformChildren(ViewGroup cvb, RectF rect, float alpha) {
             for (int i = 0; i < cvb.getChildCount(); i++) {
-                applyTransform(cvb.getChildAt(i), rect);
+                applyTransform(cvb.getChildAt(i), rect, alpha);
             }
         }
 
@@ -457,49 +531,30 @@ public final class Material3PredictiveBack {
                 return;
             }
 
-            // CrossTaskBackAnimation#onGestureCommitted — kick off the fling spring with the
-            // pre-commit velocity; it shrinks both cards a bit further (pivoted at the closing
-            // card's right edge), critically damped so they never bounce back.
-            float startVelocity = gestureProgress < 0.1f ? -DEFAULT_FLING_VELOCITY : 0f;
-            if (velocityTracker != null) {
-                velocityTracker.computeCurrentVelocity(1000);
-                startVelocity = -velocityTracker.getXVelocity();
-            }
-            flingStartVelocity = Math.max(-MAX_FLING_VELOCITY, Math.min(0f, startVelocity));
-            flingStartNanos = System.nanoTime();
-
-            // Phase 2 starts from the gesture-driven state: the closing card keeps shrinking into a
-            // small centered card while the entering window expands to full screen on top of it.
+            // DefaultCrossActivityBackAnimation#onGestureCommitted — phase 2 starts from the
+            // gesture-driven state: the closing window grows back to full size while sliding off to
+            // the right, the entering window expands to full screen. The AOSP fling spring is
+            // intentionally NOT started here — its shrink-dip in the first frames read as a
+            // backward jerk the moment the finger lifts.
             startClosingRect.set(currentClosingRect);
             startEnteringRect.set(currentEnteringRect);
-            float targetWidth = backAnimRect.width() * MIN_WINDOW_SCALE;
-            float targetHeight = backAnimRect.height() * MIN_WINDOW_SCALE;
-            targetClosingRect.set(
-                    (backAnimRect.width() - targetWidth) / 2f,
-                    (backAnimRect.height() - targetHeight) / 2f,
-                    (backAnimRect.width() + targetWidth) / 2f,
-                    (backAnimRect.height() + targetHeight) / 2f);
             targetEnteringRect.set(backAnimRect);
-
-            // The entering window rises above the closing card (AOSP sets the closing leash layer 0).
-            savedCvTranslationZ = cv.getTranslationZ();
-            savedCvbTranslationZ = cvb.getTranslationZ();
-            cv.setTranslationZ(-8f);
-            cvb.setTranslationZ(0f);
+            targetClosingRect.set(backAnimRect);
+            targetClosingRect.offset(currentClosingRect.left + enteringStartOffsetPx, 0f);
 
             ValueAnimator animator = ValueAnimator.ofFloat(1f, 0f);
             animator.setDuration(POST_COMMIT_DURATION);
-            animator.setInterpolator(EMPHASIZED);
             animator.addUpdateListener(animation -> {
-                // with EMPHASIZED on the animator, the animated fraction is already interpolated
-                float progress = animation.getAnimatedFraction();
-                float flingFactor = postCommitFlingScale((System.nanoTime() - flingStartNanos) / 1_000_000_000f);
-                setInterpolatedRectF(tmpRect, startEnteringRect, targetEnteringRect, progress);
-                applyFlingScale(tmpRect, flingFactor);
-                applyTransformChildren(cvb, tmpRect);
+                float linearProgress = animation.getAnimatedFraction();
+                // AOSP fades the closing window out over the first 20% of linear progress and lifts
+                // the scrim linearly; the spatial motion rides the emphasized curve.
+                float closingAlpha = Math.max(1f - CLOSING_ALPHA_FADE_RATE * linearProgress, 0f);
+                float progress = EMPHASIZED.getInterpolation(linearProgress);
                 setInterpolatedRectF(tmpRect, startClosingRect, targetClosingRect, progress);
-                applyFlingScale(tmpRect, flingFactor);
-                applyTransform(cv, tmpRect);
+                applyTransform(cv, tmpRect, closingAlpha);
+                setInterpolatedRectF(tmpRect, startEnteringRect, targetEnteringRect, progress);
+                applyTransformChildren(cvb, tmpRect, 1f);
+                scrim.setAlpha((int) (maxScrimAlpha * 255f * (1f - linearProgress)));
             });
             animator.addListener(new AnimatorListenerAdapter() {
                 @Override
@@ -510,29 +565,6 @@ public final class Material3PredictiveBack {
             });
             runningAnim = animator;
             animator.start();
-        }
-
-        /** CrossTaskBackAnimation#applyFlingScale — dip pivoted at the rect's right edge. */
-        private void applyFlingScale(RectF rect, float flingFactor) {
-            if (flingFactor >= 1f) {
-                return;
-            }
-            scaleCentered(rect, flingFactor, rect.right, rect.top + rect.height() / 2f);
-        }
-
-        /**
-         * CrossTaskBackAnimation fling spring — analytic solution of the critically damped spring
-         * (rest = SPRING_SCALE, start = SPRING_SCALE, stiffness 320, damping ratio 1): the value
-         * dips below SPRING_SCALE with the fling velocity and settles back without overshoot. The
-         * applied scale is clamped at 1.
-         */
-        private float postCommitFlingScale(float tSec) {
-            if (flingStartVelocity == 0f) {
-                return 1f;
-            }
-            double omega = Math.sqrt(FLING_STIFFNESS);
-            double value = SPRING_SCALE + flingStartVelocity * tSec * Math.exp(-omega * tSec);
-            return (float) Math.min(value / SPRING_SCALE, 1f);
         }
 
         /**
@@ -606,7 +638,7 @@ public final class Material3PredictiveBack {
                 cv.setScaleY(1f);
                 cv.setTranslationX(0f);
                 cv.setTranslationY(0f);
-                cv.setTranslationZ(savedCvTranslationZ);
+                cv.setAlpha(1f);
                 cv.setPivotX(cv.getWidth() / 2f);
                 cv.setPivotY(cv.getHeight() / 2f);
                 cv.setClipToOutline(savedClipToOutline);
@@ -614,7 +646,6 @@ public final class Material3PredictiveBack {
             }
             ViewGroup cvb = layout.containerViewBack;
             if (cvb != null) {
-                cvb.setTranslationZ(savedCvbTranslationZ);
                 for (int i = 0; i < savedChildStates.size(); i++) {
                     SavedChildState state = savedChildStates.get(i);
                     state.view.setOutlineProvider(state.outlineProvider);
@@ -626,6 +657,7 @@ public final class Material3PredictiveBack {
                     child.setTranslationY(0f);
                     child.setScaleX(1f);
                     child.setScaleY(1f);
+                    child.setAlpha(1f);
                     child.setPivotX(child.getWidth() / 2f);
                     child.setPivotY(child.getHeight() / 2f);
                     child.setLayerType(View.LAYER_TYPE_NONE, null);
@@ -636,6 +668,12 @@ public final class Material3PredictiveBack {
             savedChildStates.clear();
             savedCvbBackground = null;
             savedCvbForeground = null;
+            scrim.setAlpha((int) (maxScrimAlpha * 255f));
+        }
+
+        private boolean isDarkTheme() {
+            int uiMode = activity.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+            return uiMode == Configuration.UI_MODE_NIGHT_YES;
         }
 
         public void cancelAndCleanup() {
