@@ -2,26 +2,25 @@ plugin_id = "ayu_history_probe"
 plugin_name = "Ayu History Probe"
 plugin_description = "Deleted and edited message history with persistent archives. Requires Java access and God Mode."
 plugin_author = "Xenon"
-plugin_version = "1.0"
+plugin_version = "1.2"
 plugin_scopes = {"MESSAGING"}
 
 -- main branch prototype. Does NOT cancel deletions or change Telegram's DB.
 -- Captures explicit message-ID deletions only, not dialog/cache clearing.
 -- Archive stores original DB TL blobs (including attachPath), not media files.
 -- Files: files/ayu_history_probe/<account>_<selfId>/<dialogId>/<messageId>.tl
--- SQL interception runs synchronously on the original storage thread.
+-- Deletion snapshots arrive from MessagesStorage; no SQL methods are hooked.
 
 local installed = false
 local last_error = ""
 local captured = 0
 local deletion_events, queried_rows = 0, 0
 local last_saved = "none"
-local test_database, test_account
 local pending_targets = {}
 local reinjected = 0
 local MessageObject, ChatActivity, LaunchActivity
 local decode
-local view_deleted, browse_edited
+local view_deleted
 local edited_versions = 0
 local Storage, UserConfig, Message, App, Log, Array, Class, JavaLong, DialogObject
 
@@ -248,73 +247,6 @@ local function save_edit(bytes, account, dialog, mid)
     end)
     close(output)
     if not ok then temporary:delete(); error(failure) end
-end
-
-browse_edited = function(account, dialog)
-    local entries, files = {}, edit_root(account, dialog):listFiles()
-    if files then for i = 1, #files do
-        local mid = tonumber(tostring(files[i]:getName()))
-        if mid and mid < 2147483500 and files[i]:isDirectory() then entries[#entries + 1] = mid end
-    end end
-    table.sort(entries, function(a, b) return a > b end)
-    local items = {}
-    for _, id in ipairs(entries) do
-        local mid = id
-        items[#items + 1] = {text = "Message #" .. tostring(mid), callback = function() view_deleted(account, dialog, mid) end}
-    end
-    if #items == 0 then xenon.createDialog("Edit history", "No recorded edits in this chat. New edits are saved while the plugin is enabled.", {"OK"})
-    else xenon.createBottomSheet("Edited messages · chat " .. integer_string(dialog), items) end
-end
-
-local function account_for(db)
-    if test_database and test_database:equals(db) then return test_account end
-    for account = 0, UserConfig.MAX_ACCOUNT_COUNT - 1 do
-        if UserConfig:getInstance(account):isClientActivated() then
-            local candidate = Storage:getInstance(account):getDatabase()
-            if candidate and candidate:equals(db) then return account end
-        end
-    end
-    return nil
-end
-
-local function capture_where(db, condition)
-    local account = account_for(db)
-    if account == nil then return end
-    deletion_events = deletion_events + 1
-    local query = "SELECT uid, mid, data FROM messages_v2 WHERE " .. condition
-    local cursor
-    local ok, err = pcall(function()
-        -- Bypass queryFinalized to avoid re-entering a Pine-patched method.
-        -- This method was the app frame in the reported Android 16 ART crash.
-        -- SQLitePreparedStatement.query requires an actual Object[].
-        local empty = Array:newInstance(Class:forName("java.lang.Object"), 0)
-        local statement = luajava.newInstance("org.telegram.SQLite.SQLitePreparedStatement", db, query)
-        local queried, result = pcall(function() return statement:query(empty) end)
-        if not queried then pcall(function() statement:dispose() end); error(result) end
-        cursor = result
-        while cursor:next() do
-            queried_rows = queried_rows + 1
-            local dialog, mid = cursor:longValue(0), cursor:intValue(1)
-            if dialog ~= 0 and not DialogObject:isEncryptedDialog(dialog) and mid > 0 then
-                local bytes = cursor:byteArrayValue(2)
-                if bytes then
-                    local saved, failure = pcall(save, bytes, account, dialog, mid)
-                    if not saved then report(failure) end
-                end
-            end
-        end
-    end)
-    if cursor then pcall(function() cursor:dispose() end) end
-    if not ok then error(err) end
-end
-
-local function before_sql(db, args)
-    local sql = tostring(args[1])
-    local ids, dialog = sql:match("^DELETE FROM messages_v2 WHERE mid IN%(([%d,%s%-]+)%) AND uid = (%-?%d+)$")
-    if ids then capture_where(db, "mid IN(" .. ids .. ") AND uid = " .. dialog); return end
-    local maximum
-    dialog, maximum = sql:match("^DELETE FROM messages_v2 WHERE uid = (%-?%d+) AND mid <= (%d+)$")
-    if dialog then capture_where(db, "uid = " .. dialog .. " AND mid <= " .. maximum) end
 end
 
 local function show_message(file, account, dialog)
@@ -588,43 +520,6 @@ local function edit_test()
     if not ok then report(failure); xenon.toast(tostring(failure)) end
 end
 
-local function deletion_test()
-    local serialized, db
-    local ok, err = pcall(function()
-        if not installed then error("Hooks not installed") end
-        local account = UserConfig.selectedAccount
-        local dialog = UserConfig:getInstance(account).clientUserId
-        local peer = luajava.newInstance("org.telegram.tgnet.TLRPC$TL_peerUser")
-        peer.user_id = dialog
-        local msg = luajava.newInstance("org.telegram.tgnet.TLRPC$TL_message")
-        msg.id = 2147483500
-        msg.peer_id = peer
-        msg.date = 0
-        msg.message = "Ayu History Probe: deletion test in an isolated SQLite database, without sending to Telegram."
-        serialized = luajava.newInstance("org.telegram.tgnet.SerializedData")
-        msg:serializeToStream(serialized)
-        local bytes, hex = serialized:toByteArray(), {}
-        for i = 1, #bytes do hex[#hex + 1] = string.format("%02x", bytes:byte(i)) end
-        local db_file = luajava.newInstance("java.io.File", App.applicationContext:getFilesDir(), "ayu_history_probe_test.db")
-        db = luajava.newInstance("org.telegram.SQLite.SQLiteDatabase", db_file:getAbsolutePath())
-        test_database, test_account = db, account
-        db:executeFast("CREATE TABLE IF NOT EXISTS messages_v2(uid INTEGER, mid INTEGER, data BLOB)"):stepThis():dispose()
-        db:executeFast("DELETE FROM messages_v2"):stepThis():dispose()
-        db:executeFast("INSERT INTO messages_v2 VALUES(" .. integer_string(dialog) .. "," .. tostring(msg.id)
-            .. ",X'" .. table.concat(hex) .. "')"):stepThis():dispose()
-        local events_before = deletion_events
-        db:executeFast("DELETE FROM messages_v2 WHERE mid IN(" .. tostring(msg.id) .. ") AND uid = " .. integer_string(dialog)):stepThis():dispose()
-        if deletion_events <= events_before then error("Pine did not invoke the test deletion hook") end
-        local file = luajava.newInstance("java.io.File", root(account, dialog), tostring(msg.id) .. ".tl")
-        if not file:exists() then error("Hook invoked, but no file was saved: " .. last_error) end
-        show_message(file, account, dialog)
-    end)
-    test_database, test_account = nil, nil
-    close(db)
-    if serialized then pcall(function() serialized:cleanup() end) end
-    if not ok then report(err); xenon.toast(tostring(err)) end
-end
-
 plugin_settings = {
     {type = "button", key = "set_dialog", name = "Set chat filter", action = function()
         xenon.promptText("Chat ID to view", "Leave empty to view all archived chats", function(value)
@@ -648,25 +543,8 @@ plugin_settings = {
             .. "\n\nTL objects are saved. Media files are not copied separately."
             .. "\nEdits are recorded from now on, including chats that are not open.", {"OK"})
     end},
-    {type = "button", key = "browse_edits", name = "View edited", action = function()
-        local dialog = tonumber(xenon.getSetting("browse_dialog", "")) or xenon.getOpenChatId()
-        if dialog ~= 0 then browse_edited(UserConfig.selectedAccount, dialog)
-        else
-            local items, folders = {}, account_root(UserConfig.selectedAccount):listFiles()
-            if folders then for i = 1, #folders do
-                local id = tonumber(tostring(folders[i]:getName()))
-                if id and edit_root(UserConfig.selectedAccount, id):exists() then
-                    local peer = id
-                    items[#items + 1] = {text = "Chat " .. integer_string(peer), callback = function() browse_edited(UserConfig.selectedAccount, peer) end}
-                end
-            end end
-            if #items == 0 then xenon.createDialog("Edit history", "No recorded edits yet. Edit history starts when this plugin is enabled.", {"OK"})
-            else xenon.createBottomSheet("Chats with edit history", items) end
-        end
-    end},
     {type = "button", key = "browse_all", name = "All archived chats", action = browse_all},
     {type = "button", key = "self_test", name = "Test TL locally (no sending)", action = self_test},
-    {type = "button", key = "deletion_test", name = "Test deletion in isolated database", action = deletion_test},
     {type = "button", key = "edit_test", name = "Test edit history locally (no sending)", action = edit_test}
 }
 
@@ -692,8 +570,14 @@ local ok, err = pcall(function()
     if has_arch and host_arch:match("^x86") then
         error("Pine does not support ART " .. host_arch .. " (WSA). Hooks disabled; the local archive is available.")
     end
-    local unhook = xenon.hookMethod("org.telegram.SQLite.SQLiteDatabase", "executeFast", {before = guarded(before_sql)})
-    if not unhook then error("executeFast: Pine did not install the hook") end
+    if not xenon.supportsMessageDeletionEvents or not xenon.supportsMessageDeletionEvents() then
+        error("Update Xenon: this plugin requires MessagesStorage deletion events; SQL hooks are disabled.")
+    end
+    xenon.on("onMessageDeleted", guarded(function(ctx)
+        deletion_events = deletion_events + 1
+        queried_rows = queried_rows + 1
+        save(ctx.tl, ctx.account, ctx.peer, ctx.messageId)
+    end))
     local contexts = luajava.newInstance("java.lang.ThreadLocal")
     local ui_hook = xenon.hookMethod("org.telegram.ui.ChatActivity", "didReceivedNotification_messagesDidLoad", {
         before = guarded(function(chat, args)
@@ -796,6 +680,21 @@ local ok, err = pcall(function()
     })
     if not photo_hook then error("Photo state hook was not installed") end
     local menu_contexts = luajava.newInstance("java.lang.ThreadLocal")
+    local EDIT_HISTORY_OPTION = 910001
+    local function edit_target(chat, obj)
+        if not obj or not obj.messageOwner then return nil end
+        local account = xenon.getPrivateField(chat, "currentAccount")
+        local dialog, mid = obj:getDialogId(), obj:getRealId()
+        if account == nil or mid <= 0 or DialogObject:isEncryptedDialog(dialog)
+            or chat:getChatMode() == ChatActivity.MODE_SCHEDULED then return nil end
+        local files = edit_root(account, dialog, mid):listFiles()
+        local recorded = false
+        if files then for i = 1, #files do
+            if tostring(files[i]:getName()):match("^%d+_[a-f0-9]+%.tl$") then recorded = true; break end
+        end end
+        if not recorded and (obj.messageOwner.edit_date or 0) <= 0 then return nil end
+        return account, dialog, mid
+    end
     local hidden = {}
     for _, name in ipairs({"OPTION_REPLY", "OPTION_EDIT", "OPTION_PIN", "OPTION_UNPIN", "OPTION_DELETE",
         "OPTION_REPORT_CHAT", "OPTION_FACT_CHECK", "OPTION_EDIT_PRICE", "OPTION_RETRY",
@@ -807,12 +706,12 @@ local ok, err = pcall(function()
         before = guarded(function(chat, args)
             local stack = menu_contexts:get()
             if not stack then stack = luajava.newInstance("java.util.ArrayDeque"); menu_contexts:set(stack) end
-            local frame = Array:newInstance(Class:forName("java.lang.Object"), 3)
+            local frame = Array:newInstance(Class:forName("java.lang.Object"), 5)
             stack:push(frame)
             local obj = xenon.getPrivateField(chat, "selectedObject") or args[1]
-            if obj and obj.messageOwner.ayuDeleted then
-                for i = 0, 2 do Array:set(frame, i, args[i + 2]) end
-            end
+            for i = 0, 2 do Array:set(frame, i, args[i + 2]) end
+            Array:set(frame, 3, chat)
+            Array:set(frame, 4, obj)
         end),
         after = guarded(function()
             local stack = menu_contexts:get()
@@ -820,26 +719,47 @@ local ok, err = pcall(function()
             local frame = stack:pop()
             local options = Array:get(frame, 2)
             if not options then return end
+            local obj = Array:get(frame, 4)
             for i = options:size() - 1, 0, -1 do
-                if hidden[options:get(i)] then
+                if obj and obj.messageOwner.ayuDeleted and hidden[options:get(i)] then
                     for j = 0, 2 do
                         local list = Array:get(frame, j)
                         if list and i < list:size() then list:subList(i, i + 1):clear() end
                     end
                 end
             end
+            if edit_target(Array:get(frame, 3), obj) ~= nil then
+                local resources = luajava.bindClass("org.telegram.messenger.R$drawable")
+                -- Preserve Java Integer element types; Lua numbers otherwise
+                -- become Double in erased ArrayLists and crash menu consumers.
+                Array:get(frame, 0):add(luajava.newInstance("java.lang.Integer", resources.msg_edit))
+                Array:get(frame, 1):add("View edited")
+                options:add(luajava.newInstance("java.lang.Integer", EDIT_HISTORY_OPTION))
+            end
         end)
     })
     if not menu_hook then error("Message menu hook was not installed") end
+    local edit_click_hook = xenon.hookMethod("org.telegram.ui.ChatActivity", "processSelectedOption", {
+        before = function(chat, args)
+            if args[1] ~= EDIT_HISTORY_OPTION then return nil end
+            local success, failure = pcall(function()
+                local account, dialog, mid = edit_target(chat, xenon.getPrivateField(chat, "selectedObject"))
+                chat:closeMenu()
+                if account ~= nil then view_deleted(account, dialog, mid) end
+            end)
+            if not success then report(failure); xenon.toast(tostring(failure)) end
+            return true
+        end
+    })
+    if not edit_click_hook then error("Edit history click hook was not installed") end
     if xenon.on then
         xenon.on("onMessageEdited", guarded(function(ctx)
             save_edit(ctx.previousTl, ctx.account, ctx.peer, ctx.messageId)
             save_edit(ctx.currentTl, ctx.account, ctx.peer, ctx.messageId)
         end))
-        xenon.on("onChatMenuBuild", function() return {{text = "View deleted", icon = "msg_view_file"}, {text = "View edited", icon = "msg_edit"}} end)
+        xenon.on("onChatMenuBuild", function() return {{text = "View deleted", icon = "msg_view_file"}} end)
         xenon.on("onChatMenuItemClick", guarded(function(ctx)
-            if ctx.item == 0 then view_deleted(UserConfig.selectedAccount, ctx.peer)
-            elseif ctx.item == 1 then browse_edited(UserConfig.selectedAccount, ctx.peer) end
+            if ctx.item == 0 then view_deleted(UserConfig.selectedAccount, ctx.peer) end
         end))
     end
     installed = true

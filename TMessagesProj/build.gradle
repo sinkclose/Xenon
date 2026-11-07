@@ -103,7 +103,12 @@ configurations.configureEach {
 }
 
 dependencies {
-    implementation fileTree(dir: 'libs', include: ['*.aar'])
+    // Local .aar files must stay compileOnly here: AGP forbids direct local
+    // .aar deps when bundling a library AAR (bundleDebugAar fails with
+    // "Direct local .aar file dependencies are not supported"). They are
+    // packaged into the APK by :TMessagesProj_App, which declares
+    // implementation fileTree on ../TMessagesProj/libs.
+    compileOnly fileTree(dir: 'libs', include: ['*.aar'])
 
     // luaj: pure-Java Lua interpreter for the plugin engine. ~200KB, no native
     // code, runs scripts (plugins) loaded at runtime without recompilation.

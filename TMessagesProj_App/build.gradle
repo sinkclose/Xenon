@@ -4,7 +4,6 @@ plugins {
     id 'com.android.application'
     id 'androidx.baselineprofile'
     id 'org.telegram.build-app-plugin'
-    id 'com.google.gms.google-services'
 }
 
 dependencies {
