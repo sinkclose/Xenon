@@ -48,6 +48,7 @@ import androidx.core.graphics.ColorUtils;
 import androidx.core.math.MathUtils;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.DispatchQueue;
 import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.ImageLocation;
 import org.telegram.messenger.ImageReceiver;
@@ -79,6 +80,10 @@ public class PhotoAttachPhotoCell extends FrameLayout {
     private AnimatorSet animatorSet;
     private boolean isLast;
     private boolean allowLivePhotos;
+    private boolean asyncLivePhotos;
+    private static DispatchQueue livePhotoQueue;
+    private Runnable livePhotoTask;
+    private int livePhotoGeneration;
     private boolean pressed;
     private static Rect rect = new Rect();
     private PhotoAttachPhotoCellDelegate delegate;
@@ -214,7 +219,7 @@ public class PhotoAttachPhotoCell extends FrameLayout {
                     invalidate();
                 }
 
-                if (allowLivePhotos && !isParentDoFastScroll() && photoEntry != null && photoEntry.isLivePhoto()) {
+                if (allowLivePhotos && !isParentDoFastScroll() && photoEntry != null && isEntryLivePhoto()) {
                     Drawable icon;
                     if (photoEntry.isUnalivePhoto()) {
                         if (livePhotoIconOff == null) {
@@ -329,7 +334,7 @@ public class PhotoAttachPhotoCell extends FrameLayout {
             this.highQuality = highQuality;
 
             if (photoEntry != null) {
-                if (photoEntry.isVideo && !photoEntry.isLivePhoto()) {
+                if (photoEntry.isVideo && !isEntryLivePhoto()) {
                     imageView.setOrientation(0, true);
                     videoInfoContainer.setVisibility(VISIBLE);
                     videoPlayImageView.setVisibility(VISIBLE);
@@ -433,6 +438,7 @@ public class PhotoAttachPhotoCell extends FrameLayout {
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        cancelLivePhotoTask();
         if (spoilerEffect2 != null) {
             spoilerEffect2.detach(this);
         }
@@ -441,6 +447,7 @@ public class PhotoAttachPhotoCell extends FrameLayout {
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        loadLivePhotoMetadata();
         if (spoilerEffect2 != null) {
             if (spoilerEffect2.destroyed) {
                 spoilerEffect2 = SpoilerEffect2.getInstance(this);
@@ -448,6 +455,13 @@ public class PhotoAttachPhotoCell extends FrameLayout {
                 spoilerEffect2.attach(this);
             }
         }
+    }
+
+    @Override
+    public void onVisibilityAggregated(boolean isVisible) {
+        super.onVisibilityAggregated(isVisible);
+        if (isVisible) loadLivePhotoMetadata();
+        else cancelLivePhotoTask();
     }
 
     public void setIsVertical(boolean value) {
@@ -510,12 +524,83 @@ public class PhotoAttachPhotoCell extends FrameLayout {
         return videoInfoContainer;
     }
 
+    public void setAsyncLivePhotos(boolean enabled) {
+        asyncLivePhotos = enabled;
+    }
+
+    private boolean isEntryLivePhoto() {
+        return photoEntry != null && (asyncLivePhotos ? photoEntry.isLivePhoto : photoEntry.isLivePhoto());
+    }
+
+    private void cancelLivePhotoTask() {
+        livePhotoGeneration++;
+        if (livePhotoTask != null) {
+            livePhotoQueue.cancelRunnable(livePhotoTask);
+            livePhotoTask = null;
+        }
+    }
+
+    private void loadLivePhotoMetadata() {
+        if (!asyncLivePhotos || !allowLivePhotos || photoEntry == null || photoEntry.hasLivePhotoMetadata()
+                || livePhotoTask != null || !isAttachedToWindow() || !isShown() || isParentDoFastScroll()) return;
+        if (livePhotoQueue == null) {
+            livePhotoQueue = new DispatchQueue("media-picker-live-photo", true, android.os.Process.THREAD_PRIORITY_BACKGROUND);
+        }
+        MediaController.PhotoEntry entry = photoEntry;
+        // Probe a separate object: PhotoViewer can edit the original while the file is read.
+        MediaController.PhotoEntry probe = new MediaController.PhotoEntry(entry.bucketId, entry.imageId, entry.dateTaken,
+                entry.path, entry.orientation, entry.duration, false, entry.width, entry.height, entry.size);
+        int generation = livePhotoGeneration;
+        livePhotoQueue.postRunnable(livePhotoTask = () -> {
+            probe.isLivePhoto();
+            AndroidUtilities.runOnUIThread(() -> {
+                if (generation != livePhotoGeneration || photoEntry != entry || !isAttachedToWindow()) return;
+                livePhotoTask = null;
+                entry.applyLivePhotoMetadata(probe);
+                imageView.invalidate();
+            });
+        });
+    }
+
+    public void onFastScrollFinished() {
+        loadLivePhotoMetadata();
+        imageView.invalidate();
+        invalidate();
+    }
+
+    /** Retarget an unchanged thumbnail after an album refresh. All content checks stay on UI. */
+    public boolean updatePhotoEntry(MediaController.PhotoEntry entry, boolean last) {
+        MediaController.PhotoEntry previous = photoEntry;
+        if (previous == null || previous.imageId != entry.imageId || previous.dateTaken != entry.dateTaken
+                || previous.size != entry.size || previous.width != entry.width || previous.height != entry.height
+                || !TextUtils.equals(previous.path, entry.path)) return false;
+        entry.applyLivePhotoMetadata(previous);
+        if (previous.isVideo != entry.isVideo || previous.duration != entry.duration
+                || previous.orientation != entry.orientation || previous.invert != entry.invert
+                || !TextUtils.equals(previous.coverPath, entry.coverPath) || !TextUtils.equals(previous.thumbPath, entry.thumbPath)
+                || previous.hasSpoiler != entry.hasSpoiler || previous.starsAmount != entry.starsAmount
+                || previous.isHighQuality() != entry.isHighQuality()) return false;
+        if (previous != entry) {
+            cancelLivePhotoTask();
+            photoEntry = entry;
+            loadLivePhotoMetadata();
+            imageView.invalidate();
+        }
+        if (isLast != last) {
+            isLast = last;
+            requestLayout();
+        }
+        return true;
+    }
+
     public void setPhotoEntry(MediaController.PhotoEntry entry, boolean selectedMultiple, boolean needCheckShow, boolean last, boolean allowLivePhotos) {
+        cancelLivePhotoTask();
         pressed = false;
         photoEntry = entry;
         isLast = last;
         this.allowLivePhotos = allowLivePhotos;
-        if (photoEntry.isVideo && !photoEntry.isLivePhoto()) {
+        loadLivePhotoMetadata();
+        if (photoEntry.isVideo && !isEntryLivePhoto()) {
             imageView.setOrientation(0, true);
             videoInfoContainer.setVisibility(VISIBLE);
             videoPlayImageView.setVisibility(VISIBLE);
@@ -535,7 +620,7 @@ public class PhotoAttachPhotoCell extends FrameLayout {
         } else if (photoEntry.thumbPath != null) {
             imageView.setImage(photoEntry.thumbPath, null, Theme.chat_attachEmptyDrawable);
         } else if (photoEntry.path != null) {
-            if (photoEntry.isVideo && !photoEntry.isLivePhoto()) {
+            if (photoEntry.isVideo && !isEntryLivePhoto()) {
                 imageView.setImage("vthumb://" + photoEntry.imageId + ":" + photoEntry.path, null, Theme.chat_attachEmptyDrawable);
             } else {
                 imageView.setOrientation(photoEntry.orientation, photoEntry.invert, true);
@@ -555,6 +640,8 @@ public class PhotoAttachPhotoCell extends FrameLayout {
     }
 
     public void setPhotoEntry(MediaController.SearchImage searchImage, boolean needCheckShow, boolean last) {
+        cancelLivePhotoTask();
+        photoEntry = null;
         pressed = false;
         searchEntry = searchImage;
         isLast = last;
@@ -745,7 +832,7 @@ public class PhotoAttachPhotoCell extends FrameLayout {
         super.onInitializeAccessibilityNodeInfo(info);
         info.setEnabled(true);
         StringBuilder sb = new StringBuilder();
-        if (photoEntry != null && photoEntry.isLivePhoto()) {
+        if (photoEntry != null && isEntryLivePhoto()) {
             sb.append(getString(R.string.AttachLivePhoto));
         } else if (photoEntry != null && photoEntry.isVideo) {
             sb.append(getString(R.string.AttachVideo) + ", " + LocaleController.formatDuration(photoEntry.duration));

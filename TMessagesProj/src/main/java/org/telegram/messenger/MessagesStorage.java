@@ -328,6 +328,7 @@ public class MessagesStorage extends BaseController {
             database.executeFast("PRAGMA temp_store = MEMORY").stepThis().dispose();
             database.executeFast("PRAGMA journal_mode = WAL").stepThis().dispose();
             database.executeFast("PRAGMA journal_size_limit = 10485760").stepThis().dispose();
+            database.executeFast("PRAGMA synchronous = NORMAL").stepThis().dispose();
 
             if (createTable) {
                 if (BuildVars.LOGS_ENABLED) {
@@ -441,6 +442,7 @@ public class MessagesStorage extends BaseController {
                 database.executeFast("PRAGMA temp_store = MEMORY").stepThis().dispose();
                 database.executeFast("PRAGMA journal_mode = WAL").stepThis().dispose();
                 database.executeFast("PRAGMA journal_size_limit = 10485760").stepThis().dispose();
+                database.executeFast("PRAGMA synchronous = NORMAL").stepThis().dispose();
             } catch (SQLiteException e) {
                 FileLog.e(new Exception(e));
                 restored = false;
@@ -2331,7 +2333,7 @@ public class MessagesStorage extends BaseController {
                     for (int a = 0; a < dialogs.size(); a++) {
                         long did = dialogs.keyAt(a);
                         ReadDialog dialog = dialogs.valueAt(a);
-                        if (getMessagesController().isForum(did) || isForum(did, FORUM_TYPE_BOT) || getMessagesController().isMonoForumWithManageRights(did)) {
+                        if (getMessagesController().isForum(did) || getMessagesController().isMonoForumWithManageRights(did)) {
                             getMessagesController().markAllTopicsAsRead(did);
                         }
                         getMessagesController().markDialogAsRead(did, dialog.lastMid, dialog.lastMid, dialog.date, false, 0, dialog.unreadCount, true, 0);
@@ -10967,7 +10969,7 @@ public class MessagesStorage extends BaseController {
             for (int i = 0; i < userIds.size(); ++i) {
                 long userId = userIds.get(i);
                 TLRPC.User user = getMessagesController().getUser(userId);
-                if (user != null) {
+                if (user != null && !(user instanceof TLRPC.TL_userForeign_old2)) {
                     result.add(user);
                     userIds.remove(i);
                     i--;
@@ -11831,7 +11833,7 @@ public class MessagesStorage extends BaseController {
     }
 
     public void updateMessageVerifyFlags(ArrayList<TLRPC.Message> messages) {
-        Utilities.stageQueue.postRunnable(() -> {
+        storageQueue.postRunnable(() -> {
             boolean databaseInTransaction = false;
             SQLitePreparedStatement state = null;
             try {

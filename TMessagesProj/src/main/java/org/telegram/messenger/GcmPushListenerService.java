@@ -8,6 +8,8 @@
 
 package org.telegram.messenger;
 
+import android.text.TextUtils;
+
 import androidx.annotation.NonNull;
 
 import com.google.firebase.messaging.FirebaseMessagingService;
@@ -29,12 +31,19 @@ public class GcmPushListenerService extends FirebaseMessagingService {
             FileLog.d("FCM received data: " + data + " from: " + from);
         }
 
-        if (data.containsKey("n")) {
-            PushHelper.processRemoteMessage(data.get("n"));
+        if (!data.containsKey("p") && data.containsKey("n")) {
+            String remoteAction = data.get("n");
+            AndroidUtilities.runOnUIThread(() -> {
+                ApplicationLoader.postInitApplication();
+                PushHelper.processRemoteMessage(remoteAction);
+            });
             return;
         }
 
-        PushListenerController.processRemoteMessage(PushListenerController.PUSH_TYPE_FIREBASE, data.get("p"), time);
+        String payload = data.get("p");
+        if (!TextUtils.isEmpty(payload)) {
+            PushListenerController.processRemoteMessage(PushListenerController.PUSH_TYPE_FIREBASE, payload, time);
+        }
     }
 
     @Override

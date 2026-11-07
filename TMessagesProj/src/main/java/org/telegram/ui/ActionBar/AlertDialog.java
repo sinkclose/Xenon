@@ -540,6 +540,22 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
         showAsMaterialDialogInternalWithRed(null, externalDismiss1, externalDismiss2);
     }
 
+    private void setMaterialDialogItems(MaterialAlertDialogBuilder builder) {
+        if (items == null) return;
+        ArrayList<CharSequence> visibleItems = new ArrayList<>(items.length);
+        ArrayList<Integer> itemIndices = new ArrayList<>(items.length);
+        for (int i = 0; i < items.length; i++) {
+            if (items[i] == null) continue;
+            visibleItems.add(items[i]);
+            itemIndices.add(i);
+        }
+        if (visibleItems.isEmpty()) return;
+        // Legacy dialogs hide null rows but keep their original indices for click callbacks.
+        builder.setItems(visibleItems.toArray(new CharSequence[0]), (d, which) -> {
+            if (onClickListener != null) onClickListener.onClick(AlertDialog.this, itemIndices.get(which));
+        });
+    }
+
     private boolean showAsMaterialDialogInternalWithRed(boolean[] red, OnDismissListener externalDismiss1, OnDismissListener externalDismiss2) {
         // fallback for 4 buttons
         if (neutralButtonText != null && negative2ButtonText != null) {
@@ -569,11 +585,7 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
             customContainer.addView(customView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, customViewHeight));
             builder.setView(customContainer);
         }
-        if (items != null) {
-            builder.setItems(items, (d, which) -> {
-                if (onClickListener != null) onClickListener.onClick(AlertDialog.this, which);
-            });
-        }
+        setMaterialDialogItems(builder);
         if (positiveButtonText != null) {
             builder.setPositiveButton(positiveButtonText, (d, w) -> {
                 if (positiveButtonListener != null)
@@ -862,10 +874,20 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
                             maxWidth = dp(356);
                         }
 
+                        final int dialogWidth = Math.min(maxWidth, calculatedWidth) + backgroundPaddings.left + backgroundPaddings.right;
+                        if (needStarsBalance) {
+                            // the window is fullscreen here: resize the dialog inside it instead of the window
+                            final ViewGroup.LayoutParams lp = getLayoutParams();
+                            if (lp != null && lp.width != dialogWidth) {
+                                lp.width = dialogWidth;
+                                requestLayout();
+                            }
+                            return;
+                        }
                         Window window = getWindow();
                         WindowManager.LayoutParams params = new WindowManager.LayoutParams();
                         params.copyFrom(window.getAttributes());
-                        params.width = Math.min(maxWidth, calculatedWidth) + backgroundPaddings.left + backgroundPaddings.right;
+                        params.width = dialogWidth;
                         try {
                             window.setAttributes(params);
                         } catch (Throwable e) {
@@ -982,6 +1004,21 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
     }
 
     private boolean needStarsBalance;
+
+    private int getDialogWidth() {
+        final int calculatedWidth = AndroidUtilities.displaySize.x - dp(48) - additioanalHorizontalPadding * 2;
+        int maxWidth;
+        if (AndroidUtilities.isTablet()) {
+            if (AndroidUtilities.isSmallTablet()) {
+                maxWidth = dp(446);
+            } else {
+                maxWidth = dp(496);
+            }
+        } else {
+            maxWidth = dp(356);
+        }
+        return Math.min(maxWidth, calculatedWidth) + backgroundPaddings.left + backgroundPaddings.right;
+    }
     public AlertDialog setShowStarsBalance(boolean show) {
         needStarsBalance = show;
         return this;
@@ -1647,9 +1684,13 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
         WindowManager.LayoutParams params = new WindowManager.LayoutParams();
         params.copyFrom(window.getAttributes());
         if (needStarsBalance) {
-//            params.width = WindowManager.LayoutParams.MATCH_PARENT;
+            // a fixed fullscreen frame: with WRAP_CONTENT the window was resized after the first layout
+            // (see the width check in AlertDialogView.onMeasure) and the system animated it moving to the center
+            params.width = WindowManager.LayoutParams.MATCH_PARENT;
             params.height = WindowManager.LayoutParams.MATCH_PARENT;
             params.flags |= WindowManager.LayoutParams.FLAG_FULLSCREEN;
+            lastScreenWidth = AndroidUtilities.displaySize.x;
+            containerView.getLayoutParams().width = getDialogWidth();
 
             window.setWindowAnimations(R.style.DialogNoAnimation);
         } else if (progressViewStyle == ALERT_TYPE_SPINNER) {
@@ -1664,19 +1705,7 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
             }
 
             lastScreenWidth = AndroidUtilities.displaySize.x;
-            final int calculatedWidth = AndroidUtilities.displaySize.x - dp(48) - additioanalHorizontalPadding * 2;
-            int maxWidth;
-            if (AndroidUtilities.isTablet()) {
-                if (AndroidUtilities.isSmallTablet()) {
-                    maxWidth = dp(446);
-                } else {
-                    maxWidth = dp(496);
-                }
-            } else {
-                maxWidth = dp(356);
-            }
-
-            params.width = Math.min(maxWidth, calculatedWidth) + backgroundPaddings.left + backgroundPaddings.right;
+            params.width = getDialogWidth();
         }
         if (customView == null || !checkFocusable || !canTextInput(customView)) {
             params.flags |= WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
@@ -2122,6 +2151,13 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
 
     public ViewGroup getButtonsLayout() {
         return buttonsLayout;
+    }
+
+    public void makeRed(int btn) {
+        TextView button = (TextView) getButton(btn);
+        if (button != null) {
+            button.setTextColor(getThemedColor(Theme.key_text_RedBold));
+        }
     }
 
     public static class Builder {

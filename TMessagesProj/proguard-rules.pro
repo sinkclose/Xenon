@@ -113,3 +113,7 @@
 }
 -keep class ru.noties.jlatexmath.** { *; }
 -dontoptimize
+
+-keep class org.telegram.utils.code.highlight.PrismaHighlighter {
+    private static native <methods>;
+}

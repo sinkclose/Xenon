@@ -120,7 +120,7 @@ import org.telegram.messenger.AnimationNotificationsLocker;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.BotGuardHelper;
 import org.telegram.messenger.ChatObject;
-import org.telegram.messenger.CodeHighlighting;
+import org.telegram.utils.code.highlight.CodeHighlighting;
 import org.telegram.messenger.DownloadController;
 import org.telegram.messenger.Emoji;
 import org.telegram.messenger.FileLoader;
@@ -6392,7 +6392,7 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
             if (block instanceof TL_iv.pageBlockPhoto) {
                 TLRPC.Photo photo = getPhotoWithId(page, ((TL_iv.pageBlockPhoto) block).photo_id);
                 if (photo != null) {
-                    TLRPC.PhotoSize sizeFull = FileLoader.getClosestPhotoSizeWithSize(photo.sizes, AndroidUtilities.getPhotoSize());
+                    TLRPC.PhotoSize sizeFull = FileLoader.getClosestPhotoSizeWithSize(photo.sizes, AndroidUtilities.getPhotoSize(true));
                     if (sizeFull != null) {
                         return getExistingPathToAttach(sizeFull);
                     }
@@ -9133,7 +9133,7 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
                         videoView.setVisibility(INVISIBLE);
                         videoView.loadVideo(null, null, null, null, false);
                         HashMap<String, String> args = new HashMap<>();
-                        args.put("Referer", ApplicationLoader.applicationContext.getPackageName());
+                        args.put("Referer", "https://messenger.telegram.org");
                         webView.loadUrl(currentBlock.url, args);
                     }
 
@@ -9385,7 +9385,7 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
                             if (webView != null) {
                                 webView.setVisibility(VISIBLE);
                                 HashMap<String, String> args = new HashMap<>();
-                                args.put("Referer", ApplicationLoader.applicationContext.getPackageName());
+                                args.put("Referer", "https://messenger.telegram.org");
                                 webView.loadUrl(currentBlock.url, args);
                             }
                             if (videoView != null) {

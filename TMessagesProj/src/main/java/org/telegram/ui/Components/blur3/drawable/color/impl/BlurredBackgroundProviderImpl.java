@@ -172,7 +172,7 @@ public class BlurredBackgroundProviderImpl {
         // the original theme tint, no B/W override.
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
             .setBackgroundColor((r, isDark) ->
-                tintWithAccent(Theme.multAlpha(Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground), glassTintAlpha(isDark ? 0.85f : 0.76f)), r))
+                tintWithAccent(Theme.multAlpha(Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground, r), glassTintAlpha(isDark ? 0.85f : 0.76f)), r))
             .setStrokeColorTop(0xFFFFFFFF, 0)
             .setStrokeColorBottom(0xFFFFFFFF, 0)
             .setShadowColor(0x26000000, 0)

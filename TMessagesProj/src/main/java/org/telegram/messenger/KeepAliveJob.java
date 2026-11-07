@@ -34,7 +34,9 @@ public class KeepAliveJob extends JobIntentService {
                 }
                 enqueueWork(ApplicationLoader.applicationContext, KeepAliveJob.class, 1000, new Intent());
             } catch (Exception ignore) {
-
+                synchronized (sync) {
+                    startingJob = false;
+                }
             }
         });
     }
@@ -82,6 +84,7 @@ public class KeepAliveJob extends JobIntentService {
         Utilities.globalQueue.cancelRunnable(finishJobByTimeoutRunnable);
         synchronized (sync) {
             countDownLatch = null;
+            startingJob = false;
         }
         if (BuildVars.LOGS_ENABLED) {
             FileLog.d("ended keep-alive job");

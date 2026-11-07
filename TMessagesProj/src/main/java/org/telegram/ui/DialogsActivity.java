@@ -217,6 +217,7 @@ import org.telegram.ui.Stars.StarsController;
 import org.telegram.ui.Stars.StarsIntroActivity;
 import org.telegram.ui.Stories.StealthModeAlert;
 import org.telegram.ui.Stories.recorder.ButtonWithCounterView;
+import org.telegram.ui.Wallet.WalletActivity;
 import org.telegram.ui.bots.BotWebViewSheet;
 import org.telegram.ui.Components.Bulletin;
 import org.telegram.ui.Components.BulletinFactory;
@@ -785,6 +786,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     public boolean notify = true;
     public int scheduleDate;
     public int scheduleRepeatPeriod;
+    public boolean forceDocument;
 
     private int canReadCount;
     private int canPinCount;
@@ -5407,6 +5409,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 if (delegate == null || selectedDialogs.isEmpty()) {
                     return;
                 }
+                forceDocument = false;
                 ArrayList<MessagesStorage.TopicKey> topicKeys = new ArrayList<>();
                 for (int i = 0; i < selectedDialogs.size(); i++) {
                     topicKeys.add(MessagesStorage.TopicKey.of(selectedDialogs.get(i), 0));
@@ -11797,6 +11800,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
         sharedMediaEntries = entries;
         sharedLink = null;
+        forceDocument = false;
         if (commentView != null) {
             attachShareTopView(initialCaption);
         } else {
@@ -11952,6 +11956,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
 
             @Override
+            public int getSelectedCount() {
+                return sharedMediaEntries != null ? sharedMediaEntries.size() : 0;
+            }
+
+            @Override
+            public boolean canSendAsFile() {
+                return canSendDocumentsToSelectedDialogs();
+            }
+
+            @Override
             public long getDialogId() {
                 return selectedDialogs.isEmpty() ? 0 : selectedDialogs.get(0);
             }
@@ -12008,10 +12022,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 if (shareTopView != null) {
                     shareTopView.setSharedMedia(currentAccount, sharedMediaEntries);
                 }
-                final boolean useExternalOptions = !notify || scheduleDate != 0;
+                final boolean useExternalOptions = !notify || scheduleDate != 0 || forceDocument;
                 if (useExternalOptions && delegate != null && !selectedDialogs.isEmpty()) {
-                    DialogsActivity.this.notify = notify;
-                    DialogsActivity.this.scheduleDate = scheduleDate;
+                    var forwardContext = delegate instanceof ForwardContext ? (ForwardContext) delegate : DialogsActivity.this.forwardContext;
+                    if (forwardContext != null) {
+                        var params = forwardContext.getForwardParams();
+                        params.notify = notify;
+                        params.scheduleDate = scheduleDate;
+                        params.scheduleRepeatPeriod = scheduleRepeatPeriod;
+                        params.forceDocument = forceDocument;
+                    }
                     final ArrayList<MessagesStorage.TopicKey> topicKeys = new ArrayList<>();
                     for (int i = 0; i < selectedDialogs.size(); i++) {
                         topicKeys.add(MessagesStorage.TopicKey.of(selectedDialogs.get(i), 0));
@@ -12374,6 +12394,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         );
     }
 
+    private boolean canSendDocumentsToSelectedDialogs() {
+        for (int i = 0; i < selectedDialogs.size(); ++i) {
+            final TLRPC.Chat chat = getMessagesController().getChat(-selectedDialogs.get(i));
+            if (chat != null && !ChatObject.canSendDocument(chat)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private boolean onSendLongClick(View view) {
         final Activity parentActivity = getParentActivity();
         final Theme.ResourcesProvider resourcesProvider = getResourceProvider();
@@ -12385,7 +12415,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         if (forwardContext == null) {
             return false;
         }
-        boolean onlyMyself = false;
+        boolean onlyMyself = !selectedDialogs.isEmpty();
         boolean canSchedule = true;
         for (int i = 0; i < selectedDialogs.size(); ++i) {
             final long did = selectedDialogs.get(i);
@@ -12399,7 +12429,19 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 canSchedule = false;
             }
         }
-        var sendItemOptions = new SendItemOptions(getBulletinLayoutContainer(), view, forwardContext, canSchedule, forwardContext.forceShowScheduleAndSound() || selectedDialogs.size() > 1, onlyMyself ? getUserConfig().clientUserId : -1, () -> {
+
+        boolean canSendDocs = hasSharedMediaEntries() && canSendDocumentsToSelectedDialogs();
+        if (canSendDocs) {
+            for (MediaController.PhotoEntry entry : sharedMediaEntries) {
+                if (entry.hasVideoEditsLostAsDocument()) {
+                    canSendDocs = false;
+                    break;
+                }
+            }
+        }
+        final boolean multipleMedia = sharedMediaEntries != null && sharedMediaEntries.size() > 1;
+
+        var sendItemOptions = new SendItemOptions(getBulletinLayoutContainer(), view, forwardContext, canSchedule, forwardContext.forceShowScheduleAndSound() || selectedDialogs.size() > 1, canSendDocs, multipleMedia, onlyMyself ? getUserConfig().clientUserId : -1, () -> {
             if (delegate == null || selectedDialogs.isEmpty()) {
                 return;
             }
@@ -14225,6 +14267,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             io.add(ghostItem);
             if (ApplicationLoader.applicationLoaderInstance != null) {
                 ApplicationLoader.applicationLoaderInstance.addItemOptions(io);
+            }
+            if (getMessagesController().config.walletAvailable.get()) {
+                io.add(R.drawable.ic_gram, LocaleController.getString(R.string.WalletAttachMoney), () -> {
+                    presentFragment(new WalletActivity());
+                });
             }
             TLRPC.TL_attachMenuBots menuBots = MediaDataController.getInstance(UserConfig.selectedAccount).getAttachMenuBots();
             if (launchActivity != null && menuBots != null && menuBots.bots != null && !menuBots.bots.isEmpty()) {

@@ -15,6 +15,8 @@ import org.telegram.messenger.FileLog;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.messenger.SharedConfig;
+import org.telegram.messenger.UserConfig;
+import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.ui.ActionBar.Theme;
 
 import java.util.ArrayList;
@@ -145,6 +147,7 @@ public class NekoConfig {
     public static boolean voiceEnhancements = false;
     public static boolean disableInstantCamera = false;
     public static boolean hideCameraInMediaPicker = false;
+    public static boolean experimentalMediaPicker = false;
     public static boolean tryToOpenAllLinksInIV = false;
     public static boolean formatTimeWithSeconds = false;
     public static boolean accentAsNotificationColor = false;
@@ -433,6 +436,7 @@ public class NekoConfig {
             voiceEnhancements = preferences.getBoolean("voiceEnhancements", false);
             disableInstantCamera = preferences.getBoolean("disableInstantCamera", false);
             hideCameraInMediaPicker = preferences.getBoolean("hideCameraInMediaPicker", false);
+            experimentalMediaPicker = preferences.getBoolean("experimentalMediaPicker", false);
             tryToOpenAllLinksInIV = preferences.getBoolean("tryToOpenAllLinksInIV", false);
             formatTimeWithSeconds = preferences.getBoolean("formatTimeWithSeconds", false);
             accentAsNotificationColor = preferences.getBoolean("accentAsNotificationColor", false);
@@ -1817,6 +1821,12 @@ public class NekoConfig {
         editor.apply();
     }
 
+    public static void toggleExperimentalMediaPicker() {
+        experimentalMediaPicker = !experimentalMediaPicker;
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
+                .edit().putBoolean("experimentalMediaPicker", experimentalMediaPicker).apply();
+    }
+
     public static void toggleVoiceEnhancements() {
         voiceEnhancements = !voiceEnhancements;
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
@@ -2191,6 +2201,12 @@ public class NekoConfig {
         editor.apply();
         try {
             ApplicationLoader.startPushService();
+            for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+                if (UserConfig.getInstance(a).isClientActivated()) {
+                    ConnectionsManager connectionsManager = ConnectionsManager.getInstance(a);
+                    connectionsManager.setPushConnectionEnabled(connectionsManager.isPushConnectionEnabled());
+                }
+            }
         } catch (Exception ignore) {
         }
     }

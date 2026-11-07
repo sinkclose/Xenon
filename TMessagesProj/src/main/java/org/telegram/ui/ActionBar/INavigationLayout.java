@@ -62,7 +62,6 @@ public interface INavigationLayout {
     void drawCurrentPreviewFragment(Canvas canvas, Drawable foregroundDrawable);
 
     void drawHeaderShadow(Canvas canvas, int alpha, int y);
-    void setHeaderShadow(Drawable drawable);
 
     boolean isSwipeInProgress();
 
@@ -161,7 +160,7 @@ public interface INavigationLayout {
         if (getFragmentStack().isEmpty()) return null;
         for (int i = getFragmentStack().size() - 1; i >= 0; --i) {
             BaseFragment fragment = getFragmentStack().get(i);
-            if (fragment == null || fragment.isFinishing() || fragment.isRemovingFromStack())
+            if (fragment == null || fragment.getContext() == null || fragment.isFinishing() || fragment.isRemovingFromStack())
                 continue;
             return fragment;
         }
