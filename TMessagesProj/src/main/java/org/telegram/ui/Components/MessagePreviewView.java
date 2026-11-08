@@ -294,7 +294,7 @@ public class MessagePreviewView extends FrameLayout {
             chatPreviewContainer.setOutlineProvider(new ViewOutlineProvider() {
                 @Override
                 public void getOutline(View view, Outline outline) {
-                    outline.setRoundRect(0, currentTopOffset + 1, view.getMeasuredWidth(), view.getMeasuredHeight(), dp(8));
+                    outline.setRoundRect(0, currentTopOffset + 1, view.getMeasuredWidth(), view.getMeasuredHeight(), dp(zxc.iconic.xenon.NekoConfig.material3Popups ? 20 : 8));
                 }
             });
             chatPreviewContainer.setClipToOutline(true);
@@ -824,7 +824,7 @@ public class MessagePreviewView extends FrameLayout {
             menu.getSwipeBack().setOnForegroundOpenFinished(() -> {
                 switchToQuote(true, false);
             });
-            menu.setBackground(iBlur3Factory.create(menu).setColorProvider(BlurredBackgroundProviderImpl
+            if (!zxc.iconic.xenon.NekoConfig.material3Popups) menu.setBackground(iBlur3Factory.create(menu).setColorProvider(BlurredBackgroundProviderImpl
                 .scrimMenuBackground(resourcesProvider))
                 .setPadding(dp(8))
                 .setHasPadding(true)
@@ -846,7 +846,7 @@ public class MessagePreviewView extends FrameLayout {
                             switchToQuote(false, false);
                             menu.getSwipeBack().closeForeground();
                         });
-                        swipeback.addView(backButton, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+                        swipeback.addView(backButton, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48));
 
                         ActionBarPopupWindow.GapView gap = new ActionBarPopupWindow.GapView(context, resourcesProvider);
                         gap.setColor(Theme.multAlpha(Theme.getColor(Theme.key_actionBarDefaultSubmenuItem, resourcesProvider), 0.06f));
@@ -874,7 +874,7 @@ public class MessagePreviewView extends FrameLayout {
                                 dismiss(true);
                             }
                         });
-                        swipeback.addView(selectQuoteButton, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+                        swipeback.addView(selectQuoteButton, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48));
                     }
 
                     menuBack = menu.addViewToSwipeBack(swipeback);
@@ -956,9 +956,9 @@ public class MessagePreviewView extends FrameLayout {
                         }
                     });
 
-                    btn1.addView(quoteButton, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48));
-                    btn1.addView(clearQuoteButton, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48));
-                    menu.addView(btn1, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+                    btn1.addView(quoteButton, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48));
+                    btn1.addView(clearQuoteButton, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48));
+                    menu.addView(btn1, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48));
                 }
 
                 if (!messagePreviewParams.monoforum && !messagePreviewParams.noforwards && !messagePreviewParams.hasSecretMessages) {
@@ -969,9 +969,9 @@ public class MessagePreviewView extends FrameLayout {
                     quoteAnotherChatButton = new ActionBarMenuSubItem(context, true, false, false, resourcesProvider);
                     quoteAnotherChatButton.setTextAndIcon(LocaleController.getString(R.string.QuoteToAnotherChat), R.drawable.msg_forward_replace);
                     quoteAnotherChatButton.setOnClickListener(v -> selectAnotherChat(false));
-                    btn2.addView(quoteAnotherChatButton, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48));
-                    btn2.addView(replyAnotherChatButton, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48));
-                    menu.addView(btn2, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+                    btn2.addView(quoteAnotherChatButton, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48));
+                    btn2.addView(replyAnotherChatButton, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48));
+                    menu.addView(btn2, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48));
                 }
 
                 if (!messagePreviewParams.noforwards && !messagePreviewParams.hasSecretMessages) {
@@ -986,12 +986,12 @@ public class MessagePreviewView extends FrameLayout {
                 ActionBarMenuSubItem applyChanges = new ActionBarMenuSubItem(context, true, false, false, resourcesProvider);
                 applyChanges.setTextAndIcon(LocaleController.getString(R.string.ApplyChanges), R.drawable.msg_select);
                 applyChanges.setOnClickListener(v -> dismiss(true));
-                menu.addView(applyChanges, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+                menu.addView(applyChanges, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48));
 
                 ActionBarMenuSubItem viewInChat = new ActionBarMenuSubItem(context, true, false, false, resourcesProvider);
                 viewInChat.setTextAndIcon(LocaleController.getString(R.string.ViewInChat), R.drawable.msg_view_file);
                 viewInChat.setOnClickListener(v -> viewInChat());
-                menu.addView(viewInChat, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+                menu.addView(viewInChat, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48));
 
                 deleteReplyButton = new ActionBarMenuSubItem(context, true, false, true, resourcesProvider);
                 deleteReplyButton.setTextAndIcon(LocaleController.getString(showOutdatedQuote ? R.string.DoNotQuote : R.string.DoNotReply), R.drawable.msg_delete);
@@ -1004,7 +1004,7 @@ public class MessagePreviewView extends FrameLayout {
                         removeReply();
                     }
                 });
-                menu.addView(deleteReplyButton, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+                menu.addView(deleteReplyButton, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48));
 
             } else if (tab == TAB_FORWARD && messagePreviewParams.forwardMessages != null) {
 
@@ -1025,7 +1025,7 @@ public class MessagePreviewView extends FrameLayout {
                     R.raw.name_show, messagePreviewParams.multipleUsers ? LocaleController.getString(R.string.HideSenderNames) : LocaleController.getString(R.string.HideSendersName),
                     resourcesProvider
                 );
-                menu.addView(sendersNameButton, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+                menu.addView(sendersNameButton, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48));
 
                 final ToggleButton captionButton;
                 if (messagePreviewParams.hasCaption) {
@@ -1036,7 +1036,7 @@ public class MessagePreviewView extends FrameLayout {
                         resourcesProvider
                     );
                     captionButton.setState(messagePreviewParams.hideCaption, false);
-                    menu.addView(captionButton, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+                    menu.addView(captionButton, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48));
                 } else {
                     captionButton = null;
                 }
@@ -1044,7 +1044,7 @@ public class MessagePreviewView extends FrameLayout {
                 ActionBarMenuSubItem changeRecipientView = new ActionBarMenuSubItem(context, true, false, resourcesProvider);
                 changeRecipientView.setOnClickListener(view -> selectAnotherChat(true));
                 changeRecipientView.setTextAndIcon(LocaleController.getString(R.string.ChangeRecipient), R.drawable.msg_forward_replace);
-                menu.addView(changeRecipientView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+                menu.addView(changeRecipientView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48));
 
                 ActionBarPopupWindow.GapView gap = new ActionBarPopupWindow.GapView(context, resourcesProvider);
                 gap.setColor(Theme.multAlpha(Theme.getColor(Theme.key_actionBarDefaultSubmenuItem, resourcesProvider), 0.06f));
@@ -1054,11 +1054,11 @@ public class MessagePreviewView extends FrameLayout {
                 ActionBarMenuSubItem applyChanges = new ActionBarMenuSubItem(context, true, false, false, resourcesProvider);
                 applyChanges.setTextAndIcon(LocaleController.getString(R.string.ApplyChanges), R.drawable.msg_select);
                 applyChanges.setOnClickListener(v -> dismiss(true));
-                menu.addView(applyChanges, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+                menu.addView(applyChanges, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48));
 
                 ActionBarMenuSubItem sendMessagesView = new ActionBarMenuSubItem(context, false, false, resourcesProvider);
                 sendMessagesView.setTextAndIcon(LocaleController.getString("ForwardSendMessages", R.string.ForwardSendMessages), R.drawable.msg_send);
-                menu.addView(sendMessagesView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+                menu.addView(sendMessagesView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48));
                 sendMessagesView.setOnClickListener(View -> didSendPressed());
 
                 ActionBarMenuSubItem deleteLink = new ActionBarMenuSubItem(context, true, false, true, resourcesProvider);
@@ -1066,7 +1066,7 @@ public class MessagePreviewView extends FrameLayout {
                 deleteLink.setColors(getThemedColor(Theme.key_text_RedBold), getThemedColor(Theme.key_text_RedRegular));
                 deleteLink.setOnClickListener(v -> removeForward());
                 deleteLink.setSelectorColor(Theme.multAlpha(Theme.getColor(Theme.key_text_RedRegular), .12f));
-                menu.addView(deleteLink, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+                menu.addView(deleteLink, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48));
 
                 sendersNameButton.setState(messagePreviewParams.hideForwardSendersName, false);
                 sendersNameButton.setOnClickListener(view -> {
@@ -1125,7 +1125,7 @@ public class MessagePreviewView extends FrameLayout {
                     resourcesProvider
                 );
                 changePositionBtn.setState(!messagePreviewParams.webpageTop, false);
-                menu.addView(changePositionBtn, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+                menu.addView(changePositionBtn, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48));
 
                 changeSizeBtnContainer = new FrameLayout(context);
                 changeSizeBtnContainer.setBackground(Theme.createRadSelectorDrawable(getThemedColor(Theme.key_dialogButtonSelector), 0, 0));
@@ -1137,7 +1137,7 @@ public class MessagePreviewView extends FrameLayout {
                 );
                 changeSizeBtn.setBackground(null);
                 changeSizeBtn.setVisibility(messagePreviewParams.isVideo ? View.INVISIBLE : View.VISIBLE);
-                changeSizeBtnContainer.addView(changeSizeBtn, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+                changeSizeBtnContainer.addView(changeSizeBtn, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48));
                 videoChangeSizeBtn = new ToggleButton(
                     context,
                     R.raw.media_shrink, LocaleController.getString(R.string.LinkVideoLarger),
@@ -1147,8 +1147,8 @@ public class MessagePreviewView extends FrameLayout {
                 videoChangeSizeBtn.setBackground(null);
                 videoChangeSizeBtn.setVisibility(!messagePreviewParams.isVideo ? View.INVISIBLE : View.VISIBLE);
                 changeSizeBtnContainer.setAlpha(messagePreviewParams.hasMedia ? 1f : .5f);
-                changeSizeBtnContainer.addView(videoChangeSizeBtn, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
-                menu.addView(changeSizeBtnContainer, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+                changeSizeBtnContainer.addView(videoChangeSizeBtn, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48));
+                menu.addView(changeSizeBtnContainer, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48));
                 changeSizeBtnContainer.setVisibility(messagePreviewParams.singleLink && !messagePreviewParams.hasMedia ? View.GONE : View.VISIBLE);
                 changeSizeBtn.setState(messagePreviewParams.webpageSmall, false);
                 videoChangeSizeBtn.setState(messagePreviewParams.webpageSmall, false);
@@ -1161,12 +1161,12 @@ public class MessagePreviewView extends FrameLayout {
                 ActionBarMenuSubItem applyChanges = new ActionBarMenuSubItem(context, true, false, false, resourcesProvider);
                 applyChanges.setTextAndIcon(LocaleController.getString(R.string.ApplyChanges), R.drawable.msg_select);
                 applyChanges.setOnClickListener(v -> dismiss(true));
-                menu.addView(applyChanges, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+                menu.addView(applyChanges, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48));
 
                 sendMediaButton = new ActionBarMenuSubItem(context, false, false, resourcesProvider);
                 sendMediaButton.setTextAndIcon(LocaleController.getString(messagePreviewParams.webpage.document != null ? messagePreviewParams.isVideo ? R.string.PreviewSendVideo : R.string.PreviewSendFile : R.string.PreviewSendPhoto), R.drawable.msg_send);
                 sendMediaButton.setVisibility(messagePreviewParams.webpage.document != null || messagePreviewParams.webpage.photo != null ? View.VISIBLE : View.GONE);
-                menu.addView(sendMediaButton, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+                menu.addView(sendMediaButton, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48));
                 sendMediaButton.setOnClickListener(v -> {
                     if (chatActivity.isInScheduleMode()) {
                         AlertsCreator.createScheduleDatePickerDialog(
@@ -1182,7 +1182,7 @@ public class MessagePreviewView extends FrameLayout {
                 deleteLink.setColors(getThemedColor(Theme.key_text_RedBold), getThemedColor(Theme.key_text_RedRegular));
                 deleteLink.setOnClickListener(v -> removeLink());
                 deleteLink.setSelectorColor(Theme.multAlpha(Theme.getColor(Theme.key_text_RedRegular), .12f));
-                menu.addView(deleteLink, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+                menu.addView(deleteLink, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48));
 
                 changeSizeBtnContainer.setOnClickListener(view -> {
                     if (!messagePreviewParams.hasMedia) {

@@ -26,6 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /** Rounded typography for chat controls and menus; message content keeps its own font. */
 public final class RoundedUiFonts {
+    private static final WeakHashMap<View, Boolean> popupRoots = new WeakHashMap<>();
     private static final WeakHashMap<View, Boolean> observed = new WeakHashMap<>();
     private static final ConcurrentHashMap<Class<?>, List<Field>> fields = new ConcurrentHashMap<>();
 
@@ -42,6 +43,12 @@ public final class RoundedUiFonts {
         text.setSpan(new TypefaceSpan(TypefaceHelper.createRoundedTypeface(700, false)),
                 text.length() - username.length(), text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         return text;
+    }
+
+    public static void observePopup(View root) {
+        if (root == null) return;
+        popupRoots.put(root, true);
+        observe(root);
     }
 
     public static void observe(View root) {
@@ -66,30 +73,34 @@ public final class RoundedUiFonts {
         apply(root);
     }
 
-    private static Typeface rounded(Typeface current) {
-        if (TypefaceHelper.isCurrentRoundedTypeface(current)
+    private static Typeface rounded(Typeface current, boolean popup) {
+        if ((!popup && TypefaceHelper.isCurrentRoundedTypeface(current))
                 || current != null && (current.equals(Typeface.MONOSPACE)
                 || current.equals(Typeface.create("monospace", current.getStyle())))) return current;
         int weight = current == null ? 400 : Build.VERSION.SDK_INT >= 28
                 ? current.getWeight() : current.isBold() ? 700 : 400;
-        return TypefaceHelper.createRoundedTypeface(weight, current != null && current.isItalic());
+        return TypefaceHelper.createRoundedTypeface(popup ? Math.max(500, weight) : weight, current != null && current.isItalic());
     }
 
     private static void apply(View view) {
+        apply(view, popupRoots.containsKey(view));
+    }
+
+    private static void apply(View view, boolean popup) {
         if (!TypefaceHelper.supportsRoundedTypeface() || view instanceof ClientFonts.PreserveTypeface
                 || view instanceof ChatMessageCell || view instanceof ChatActionCell) return;
         boolean changed = false;
         if (view instanceof TextView) {
             TextView text = (TextView) view;
-            Typeface face = rounded(text.getTypeface());
+            Typeface face = rounded(text.getTypeface(), popup);
             if (face != text.getTypeface()) { text.setTypeface(face); changed = true; }
         }
         if (view instanceof AnimatedTextView) {
             AnimatedTextView text = (AnimatedTextView) view;
-            Typeface face = rounded(text.getPaint().getTypeface());
+            Typeface face = rounded(text.getPaint().getTypeface(), popup);
             if (face != text.getPaint().getTypeface()) { text.setTypeface(face); changed = true; }
         }
-        // Inspect only app-owned TextPaint fields, never Android's internals or message layouts.
+        // Inspect only app-owned TextPaint fields, never Android internals.
         for (Class<?> type = view.getClass(); type != null && (type.getName().startsWith("org.telegram.")
                 || type.getName().startsWith("zxc.iconic.")); type = type.getSuperclass()) {
             for (Field field : fields.computeIfAbsent(type, key -> {
@@ -105,13 +116,13 @@ public final class RoundedUiFonts {
                     Object value = field.get(view);
                     if (value instanceof AnimatedTextView.AnimatedTextDrawable) {
                         AnimatedTextView.AnimatedTextDrawable drawable = (AnimatedTextView.AnimatedTextDrawable) value;
-                        Typeface face = rounded(drawable.getPaint().getTypeface());
+                        Typeface face = rounded(drawable.getPaint().getTypeface(), popup);
                         if (face != drawable.getPaint().getTypeface()) { drawable.setTypeface(face); changed = true; }
                         continue;
                     }
                     Paint paint = (Paint) value;
                     if (paint == null) continue;
-                    Typeface face = rounded(paint.getTypeface());
+                    Typeface face = rounded(paint.getTypeface(), popup);
                     if (face != paint.getTypeface()) { paint.setTypeface(face); changed = true; }
                 } catch (IllegalAccessException ignored) {}
             }
@@ -119,7 +130,7 @@ public final class RoundedUiFonts {
         if (changed) { view.requestLayout(); view.invalidate(); }
         if (view instanceof ViewGroup) {
             ViewGroup group = (ViewGroup) view;
-            for (int i = 0; i < group.getChildCount(); i++) apply(group.getChildAt(i));
+            for (int i = 0; i < group.getChildCount(); i++) apply(group.getChildAt(i), popup);
         }
     }
 }

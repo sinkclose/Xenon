@@ -68,8 +68,9 @@ public final class MaterialPopupRowDrawable extends Drawable {
         rect.set(getBounds());
         rect.inset(AndroidUtilities.dpf2(1), AndroidUtilities.dpf2(1));
         float t = Math.max(0, Math.min(1, progress));
-        float topRadius = radius(top ? 20 : 8, t);
-        float bottomRadius = radius(bottom ? 20 : 8, t);
+        float pressedRadius = Math.min(rect.width(), rect.height()) / 2f;
+        float topRadius = radius(top ? 20 : 8, pressedRadius, t);
+        float bottomRadius = radius(bottom ? 20 : 8, pressedRadius, t);
         radii[0] = radii[1] = radii[2] = radii[3] = topRadius;
         radii[4] = radii[5] = radii[6] = radii[7] = bottomRadius;
         path.rewind();
@@ -77,8 +78,9 @@ public final class MaterialPopupRowDrawable extends Drawable {
         canvas.drawPath(path, paint);
     }
 
-    private static float radius(float normal, float progress) {
-        return AndroidUtilities.dpf2(normal >= 20 ? normal : normal + (2 - normal) * progress);
+    private static float radius(float normal, float pressedRadius, float progress) {
+        float restingRadius = AndroidUtilities.dpf2(normal);
+        return restingRadius + (pressedRadius - restingRadius) * progress;
     }
 
     @Override public void setAlpha(int alpha) { paint.setAlpha(alpha); invalidateSelf(); }

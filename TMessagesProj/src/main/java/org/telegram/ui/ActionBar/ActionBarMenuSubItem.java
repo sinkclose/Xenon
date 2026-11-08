@@ -108,6 +108,7 @@ public class ActionBarMenuSubItem extends FrameLayout {
         textView.setEllipsize(TextUtils.TruncateAt.END);
         textView.setTextColor(textColor);
         textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
+        if (zxc.iconic.xenon.helpers.TypefaceHelper.supportsRoundedTypeface()) textView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(500, false));
         addView(textView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.CENTER_VERTICAL));
 
         checkViewLeft = LocaleController.isRTL;
@@ -487,7 +488,7 @@ public class ActionBarMenuSubItem extends FrameLayout {
         if (!iosPopupStyle && zxc.iconic.xenon.NekoConfig.material3Popups) {
             if (materialPopupBackground == null) {
                 materialPopupBackground = new org.telegram.ui.Components.MaterialPopupRowDrawable(
-                        getThemedColor(Theme.key_windowBackgroundWhite), top, bottom);
+                        getThemedColor(Theme.key_actionBarDefaultSubmenuBackground), top, bottom);
             }
             materialPopupBackground.setCorners(top, bottom);
             if (getBackground() != materialPopupBackground) setBackground(materialPopupBackground);

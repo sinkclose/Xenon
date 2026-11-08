@@ -356,7 +356,7 @@ public class ActionBarPopupWindow extends PopupWindow {
 
         @Override protected void onAttachedToWindow() {
             super.onAttachedToWindow();
-            zxc.iconic.xenon.helpers.RoundedUiFonts.observe(this);
+            zxc.iconic.xenon.helpers.RoundedUiFonts.observePopup(this);
         }
 
         @Override protected void onDetachedFromWindow() {
@@ -909,13 +909,21 @@ public class ActionBarPopupWindow extends PopupWindow {
                     ((ActionBarMenuSubItem) child).refreshPopupStyle();
                     ((ActionBarMenuSubItem) child).updateSelectorBackground(top, bottom);
                 } else if (material && isPopupRow(child)) {
+                    if (child instanceof FrameLayout) {
+                        FrameLayout row = (FrameLayout) child;
+                        for (int k = 0; k < row.getChildCount(); k++) {
+                            if (row.getChildAt(k) instanceof ActionBarMenuSubItem) {
+                                row.getChildAt(k).setBackground(null);
+                            }
+                        }
+                    }
                     Drawable background = child.getBackground();
                     if (!materialRowBackgrounds.containsKey(child)) materialRowBackgrounds.put(child, background);
                     if (background instanceof org.telegram.ui.Components.MaterialPopupRowDrawable) {
                         ((org.telegram.ui.Components.MaterialPopupRowDrawable) background).setCorners(top, bottom);
                     } else {
                         child.setBackground(new org.telegram.ui.Components.MaterialPopupRowDrawable(
-                                getThemedColor(Theme.key_windowBackgroundWhite), top, bottom));
+                                getThemedColor(Theme.key_actionBarDefaultSubmenuBackground), top, bottom));
                     }
                 } else if (!material && materialRowBackgrounds.containsKey(child)) {
                     child.setBackground(materialRowBackgrounds.remove(child));
@@ -1128,7 +1136,7 @@ public class ActionBarPopupWindow extends PopupWindow {
                 }
             }
             prepareNativeSurface(source);
-            zxc.iconic.xenon.helpers.RoundedUiFonts.observe(getContentView());
+            zxc.iconic.xenon.helpers.RoundedUiFonts.observePopup(getContentView());
         super.showAsDropDown(anchor, xoff, yoff);
             registerListener(anchor);
         } catch (Exception e) {
@@ -1143,7 +1151,7 @@ public class ActionBarPopupWindow extends PopupWindow {
             return;
         }
         prepareNativeSurface(source);
-        zxc.iconic.xenon.helpers.RoundedUiFonts.observe(getContentView());
+        zxc.iconic.xenon.helpers.RoundedUiFonts.observePopup(getContentView());
         super.showAsDropDown(anchor, xoff, yoff, gravity);
         registerListener(anchor);
     }
@@ -1227,7 +1235,7 @@ public class ActionBarPopupWindow extends PopupWindow {
             }
         }
         prepareNativeSurface(source);
-        zxc.iconic.xenon.helpers.RoundedUiFonts.observe(getContentView());
+        zxc.iconic.xenon.helpers.RoundedUiFonts.observePopup(getContentView());
         super.showAtLocation(parent, gravity, x, y);
         unregisterListener();
     }

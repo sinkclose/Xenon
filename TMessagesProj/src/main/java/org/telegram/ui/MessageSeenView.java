@@ -296,7 +296,7 @@ public class MessageSeenView extends FrameLayout {
             @Override
             protected void onMeasure(int widthSpec, int heightSpec) {
                 int height = MeasureSpec.getSize(heightSpec);
-                int listViewTotalHeight = AndroidUtilities.dp(4) + AndroidUtilities.dp(50) * getAdapter().getItemCount();
+                int listViewTotalHeight = AndroidUtilities.dp(4) + AndroidUtilities.dp(zxc.iconic.xenon.NekoConfig.material3Popups ? 58 : 50) * getAdapter().getItemCount();
 
                 if (listViewTotalHeight > height) {
                     listViewTotalHeight = height;
@@ -305,11 +305,16 @@ public class MessageSeenView extends FrameLayout {
                 super.onMeasure(widthSpec, MeasureSpec.makeMeasureSpec(listViewTotalHeight, MeasureSpec.EXACTLY));
             }
         };
+        listView.setBackgroundColor(android.graphics.Color.TRANSPARENT);
         listView.setLayoutManager(new LinearLayoutManager(getContext()));
         listView.addItemDecoration(new RecyclerView.ItemDecoration() {
             @Override
             public void getItemOffsets(@NonNull Rect outRect, @NonNull View view, @NonNull RecyclerView parent, @NonNull RecyclerView.State state) {
                 int p = parent.getChildAdapterPosition(view);
+                if (zxc.iconic.xenon.NekoConfig.material3Popups) {
+                    outRect.bottom = AndroidUtilities.dp(2);
+                    return;
+                }
                 if (p == users.size() - 1) {
                     outRect.bottom = AndroidUtilities.dp(4);
                 }
@@ -325,7 +330,7 @@ public class MessageSeenView extends FrameLayout {
             @Override
             public RecyclerView.ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
                 UserCell userCell = new UserCell(parent.getContext());
-                userCell.setLayoutParams(new RecyclerView.LayoutParams(LayoutHelper.MATCH_PARENT, AndroidUtilities.dp(50)));
+                userCell.setLayoutParams(new RecyclerView.LayoutParams(LayoutHelper.MATCH_PARENT, AndroidUtilities.dp(zxc.iconic.xenon.NekoConfig.material3Popups ? 58 : 50)));
                 return new RecyclerListView.Holder(userCell);
             }
 
@@ -333,6 +338,13 @@ public class MessageSeenView extends FrameLayout {
             public void onBindViewHolder(RecyclerView.ViewHolder holder, int position) {
                 UserCell cell = (UserCell) holder.itemView;
                 cell.setUser(users.get(position), dates.get(position));
+                if (zxc.iconic.xenon.NekoConfig.material3Popups) {
+                    cell.setBackground(new org.telegram.ui.Components.MaterialPopupRowDrawable(
+                            Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground), position == 0,
+                            position == getItemCount() - 1));
+                } else {
+                    cell.setBackground(null);
+                }
             }
 
             @Override
@@ -366,6 +378,7 @@ public class MessageSeenView extends FrameLayout {
 
             nameView = new SimpleTextView(context);
             nameView.setTextSize(16);
+            nameView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(500, false));
             nameView.setEllipsizeByGradient(!LocaleController.isRTL);
             nameView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             nameView.setTextColor(Theme.getColor(Theme.key_actionBarDefaultSubmenuItem));
@@ -384,18 +397,18 @@ public class MessageSeenView extends FrameLayout {
 
             if (LocaleController.isRTL) {
                 addView(avatarImageView, LayoutHelper.createFrame(34, 34, Gravity.RIGHT | Gravity.CENTER_VERTICAL, 0, 0, 10, 0));
-                addView(nameView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.RIGHT | Gravity.TOP, 8, 5.33f, 55, 0));
+                addView(nameView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 24, Gravity.RIGHT | Gravity.TOP, 8, 4, 55, 0));
                 addView(readView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.RIGHT | Gravity.TOP, 13, 19, 55, 0));
             } else {
                 addView(avatarImageView, LayoutHelper.createFrame(34, 34, Gravity.LEFT | Gravity.CENTER_VERTICAL, 10f, 0, 0, 0));
-                addView(nameView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.TOP, 55, 5.33f, 8, 0));
+                addView(nameView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 24, Gravity.LEFT | Gravity.TOP, 55, 4, 8, 0));
                 addView(readView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.TOP, 55, 19, 13, 0));
             }
         }
 
         @Override
         protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-            super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(48), View.MeasureSpec.EXACTLY));
+            super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(zxc.iconic.xenon.NekoConfig.material3Popups ? 58 : 50), View.MeasureSpec.EXACTLY));
         }
 
         public void setUser(TLObject object, int date) {
@@ -410,7 +423,8 @@ public class MessageSeenView extends FrameLayout {
                 avatarDrawable.setInfo(currentAccount, object);
                 ImageLocation imageLocation = ImageLocation.getForUserOrChat(currentAccount, object, ImageLocation.TYPE_SMALL);
                 avatarImageView.setImage(imageLocation, "50_50", avatarDrawable, object);
-                nameView.setText(ContactsController.formatName(object));
+                CharSequence displayName = ContactsController.formatName(object);
+                nameView.setText(TextUtils.isEmpty(displayName) ? LocaleController.getString(R.string.HiddenName) : displayName);
             }
 
             if (date <= 0) {
