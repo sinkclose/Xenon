@@ -155,8 +155,12 @@ public class TypefaceHelper {
     /** Probe the selected family, including OEM system replacements, through public APIs. */
     private static Typeface bundledFlex;
 
+    private static Typeface cachedFlexBase;
+    private static int flexBaseGeneration = -1;
 
     private static synchronized Typeface flexBase() {
+        int generation = ClientFonts.generation();
+        if (cachedFlexBase != null && flexBaseGeneration == generation) return cachedFlexBase;
         Typeface result;
         if (ClientFonts.useGoogleSans()) {
             Typeface system = createSystemTypeface(400, false);
@@ -172,6 +176,8 @@ public class TypefaceHelper {
         } else {
             result = createTypeface(400, false);
         }
+        cachedFlexBase = result;
+        flexBaseGeneration = generation;
         return result;
     }
 

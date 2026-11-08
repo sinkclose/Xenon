@@ -34,6 +34,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class ClientFonts {
     private static Application application;
     private static volatile Typeface family;
+    private static volatile boolean googleSansEnabled;
     private static volatile String selected = "";
     private static volatile int generation;
     private static final ArrayList<ClientFontFiles.Entry> entries = new ArrayList<>();
@@ -68,6 +69,7 @@ public final class ClientFonts {
     public static void initialize(Application app) {
         if (application != null) return;
         application = app;
+        googleSansEnabled = preferences().getBoolean("useGoogleSans", false);
         try {
             JSONArray saved = new JSONArray(preferences().getString("fonts", "[]"));
             for (int i = 0; i < saved.length(); i++) {
@@ -78,13 +80,13 @@ public final class ClientFonts {
                 if (entry.file(directory()).isFile() && find(id) == null) entries.add(entry);
             }
             String id = preferences().getString("selected", "");
-            if (preferences().getBoolean("useGoogleSans", false)) {
+            if (googleSansEnabled) {
                 family = Typeface.createFromAsset(app.getAssets(), "fonts/GoogleSans.ttf");
                 generation++;
                 AndroidUtilities.clearTypefaceCache();
             }
             ClientFontFiles.Entry entry = find(id);
-            if (entry != null && !preferences().getBoolean("useGoogleSans", false)) {
+            if (entry != null && !googleSansEnabled) {
                 family = load(entry);
                 selected = id;
                 generation++;
@@ -126,11 +128,14 @@ public final class ClientFonts {
     }
 
     public static boolean useGoogleSans() {
-        return application != null && preferences().getBoolean("useGoogleSans", false);
+        return googleSansEnabled;
     }
 
     public static void setUseGoogleSans(boolean enabled) {
         preferences().edit().putBoolean("useGoogleSans", enabled).apply();
+        googleSansEnabled = enabled;
+        generation++;
+        TypefaceHelper.clearFontSupportCache();
     }
 
     public static File directory() { return new File(application.getFilesDir(), "client-fonts"); }

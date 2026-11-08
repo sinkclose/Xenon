@@ -27,6 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /** Rounded typography for chat controls and menus; message content keeps its own font. */
 public final class RoundedUiFonts {
     private static final WeakHashMap<View, Boolean> popupRoots = new WeakHashMap<>();
+    private static final WeakHashMap<View, Integer> styled = new WeakHashMap<>();
     private static final WeakHashMap<View, Boolean> observed = new WeakHashMap<>();
     private static final ConcurrentHashMap<Class<?>, List<Field>> fields = new ConcurrentHashMap<>();
 
@@ -100,7 +101,10 @@ public final class RoundedUiFonts {
             Typeface face = rounded(text.getPaint().getTypeface(), popup);
             if (face != text.getPaint().getTypeface()) { text.setTypeface(face); changed = true; }
         }
-        // Inspect only app-owned TextPaint fields, never Android internals.
+        int styleGeneration = ClientFonts.generation() * 2 + (popup ? 1 : 0);
+        Integer previousStyle = styled.put(view, styleGeneration);
+        // Inspect canvas paints once per font change, not on every global layout while scrolling.
+        if (previousStyle == null || previousStyle != styleGeneration) {
         for (Class<?> type = view.getClass(); type != null && (type.getName().startsWith("org.telegram.")
                 || type.getName().startsWith("zxc.iconic.")); type = type.getSuperclass()) {
             for (Field field : fields.computeIfAbsent(type, key -> {
@@ -126,6 +130,7 @@ public final class RoundedUiFonts {
                     if (face != paint.getTypeface()) { paint.setTypeface(face); changed = true; }
                 } catch (IllegalAccessException ignored) {}
             }
+        }
         }
         if (changed) { view.requestLayout(); view.invalidate(); }
         if (view instanceof ViewGroup) {
