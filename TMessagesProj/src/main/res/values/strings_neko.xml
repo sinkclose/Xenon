@@ -822,6 +822,7 @@
     <string name="Material3Popups">Popups</string>
     <string name="ExperimentalMediaPicker">Media picker V2</string>
     <string name="ExperimentalMediaPickerHint">Experimental gallery with faster first photos and an adaptive grid. No live camera preview; the camera opens only on tap. Applies the next time you open attachments in a chat.</string>
+    <string name="UseGoogleSansAndFlex">Use Google Sans and Google Sans Flex</string>
 </resources>
 
 

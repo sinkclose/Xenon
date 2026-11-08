@@ -78,8 +78,13 @@ public final class ClientFonts {
                 if (entry.file(directory()).isFile() && find(id) == null) entries.add(entry);
             }
             String id = preferences().getString("selected", "");
+            if (preferences().getBoolean("useGoogleSans", false)) {
+                family = Typeface.createFromAsset(app.getAssets(), "fonts/GoogleSans.ttf");
+                generation++;
+                AndroidUtilities.clearTypefaceCache();
+            }
             ClientFontFiles.Entry entry = find(id);
-            if (entry != null) {
+            if (entry != null && !preferences().getBoolean("useGoogleSans", false)) {
                 family = load(entry);
                 selected = id;
                 generation++;
@@ -118,6 +123,14 @@ public final class ClientFonts {
 
     private static android.content.SharedPreferences preferences() {
         return application.getSharedPreferences("client_fonts", Activity.MODE_PRIVATE);
+    }
+
+    public static boolean useGoogleSans() {
+        return application != null && preferences().getBoolean("useGoogleSans", false);
+    }
+
+    public static void setUseGoogleSans(boolean enabled) {
+        preferences().edit().putBoolean("useGoogleSans", enabled).apply();
     }
 
     public static File directory() { return new File(application.getFilesDir(), "client-fonts"); }
@@ -184,7 +197,7 @@ public final class ClientFonts {
                 next = load(entry);
             }
             if (!preferences().edit().putString("selected", id).commit()) throw new IOException("Cannot save selected font");
-            family = next;
+            family = useGoogleSans() ? Typeface.createFromAsset(application.getAssets(), "fonts/GoogleSans.ttf") : next;
             selected = id;
             variants.clear();
             generation++;
@@ -208,6 +221,12 @@ public final class ClientFonts {
         if (result == null) {
             result = Build.VERSION.SDK_INT >= 28 ? Typeface.create(family, weight, italic)
                     : Typeface.create(family, (weight >= 500 ? Typeface.BOLD : 0) | (italic ? Typeface.ITALIC : 0));
+            if (useGoogleSans() && Build.VERSION.SDK_INT >= 26) {
+                Paint variable = new Paint();
+                variable.setTypeface(result);
+                variable.setFontVariationSettings("'wght' " + Math.max(400, Math.min(700, weight)) + ", 'opsz' 18, 'GRAD' 0");
+                result = variable.getTypeface();
+            }
             variants.put(key, result);
             customStyles.put(result, new Style(weight, italic));
         }

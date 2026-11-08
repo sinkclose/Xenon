@@ -113,6 +113,7 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
     private final int downloadSpeedBoostRow = rowId++;
     private final int localCustomEmojiRow = rowId++;
     private final int keepFormattingRow = rowId++;
+    private final int useGoogleSansRow = rowId++;
     private final int forceFontWeightFallbackRow = rowId++;
     private final int contentRestrictionRow = rowId++;
     private final int showRPCErrorRow = rowId++;
@@ -183,6 +184,7 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
         }
         items.add(UItem.asCheck(localCustomEmojiRow, LocaleController.getString(R.string.LocalCustomEmoji)).slug("localCustomEmoji").setChecked(NekoConfig.localCustomEmoji));
         items.add(UItem.asCheck(keepFormattingRow, LocaleController.getString(R.string.TranslationKeepFormatting)).slug("keepFormatting").setChecked(NekoConfig.keepFormatting));
+        items.add(UItem.asCheck(useGoogleSansRow, LocaleController.getString(R.string.UseGoogleSansAndFlex)).setChecked(zxc.iconic.xenon.helpers.ClientFonts.useGoogleSans()).slug("useGoogleSans"));
         items.add(UItem.asCheck(forceFontWeightFallbackRow, LocaleController.getString(R.string.ForceFontWeightFallback)).slug("forceFontWeightFallback").setChecked(NekoConfig.forceFontWeightFallback));
         if (Extra.isDirectApp()) {
             items.add(UItem.asCheck(contentRestrictionRow, LocaleController.getString(R.string.IgnoreContentRestriction)).slug("contentRestriction").setChecked(NekoConfig.ignoreContentRestriction));
@@ -384,6 +386,10 @@ public class NekoExperimentalSettingsActivity extends BaseNekoSettingsActivity {
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.ignoreContentRestriction);
             }
+        } else if (id == useGoogleSansRow) {
+            zxc.iconic.xenon.helpers.ClientFonts.setUseGoogleSans(!zxc.iconic.xenon.helpers.ClientFonts.useGoogleSans());
+            if (view instanceof TextCheckCell) ((TextCheckCell) view).setChecked(zxc.iconic.xenon.helpers.ClientFonts.useGoogleSans());
+            showRestartBulletin();
         } else if (id == forceFontWeightFallbackRow) {
             NekoConfig.toggleForceFontWeightFallback();
             if (view instanceof TextCheckCell) {

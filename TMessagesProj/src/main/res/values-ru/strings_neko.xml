@@ -824,5 +824,6 @@
     <string name="Material3Popups">Popups</string>
     <string name="ExperimentalMediaPicker">Медиапикер V2</string>
     <string name="ExperimentalMediaPickerHint">Экспериментальная галерея: быстрый показ последних фото и адаптивная сетка. Без живого превью камеры — камера открывается только по нажатию. Применяется при следующем открытии вложений в чате.</string>
+    <string name="UseGoogleSansAndFlex">Использовать Google Sans и Google Sans Flex</string>
 </resources>
 

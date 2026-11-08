@@ -153,9 +153,31 @@ public class TypefaceHelper {
     private static final android.util.LruCache<String, Typeface> roundedVariants = new android.util.LruCache<>(512);
 
     /** Probe the selected family, including OEM system replacements, through public APIs. */
+    private static Typeface bundledFlex;
+
+
+    private static synchronized Typeface flexBase() {
+        Typeface result;
+        if (ClientFonts.useGoogleSans()) {
+            Typeface system = createSystemTypeface(400, false);
+            Paint probe = new Paint();
+            probe.setTypeface(system);
+            if (Build.VERSION.SDK_INT >= 26 && probe.setFontVariationSettings("'ROND' 100")) {
+                result = system;
+            } else {
+                if (bundledFlex == null) bundledFlex = Typeface.createFromAsset(
+                        org.telegram.messenger.ApplicationLoader.applicationContext.getAssets(), "fonts/GoogleSansFlex.ttf");
+                result = bundledFlex;
+            }
+        } else {
+            result = createTypeface(400, false);
+        }
+        return result;
+    }
+
     public static boolean supportsRoundedTypeface() {
         if (Build.VERSION.SDK_INT < 26) return false;
-        Typeface base = createTypeface(400, false);
+        Typeface base = flexBase();
         synchronized (roundedSupport) {
             Boolean supported = roundedSupport.get(base);
             if (supported == null) {
@@ -177,7 +199,8 @@ public class TypefaceHelper {
             Typeface result = roundedVariants.get(key);
             if (result == null) {
                 Paint paint = new Paint();
-                paint.setTypeface(base);
+                Typeface source = flexBase();
+                paint.setTypeface(Build.VERSION.SDK_INT >= 28 ? Typeface.create(source, weight, italic) : source);
                 paint.setFontVariationSettings("'ROND' 100, 'wght' " + weight);
                 result = paint.getTypeface();
                 roundedVariants.put(key, result);
