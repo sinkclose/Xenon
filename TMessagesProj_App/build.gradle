@@ -4,10 +4,13 @@ plugins {
     id 'com.android.application'
     id 'androidx.baselineprofile'
     id 'org.telegram.build-app-plugin'
+    id 'com.google.gms.google-services'
 }
 
 dependencies {
     implementation project(':TMessagesProj')
+    // The library compiles against these AARs; the app must package their classes and JNI libs.
+    implementation fileTree(dir: '../TMessagesProj/libs', include: ['*.aar'])
     implementation 'androidx.profileinstaller:profileinstaller:1.4.1'
     baselineProfile project(':baselineprofile')
 }

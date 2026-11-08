@@ -12,10 +12,7 @@ import android.graphics.RectF;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
-import android.os.SystemClock;
-import android.view.MotionEvent;
 import android.view.RoundedCorner;
-import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
@@ -45,7 +42,7 @@ import zxc.iconic.xenon.NekoConfig;
  * (android-17.0.0_r1, frameworks/base/libs/WindowManager/Shell/src/com/android/wm/shell/back/
  * {@code CrossActivityBackAnimation.kt} + {@code DefaultCrossActivityBackAnimation.kt}).
  *
- * <p>The gesture phase is the system cross-activity animation 1:1: the closing window scales down
+ * <p>At intensity 1.0 the gesture geometry follows the system cross-activity animation: the closing window scales down
  * to 0.85 (sliding toward the right edge for a left-edge gesture), the entering window starts
  * offset off the left edge and both rects shrink together while following the touch Y, over a
  * black scrim (0.2 light / 0.8 dark).
@@ -61,7 +58,8 @@ import zxc.iconic.xenon.NekoConfig;
  * cancel settles through the regular progress frames.
  *
  * <p>The SurfaceControl rect math is re-expressed as View transforms (scale around the origin +
- * translation, outline clip in local space), reproducing the identical on-screen result. It drives
+ * translation, outline clip in local space). This is an in-app fragment adaptation, rather than a
+ * system window transition (system bars, letterboxing and freeform tasks remain platform-owned). It drives
  * {@link ActionBarLayout} through the same hooks the stock callback uses ({@code onBackStarted},
  * {@code predictiveInput}, {@code onSlideAnimationEnd}), so it must run on API 34+ where
  * {@link OnBackAnimationCallback} is available.
@@ -146,14 +144,6 @@ public final class Material3PredictiveBack {
         rect.offset(pivotX, pivotY);
     }
 
-    /** BackEvent#getFrameTimeMillis is API 35+; fall back to uptime at 34. */
-    private static long frameTimeMillis(BackEvent event) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-            return event.getFrameTimeMillis();
-        }
-        return SystemClock.uptimeMillis();
-    }
-
     // The entering fragment's own background to fill the M3 gap. ViewPagerActivity (e.g.
     // MainTabsActivity) sets hasOwnBackground but draws nothing itself — the visible color comes
     // from the current tab's inner fragment, so descend into it.
@@ -219,13 +209,7 @@ public final class Material3PredictiveBack {
         private float displayBoundsMarginPx = 0f;
         private float enteringStartOffsetPx = 0f;
         private float maxScrimAlpha = MAX_SCRIM_ALPHA_LIGHT;
-        /** BACK_GESTURE-interpolated progress (AOSP gestureProgress, used by the fling check). */
-        private float gestureProgress = 0f;
         private float lastRawProgress = 0f;
-        /** Spring-space start velocity of the post-commit fling (negative = shrink). */
-
-        private VelocityTracker velocityTracker = null;
-        private long velocityDownTime = -1L;
 
         private ValueAnimator runningAnim = null;
         private ViewOutlineProvider savedOutlineProvider = null;
@@ -243,6 +227,20 @@ public final class Material3PredictiveBack {
             @Override
             public void getOutline(View view, Outline outline) {
                 outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), deviceCornerPx);
+            }
+        };
+
+        // All children share one window outline, expressed in each child's local coordinates.
+        // Rounding each child independently would round the seam below the action bar too.
+        private final ViewOutlineProvider enteringOutlineProvider = new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline outline) {
+                ViewGroup parent = layout.containerViewBack;
+                if (parent != null) {
+                    outline.setRoundRect(-view.getLeft(), -view.getTop(),
+                            parent.getWidth() - view.getLeft(), parent.getHeight() - view.getTop(),
+                            deviceCornerPx);
+                }
             }
         };
 
@@ -274,7 +272,6 @@ public final class Material3PredictiveBack {
             startTouchY = backEvent.getTouchY();
             lastTouchY = startTouchY;
             swipeEdge = backEvent.getSwipeEdge();
-            gestureProgress = 0f;
             lastRawProgress = 0f;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 WindowInsets insets = activity.getWindow().getDecorView().getRootWindowInsets();
@@ -283,12 +280,6 @@ public final class Material3PredictiveBack {
             } else {
                 deviceCornerPx = AndroidUtilities.dp(24);
             }
-            // AOSP ProgressVelocityTracker — tracks the interpolated progress over event times.
-            if (velocityTracker == null) {
-                velocityTracker = VelocityTracker.obtain();
-            }
-            velocityTracker.clear();
-            velocityDownTime = -1L;
             // Run stock's heavy prep (attach previous fragment, relayout, onResume, HW layer) during the
             // pre-LAZY_START invisible phase so the first visible frame is just a transform.
             layout.onBackStarted(backEvent.getTouchX(), backEvent.getTouchY());
@@ -317,19 +308,10 @@ public final class Material3PredictiveBack {
             }
             // The system dispatcher (WindowOnBackInvokedDispatcher -> BackProgressAnimator) already
             // spring-smooths the progress it delivers, exactly like the one the shell-side animator
-            // uses. AOSP then applies the gesture interpolator and feeds the interpolated progress
-            // both to the rects and to the velocity tracker.
+            // uses. Apply the gesture interpolator once, without another local progress spring.
             float p = BACK_GESTURE.getInterpolation(rawP);
-            gestureProgress = p;
-            long frameTime = frameTimeMillis(backEvent);
-            if (velocityDownTime == -1L) {
-                velocityDownTime = frameTime;
-            }
-            MotionEvent motionEvent = MotionEvent.obtain(velocityDownTime, frameTime, MotionEvent.ACTION_MOVE, p, 0f, 0);
-            velocityTracker.addMovement(motionEvent);
-            motionEvent.recycle();
             // Predictive-back intensity (slider /10 → 0.1..2.0, 1.0 default) is a Xenon-only knob:
-            // at 10 the progress is unmodified and the animation is exactly AOSP's.
+            // at 10 the progress is unmodified and gesture geometry follows AOSP.
             float intensity = Math.max(NekoConfig.predictiveBackIntensity / 10f, 0.001f);
             onGestureProgress(clamp(p * intensity, 0f, 1f), lastTouchY);
         }
@@ -339,7 +321,6 @@ public final class Material3PredictiveBack {
             invoked = false;
             if (!attached) {
                 undoStockPrep();
-                cleanupViews();
                 return;
             }
             runFinishAnim(true);
@@ -350,7 +331,6 @@ public final class Material3PredictiveBack {
             invoked = true;
             if (!attached) {
                 undoStockPrep();
-                cleanupViews();
                 plainBack.run();
                 return;
             }
@@ -414,7 +394,7 @@ public final class Material3PredictiveBack {
             for (int i = 0; i < cvb.getChildCount(); i++) {
                 View child = cvb.getChildAt(i);
                 savedChildStates.add(new SavedChildState(child, child.getOutlineProvider(), child.getClipToOutline()));
-                child.setOutlineProvider(outlineProvider);
+                child.setOutlineProvider(enteringOutlineProvider);
                 child.setClipToOutline(true);
                 child.setLayerType(View.LAYER_TYPE_HARDWARE, null);
             }
@@ -507,8 +487,16 @@ public final class Material3PredictiveBack {
         }
 
         private void applyTransformChildren(ViewGroup cvb, RectF rect, float alpha) {
+            if (backAnimRect.width() <= 0f) {
+                return;
+            }
+            float scale = rect.width() / backAnimRect.width();
             for (int i = 0; i < cvb.getChildCount(); i++) {
-                applyTransform(cvb.getChildAt(i), rect, alpha);
+                View child = cvb.getChildAt(i);
+                applyTransform(child, rect, alpha);
+                // Match a single SurfaceControl matrix: the child's layout origin scales too.
+                child.setTranslationX(rect.left + child.getLeft() * (scale - 1f));
+                child.setTranslationY(rect.top + child.getTop() * (scale - 1f));
             }
         }
 
@@ -624,11 +612,6 @@ public final class Material3PredictiveBack {
                 layout.onBackPressed();
             }
             attached = false;
-            if (velocityTracker != null) {
-                velocityTracker.recycle();
-                velocityTracker = null;
-            }
-            velocityDownTime = -1L;
         }
 
         private void cleanupViews() {
