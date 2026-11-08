@@ -465,7 +465,14 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
                 negBtn.setTextColor(isRed ? redColor : btnColor);
                 negBtn.setGravity(Gravity.CENTER);
                 negBtn.setPadding(dp(16), dp(10), dp(16), dp(10));
-                negBtn.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector, rp), 2));
+                if (!hasPos && !hasNeg2 && !hasNeu) {
+                    int primaryColor = isRed ? redColor : Theme.getColor(Theme.key_featuredStickers_addButton, rp);
+                    negBtn.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText, rp));
+                    negBtn.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
+                    negBtn.setBackground(Theme.AdaptiveRipple.filledRect(primaryColor, dp(24)));
+                } else {
+                    negBtn.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector, rp), 2));
+                }
                 negBtn.setOnClickListener(v -> {
                     sheet.dismiss();
                     if (negativeButtonListener != null) {

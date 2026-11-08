@@ -711,7 +711,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity(), resourcesProvider);
         builder.setTitle(LocaleController.getString(R.string.CenteredTitle));
         builder.setMessage(LocaleController.getString(R.string.CenteredTitleInfo));
-        builder.setNegativeButton(LocaleController.getString(R.string.Close), null);
+        builder.setPositiveButton(LocaleController.getString(R.string.Close), null);
         builder.show();
     }
 
