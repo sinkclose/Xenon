@@ -715,7 +715,7 @@ public class FolderBottomSheet extends BottomSheetWithRecyclerListView {
             text.setAnimationProperties(.3f, 0, 250, CubicBezierInterpolator.EASE_OUT_QUINT);
             text.setCallback(this);
             text.setTextSize(dp(14));
-            text.setTypeface(AndroidUtilities.bold());
+            text.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             text.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText));
             text.setText(string);
             text.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -724,7 +724,7 @@ public class FolderBottomSheet extends BottomSheetWithRecyclerListView {
             countText.setAnimationProperties(.3f, 0, 250, CubicBezierInterpolator.EASE_OUT_QUINT);
             countText.setCallback(this);
             countText.setTextSize(dp(12));
-            countText.setTypeface(AndroidUtilities.bold());
+            countText.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             countText.setTextColor(Theme.getColor(Theme.key_featuredStickers_addButton));
             countText.setText("");
             countText.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -1100,7 +1100,7 @@ public class FolderBottomSheet extends BottomSheetWithRecyclerListView {
 
             textView = new AnimatedTextView(context, true, true, false);
             textView.setTextSize(dp(15));
-            textView.setTypeface(AndroidUtilities.bold());
+            textView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             textView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueHeader));
             textView.setGravity(LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT);
             addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 20, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.BOTTOM, 21, 15, 21, 2));
@@ -1166,7 +1166,7 @@ public class FolderBottomSheet extends BottomSheetWithRecyclerListView {
             titleTextView = new AnimatedEmojiSpan.TextViewEmojis(context);
             titleTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
             titleTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
-            titleTextView.setTypeface(AndroidUtilities.bold());
+            titleTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             titleTextView.setGravity(Gravity.CENTER);
             titleTextView.setLineSpacing(dp(-1), 1.0f);
             this.title = Emoji.replaceEmoji(new SpannableStringBuilder(title), titleTextView.getPaint().getFontMetricsInt(), false, 0.8f);
@@ -1248,11 +1248,11 @@ public class FolderBottomSheet extends BottomSheetWithRecyclerListView {
 
                 paint.setColor(Theme.multAlpha(Theme.getColor(Theme.key_profile_tabText), .8f));
                 paint.setTextSize(dp(15.33f));
-                paint.setTypeface(AndroidUtilities.bold());
+                paint.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
 
                 selectedTextPaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText2));
                 selectedTextPaint.setTextSize(dp(17));
-                selectedTextPaint.setTypeface(AndroidUtilities.bold());
+                selectedTextPaint.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
 
                 selectedPaint.setColor(Theme.getColor(Theme.key_featuredStickers_unread));
 
@@ -1261,7 +1261,7 @@ public class FolderBottomSheet extends BottomSheetWithRecyclerListView {
                 countText.setCallback(this);
                 countText.setTextSize(dp(11.66f));
                 countText.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhite));
-                countText.setTypeface(AndroidUtilities.bold());
+                countText.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
                 countText.setGravity(Gravity.CENTER_HORIZONTAL);
 
                 final int textColor = Theme.multAlpha(Theme.getColor(Theme.key_profile_tabText), .8f);

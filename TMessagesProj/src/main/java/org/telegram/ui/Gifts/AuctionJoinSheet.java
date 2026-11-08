@@ -148,7 +148,7 @@ public class AuctionJoinSheet extends BottomSheetWithRecyclerListView implements
         headerContainer.addView(giftCell, LayoutHelper.createFrame(130, 130, Gravity.CENTER, 0, 18, 0, 14));
 
         final TextView titleView = new TextView(context);
-        titleView.setTypeface(AndroidUtilities.bold());
+        titleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         titleView.setGravity(Gravity.CENTER);
         titleView.setText(title);
         titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
@@ -370,7 +370,7 @@ public class AuctionJoinSheet extends BottomSheetWithRecyclerListView implements
 
             headerStatus = new TextView(context);
             headerStatus.setGravity(Gravity.CENTER);
-            headerStatus.setTypeface(AndroidUtilities.bold());
+            headerStatus.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             headerStatus.setTextColor(Color.WHITE);
             headerStatus.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
 
@@ -387,7 +387,7 @@ public class AuctionJoinSheet extends BottomSheetWithRecyclerListView implements
             headerContainer.addView(headerStatus, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, 26, Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM, 16, 0, 16, 77));
 
             TextView giftNameTextView = new TextView(context);
-            giftNameTextView.setTypeface(AndroidUtilities.bold());
+            giftNameTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             giftNameTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 21);
             giftNameTextView.setText(title);
             giftNameTextView.setGravity(Gravity.CENTER);
@@ -566,7 +566,7 @@ public class AuctionJoinSheet extends BottomSheetWithRecyclerListView implements
         linearLayout.addView(backupImageView, LayoutHelper.createLinear(80, 80, Gravity.CENTER, 0, 21, 0, 16));
 
         final TextView titleView = new TextView(context);
-        titleView.setTypeface(AndroidUtilities.bold());
+        titleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         titleView.setGravity(Gravity.CENTER);
         titleView.setText(getString(R.string.GiftAuctionInfoHeader));
         titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
@@ -719,7 +719,7 @@ public class AuctionJoinSheet extends BottomSheetWithRecyclerListView implements
             titleTextView.setText(getString(R.string.Gift2AuctionsChangeRecipient));
             titleTextView.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, resourcesProvider));
             titleTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
-            titleTextView.setTypeface(AndroidUtilities.bold());
+            titleTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             titleTextView.setGravity(LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT);
             topView.addView(titleTextView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, 24, 19, 24, 2));
         }

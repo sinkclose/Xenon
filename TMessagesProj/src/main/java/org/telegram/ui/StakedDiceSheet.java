@@ -317,7 +317,7 @@ public class StakedDiceSheet extends BottomSheetWithRecyclerListView {
             TextView textView = new TextView(context);
             textView.setGravity(Gravity.CENTER);
             textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
-            textView.setTypeface(AndroidUtilities.bold());
+            textView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             textView.setTextColor(Theme.getColor(Theme.key_featuredStickers_addButton, resourcesProvider));
             textView.setBackground(Theme.createRoundRectDrawable(dp(13), Theme.multAlpha(Theme.getColor(Theme.key_featuredStickers_addButton, resourcesProvider), 0.15f)));
             textView.setText(replaceDiamond(formatTON(ton) + " 💎", 0.75f));

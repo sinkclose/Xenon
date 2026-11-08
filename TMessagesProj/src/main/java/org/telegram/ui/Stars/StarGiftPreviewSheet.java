@@ -356,7 +356,7 @@ public class StarGiftPreviewSheet extends BottomSheetWithRecyclerListView {
         headerView.addView(headerPlay, LayoutHelper.createFrame(32, 32, Gravity.TOP | Gravity.RIGHT, 0, 14, 12, 0));
 
         giftNameTextView = new TextView(context);
-        giftNameTextView.setTypeface(AndroidUtilities.bold());
+        giftNameTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         giftNameTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 21);
         giftNameTextView.setText(collectionTitle);
         giftNameTextView.setGravity(Gravity.CENTER);
@@ -614,7 +614,7 @@ public class StarGiftPreviewSheet extends BottomSheetWithRecyclerListView {
             addView(imageView, LayoutHelper.createFrame(80, 80, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 17, 0, 0));
 
             textView = new TextView(context);
-            textView.setTypeface(AndroidUtilities.bold());
+            textView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
             textView.setGravity(Gravity.CENTER);
             textView.setEllipsize(TextUtils.TruncateAt.END);
@@ -623,7 +623,7 @@ public class StarGiftPreviewSheet extends BottomSheetWithRecyclerListView {
 
             percentageView = new TextView(context);
             percentageView.setClickable(false);
-            percentageView.setTypeface(AndroidUtilities.bold());
+            percentageView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             percentageView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 11);
             percentageView.setPadding(dp(5), dp(1), dp(5), dp(1));
             percentageView.setBackground(Theme.createRoundRectDrawable(dp(10), 0x10FFFFFF));
@@ -902,7 +902,7 @@ public class StarGiftPreviewSheet extends BottomSheetWithRecyclerListView {
             setClipChildren(false);
 
             titleView = new AnimatedTextView(context, true, false, false);
-            titleView.setTypeface(AndroidUtilities.bold());
+            titleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             titleView.setTextSize(dp(13));
             titleView.setTextColor(0xFFFFFFFF);
             titleView.setGravity(Gravity.CENTER);
@@ -916,7 +916,7 @@ public class StarGiftPreviewSheet extends BottomSheetWithRecyclerListView {
             addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 4, 20, 4, 0));
 
             percentView = new AnimatedTextView(context);
-            percentView.setTypeface(AndroidUtilities.bold());
+            percentView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             percentView.setTextColor(Color.WHITE);
             percentView.setGravity(Gravity.RIGHT);
             percentView.getDrawable().centerY = true;

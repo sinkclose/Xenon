@@ -165,7 +165,7 @@ public class MessageSuggestionOfferSheet extends BottomSheet {
             R.string.PostSuggestionsOfferTitle:
             R.string.PostSuggestionsOfferChangeTitle
         ));
-        titleView.setTypeface(AndroidUtilities.bold());
+        titleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         titleView.setEllipsize(TextUtils.TruncateAt.END);
         headerLayout.addView(titleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, 1f, Gravity.FILL, 18 + 4, 0, 18 + 4, 0));
 

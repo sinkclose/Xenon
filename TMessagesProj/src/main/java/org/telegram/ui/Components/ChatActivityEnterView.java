@@ -6235,6 +6235,18 @@ public class ChatActivityEnterView extends FrameLayout implements
 
         messageEditText = new ChatActivityEditTextCaption(getContext(), resourcesProvider) {
 
+            @Override
+            public void setHintText(CharSequence text, boolean animated, android.text.TextPaint paint) {
+                if (text != null && zxc.iconic.xenon.helpers.TypefaceHelper.supportsRoundedTypeface()) {
+                    android.text.SpannableStringBuilder styled = new android.text.SpannableStringBuilder(text);
+                    styled.setSpan(new org.telegram.ui.Components.TypefaceSpan(
+                            zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false)),
+                            0, styled.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    text = styled;
+                }
+                super.setHintText(text, animated, paint);
+            }
+
             private boolean firstDraw = true;
             @Override
             protected void onDraw(Canvas canvas) {

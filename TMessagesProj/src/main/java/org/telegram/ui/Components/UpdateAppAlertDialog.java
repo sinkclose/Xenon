@@ -94,7 +94,7 @@ public class UpdateAppAlertDialog extends BottomSheet {
                 textView[a].setGravity(Gravity.CENTER);
                 if (hasBackground) {
                     textView[a].setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText));
-                    textView[a].setTypeface(AndroidUtilities.bold());
+                    textView[a].setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
                 } else {
                     textView[a].setTextColor(Theme.getColor(Theme.key_featuredStickers_addButton));
                 }
@@ -253,7 +253,7 @@ public class UpdateAppAlertDialog extends BottomSheet {
         }
 
         TextView textView = new TextView(context);
-        textView.setTypeface(AndroidUtilities.bold());
+        textView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
         textView.setTextColor(Theme.getColor(Theme.key_dialogTextBlack));
         textView.setSingleLine(true);

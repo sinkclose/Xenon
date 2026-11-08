@@ -132,7 +132,7 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
 
         var titleView = new TextView(context);
         titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22);
-        titleView.setTypeface(AndroidUtilities.bold());
+        titleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         titleView.setGravity(Gravity.CENTER);
         titleView.setSingleLine();
         titleView.setEllipsize(TextUtils.TruncateAt.END);

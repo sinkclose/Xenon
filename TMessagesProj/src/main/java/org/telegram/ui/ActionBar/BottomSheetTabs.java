@@ -351,7 +351,7 @@ public class BottomSheetTabs extends FrameLayout {
     private static TextPaint getTextPaint() {
         if (textPaint == null) {
             textPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
-            textPaint.setTypeface(AndroidUtilities.bold());
+            textPaint.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             textPaint.setTextSize(AndroidUtilities.dp(17));
         }
         return textPaint;

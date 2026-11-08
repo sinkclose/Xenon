@@ -147,6 +147,7 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
 
     @Override
     protected void onDetachedFromWindow() {
+        if (fontWeightAnimator != null) fontWeightAnimator.cancel();
         if (navigationSelectionSpring != null) navigationSelectionSpring.cancel();
         navigationSelection = isTabSelected() ? 1f : 0f;
         if (navigationSelectionSpring != null) {
@@ -181,7 +182,7 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
         textView.setSingleLine();
         textView.setLines(1);
         textView.setEllipsize(TextUtils.TruncateAt.END);
-        textView.setTypeface(AndroidUtilities.bold());
+        textView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         textView.setGravity(Gravity.CENTER);
 
         defaultTextPaint = new TextPaint(textView.getPaint());
@@ -351,6 +352,42 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
         usePremiumCounter = usePremiumBadge;
     }
 
+    private android.animation.ValueAnimator fontWeightAnimator;
+    private float fontSelection;
+    private float fontSelectionTarget = -1f;
+
+    private void updateFontSelection(boolean selected, boolean animated) {
+        if (!zxc.iconic.xenon.helpers.TypefaceHelper.supportsRoundedTypeface()) return;
+        float target = selected ? 1f : 0f;
+        // Selection callbacks may repeat during a page transition; keep the original deadline.
+        if (animated && fontSelectionTarget == target && fontWeightAnimator != null && fontWeightAnimator.isRunning()) return;
+        fontSelectionTarget = target;
+        if (fontWeightAnimator != null) fontWeightAnimator.cancel();
+        if (animated && isAttachedToWindow()) {
+            fontWeightAnimator = android.animation.ValueAnimator.ofFloat(fontSelection, target);
+            fontWeightAnimator.setDuration(300);
+            fontWeightAnimator.setInterpolator(org.telegram.ui.Components.CubicBezierInterpolator.EASE_OUT_QUINT);
+            fontWeightAnimator.addUpdateListener(animation -> {
+                fontSelection = (float) animation.getAnimatedValue();
+                applyRoundedFontWeight();
+            });
+            fontWeightAnimator.start();
+        } else {
+            fontSelection = target;
+            applyRoundedFontWeight();
+        }
+    }
+
+    private void applyRoundedFontWeight() {
+        int weight = Math.round(500 + 300 * fontSelection);
+        textView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(weight, false));
+        if (android.os.Build.VERSION.SDK_INT >= 26) {
+            textView.setFontVariationSettings("'ROND' 100, 'wght' " + weight);
+            zxc.iconic.xenon.helpers.TypefaceHelper.rememberRoundedTypeface(textView.getTypeface());
+        }
+        invalidate();
+    }
+
     public void setSelected(boolean selected, boolean animated) {
         if (useMainTabSelectedIndicator) {
             super.setSelected(selected);
@@ -361,11 +398,13 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
             isSelectedAnimator.setValue(selected, animated && !liquidMainTabStyle);
         }
         checkPlayAnimation(animated);
+        updateFontSelection(selected, animated);
+        if (zxc.iconic.xenon.helpers.TypefaceHelper.supportsRoundedTypeface()) return;
 
         if (useMainTabSelectedIndicator) {
-            textView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
+            textView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(500, false));
         } else if (!selected) {
-            textView.setTypeface(AndroidUtilities.bold());
+            textView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         } else {
             textView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_EXTRA_BOLD));
         }
@@ -584,7 +623,10 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
         if (MainTabsUiHelper.isMaterial3NavigationBar()) {
             useMainTabSelectedIndicator = true;
             MainTabsUiHelper.applyMaterial3MainTabStyle(textView);
-            textView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
+            updateFontSelection(isTabSelected(), false);
+            if (!zxc.iconic.xenon.helpers.TypefaceHelper.supportsRoundedTypeface()) {
+                textView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
+            }
             defaultTextPaint.set(textView.getPaint());
             setNavigationSelected(isTabSelected(), false);
             ensureNavigationRipple();

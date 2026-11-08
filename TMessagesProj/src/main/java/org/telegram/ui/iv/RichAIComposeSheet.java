@@ -74,7 +74,7 @@ public class RichAIComposeSheet extends BottomSheetWithRecyclerListView {
         final TextView titleView = new TextView(context);
         titleView.setText(getString(R.string.ArticleAICreate));
         titleView.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 20);
-        titleView.setTypeface(AndroidUtilities.bold());
+        titleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         titleView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
         titleView.setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
         topView.addView(titleView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 56, Gravity.LEFT | Gravity.TOP, 22, 6, 56, 0));

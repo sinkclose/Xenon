@@ -365,7 +365,7 @@ public class LimitReachedBottomSheet extends BottomSheetWithRecyclerListView imp
             actionBtn.setEllipsize(TextUtils.TruncateAt.END);
             actionBtn.setSingleLine(true);
             actionBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-            actionBtn.setTypeface(AndroidUtilities.bold());
+            actionBtn.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             actionBtn.setText(premiumButtonView.getTextView().getText());
             actionBtn.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText, resourcesProvider));
             actionBtn.setOnClickListener(v -> {
@@ -1860,7 +1860,7 @@ public class LimitReachedBottomSheet extends BottomSheetWithRecyclerListView imp
 
                 TextView title = new TextView(context);
                 title.setGravity(Gravity.CENTER);
-                title.setTypeface(AndroidUtilities.bold());
+                title.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
                 title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
                 title.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, resourcesProvider));
                 title.setText(getString(R.string.InvitePremiumBlockedTitle));
@@ -1946,7 +1946,7 @@ public class LimitReachedBottomSheet extends BottomSheetWithRecyclerListView imp
 
                     title = new TextView(context);
                     title.setGravity(Gravity.CENTER);
-                    title.setTypeface(AndroidUtilities.bold());
+                    title.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
                     title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
                     title.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, resourcesProvider));
                     title.setText(getString(R.string.InviteBlockedTitle));
@@ -2019,7 +2019,7 @@ public class LimitReachedBottomSheet extends BottomSheetWithRecyclerListView imp
             }
 
             title = new TextView(context);
-            title.setTypeface(AndroidUtilities.bold());
+            title.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             if (type == TYPE_FEATURES) {
                 title.setText(getString(R.string.BoostingAdditionalFeaturesTitle));
             } else if (type == TYPE_BOOSTS_FOR_REMOVE_RESTRICTIONS) {
@@ -2181,7 +2181,7 @@ public class LimitReachedBottomSheet extends BottomSheetWithRecyclerListView imp
                 int titleIndex = indexOfChild(title);
                 removeView(title);
                 title = new TextView(getContext());
-                title.setTypeface(AndroidUtilities.bold());
+                title.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
                 title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
                 title.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
                 title.setGravity(Gravity.CENTER);
@@ -2859,7 +2859,7 @@ public class LimitReachedBottomSheet extends BottomSheetWithRecyclerListView imp
             levelTextView = new SimpleTextView(context);
             levelTextView.setTextColor(Color.WHITE);
             levelTextView.setWidthWrapContent(true);
-            levelTextView.setTypeface(AndroidUtilities.bold());
+            levelTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             levelTextView.setTextSize(14);
             levelLayout = new FrameLayout(context) {
                 private final PremiumGradient.PremiumGradientTools gradientTools = new PremiumGradient.PremiumGradientTools(Theme.key_premiumGradient1, Theme.key_premiumGradient2, -1, -1, -1, resourcesProvider);

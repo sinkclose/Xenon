@@ -315,7 +315,7 @@ public class HighlightMessageSheet {
             titleTextView.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, resourcesProvider));
             titleTextView.setScaleProperty(0.7f);
             titleTextView.setGravity(Gravity.CENTER);
-            titleTextView.setTypeface(AndroidUtilities.bold());
+            titleTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             titleTextView.setAllowCancel(true);
             layout.addView(titleTextView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 20, 0, 0, 0, 1.66f));
 

@@ -368,7 +368,7 @@ public class GiftMessageBottomSheet extends BottomSheet {
         captionLimitView.setVisibility(View.GONE);
         captionLimitView.setTextSize(dp(15));
         captionLimitView.setTextColor(getThemedColor(Theme.key_windowBackgroundWhiteGrayText));
-        captionLimitView.setTypeface(AndroidUtilities.bold());
+        captionLimitView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         captionLimitView.setGravity(Gravity.CENTER);
         containerView.addView(captionLimitView, LayoutHelper.createFrame(56, 20, Gravity.BOTTOM | Gravity.RIGHT, 3, 0, 3, 54));
 
@@ -412,7 +412,7 @@ public class GiftMessageBottomSheet extends BottomSheet {
         previewInChatHeader = new TextView(context);
         previewInChatHeader.setTextColor(getThemedColor(Theme.key_chat_serviceText));
         previewInChatHeader.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-        previewInChatHeader.setTypeface(AndroidUtilities.bold());
+        previewInChatHeader.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         previewInChatHeader.setText(LocaleController.getString(R.string.GiftMessagePreviewInChat));
         previewInChatHeader.setGravity(Gravity.CENTER);
         previewInChatHeader.setPadding(dp(10), 0, dp(10), 0);
@@ -423,7 +423,7 @@ public class GiftMessageBottomSheet extends BottomSheet {
         TextView publicCheckboxTextView = new TextView(context);
         publicCheckboxTextView.setTextColor(getThemedColor(Theme.key_chat_serviceText));
         publicCheckboxTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-        publicCheckboxTextView.setTypeface(AndroidUtilities.bold());
+        publicCheckboxTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         publicCheckboxTextView.setText(LocaleController.getString(R.string.GiftMessageMakeMessagePublic));
         publicCheckboxButton.addView(publicCheckboxTextView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL, 22 + 14, 0, 14, 0));
 

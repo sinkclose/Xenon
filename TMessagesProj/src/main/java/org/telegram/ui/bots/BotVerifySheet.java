@@ -210,7 +210,7 @@ public class BotVerifySheet {
         } else {
             titleView.setText(getString(R.string.BotVerifyGroupTitle));
         }
-        titleView.setTypeface(AndroidUtilities.bold());
+        titleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         linearLayout.addView(titleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 24, 21, 24, 8.33f));
 
         TextView textView = new TextView(context);

@@ -766,7 +766,7 @@ public class AuctionBidSheet extends BottomSheetWithRecyclerListView implements 
         layout.titleTextView.setSingleLine(true);
         layout.titleTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
         layout.titleTextView.setMaxLines(1);
-        layout.titleTextView.setTypeface(AndroidUtilities.bold());
+        layout.titleTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         layout.subtitleTextView.setText(formatString(R.string.Gift2AuctionPlaceACustomBidHint, auction.gift.gifts_per_round));
         layout.subtitleTextView.setSingleLine(false);
         layout.subtitleTextView.setMaxLines(5);
@@ -904,7 +904,7 @@ public class AuctionBidSheet extends BottomSheetWithRecyclerListView implements 
             infoView = new AnimatedTextView(context);
             infoView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
             infoView.setTextSize(dp(17));
-            infoView.setTypeface(AndroidUtilities.bold());
+            infoView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             layout.addView(infoView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, 23, Gravity.CENTER_HORIZONTAL));
 
             titleView = new TextView(context);
@@ -943,7 +943,7 @@ public class AuctionBidSheet extends BottomSheetWithRecyclerListView implements 
             placeTextView.setTextSize(dp(15));
             placeTextView.setPadding(dp(20), 0, 0, 0);
             placeTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
-            placeTextView.setTypeface(AndroidUtilities.bold());
+            placeTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             placeTextView.setGravity(Gravity.CENTER);
 
             addView(placeTextView, LayoutHelper.createLinear(66, LayoutHelper.WRAP_CONTENT, 0f, Gravity.CENTER_VERTICAL));

@@ -18972,7 +18972,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             final String botUsername = UserObject.getPublicUsername(botUser);
             if (botUser != null && !TextUtils.isEmpty(botUsername)) {
                 viaUsername = "@" + botUsername;
-                viaString = AndroidUtilities.replaceTags(String.format(" %s <b>%s</b>", getString("ViaBot", R.string.ViaBot), viaUsername));
+                viaString = zxc.iconic.xenon.helpers.RoundedUiFonts.viaBot(getString("ViaBot", R.string.ViaBot), viaUsername);
                 viaWidth = (int) Math.ceil(Theme.chat_replyNamePaint.measureText(viaString, 0, viaString.length()));
                 currentViaBotUser = botUser;
             }
@@ -18981,13 +18981,13 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             final String botUsername = UserObject.getPublicUsername(botUser);
             if (botUser != null && !TextUtils.isEmpty(botUsername)) {
                 viaUsername = "@" + botUsername;
-                viaString = AndroidUtilities.replaceTags(String.format(" %s <b>%s</b>", getString("ViaBot", R.string.ViaBot), viaUsername));
+                viaString = zxc.iconic.xenon.helpers.RoundedUiFonts.viaBot(getString("ViaBot", R.string.ViaBot), viaUsername);
                 viaWidth = (int) Math.ceil(Theme.chat_replyNamePaint.measureText(viaString, 0, viaString.length()));
                 currentViaBotUser = botUser;
             }
         } else if (!TextUtils.isEmpty(messageObject.messageOwner.via_bot_name)) {
             viaUsername = "@" + messageObject.messageOwner.via_bot_name;
-            viaString = AndroidUtilities.replaceTags(String.format(" %s <b>%s</b>", getString("ViaBot", R.string.ViaBot), viaUsername));
+            viaString = zxc.iconic.xenon.helpers.RoundedUiFonts.viaBot(getString("ViaBot", R.string.ViaBot), viaUsername);
             viaWidth = (int) Math.ceil(Theme.chat_replyNamePaint.measureText(viaString, 0, viaString.length()));
         }
 
@@ -19152,14 +19152,14 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                         viaNameWidth += dp(4 + 20 + 4);
                         stringBuilder.setSpan(new DialogCell.FixedWidthSpan(dp(4 + 20 + 4)), nameStringFinal.length(), nameStringFinal.length() + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                     }
-                    stringBuilder.setSpan(viaSpan2 = new TypefaceSpan(AndroidUtilities.bold(), 0, color), nameStringFinal.length() + 2 + viaBotString.length(), stringBuilder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    stringBuilder.setSpan(viaSpan2 = new TypefaceSpan(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false), 0, color), nameStringFinal.length() + 2 + viaBotString.length(), stringBuilder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                     nameStringFinal = stringBuilder;
                 } else {
                     viaOnly = true;
                     SpannableStringBuilder stringBuilder = new SpannableStringBuilder();
                     stringBuilder.append(viaBotString).append(" ").append(viaUsername);
                     stringBuilder.setSpan(viaSpan1 = new TypefaceSpan(Typeface.DEFAULT, 0, color), 0, viaBotString.length() + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                    stringBuilder.setSpan(viaSpan2 = new TypefaceSpan(AndroidUtilities.bold(), 0, color), 1 + viaBotString.length(), stringBuilder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    stringBuilder.setSpan(viaSpan2 = new TypefaceSpan(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false), 0, color), 1 + viaBotString.length(), stringBuilder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                     nameStringFinal = stringBuilder;
                 }
                 nameStringFinal = TextUtils.ellipsize(nameStringFinal, Theme.chat_namePaint, nameWidth + additionalWidth, TextUtils.TruncateAt.END);
@@ -19296,7 +19296,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                         includeAvatar = false;
                     }
                     lastLine = new SpannableStringBuilder((includeAvatar ? "A " : "") + name);
-                    ((SpannableStringBuilder) lastLine).setSpan(new TypefaceSpan(AndroidUtilities.bold()), 0, lastLine.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    ((SpannableStringBuilder) lastLine).setSpan(new TypefaceSpan(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false)), 0, lastLine.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                     if (includeAvatar) {
                         ((SpannableStringBuilder) lastLine).setSpan(forwardAvatar, 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                     }
@@ -19334,7 +19334,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     if (viaString != null) {
                         stringBuilder = new SpannableStringBuilder(String.format("%s %s %s", fromString, getString("ViaBot", R.string.ViaBot), viaUsername));
                         viaNameWidth = (int) Math.ceil(Theme.chat_forwardNamePaint.measureText(fromString));
-                        stringBuilder.setSpan(new TypefaceSpan(AndroidUtilities.bold()), stringBuilder.length() - viaUsername.length() - 1, stringBuilder.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                        stringBuilder.setSpan(new TypefaceSpan(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false)), stringBuilder.length() - viaUsername.length(), stringBuilder.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
                     } else {
                         stringBuilder = new SpannableStringBuilder(fromString);
                     }
@@ -19342,9 +19342,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                         stringBuilder.setSpan(forwardAvatar, 0, 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
                     }
                     forwardNameCenterX = (int) Math.ceil(Theme.chat_forwardNamePaint.measureText(name, 0, name.length())) / 2;
-                    if (currentForwardName == null || messageObject.messageOwner.fwd_from.from_id != null) {
-                        stringBuilder.setSpan(new TypefaceSpan(AndroidUtilities.bold()), 0, stringBuilder.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-                    }
+                    // Style only the source name; keep the separate via label and bot username spans intact.
+                    stringBuilder.setSpan(new TypefaceSpan(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false)), 0, fromString.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
                     lastLine = stringBuilder;
                 }
                 try {
@@ -19741,9 +19740,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                         if (includeAvatar && stringBuilder.length() > 1) {
                             stringBuilder.setSpan(forwardAvatar, 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                         }
-                        if (currentForwardName == null || messageObject.messageOwner.fwd_from.from_id != null) {
-                            stringBuilder.setSpan(new TypefaceSpan(AndroidUtilities.bold()), 0,  ellipsizedText.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-                        }
+                        stringBuilder.setSpan(new TypefaceSpan(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false)), 0, ellipsizedText.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
                         stringFinalText = TextUtils.ellipsize(stringBuilder, textPaint, maxWidth, TextUtils.TruncateAt.END);
                         forwardNameCenterX = (int) Math.ceil(Theme.chat_replyNamePaint.measureText(ellipsizedText, 0, ellipsizedText.length())) / 2;
                     }

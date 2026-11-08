@@ -71,7 +71,7 @@ public class SessionBottomSheet extends BottomSheet {
 
         TextView nameView = new TextView(context);
         nameView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
-        nameView.setTypeface(AndroidUtilities.bold());
+        nameView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         nameView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
         nameView.setGravity(Gravity.CENTER);
         linearLayout.addView(nameView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 21, 12, 21, 0));
@@ -239,7 +239,7 @@ public class SessionBottomSheet extends BottomSheet {
             buttonTextView.setPadding(dp(34), 0, dp(34), 0);
             buttonTextView.setGravity(Gravity.CENTER);
             buttonTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-            buttonTextView.setTypeface(AndroidUtilities.bold());
+            buttonTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             buttonTextView.setText(LocaleController.getString(R.string.TerminateSession));
 
             buttonTextView.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText));

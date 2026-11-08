@@ -97,6 +97,7 @@ public class TextCell extends FrameLayout {
         leftPadding = left;
 
         textView = new SimpleTextView(context);
+        textView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(400, false));
         textView.setTextColor(Theme.getColor(dialog ? Theme.key_dialogTextBlack : Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
         textView.setTextSize(16);
         textView.setGravity(LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT);

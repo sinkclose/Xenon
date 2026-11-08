@@ -80,6 +80,7 @@ public class TextSettingsCell extends FrameLayout {
 
         textView = new TextView(context);
         zxc.iconic.xenon.helpers.ClientFonts.applyToView(textView);
+        textView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(400, false));
         textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
         textView.setLines(1);
         textView.setMaxLines(1);

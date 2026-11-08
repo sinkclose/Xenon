@@ -392,7 +392,7 @@ public class InviteLinkBottomSheet extends BottomSheet {
         titleTextView.setEllipsize(TextUtils.TruncateAt.END);
         titleTextView.setPadding(dp(23), 0, dp(23), 0);
         titleTextView.setGravity(Gravity.CENTER_VERTICAL);
-        titleTextView.setTypeface(AndroidUtilities.bold());
+        titleTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         if (!permanent) {
             if (invite.expired) {
                 titleTextView.setText(LocaleController.getString(R.string.ExpiredLink));
@@ -1183,7 +1183,7 @@ public class InviteLinkBottomSheet extends BottomSheet {
             priceView = new TextView(context);
             priceView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
             priceView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
-            priceView.setTypeface(AndroidUtilities.bold());
+            priceView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             layout.addView(priceView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.RIGHT));
 
             periodView = new TextView(context);
@@ -1232,7 +1232,7 @@ public class InviteLinkBottomSheet extends BottomSheet {
 
             titleView = new TextView(context);
             titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
-            titleView.setTypeface(AndroidUtilities.bold());
+            titleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             titleView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
             addView(titleView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.TOP, 72, 9, 0, 0));
 
@@ -1320,7 +1320,7 @@ public class InviteLinkBottomSheet extends BottomSheet {
         TextView textView = new TextView(context);
         textView.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, resourcesProvider));
         textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
-        textView.setTypeface(AndroidUtilities.bold());
+        textView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         textView.setGravity(Gravity.CENTER);
         textView.setText(getString(R.string.StarsSubscriptionTitle));
         linearLayout.addView(textView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER, 20, 0, 20, 4));

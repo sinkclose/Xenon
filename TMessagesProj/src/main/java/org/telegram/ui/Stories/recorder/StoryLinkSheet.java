@@ -86,7 +86,7 @@ public class StoryLinkSheet extends BottomSheetWithRecyclerListView implements N
         urlEditText.editText.setSelection(def.length());
         TextView pasteTextView = new TextView(getContext());
         pasteTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
-        pasteTextView.setTypeface(AndroidUtilities.bold());
+        pasteTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         pasteTextView.setText(getString(R.string.Paste));
         pasteTextView.setPadding(dp(10), 0, dp(10), 0);
         pasteTextView.setGravity(Gravity.CENTER);
@@ -459,7 +459,7 @@ public class StoryLinkSheet extends BottomSheetWithRecyclerListView implements N
             titleView = new AnimatedTextView(context);
             titleView.setTextColor(0xFF1A9CFF);
             titleView.setTextSize(dp(14.21f));
-            titleView.setTypeface(AndroidUtilities.bold());
+            titleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             titleView.setEllipsizeByGradient(true);
             titleView.getDrawable().setOverrideFullWidth(AndroidUtilities.displaySize.x);
             addView(titleView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 24, Gravity.FILL_HORIZONTAL | Gravity.TOP, 57, 2.33f, 48, 0));

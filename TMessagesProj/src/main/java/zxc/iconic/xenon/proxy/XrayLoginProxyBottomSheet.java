@@ -79,7 +79,7 @@ public class XrayLoginProxyBottomSheet extends BottomSheet {
                 Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider), 0.05f), 10));
 
         activeNameView = makeLabel(context, 15, Theme.key_windowBackgroundWhiteBlackText);
-        activeNameView.setTypeface(AndroidUtilities.bold());
+        activeNameView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         activeNameView.setSingleLine(true);
         activeCard.addView(activeNameView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
@@ -160,7 +160,7 @@ public class XrayLoginProxyBottomSheet extends BottomSheet {
     private TextView makeSectionHeader(Context context, int stringRes) {
         TextView tv = makeLabel(context, 13, Theme.key_windowBackgroundWhiteBlueHeader);
         tv.setText(LocaleController.getString(stringRes));
-        tv.setTypeface(AndroidUtilities.bold());
+        tv.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         return tv;
     }
 
@@ -168,7 +168,7 @@ public class XrayLoginProxyBottomSheet extends BottomSheet {
         TextView button = new TextView(context);
         button.setGravity(Gravity.CENTER);
         button.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
-        button.setTypeface(AndroidUtilities.bold());
+        button.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         button.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText, resourcesProvider));
         button.setIncludeFontPadding(false);
         return button;
@@ -179,7 +179,7 @@ public class XrayLoginProxyBottomSheet extends BottomSheet {
         button.setText(text);
         button.setGravity(Gravity.CENTER);
         button.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-        button.setTypeface(AndroidUtilities.bold());
+        button.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         button.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4, resourcesProvider));
         button.setIncludeFontPadding(false);
         int normal = Theme.multAlpha(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4, resourcesProvider), 0.08f);

@@ -123,7 +123,7 @@ public class CommunityInviteOnlySheet extends BottomSheetWithRecyclerListView {
             addView(avatarImage, LayoutHelper.createLinear(70, 70, Gravity.CENTER_HORIZONTAL));
 
             titleView = new TextView(context);
-            titleView.setTypeface(AndroidUtilities.bold());
+            titleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
             titleView.setGravity(Gravity.CENTER);
             addView(titleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.NO_GRAVITY, 0, 11.33f, 0, 1 + 6));

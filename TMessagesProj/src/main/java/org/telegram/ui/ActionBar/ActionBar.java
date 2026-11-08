@@ -587,7 +587,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             titleTextView[i].setTextColor(getThemedColor(Theme.key_actionBarDefaultTitle));
         }
         titleTextView[i].setEmojiColor(titleTextView[i].getTextColor());
-        titleTextView[i].setTypeface(AndroidUtilities.bold());
+        titleTextView[i].setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         titleTextView[i].setDrawablePadding(dp(4));
         titleTextView[i].setPadding(0, dp(8), 0, dp(8));
         titleTextView[i].setRightDrawableTopPadding(-dp(1));

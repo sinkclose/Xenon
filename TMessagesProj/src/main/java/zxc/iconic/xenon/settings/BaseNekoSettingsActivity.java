@@ -752,7 +752,7 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
             textView = new TextView(context);
             textView.setTextSize(15);
             textView.setTextColor(textColor);
-            textView.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"));
+            textView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(500, false));
             textView.setGravity(android.view.Gravity.CENTER);
             textView.setBackground(Theme.createRoundRectDrawable(AndroidUtilities.dp(24), accentColor));
             textView.setPadding(AndroidUtilities.dp(24), AndroidUtilities.dp(12), AndroidUtilities.dp(24), AndroidUtilities.dp(12));

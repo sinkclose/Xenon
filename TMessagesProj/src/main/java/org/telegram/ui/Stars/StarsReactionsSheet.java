@@ -325,7 +325,7 @@ public class StarsReactionsSheet extends BottomSheet implements NotificationCent
         titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
         titleView.setGravity(Gravity.CENTER);
         titleView.setText(getString(R.string.StarsReactionTitle2));
-        titleView.setTypeface(AndroidUtilities.bold());
+        titleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         titleView.setEllipsize(TextUtils.TruncateAt.END);
 //        toptopLayout.addView(beforeTitleSpace = new Space(context), LayoutHelper.createLinear(0, 0, 1, Gravity.FILL));
         toptopLayout.addView(titleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 1, Gravity.FILL, 2, 0, 2, 0));

@@ -698,6 +698,7 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
         dismissed = false;
         super.show();
         zxc.iconic.xenon.helpers.ClientFonts.observeWindow(getWindow().getDecorView());
+        zxc.iconic.xenon.helpers.RoundedUiFonts.observe(getWindow().getDecorView());
         if (progressViewContainer != null && progressViewStyle == ALERT_TYPE_SPINNER) {
             progressViewContainer.setScaleX(0);
             progressViewContainer.setScaleY(0);

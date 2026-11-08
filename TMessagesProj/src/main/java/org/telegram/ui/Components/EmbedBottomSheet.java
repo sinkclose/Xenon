@@ -711,7 +711,7 @@ public class EmbedBottomSheet extends BottomSheet {
             textView.setTextColor(Theme.getColor(Theme.key_dialogTextBlack));
             textView.setText(description);
             textView.setSingleLine(true);
-            textView.setTypeface(AndroidUtilities.bold());
+            textView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             textView.setEllipsize(TextUtils.TruncateAt.END);
             textView.setPadding(AndroidUtilities.dp(18), 0, AndroidUtilities.dp(18), 0);
             containerLayout.addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.BOTTOM, 0, 0, 0, 48 + 9 + 20));
@@ -749,7 +749,7 @@ public class EmbedBottomSheet extends BottomSheet {
         textView.setBackgroundDrawable(Theme.createSelectorDrawable(Theme.getColor(Theme.key_dialogButtonSelector), 0));
         textView.setPadding(AndroidUtilities.dp(18), 0, AndroidUtilities.dp(18), 0);
         textView.setText(LocaleController.getString(R.string.Close).toUpperCase());
-        textView.setTypeface(AndroidUtilities.bold());
+        textView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         frameLayout.addView(textView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT, Gravity.TOP | Gravity.LEFT));
         textView.setOnClickListener(v -> dismiss());
 
@@ -858,7 +858,7 @@ public class EmbedBottomSheet extends BottomSheet {
         copyTextButton.setBackgroundDrawable(Theme.createSelectorDrawable(Theme.getColor(Theme.key_dialogButtonSelector), 0));
         copyTextButton.setPadding(AndroidUtilities.dp(18), 0, AndroidUtilities.dp(18), 0);
         copyTextButton.setText(LocaleController.getString(R.string.Copy).toUpperCase());
-        copyTextButton.setTypeface(AndroidUtilities.bold());
+        copyTextButton.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         linearLayout.addView(copyTextButton, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT, Gravity.TOP | Gravity.LEFT));
         copyTextButton.setOnClickListener(copyClickListener);
 
@@ -871,7 +871,7 @@ public class EmbedBottomSheet extends BottomSheet {
         openInButton.setBackgroundDrawable(Theme.createSelectorDrawable(Theme.getColor(Theme.key_dialogButtonSelector), 0));
         openInButton.setPadding(AndroidUtilities.dp(18), 0, AndroidUtilities.dp(18), 0);
         openInButton.setText(LocaleController.getString(R.string.OpenInBrowser).toUpperCase());
-        openInButton.setTypeface(AndroidUtilities.bold());
+        openInButton.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         linearLayout.addView(openInButton, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT, Gravity.TOP | Gravity.LEFT));
         openInButton.setOnClickListener(v -> {
             Browser.openUrl(parentActivity, openUrl);

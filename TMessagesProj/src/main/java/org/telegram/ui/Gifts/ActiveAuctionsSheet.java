@@ -170,7 +170,7 @@ public class ActiveAuctionsSheet extends BottomSheetWithRecyclerListView impleme
             RLottieImageView backupImageView = new RLottieImageView(context);
             titleView = new AnimatedTextView(context);
             titleView.setTextSize(dp(14));
-            titleView.setTypeface(AndroidUtilities.bold());
+            titleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             titleView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
             messageView = new AnimatedTextView(context);
             messageView.setTextSize(dp(12));

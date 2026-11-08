@@ -278,7 +278,7 @@ public class GiftSheet extends BottomSheetWithRecyclerListView implements Notifi
 
         final TextView titleView = new TextView(context);
         titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
-        titleView.setTypeface(AndroidUtilities.bold());
+        titleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         titleView.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, resourcesProvider));
         titleView.setGravity(Gravity.CENTER);
         bottomView.addView(titleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 4, 0, 4, 0));
@@ -315,7 +315,7 @@ public class GiftSheet extends BottomSheetWithRecyclerListView implements Notifi
 
         final TextView titleStarsView = new TextView(context);
         titleStarsView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
-        titleStarsView.setTypeface(AndroidUtilities.bold());
+        titleStarsView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         titleStarsView.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, resourcesProvider));
         titleStarsView.setGravity(Gravity.CENTER);
         starsHeaderView.addView(titleStarsView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 4, 0, 4, 0));
@@ -1152,7 +1152,7 @@ public class GiftSheet extends BottomSheetWithRecyclerListView implements Notifi
             titleView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
             titleView.setGravity(Gravity.CENTER);
             titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-            titleView.setTypeface(AndroidUtilities.bold());
+            titleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             card.addView(titleView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP, 0, 93 - 4, 0, 0));
 
             subtitleView = new TextView(context);
@@ -1173,7 +1173,7 @@ public class GiftSheet extends BottomSheetWithRecyclerListView implements Notifi
             };
             priceView = new TextView(context);
             priceView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
-            priceView.setTypeface(AndroidUtilities.bold());
+            priceView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             priceView.setPadding(dp(10), 0, dp(10), 0);
             priceView.setGravity(Gravity.CENTER);
 
@@ -1224,7 +1224,7 @@ public class GiftSheet extends BottomSheetWithRecyclerListView implements Notifi
 
             chanceTextView = new TextView(context);
             chanceTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 10);
-            chanceTextView.setTypeface(AndroidUtilities.bold());
+            chanceTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             chanceTextView.setPadding(dp(5), 0, dp(5), 0);
             chanceTextView.setGravity(Gravity.CENTER);
             chanceTextView.setTextColor(0xFFFFFFFF);
@@ -3162,7 +3162,7 @@ public class GiftSheet extends BottomSheetWithRecyclerListView implements Notifi
                     final LinkSpanDrawable.LinksTextView tab = new LinkSpanDrawable.LinksTextView(getContext());
                     tab.setGravity(Gravity.CENTER);
                     tab.setText(tabs.get(a));
-                    tab.setTypeface(AndroidUtilities.bold());
+                    tab.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
                     tab.setTextColor(Theme.blendOver(Theme.getColor(Theme.key_dialogGiftsBackground), Theme.getColor(Theme.key_dialogGiftsTabText)));
                     tab.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
                     tab.setPadding(dp(12), 0, dp(12), 0);

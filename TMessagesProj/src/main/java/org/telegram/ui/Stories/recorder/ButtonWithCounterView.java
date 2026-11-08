@@ -92,7 +92,7 @@ public class ButtonWithCounterView extends FrameLayout implements Loadable {
         this.filled = filled;
         if (filled) {
             setBackground(Theme.createRoundRectDrawable(dp(radiusDp), backgroundColor));
-            text.setTypeface(AndroidUtilities.bold());
+            text.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         } else {
             setBackground(null);
             text.setTypeface(null);
@@ -123,7 +123,7 @@ public class ButtonWithCounterView extends FrameLayout implements Loadable {
         text.setCallback(this);
         text.setTextSize(dp(14));
         if (filled) {
-            text.setTypeface(AndroidUtilities.bold());
+            text.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         }
         text.setGravity(Gravity.CENTER_HORIZONTAL);
 
@@ -137,7 +137,7 @@ public class ButtonWithCounterView extends FrameLayout implements Loadable {
         countText.setAnimationProperties(.3f, 0, 250, CubicBezierInterpolator.EASE_OUT_QUINT);
         countText.setCallback(this);
         countText.setTextSize(dp(12));
-        countText.setTypeface(AndroidUtilities.bold());
+        countText.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         countText.setText("");
         countText.setGravity(Gravity.CENTER_HORIZONTAL);
 

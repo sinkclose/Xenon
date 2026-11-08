@@ -1149,13 +1149,13 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
                 textView.setGravity(Gravity.CENTER);
                 textView.setTextColor(getThemedColor(Theme.key_dialogTextBlack));
                 textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-                textView.setTypeface(AndroidUtilities.bold());
+                textView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
                 addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
             } else if (type == 2) {
                 textView.setGravity(Gravity.CENTER);
                 textView.setTextColor(getThemedColor(Theme.key_featuredStickers_buttonText));
                 textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-                textView.setTypeface(AndroidUtilities.bold());
+                textView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
                 textView.setBackground(Theme.AdaptiveRipple.filledRect(getThemedColor(Theme.key_featuredStickers_addButton), 6));
                 addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, 0, 16, 16, 16, 16));
             }
@@ -1507,10 +1507,12 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
             };
             int height = 48;
             titleView.setText(title);
+            if (bigTitle || zxc.iconic.xenon.helpers.TypefaceHelper.supportsRoundedTypeface()) {
+                titleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
+            }
             if (bigTitle) {
                 titleView.setTextColor(getThemedColor(Theme.key_dialogTextBlack));
                 titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
-                titleView.setTypeface(AndroidUtilities.bold());
                 titleView.setPadding(dp(21), dp(multipleLinesTitle ? 14 : 6), dp(21), dp(8));
             } else {
                 titleView.setTextColor(getThemedColor(Theme.key_dialogTextGray2));
@@ -1740,6 +1742,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
         } else {
             super.show();
             zxc.iconic.xenon.helpers.ClientFonts.observeWindow(getWindow().getDecorView());
+        zxc.iconic.xenon.helpers.RoundedUiFonts.observe(getWindow().getDecorView());
             if (Build.VERSION.SDK_INT >= 31 && zxc.iconic.xenon.NekoConfig.blurOverlay && backdropBlur == null) {
                 Activity activity = AndroidUtilities.findActivity(getContext());
                 if (activity != null && !activity.isFinishing()) setupBackdropBlur(activity);

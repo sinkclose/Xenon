@@ -66,6 +66,12 @@ public class AltSeekbar extends FrameLayout {
     }
 
     @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        zxc.iconic.xenon.helpers.RoundedUiFonts.observe(this);
+    }
+
+    @Override
     protected void onDetachedFromWindow() {
         setDragging(false);
         super.onDetachedFromWindow();
@@ -99,7 +105,7 @@ public class AltSeekbar extends FrameLayout {
 
         TextView headerTextView = new TextView(context);
         headerTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
-        headerTextView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
+        headerTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(500, false));
         headerTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueHeader, resourcesProvider));
         headerTextView.setGravity(LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT);
         headerTextView.setText(title);
@@ -117,7 +123,7 @@ public class AltSeekbar extends FrameLayout {
             }
         };
         headerValue.setAnimationProperties(.45f, 0, 240, CubicBezierInterpolator.EASE_OUT_QUINT);
-        headerValue.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
+        headerValue.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(500, false));
         headerValue.setPadding(AndroidUtilities.dp(5.33f), AndroidUtilities.dp(2), AndroidUtilities.dp(5.33f), AndroidUtilities.dp(2));
         headerValue.setTextSize(AndroidUtilities.dp(12));
         headerValue.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueHeader, resourcesProvider));
@@ -129,6 +135,7 @@ public class AltSeekbar extends FrameLayout {
 
 if (subtitle != null) {
             TextView subtitleView = new TextView(context);
+        subtitleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(400, false));
             subtitleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
             subtitleView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider));
             subtitleView.setGravity(LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT);
@@ -139,6 +146,7 @@ if (subtitle != null) {
         FrameLayout valuesView = new FrameLayout(context);
 
         leftTextView = new TextView(context);
+        leftTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(400, false));
         leftTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
         leftTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider));
         leftTextView.setGravity(Gravity.LEFT);
@@ -146,6 +154,7 @@ if (subtitle != null) {
         valuesView.addView(leftTextView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.CENTER_VERTICAL));
 
         rightTextView = new TextView(context);
+        rightTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(400, false));
         rightTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
         rightTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider));
         rightTextView.setGravity(Gravity.RIGHT);

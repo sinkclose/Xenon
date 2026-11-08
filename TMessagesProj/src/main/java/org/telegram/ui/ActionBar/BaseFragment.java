@@ -548,6 +548,12 @@ public abstract class BaseFragment {
     public void onResume() {
         isPaused = false;
         if (fragmentView != null) zxc.iconic.xenon.helpers.ClientFonts.observeWindow(fragmentView);
+        if (fragmentView != null && (this instanceof org.telegram.ui.ProfileActivity
+                || this instanceof org.telegram.ui.SettingsActivity || this instanceof org.telegram.ui.ChatActivity
+                || this instanceof org.telegram.ui.FilterCreateActivity || this instanceof org.telegram.ui.FiltersSetupActivity
+                || this instanceof org.telegram.ui.FilterChatlistActivity)) {
+            zxc.iconic.xenon.helpers.RoundedUiFonts.observe(fragmentView);
+        }
         if (actionBar != null) zxc.iconic.xenon.helpers.ClientFonts.applyToView(actionBar);
         if (actionBar != null) {
             actionBar.onResume();

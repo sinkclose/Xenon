@@ -730,6 +730,7 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
             }, 200);
         }
 
+        zxc.iconic.xenon.helpers.RoundedUiFonts.observe(fragmentView);
         return fragmentView;
     }
 

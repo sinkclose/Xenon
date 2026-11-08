@@ -296,7 +296,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         titleTextView.setTextColor(getThemedColor(Theme.key_actionBarDefaultTitle));
         titleTextView.setTextSize(18);
         titleTextView.setGravity(Gravity.LEFT);
-        titleTextView.setTypeface(AndroidUtilities.bold());
+        titleTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         titleTextView.setLeftDrawableTopPadding(-dp(1.3f));
         titleTextView.setCanHideRightDrawable(false);
         titleTextView.setRightDrawableOutside(true);
@@ -899,7 +899,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         titleTextLargerCopyView.setTextColor(getThemedColor(Theme.key_actionBarDefaultTitle));
         titleTextLargerCopyView.setTextSizePx(dp(glassMode ? 17.5f : 18));
         titleTextLargerCopyView.setGravity(Gravity.LEFT);
-        titleTextLargerCopyView.setTypeface(AndroidUtilities.bold());
+        titleTextLargerCopyView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         titleTextLargerCopyView.setLeftDrawableTopPadding(-dp(1.3f));
         titleTextLargerCopyView.setRightDrawable(titleTextView.getRightDrawable());
         titleTextLargerCopyView.setRightDrawable2(titleTextView.getRightDrawable2());

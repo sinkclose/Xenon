@@ -181,7 +181,7 @@ public class CountrySelectBottomSheet extends BottomSheetWithRecyclerListView im
         };
         doneItem.setTextColor(getThemedColor(Theme.key_featuredStickers_buttonText));
         doneItem.setText(getString(R.string.Save));
-        doneItem.setTypeface(AndroidUtilities.bold());
+        doneItem.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         doneItem.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
         doneItem.setGravity(Gravity.CENTER);
         doneItem.setPadding(dp(16), 0, dp(16), 0);

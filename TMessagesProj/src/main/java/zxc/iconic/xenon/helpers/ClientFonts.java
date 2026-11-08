@@ -227,7 +227,7 @@ public final class ClientFonts {
     }
 
     public static synchronized Typeface resolve(Typeface original) {
-        if (family == null || monospace(original)) return original;
+        if (family == null || monospace(original) || TypefaceHelper.isCurrentRoundedTypeface(original)) return original;
         Style style = style(original);
         return get(style.weight, style.italic);
     }

@@ -5888,7 +5888,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             nameTextView[a].setPadding(0, AndroidUtilities.dp(6), 0, AndroidUtilities.dp(a == 0 ? 12 : 4));
             nameTextView[a].setTextSizePx(dp(17.5f));
             nameTextView[a].setGravity(Gravity.LEFT);
-            nameTextView[a].setTypeface(AndroidUtilities.bold());
+            nameTextView[a].setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             nameTextView[a].setLeftDrawableTopPadding(-AndroidUtilities.dp(1.3f));
             nameTextView[a].setPivotX(0);
             nameTextView[a].setPivotY(0);
@@ -6343,6 +6343,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         };
 
         ViewCompat.setOnApplyWindowInsetsListener(fragmentView, this::onApplyWindowInsets);
+        zxc.iconic.xenon.helpers.RoundedUiFonts.observe(fragmentView);
         return fragmentView;
     }
 

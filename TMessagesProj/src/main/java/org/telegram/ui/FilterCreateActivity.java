@@ -623,6 +623,7 @@ public class FilterCreateActivity extends BaseFragment {
 
         loadInvites();
 
+        zxc.iconic.xenon.helpers.RoundedUiFonts.observe(fragmentView);
         return fragmentView;
     }
 
@@ -2210,7 +2211,7 @@ public class FilterCreateActivity extends BaseFragment {
             this.outline = outline;
             this.fontSize = fontSize;
 
-            textPaint.setTypeface(AndroidUtilities.bold());
+            textPaint.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             if (outline) {
                 bgPaint.setStyle(Paint.Style.STROKE);
                 bgPaint.setStrokeWidth(dpf2(1.33f));
@@ -2232,7 +2233,7 @@ public class FilterCreateActivity extends BaseFragment {
 
         public NewSpan(float textSize) {
             this.outline = false;
-            textPaint.setTypeface(AndroidUtilities.bold());
+            textPaint.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             bgPaint.setStyle(Paint.Style.FILL);
             textPaint.setTextSize(dp(textSize));
         }
@@ -2417,7 +2418,7 @@ public class FilterCreateActivity extends BaseFragment {
             button = new TextView(getContext());
             button.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
             button.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText));
-            button.setTypeface(AndroidUtilities.bold());
+            button.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             button.setBackground(Theme.AdaptiveRipple.filledRectByKey(Theme.key_featuredStickers_addButton, 8));
             button.setText(LocaleController.getString(R.string.FolderLinkShareButton));
             button.setGravity(Gravity.CENTER);
@@ -2656,7 +2657,7 @@ public class FilterCreateActivity extends BaseFragment {
                 addView(imageView, LayoutHelper.createFrame(54, 44, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 22, 0, 0));
 
                 titleView = new SpoilersTextView(context);
-                titleView.setTypeface(AndroidUtilities.bold());
+                titleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
                 titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
                 titleView.setTextColor(Theme.getColor(Theme.key_dialogTextBlack));
                 titleView.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -2816,7 +2817,7 @@ public class FilterCreateActivity extends BaseFragment {
             };
             animatedColor = new AnimatedColor(previewView, 0, 320, CubicBezierInterpolator.EASE_OUT_QUINT);
             previewView.setTextSize(dp(10));
-            previewView.setTypeface(AndroidUtilities.bold());
+            previewView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             previewView.setGravity(Gravity.RIGHT);
             previewView.setPadding(dp(4.66f), 0, dp(4.66f), 0);
             addView(previewView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, (LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT) | Gravity.TOP, padding, 16.66f, padding, bottomMargin));

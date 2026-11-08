@@ -72,7 +72,7 @@ public class ExplainStarsSheet extends BottomSheetWithRecyclerListView {
 
         TextView titleView = new TextView(context);
         titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
-        titleView.setTypeface(AndroidUtilities.bold());
+        titleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         titleView.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, resourcesProvider));
         titleView.setGravity(Gravity.CENTER);
         titleView.setText(getString(R.string.ExplainStarsTitle));
@@ -148,7 +148,7 @@ public class ExplainStarsSheet extends BottomSheetWithRecyclerListView {
             textLayout.setOrientation(VERTICAL);
 
             titleView = new LinkSpanDrawable.LinksTextView(context);
-            titleView.setTypeface(AndroidUtilities.bold());
+            titleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
             titleView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
             titleView.setLinkTextColor(Theme.getColor(Theme.key_chat_messageLinkIn, resourcesProvider));

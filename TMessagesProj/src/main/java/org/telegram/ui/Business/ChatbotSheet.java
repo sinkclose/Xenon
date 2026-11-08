@@ -93,7 +93,7 @@ public class ChatbotSheet extends BottomSheetWithRecyclerListView {
         titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
         titleView.setTextColor(getThemedColor(Theme.key_windowBackgroundWhiteBlackText));
         titleView.setGravity(Gravity.CENTER);
-        titleView.setTypeface(AndroidUtilities.bold());
+        titleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         titleView.setText(UserObject.getUserName(user));
         topView.addView(titleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 32, 15.66f, 32, 3.66f));
         actionBar.setTitle(UserObject.getUserName(user));

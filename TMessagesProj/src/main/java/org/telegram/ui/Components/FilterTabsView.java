@@ -1163,9 +1163,9 @@ public class FilterTabsView extends FrameLayout {
         super(context);
         this.resourcesProvider = resourcesProvider;
         textCounterPaint.setTextSize(dpf2(11f));
-        textCounterPaint.setTypeface(AndroidUtilities.bold());
+        textCounterPaint.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         textPaint.setTextSize(dpf2(14f));
-        textPaint.setTypeface(AndroidUtilities.bold());
+        textPaint.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         deletePaint.setStyle(Paint.Style.STROKE);
         deletePaint.setStrokeCap(Paint.Cap.ROUND);
         deletePaint.setStrokeWidth(dp(1.5f));

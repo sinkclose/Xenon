@@ -38,7 +38,7 @@ public class UpdateDownloadButton extends FrameLayout {
         progressPaint.setColor(textColor);
         label = new TextView(context);
         label.setTextSize(14);
-        label.setTypeface(AndroidUtilities.bold());
+        label.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         label.setTextColor(textColor);
         label.setGravity(Gravity.CENTER);
         label.setSingleLine(true);

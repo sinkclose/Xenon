@@ -95,7 +95,7 @@ public class SellGiftEnterPriceSheet extends BottomSheet {
         titleView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
         titleView.setTextSize(dp(20));
         titleView.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-        titleView.setTypeface(AndroidUtilities.bold());
+        titleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         // titleView.setEllipsize(TextUtils.TruncateAt.END);
         headerLayout.addView(titleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, 1f, Gravity.FILL, 18 + 4, 0, 18 + 4, 0));
 

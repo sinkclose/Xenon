@@ -208,7 +208,7 @@ public class AuctionWearingSheet extends BottomSheetWithRecyclerListView impleme
         avatarImageView.setForUserOrChat(userOrChat, avatarDrawable);
 
         giftNameTextView = new TextView(context);
-        giftNameTextView.setTypeface(AndroidUtilities.bold());
+        giftNameTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         giftNameTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 21);
         giftNameTextView.setText(DialogObject.getShortName(dialogId != 0 ? dialogId : UserConfig.getInstance(currentAccount).getClientUserId()));
         giftNameTextView.setGravity(Gravity.CENTER);
@@ -344,7 +344,7 @@ public class AuctionWearingSheet extends BottomSheetWithRecyclerListView impleme
             TextView leftTextView = new TextView(context);
             leftTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
             leftTextView.setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
-            leftTextView.setTypeface(AndroidUtilities.bold());
+            leftTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             leftTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
             leftTextView.setText(LocaleController.formatPluralStringComma("Gift2AvailabilityLeft", starGift.availability_remains));
             limitContainer.addView(leftTextView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.LEFT, 11, 0, 11, 0));
@@ -352,7 +352,7 @@ public class AuctionWearingSheet extends BottomSheetWithRecyclerListView impleme
             TextView soldTextView = new TextView(context);
             soldTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
             soldTextView.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
-            soldTextView.setTypeface(AndroidUtilities.bold());
+            soldTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             soldTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
             soldTextView.setText(LocaleController.formatPluralStringComma("Gift2AvailabilitySold", starGift.availability_total - starGift.availability_remains));
             limitContainer.addView(soldTextView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.RIGHT, 11, 0, 11, 0));
@@ -382,7 +382,7 @@ public class AuctionWearingSheet extends BottomSheetWithRecyclerListView impleme
             TextView leftTextView2 = new TextView(context);
             leftTextView2.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
             leftTextView2.setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
-            leftTextView2.setTypeface(AndroidUtilities.bold());
+            leftTextView2.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             leftTextView2.setTextColor(0xFFFFFFFF);
             leftTextView2.setText(LocaleController.formatPluralStringComma("Gift2AvailabilityLeft", starGift.availability_remains));
             valueContainerView.addView(leftTextView2, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.LEFT, 11, 0, 11, 0));
@@ -390,7 +390,7 @@ public class AuctionWearingSheet extends BottomSheetWithRecyclerListView impleme
             TextView soldTextView2 = new TextView(context);
             soldTextView2.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
             soldTextView2.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
-            soldTextView2.setTypeface(AndroidUtilities.bold());
+            soldTextView2.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             soldTextView2.setTextColor(0xFFFFFFFF);
             soldTextView2.setText(LocaleController.formatPluralStringComma("Gift2AvailabilitySold", starGift.availability_total - starGift.availability_remains));
             valueContainerView.addView(soldTextView2, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.RIGHT, 11, 0, 11, 0));
@@ -506,7 +506,7 @@ public class AuctionWearingSheet extends BottomSheetWithRecyclerListView impleme
         }
 
         final TextView titleView = new TextView(context);
-        titleView.setTypeface(AndroidUtilities.bold());
+        titleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         titleView.setGravity(Gravity.CENTER);
         titleView.setText(formatString(R.string.GiftAuctionWearInfoHeader, starGift.title));
         titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);

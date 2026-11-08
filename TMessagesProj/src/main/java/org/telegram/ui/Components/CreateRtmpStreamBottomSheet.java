@@ -99,7 +99,7 @@ public class CreateRtmpStreamBottomSheet extends BottomSheetWithRecyclerListView
             if (hasRevokeButton) {
                 final ButtonWithCounterView revokeBtn = new ButtonWithCounterView(context, false, resourcesProvider);
                 revokeBtn.setColor(Theme.getColor(Theme.key_fill_RedNormal));
-                revokeBtn.text.setTypeface(AndroidUtilities.bold());
+                revokeBtn.text.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
                 revokeBtn.setText(getString(R.string.LiveStoryRTMPRevoke), false);
                 revokeBtn.setOnClickListener(v -> {
                     new AlertDialog.Builder(context, resourcesProvider)
@@ -168,7 +168,7 @@ public class CreateRtmpStreamBottomSheet extends BottomSheetWithRecyclerListView
         startBtn.setEllipsize(TextUtils.TruncateAt.END);
         startBtn.setSingleLine(true);
         startBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-        startBtn.setTypeface(AndroidUtilities.bold());
+        startBtn.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         startBtn.setText(getString(R.string.VoipChannelStartStreaming));
         startBtn.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText, resourcesProvider));
         startBtn.setBackground(Theme.createSimpleSelectorRoundRectDrawable(dp(8), Theme.getColor(Theme.key_featuredStickers_addButton, resourcesProvider), ColorUtils.setAlphaComponent(Theme.getColor(Theme.key_windowBackgroundWhite), 120)));
@@ -181,7 +181,7 @@ public class CreateRtmpStreamBottomSheet extends BottomSheetWithRecyclerListView
         if (hasRevoke) {
             final ButtonWithCounterView revokeBtn = new ButtonWithCounterView(context, false, resourcesProvider);
             revokeBtn.setColor(Theme.getColor(Theme.key_fill_RedNormal));
-            revokeBtn.text.setTypeface(AndroidUtilities.bold());
+            revokeBtn.text.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             revokeBtn.setText(getString(R.string.LiveStoryRTMPRevoke), false);
             revokeBtn.setOnClickListener(v -> {
                 new AlertDialog.Builder(context, resourcesProvider)
@@ -294,7 +294,7 @@ public class CreateRtmpStreamBottomSheet extends BottomSheetWithRecyclerListView
             addView(imageView, LayoutHelper.createLinear(112, 112, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 24, 0, 0));
 
             TextView title = new TextView(context);
-            title.setTypeface(AndroidUtilities.bold());
+            title.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             title.setText(LocaleController.formatString(R.string.Streaming));
             title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
             title.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));

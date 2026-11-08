@@ -107,7 +107,7 @@ public class QRCodeBottomSheet extends BottomSheet {
         buttonTextView.setPadding(AndroidUtilities.dp(34), 0, AndroidUtilities.dp(34), 0);
         buttonTextView.setGravity(Gravity.CENTER);
         buttonTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-        buttonTextView.setTypeface(AndroidUtilities.bold());
+        buttonTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         buttonTextView.setText(LocaleController.getString(R.string.ShareQrCode));
         buttonTextView.setOnClickListener(view -> {
             Uri uri = AndroidUtilities.getBitmapShareUri(qrCode, "qr_tmp.png", Bitmap.CompressFormat.PNG);

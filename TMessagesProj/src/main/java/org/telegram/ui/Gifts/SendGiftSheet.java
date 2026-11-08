@@ -419,7 +419,7 @@ public class SendGiftSheet extends BottomSheetWithRecyclerListView implements No
         leftTextView = new TextView(context);
         leftTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
         leftTextView.setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
-        leftTextView.setTypeface(AndroidUtilities.bold());
+        leftTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         leftTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
         if (starGift != null) {
             leftTextView.setText(LocaleController.formatPluralStringComma("Gift2AvailabilityLeft", starGift.availability_remains));
@@ -429,7 +429,7 @@ public class SendGiftSheet extends BottomSheetWithRecyclerListView implements No
         soldTextView = new TextView(context);
         soldTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
         soldTextView.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
-        soldTextView.setTypeface(AndroidUtilities.bold());
+        soldTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         soldTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
         if (starGift != null) {
             soldTextView.setText(LocaleController.formatPluralStringComma("Gift2AvailabilitySold", starGift.availability_total - starGift.availability_remains));
@@ -464,7 +464,7 @@ public class SendGiftSheet extends BottomSheetWithRecyclerListView implements No
         leftTextView2 = new TextView(context);
         leftTextView2.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
         leftTextView2.setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
-        leftTextView2.setTypeface(AndroidUtilities.bold());
+        leftTextView2.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         leftTextView2.setTextColor(0xFFFFFFFF);
         if (starGift != null) {
             leftTextView2.setText(LocaleController.formatPluralStringComma("Gift2AvailabilityLeft", starGift.availability_remains));
@@ -474,7 +474,7 @@ public class SendGiftSheet extends BottomSheetWithRecyclerListView implements No
         soldTextView2 = new TextView(context);
         soldTextView2.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
         soldTextView2.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
-        soldTextView2.setTypeface(AndroidUtilities.bold());
+        soldTextView2.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         soldTextView2.setTextColor(0xFFFFFFFF);
         if (starGift != null) {
             soldTextView2.setText(LocaleController.formatPluralStringComma("Gift2AvailabilitySold", starGift.availability_total - starGift.availability_remains));

@@ -234,7 +234,7 @@ public class FiltersListBottomSheet extends BottomSheet implements NotificationC
         titleTextView.setPadding(AndroidUtilities.dp(24), 0, AndroidUtilities.dp(24), 0);
         titleTextView.setGravity(Gravity.CENTER_VERTICAL);
         titleTextView.setText(LocaleController.getString(R.string.FilterChoose));
-        titleTextView.setTypeface(AndroidUtilities.bold());
+        titleTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         containerView.addView(titleTextView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 50, Gravity.LEFT | Gravity.TOP, 0, 0, 40, 0));
 
         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.emojiLoaded);

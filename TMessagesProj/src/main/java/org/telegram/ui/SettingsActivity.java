@@ -460,7 +460,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
 
         titleView = new TextView(context);
         titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22);
-        titleView.setTypeface(AndroidUtilities.bold());
+        titleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         titleView.setGravity(Gravity.CENTER);
         titleView.setSingleLine();
         titleView.setEllipsize(TextUtils.TruncateAt.END);
@@ -512,6 +512,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         checkUi_menuItems();
 
         ViewCompat.setOnApplyWindowInsetsListener(contentView, this::onApplyWindowInsets);
+        zxc.iconic.xenon.helpers.RoundedUiFonts.observe(contentView);
         return fragmentView = contentView;
     }
 
@@ -1026,7 +1027,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
 
             textView = new SimpleTextView(context);
             textView.setTextSize(15);
-            textView.setTypeface(AndroidUtilities.bold());
+            textView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             textView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
 
             botDrawable = new AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(textView, dp(24), AnimatedEmojiDrawable.CACHE_TYPE_EMOJI_STATUS);
@@ -1048,7 +1049,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             counterView = new TextView(context);
             counterView.setPadding(dp(6.66f), 0, dp(6.66f), 0);
             counterView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 11);
-            counterView.setTypeface(AndroidUtilities.bold());
+            counterView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             counterView.setGravity(Gravity.CENTER);
             counterView.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText, resourcesProvider));
             counterView.setBackground(Theme.createRoundRectDrawable(dp(10), Theme.getColor(Theme.key_featuredStickers_addButton, resourcesProvider)));

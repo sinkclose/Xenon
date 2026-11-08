@@ -704,7 +704,7 @@ public class ReportBottomSheet extends BottomSheet {
             public BigHeaderCell(Context context, Theme.ResourcesProvider resourcesProvider) {
                 super(context);
                 textView = new TextView(context);
-                textView.setTypeface(AndroidUtilities.bold());
+                textView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
                 textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
                 textView.setGravity(LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT);
                 textView.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, resourcesProvider));

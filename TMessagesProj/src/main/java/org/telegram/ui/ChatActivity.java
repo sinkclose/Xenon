@@ -10333,6 +10333,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         onBottomItemsVisibilityChanged();
         ViewCompat.setOnApplyWindowInsetsListener(fragmentView, this::onApplyWindowInsets);
         Timer.finish(t);
+        zxc.iconic.xenon.helpers.RoundedUiFonts.observe(fragmentView);
 
         return fragmentView;
     }

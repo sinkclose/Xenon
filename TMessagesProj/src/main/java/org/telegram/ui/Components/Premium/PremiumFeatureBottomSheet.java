@@ -692,7 +692,7 @@ public class PremiumFeatureBottomSheet extends BottomSheet implements Notificati
             title.setGravity(Gravity.CENTER_HORIZONTAL);
             title.setTextColor(getThemedColor(Theme.key_dialogTextBlack));
             title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
-            title.setTypeface(AndroidUtilities.bold());
+            title.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
 
             addView(title, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 21, 20, 21, 0));
 

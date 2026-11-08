@@ -98,7 +98,7 @@ public class CreateGroupCallBottomSheet extends BottomSheetWithRecyclerListView 
         startBtn.setEllipsize(TextUtils.TruncateAt.END);
         startBtn.setSingleLine(true);
         startBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-        startBtn.setTypeface(AndroidUtilities.bold());
+        startBtn.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         startBtn.setText(isChannelOrGiga
                 ? LocaleController.formatString(R.string.VoipChannelStartVoiceChat)
                 : LocaleController.formatString(R.string.VoipGroupStartVoiceChat)
@@ -112,7 +112,7 @@ public class CreateGroupCallBottomSheet extends BottomSheetWithRecyclerListView 
         scheduleBtn.setEllipsize(TextUtils.TruncateAt.END);
         scheduleBtn.setSingleLine(true);
         scheduleBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-        scheduleBtn.setTypeface(AndroidUtilities.bold());
+        scheduleBtn.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         scheduleBtn.setText(isChannelOrGiga
                 ? LocaleController.formatString(R.string.VoipChannelScheduleVoiceChat)
                 : LocaleController.formatString(R.string.VoipGroupScheduleVoiceChat)
@@ -275,7 +275,7 @@ public class CreateGroupCallBottomSheet extends BottomSheetWithRecyclerListView 
             addView(imageView, LayoutHelper.createLinear(112, 112, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 24, 0, 0));
 
             TextView title = new TextView(context);
-            title.setTypeface(AndroidUtilities.bold());
+            title.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             title.setText(isChannelOrGiga
                     ? LocaleController.formatString(R.string.StartVoipChannelTitle)
                     : LocaleController.formatString(R.string.StartVoipChatTitle)

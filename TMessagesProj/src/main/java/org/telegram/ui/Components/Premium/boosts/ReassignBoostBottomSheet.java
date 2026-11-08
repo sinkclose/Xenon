@@ -330,7 +330,7 @@ public class ReassignBoostBottomSheet extends BottomSheetWithRecyclerListView {
             addView(avatarsContainer, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 70, 0, 15, 0, 0));
 
             TextView title = new TextView(context);
-            title.setTypeface(AndroidUtilities.bold());
+            title.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             title.setText(LocaleController.getString(R.string.BoostingReassignBoost));
             title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
             title.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));

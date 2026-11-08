@@ -66,7 +66,7 @@ public class TypefaceHelper {
     public static SpannableStringBuilder getTitleText() {
         var builder = new SpannableStringBuilder(getString(R.string.AppName));
         builder.setSpan(new LeadingMarginSpan.Standard(dp(2), 0), 0, builder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        builder.setSpan(new TypefaceSpan(TypefaceHelper.createTypeface(550, false), 0, Theme.key_telegram_color_dialogsLogo, null), 0, builder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        builder.setSpan(new TypefaceSpan(TypefaceHelper.createRoundedTypeface(550, false), 0, Theme.key_telegram_color_dialogsLogo, null), 0, builder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         return builder;
     }
 
@@ -132,6 +132,59 @@ public class TypefaceHelper {
         Typeface custom = ClientFonts.get(weight, italic);
         if (custom != null) return custom;
         return createSystemTypeface(weight, italic);
+    }
+
+    private static final java.util.WeakHashMap<Typeface, Integer> roundedGenerations = new java.util.WeakHashMap<>();
+
+    public static boolean isCurrentRoundedTypeface(Typeface typeface) {
+        synchronized (roundedVariants) {
+            Integer generation = roundedGenerations.get(typeface);
+            return generation != null && generation == ClientFonts.generation();
+        }
+    }
+
+    public static void rememberRoundedTypeface(Typeface typeface) {
+        synchronized (roundedVariants) {
+            roundedGenerations.put(typeface, ClientFonts.generation());
+        }
+    }
+
+    private static final android.util.LruCache<Typeface, Boolean> roundedSupport = new android.util.LruCache<>(16);
+    private static final android.util.LruCache<String, Typeface> roundedVariants = new android.util.LruCache<>(512);
+
+    /** Probe the selected family, including OEM system replacements, through public APIs. */
+    public static boolean supportsRoundedTypeface() {
+        if (Build.VERSION.SDK_INT < 26) return false;
+        Typeface base = createTypeface(400, false);
+        synchronized (roundedSupport) {
+            Boolean supported = roundedSupport.get(base);
+            if (supported == null) {
+                Paint probe = new Paint();
+                probe.setTypeface(base);
+                supported = probe.setFontVariationSettings("'ROND' 100")
+                        && probe.setFontVariationSettings("'wght' 500");
+                roundedSupport.put(base, supported);
+            }
+            return supported;
+        }
+    }
+
+    public static Typeface createRoundedTypeface(int weight, boolean italic) {
+        Typeface base = createTypeface(weight, italic);
+        if (!supportsRoundedTypeface()) return base;
+        String key = ClientFonts.generation() + ":" + weight + ":" + italic;
+        synchronized (roundedVariants) {
+            Typeface result = roundedVariants.get(key);
+            if (result == null) {
+                Paint paint = new Paint();
+                paint.setTypeface(base);
+                paint.setFontVariationSettings("'ROND' 100, 'wght' " + weight);
+                result = paint.getTypeface();
+                roundedVariants.put(key, result);
+                roundedGenerations.put(result, ClientFonts.generation());
+            }
+            return result;
+        }
     }
 
     public static Typeface createSystemTypeface(int weight, boolean italic) {

@@ -795,7 +795,7 @@ public class NewContactBottomSheet extends BottomSheet implements AdapterView.On
         doneButton.setText(LocaleController.getString(R.string.CreateContact));
         doneButton.setTextColor(parentFragment.getThemedColor(Theme.key_featuredStickers_buttonText));
         doneButton.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
-        doneButton.setTypeface(AndroidUtilities.bold());
+        doneButton.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         ScaleStateListAnimator.apply(doneButtonContainer, .02f, 1.2f);
 
         progressView = new ImageView(context);

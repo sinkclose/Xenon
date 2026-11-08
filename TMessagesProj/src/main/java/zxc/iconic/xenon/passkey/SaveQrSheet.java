@@ -224,7 +224,7 @@ public class SaveQrSheet extends BottomSheet {
         var headerMaxTextWidth = QR_OUTER_PADDING + QR_CONTENT_WIDTH - QR_INNER_PADDING - headerTextLeft;
 
         textPaint.setColor(Color.BLACK);
-        textPaint.setTypeface(AndroidUtilities.bold());
+        textPaint.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         textPaint.setTextSize(QR_TEXT_SIZE_NAME);
         var nameLayout = createLayout(name, headerMaxTextWidth, 1);
         canvas.save();
@@ -266,7 +266,7 @@ public class SaveQrSheet extends BottomSheet {
         var bottomContentWidth = QR_CONTENT_WIDTH - (QR_INNER_PADDING * 2);
 
         textPaint.setColor(Color.BLACK);
-        textPaint.setTypeface(AndroidUtilities.bold());
+        textPaint.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         textPaint.setTextSize(QR_TEXT_SIZE_TITLE);
         var titleLayout = createLayout(title, bottomContentWidth, 1);
         canvas.save();

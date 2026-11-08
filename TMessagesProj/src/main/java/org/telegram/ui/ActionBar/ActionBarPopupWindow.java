@@ -354,6 +354,11 @@ public class ActionBarPopupWindow extends PopupWindow {
             else super.draw(canvas);
         }
 
+        @Override protected void onAttachedToWindow() {
+            super.onAttachedToWindow();
+            zxc.iconic.xenon.helpers.RoundedUiFonts.observe(this);
+        }
+
         @Override protected void onDetachedFromWindow() {
             if (iosEmbeddedSurface != null) {
                 iosEmbeddedSurface.release();
@@ -1123,7 +1128,8 @@ public class ActionBarPopupWindow extends PopupWindow {
                 }
             }
             prepareNativeSurface(source);
-            super.showAsDropDown(anchor, xoff, yoff);
+            zxc.iconic.xenon.helpers.RoundedUiFonts.observe(getContentView());
+        super.showAsDropDown(anchor, xoff, yoff);
             registerListener(anchor);
         } catch (Exception e) {
             FileLog.e(e);
@@ -1137,6 +1143,7 @@ public class ActionBarPopupWindow extends PopupWindow {
             return;
         }
         prepareNativeSurface(source);
+        zxc.iconic.xenon.helpers.RoundedUiFonts.observe(getContentView());
         super.showAsDropDown(anchor, xoff, yoff, gravity);
         registerListener(anchor);
     }
@@ -1220,6 +1227,7 @@ public class ActionBarPopupWindow extends PopupWindow {
             }
         }
         prepareNativeSurface(source);
+        zxc.iconic.xenon.helpers.RoundedUiFonts.observe(getContentView());
         super.showAtLocation(parent, gravity, x, y);
         unregisterListener();
     }

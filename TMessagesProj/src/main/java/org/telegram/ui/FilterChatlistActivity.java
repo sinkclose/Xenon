@@ -283,6 +283,7 @@ public class FilterChatlistActivity extends BaseFragment {
 
         updateRows();
 
+        zxc.iconic.xenon.helpers.RoundedUiFonts.observe(fragmentView);
         return fragmentView;
     }
 
@@ -1010,7 +1011,7 @@ public class FilterChatlistActivity extends BaseFragment {
             copyButton.setGravity(Gravity.CENTER);
             copyButton.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText));
             copyButton.setBackground(Theme.createRadSelectorDrawable(0x30ffffff, 8, 8));
-            copyButton.setTypeface(AndroidUtilities.bold());
+            copyButton.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             copyButton.setTextSize(14);
             SpannableStringBuilder spannableStringBuilder = new SpannableStringBuilder();
             spannableStringBuilder.append("..").setSpan(new ColoredImageSpan(ContextCompat.getDrawable(context, R.drawable.msg_copy_filled)), 0, 1, 0);
@@ -1035,7 +1036,7 @@ public class FilterChatlistActivity extends BaseFragment {
             shareButton.setGravity(Gravity.CENTER);
             shareButton.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText));
             shareButton.setBackground(Theme.createRadSelectorDrawable(0x30ffffff, 8, 8));
-            shareButton.setTypeface(AndroidUtilities.bold());
+            shareButton.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             shareButton.setTextSize(14);
             spannableStringBuilder = new SpannableStringBuilder();
             spannableStringBuilder.append("..").setSpan(new ColoredImageSpan(ContextCompat.getDrawable(context, R.drawable.msg_share_filled)), 0, 1, 0);
@@ -1052,7 +1053,7 @@ public class FilterChatlistActivity extends BaseFragment {
             generateButton.setGravity(Gravity.CENTER);
             generateButton.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText));
             generateButton.setBackground(Theme.createRadSelectorDrawable(0x30ffffff, 8, 8));
-            generateButton.setTypeface(AndroidUtilities.bold());
+            generateButton.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
             generateButton.setTextSize(14);
             generateButton.setText("Generate Invite Link");
             generateButton.setOnClickListener(e -> generate());

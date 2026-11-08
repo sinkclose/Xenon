@@ -2733,7 +2733,7 @@ public class EmojiBottomSheet extends BottomSheet implements NotificationCenter.
 
         private void updateLayouts() {
             textPaint.setTextSize(dp(14));
-            textPaint.setTypeface(AndroidUtilities.bold());
+            textPaint.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
 
             emojiLayout = new StaticLayout(LocaleController.getString("Emoji"), textPaint, getMeasuredWidth(), Layout.Alignment.ALIGN_NORMAL, 1, 0, false);
             emojiLayoutWidth = emojiLayout.getLineCount() >= 1 ? emojiLayout.getLineWidth(0) : 0;

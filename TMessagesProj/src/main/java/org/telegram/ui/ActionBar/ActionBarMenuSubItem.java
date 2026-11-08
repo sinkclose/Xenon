@@ -114,6 +114,12 @@ public class ActionBarMenuSubItem extends FrameLayout {
         makeCheckView(needCheck);
     }
 
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        zxc.iconic.xenon.helpers.RoundedUiFonts.observe(this);
+    }
+
     public void makeCheckView(int needCheck) {
         if (needCheck > 0) {
             checkView = new CheckBox2(getContext(), 26, resourcesProvider);
