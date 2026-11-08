@@ -374,7 +374,7 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
 
         LinearLayout contentView = new LinearLayout(context);
         contentView.setOrientation(LinearLayout.VERTICAL);
-        contentView.setPadding(dp(24), dp(16), dp(24), dp(8));
+        contentView.setPadding(dp(20), dp(24), dp(20), dp(8));
 
         if (topView != null) {
             AndroidUtilities.removeFromParent(topView);
@@ -386,8 +386,9 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
             titleView.setText(title);
             titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
             titleView.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, rp));
-            titleView.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"));
-            titleView.setPadding(0, 0, 0, dp(8));
+            titleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
+            titleView.setGravity(Gravity.CENTER);
+            titleView.setPadding(0, 0, 0, dp(12));
             contentView.addView(titleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
         }
 
@@ -396,7 +397,7 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
             subtitleView.setText(subtitle);
             subtitleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
             subtitleView.setTextColor(Theme.getColor(Theme.key_dialogTextGray3, rp));
-            subtitleView.setPadding(0, 0, 0, dp(8));
+            subtitleView.setPadding(0, 0, 0, dp(12));
             contentView.addView(subtitleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
         }
 
@@ -449,8 +450,9 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
             // Keep AlertDialog.getButtonsLayout()/getButton() working in sheet mode,
             // otherwise callers like BoostDialogs.applyDialogStyle() NPE (buttonsLayout == null).
             AlertDialog.this.buttonsLayout = buttonsLayout;
-            buttonsLayout.setOrientation(verticalButtons ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
-            buttonsLayout.setGravity(verticalButtons ? Gravity.START : Gravity.END);
+            buttonsLayout.setOrientation(LinearLayout.VERTICAL);
+            buttonsLayout.setGravity(Gravity.CENTER_HORIZONTAL);
+            buttonsLayout.setPadding(0, dp(12), 0, 0);
             int btnColor = Theme.getColor(Theme.key_dialogButton, rp);
             int redColor = getThemedColor(Theme.key_text_RedBold);
 
@@ -470,7 +472,7 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
                         negativeButtonListener.onClick(AlertDialog.this, AlertDialog.BUTTON_NEGATIVE);
                     }
                 });
-                buttonsLayout.addView(negBtn, LayoutHelper.createLinear(verticalButtons ? LayoutHelper.MATCH_PARENT : LayoutHelper.WRAP_CONTENT, 48, 0, 0, 0, 0));
+                buttonsLayout.addView(negBtn, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48, 0, 4, 0, 0));
             }
             if (hasNeg2) {
                 TextView neg2Btn = new TextView(context);
@@ -487,7 +489,7 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
                         negative2ButtonListener.onClick(AlertDialog.this, AlertDialog.BUTTON_NEGATIVE_2);
                     }
                 });
-                buttonsLayout.addView(neg2Btn, LayoutHelper.createLinear(verticalButtons ? LayoutHelper.MATCH_PARENT : LayoutHelper.WRAP_CONTENT, 48, 0, 0, 0, 0));
+                buttonsLayout.addView(neg2Btn, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48, 0, 4, 0, 0));
             }
             if (hasNeu) {
                 TextView neuBtn = new TextView(context);
@@ -505,7 +507,7 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
                         neutralButtonListener.onClick(AlertDialog.this, AlertDialog.BUTTON_NEUTRAL);
                     }
                 });
-                buttonsLayout.addView(neuBtn, LayoutHelper.createLinear(verticalButtons ? LayoutHelper.MATCH_PARENT : LayoutHelper.WRAP_CONTENT, 48, 0, 0, 0, 0));
+                buttonsLayout.addView(neuBtn, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48, 0, 4, 0, 0));
             }
             if (hasPos) {
                 TextView posBtn = new TextView(context);
@@ -513,18 +515,19 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
                 posBtn.setText(positiveButtonText);
                 posBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
                 boolean isRed = red != null && red.length > 0 && red[0];
-                posBtn.setTextColor(isRed ? redColor : btnColor);
-                posBtn.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"));
+                int primaryColor = isRed ? redColor : Theme.getColor(Theme.key_featuredStickers_addButton, rp);
+                posBtn.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText, rp));
+                posBtn.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
                 posBtn.setGravity(Gravity.CENTER);
                 posBtn.setPadding(dp(16), dp(10), dp(16), dp(10));
-                posBtn.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector, rp), 2));
+                posBtn.setBackground(Theme.AdaptiveRipple.filledRect(primaryColor, dp(24)));
                 posBtn.setOnClickListener(v -> {
                     sheet.dismiss();
                     if (positiveButtonListener != null) {
                         positiveButtonListener.onClick(AlertDialog.this, AlertDialog.BUTTON_POSITIVE);
                     }
                 });
-                buttonsLayout.addView(posBtn, LayoutHelper.createLinear(verticalButtons ? LayoutHelper.MATCH_PARENT : LayoutHelper.WRAP_CONTENT, 48, 0, 0, 0, 0));
+                buttonsLayout.addView(posBtn, 0, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48, 0, 4, 0, 4));
             }
             contentView.addView(buttonsLayout, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
         }
@@ -534,6 +537,7 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
 
         sheet.setCustomView(scrollView);
         sheet.show();
+        zxc.iconic.xenon.helpers.RoundedUiFonts.observe(contentView);
     }
 
     private void showAsMaterialDialogInternal(OnDismissListener externalDismiss1, OnDismissListener externalDismiss2) {
