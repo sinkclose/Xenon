@@ -2,6 +2,7 @@ package org.telegram.ui.Components;
 
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.RectF;
 import android.os.Build;
 import android.os.SystemClock;
 import android.view.View;
@@ -13,6 +14,7 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.FileLog;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
 import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceColor;
+import org.telegram.ui.Components.blur3.capture.IBlur3Capture;
 import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode;
 import org.telegram.ui.Components.chat.layouts.ChatActivityFadeView;
 
@@ -29,6 +31,16 @@ public class ProgressiveFadeBlurController {
     private final ChatActivityFadeView fadeView;
     private final CaptureLayout captureLayout;
     private View captureView;
+    private View captureCoordinateRoot;
+    private IBlur3Capture contentCapture;
+    private final RectF captureBounds = new RectF();
+
+    /** Capture real content in the same coordinate system as the fade host. */
+    public void setContentCapture(View coordinateRoot, IBlur3Capture capture) {
+        captureCoordinateRoot = coordinateRoot;
+        contentCapture = capture;
+        capturePending = true;
+    }
     private java.util.function.Consumer<Canvas> backgroundCapture;
 
     public void setBackgroundCapture(java.util.function.Consumer<Canvas> capture) {
@@ -44,7 +56,11 @@ public class ProgressiveFadeBlurController {
     }
 
     public void setFadeHeightTop(int height) {
-        fadeView.setFadeHeightTop(height, false);
+        setFadeHeightTop(height, false);
+    }
+
+    public void setFadeHeightTop(int height, boolean translucent) {
+        fadeView.setFadeHeightTop(height, translucent);
     }
 
     private float strengthProgress = 1f;
@@ -175,6 +191,23 @@ public class ProgressiveFadeBlurController {
         // below the drawable bounds (flipped geometry), making dim invisible.
     }
 
+    private int progressiveBlurZoneTop = -1;
+
+    /** Keep the blur profile independent of the visible fade's edge. */
+    public void setProgressiveBlurZoneTop(int zone) {
+        if (progressiveBlurZoneTop != zone) {
+            progressiveBlurZoneTop = zone;
+            capturePending = true;
+        }
+    }
+
+    private float progressiveTopFraction(int height) {
+        int zone = progressiveBlurZoneTop >= 0 ? progressiveBlurZoneTop : fadeZoneTop;
+        int originalTransition = AndroidUtilities.dp(48);
+        return zone > originalTransition
+                ? Math.min(1f, (zone - originalTransition) / (float) height) : 1f;
+    }
+
     public void setTopOffset(int topOffset) {
         if (topOffset < 0) {
             topOffset = 0;
@@ -191,13 +224,24 @@ public class ProgressiveFadeBlurController {
     }
 
     public void setDimEnabled(boolean dimEnabled) {
-        this.dimEnabled = dimEnabled;
+        if (this.dimEnabled != dimEnabled) {
+            this.dimEnabled = dimEnabled;
+            capturePending = true;
+        }
     }
 
     private int fadeViewRequestedVisibility = View.VISIBLE;
 
+    private boolean uniformBlurAllowed;
+
+    /** Also use the existing fixed-radius fade when progressive blur is off. */
+    public void setUniformBlurAllowed(boolean allowed) {
+        uniformBlurAllowed = allowed;
+    }
+
     public boolean isEnabled() {
-        return NekoConfig.progressiveFadeBlurOtherActivitiesEnabled();
+        return NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()
+                || uniformBlurAllowed && NekoConfig.fadeViewOtherActivities() && NekoConfig.blurredFadeViewEnabled();
     }
 
     // Applies the stock behavior when the master blur is off: loops stopped,
@@ -271,7 +315,7 @@ public class ProgressiveFadeBlurController {
     }
 
     public void invalidate() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || source.inRecording() || SizeNotifierFrameLayout.drawingBlur) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || source.inRecording() || SizeNotifierFrameLayout.drawingBlur) {
             return;
         }
         syncState();
@@ -290,8 +334,9 @@ public class ProgressiveFadeBlurController {
                 && transform == lastCaptureTransform && !activeEdgeEffects && !lastCaptureHadEdgeEffects) {
             return;
         }
-        final int fw = captureView.getWidth();
-        final int fh = captureView.getHeight();
+        final View coordinates = captureCoordinateRoot != null ? captureCoordinateRoot : captureView;
+        final int fw = coordinates.getWidth();
+        final int fh = coordinates.getHeight();
         if (fw <= 0 || fh <= 0) {
             return;
         }
@@ -319,18 +364,19 @@ public class ProgressiveFadeBlurController {
         }
         final int pixelation = Math.max(2, NekoConfig.blurredFadePixelation);
         source.setPixelation(pixelation);
-        final float topFraction = fadeZoneTop > AndroidUtilities.dp(48) ? Math.min(1f, (fadeZoneTop - AndroidUtilities.dp(48)) / (float) fh) : 1f;
+        final float topFraction = progressiveTopFraction(fh);
         final float bottomFraction = fadeZoneBottom > 0 ? Math.min(1f, fadeZoneBottom / (float) fh) : 0f;
-        source.setProgressiveBlur(strengthProgress * AndroidUtilities.dpf2(NekoConfig.progressiveFadeBlurMaxRadius) / pixelation, Math.max(1, Math.round(fw / (float) pixelation)), Math.max(1, Math.round(fh / (float) pixelation)), topFraction, bottomFraction, NekoConfig.progressiveFadeBlurSamples);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurEnabled()) {
+            source.setProgressiveBlur(strengthProgress * AndroidUtilities.dpf2(NekoConfig.progressiveFadeBlurMaxRadius) / pixelation, Math.max(1, Math.round(fw / (float) pixelation)), Math.max(1, Math.round(fh / (float) pixelation)), topFraction, bottomFraction, NekoConfig.progressiveFadeBlurSamples);
+        } else {
+            source.setPlainBlur(strengthProgress * AndroidUtilities.dpf2(NekoConfig.blurredFadeBlurStrength) / pixelation);
+        }
         try {
             Canvas c = source.beginRecording(fw, fh);
             try {
                 c.drawColor(color);
                 if (backgroundCapture != null) backgroundCapture.accept(c);
-                drawCapturedView(c, captureView);
-                for (int i = 0; i < additionalCaptureViews.size(); i++) {
-                    drawCapturedView(c, additionalCaptureViews.get(i));
-                }
+                captureContent(c, fw, fh);
             } finally {
                 source.endRecording();
             }
@@ -350,6 +396,16 @@ public class ProgressiveFadeBlurController {
             // Keep the filter current until release, including the final frame.
             capturePending = true;
             scheduleUpdate(interval);
+        }
+    }
+
+    private void captureContent(Canvas canvas, int width, int height) {
+        if (contentCapture != null) {
+            captureBounds.set(0, 0, width, height);
+            contentCapture.capture(canvas, captureBounds);
+        } else {
+            drawCapturedView(canvas, captureView);
+            for (View extra : additionalCaptureViews) drawCapturedView(canvas, extra);
         }
     }
 

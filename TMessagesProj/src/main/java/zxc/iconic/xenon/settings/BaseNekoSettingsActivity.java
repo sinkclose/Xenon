@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Build;
@@ -17,6 +18,18 @@ import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.LayerDrawable;
+import androidx.appcompat.view.ContextThemeWrapper;
+import androidx.appcompat.widget.Toolbar;
+import androidx.coordinatorlayout.widget.CoordinatorLayout;
+import androidx.core.graphics.ColorUtils;
+import com.google.android.material.appbar.AppBarLayout;
+import com.google.android.material.appbar.CollapsingToolbarLayout;
+import com.google.android.material.color.MaterialColors;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
@@ -50,6 +63,7 @@ import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.ProgressiveFadeBlurController;
 import org.telegram.ui.Components.chat.layouts.ChatActivityFadeView;
+import org.telegram.ui.Components.chat.ViewPositionWatcher;
 import org.telegram.ui.Components.SizeNotifierFrameLayout;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.URLSpanNoUnderline;
@@ -120,26 +134,39 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
 
     @Override
     public View createView(Context context) {
+        materialHeaderApplied = false;
+        materialCoordinator = null;
+        materialCollapsingToolbar = null;
+        materialFadeHost = null;
+        materialFadeController = null;
+        materialPlainFade = null;
+        materialFadeApplied = false;
+        materialPlainFadeColor = Integer.MIN_VALUE;
         contentView = new SizeNotifierFrameLayout(context) {
             @Override
             protected void dispatchDraw(Canvas canvas) {
-                // Fade view: live-blurred capture when the progressive path is
-                // enabled (48dp gradient raised 12dp under the header),
-                // plain theme-colored gradient (no blur)
-                // when only the toggle is on (start lowered ~5% down).
-                final boolean fadeBlurActive = progressiveFadeController != null && NekoConfig.progressiveFadeBlurOtherActivitiesEnabled();
+                // Only the short fade edge follows the first row's scroll.
+                // The progressive blur keeps its original coverage and density.
+                if (materialHeaderEnabled() && materialHeaderSearching != isSearchFieldVisible()) {
+                    updateMaterialHeader();
+                }
+                final boolean fadeBlurActive = progressiveFadeController != null && progressiveFadeController.isEnabled();
                 final int fadeZone = Math.max(listView.getPaddingTop(), actionBarContainer.getHeight());
-                if (fadeBlurActive) {
-                    // Raise the 48dp progressive gradient by 12dp.
-                    progressiveFadeController.setFadeZoneTop(fadeZone + AndroidUtilities.dp(31));
+                if (materialHeaderEnabled()) {
+                    updateMaterialFade();
+                    removePlainTopFade();
+                } else if (fadeBlurActive) {
+                    progressiveFadeController.setProgressiveBlurZoneTop(fadeZone + AndroidUtilities.dp(31));
+                    progressiveFadeController.setFadeZoneTop(settingsFadeZoneTop(fadeZone));
+                    progressiveFadeController.setAlpha(1f);
                     progressiveFadeController.invalidate();
                     removePlainTopFade();
                 } else if (fadeViewEnabled() && NekoConfig.fadeViewOtherActivities()) {
-                    ensurePlainTopFade(fadeZone + fadeZone / 20);
+                    ensurePlainTopFade(settingsFadeZoneTop(fadeZone));
                 } else {
                     removePlainTopFade();
                 }
-                if (Build.VERSION.SDK_INT >= 31 && scrollableViewNoiseSuppressor != null) {
+                if (!materialHeaderEnabled() && Build.VERSION.SDK_INT >= 31 && scrollableViewNoiseSuppressor != null) {
                     blur3_InvalidateBlur();
                     if (iBlur3SourceGlassFrosted != null) {
                         iBlur3SourceGlassFrosted.setSize(getMeasuredWidth(), getMeasuredHeight());
@@ -161,6 +188,7 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
             @Override
             public void drawBlurRect(Canvas canvas, float y, Rect rectTmp, Paint blurScrimPaint, boolean top) {
                 // The fade view (blurred or plain) covers the header zone.
+                if (materialHeaderEnabled()) return;
                 if (fadeViewEnabled() && NekoConfig.fadeViewOtherActivities()) {
                     return;
                 }
@@ -222,7 +250,7 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
                     scrollableViewNoiseSuppressor.onScrolled(dx, dy);
                     blur3_InvalidateBlur();
                 }
-                if (progressiveFadeController != null) {
+                if (progressiveFadeController != null && !materialHeaderEnabled()) {
                     progressiveFadeController.invalidate();
                 }
             }
@@ -253,6 +281,7 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
         };
         listView.addEdgeEffectListener(() -> listView.postOnAnimation(this::blur3_InvalidateBlur));
         listView.setSections();
+        listView.setCaptureSectionsDecoratorAllowed(true);
         listView.setPadding(0, needActionBarPadding() ? ActionBar.getCurrentActionBarHeight() : AndroidUtilities.dp(12), 0, 0);
         contentView.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.FILL));
 
@@ -262,6 +291,7 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
             @Override
             protected void onDraw(@NonNull Canvas canvas) {
                 var top = actionBarContainer.getHeight();
+                if (materialHeaderEnabled()) return;
                 AndroidUtilities.rectTmp2.set(0, 0, getMeasuredWidth(), top);
                 blurScrimPaint.setColor(Theme.getColor(Theme.key_actionBarDefault, resourceProvider));
                 contentView.drawBlurRect(canvas, 0, AndroidUtilities.rectTmp2, blurScrimPaint, true);
@@ -286,11 +316,16 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
 
         updateActionBarVisible(true, false);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && progressiveBlurEnabled() && fadeViewEnabled() && NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && progressiveBlurEnabled() && fadeViewEnabled()) {
             progressiveFadeController = new ProgressiveFadeBlurController(contentView, listView, contentView.indexOfChild(actionBarBackground), () -> getThemedColor(Theme.key_windowBackgroundGray));
+            progressiveFadeController.setUniformBlurAllowed(true);
             progressiveFadeController.setFadeZoneTop(listView.getPaddingTop());
+            progressiveFadeController.setContentCapture(contentView, iBlur3Capture);
+            progressiveFadeController.setOpaqueFade(true);
+            progressiveFadeController.setFadeHeightTop(AndroidUtilities.dp(32), false);
         }
 
+        syncMaterialHeader();
         return fragmentView = contentView;
     }
 
@@ -321,6 +356,14 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
     }
 
     private void updateActionBarVisible(boolean force, boolean animated) {
+        if (materialHeaderEnabled()) {
+            if (actionBarVisibleAnimator != null) {
+                actionBarVisibleAnimator.cancel();
+                actionBarVisibleAnimator = null;
+            }
+            updateMaterialHeader();
+            return;
+        }
         final boolean visible;
         if (isSearchFieldVisible()) {
             visible = true;
@@ -402,6 +445,7 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
 
     public void syncCenterTitle(boolean animate) {
         syncCenterTitle(getActionBar(), animate);
+        updateMaterialHeader();
     }
 
     private void syncCenterTitle(ActionBar actionBar, boolean animate) {
@@ -427,6 +471,389 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
             getActionBar().setPlainBackCircle(NekoConfig.fadeViewOtherActivities());
         }
         syncCenterTitle(false);
+        syncMaterialHeader();
+    }
+
+    private CoordinatorLayout materialCoordinator;
+    private AppBarLayout materialAppBar;
+    private CollapsingToolbarLayout materialCollapsingToolbar;
+    private Toolbar materialToolbar;
+    private boolean materialHeaderApplied;
+    private boolean materialHeaderSearching;
+    private int headerInsetLeft;
+    private int headerInsetTop = AndroidUtilities.statusBarHeight;
+    private int headerInsetRight;
+    private int headerInsetBottom;
+    private Typeface materialDefaultExpandedTypeface;
+    private Typeface materialDefaultCollapsedTypeface;
+    private int materialFontGeneration = -1;
+
+    protected boolean materialHeaderEnabled() {
+        return NekoConfig.materialActivityHeaders;
+    }
+
+    // Use Material's nested scrolling and title renderer. In particular, do not
+    // derive collapse from accumulated RecyclerView dy or fade two titles to zero.
+    protected void syncMaterialHeader() {
+        if (listView == null || actionBarContainer == null) return;
+        boolean enabled = materialHeaderEnabled();
+        if (enabled != materialHeaderApplied) {
+            materialHeaderApplied = enabled;
+            ((ViewGroup) listView.getParent()).removeView(listView);
+            ((ViewGroup) actionBarContainer.getParent()).removeView(actionBarContainer);
+            if (enabled) {
+                createMaterialHeader();
+                listView.setPadding(0, 0, 0, 0);
+                listView.setClipToPadding(true);
+                listView.setNestedScrollingEnabled(true);
+                CoordinatorLayout.LayoutParams scrolling = new CoordinatorLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+                scrolling.setBehavior(new AppBarLayout.ScrollingViewBehavior() {
+                    @Override
+                    public boolean onMeasureChild(CoordinatorLayout parent, View child, int widthSpec, int widthUsed, int heightSpec, int heightUsed) {
+                        boolean measured = super.onMeasureChild(parent, child, widthSpec, widthUsed, heightSpec, heightUsed);
+                        if (measured && materialFadeEnabled()) {
+                            child.measure(View.MeasureSpec.makeMeasureSpec(child.getMeasuredWidth(), View.MeasureSpec.EXACTLY),
+                                    View.MeasureSpec.makeMeasureSpec(child.getMeasuredHeight() + materialListOverlap(), View.MeasureSpec.EXACTLY));
+                        }
+                        return measured;
+                    }
+
+                    @Override
+                    public boolean onLayoutChild(CoordinatorLayout parent, View child, int direction) {
+                        boolean laidOut = super.onLayoutChild(parent, child, direction);
+                        if (materialFadeEnabled()) child.offsetTopAndBottom(-materialListOverlap());
+                        return laidOut;
+                    }
+
+                    @Override
+                    public boolean onDependentViewChanged(CoordinatorLayout parent, View child, View dependency) {
+                        boolean changed = super.onDependentViewChanged(parent, child, dependency);
+                        if (materialFadeEnabled() && dependency == materialAppBar) {
+                            child.offsetTopAndBottom(dependency.getBottom() - materialListOverlap() - child.getTop());
+                        }
+                        return changed;
+                    }
+                });
+                materialCoordinator.addView(listView, 0, scrolling);
+                CollapsingToolbarLayout.LayoutParams actions = new CollapsingToolbarLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, AndroidUtilities.dp(64));
+                actions.setCollapseMode(CollapsingToolbarLayout.LayoutParams.COLLAPSE_MODE_PIN);
+                materialCollapsingToolbar.addView(actionBarContainer, actions);
+                materialBackTarget = new View(contentView.getContext());
+                materialBackTarget.setContentDescription(LocaleController.getString(R.string.AccDescrGoBack));
+                materialBackTarget.setBackground(Theme.createSelectorDrawable(getThemedColor(Theme.key_listSelector), 1));
+                materialBackTarget.setOnClickListener(v -> {
+                    if (isSearchFieldVisible()) actionBar.closeSearchField();
+                    else finishFragment();
+                });
+                actionBarContainer.addView(materialBackTarget, LayoutHelper.createFrame(48, 48,
+                        Gravity.LEFT | Gravity.CENTER_VERTICAL, 20, 0, 0, 0));
+                actionBar.setPlainBackCircle(false);
+                actionBar.backButtonImageView.setVisibility(View.INVISIBLE);
+                actionBar.getTitlesContainer().setVisibility(View.INVISIBLE);
+                actionBar.setBackgroundColor(Color.TRANSPARENT);
+                actionBarContainer.setPadding(0, AndroidUtilities.dp(4), 0, AndroidUtilities.dp(4));
+                actionBarBackground.setVisibility(View.GONE);
+                removePlainTopFade();
+            } else {
+                if (materialFadeController != null) materialFadeController.stopContinuousUpdates();
+                materialFadeController = null;
+                materialPlainFade = null;
+                materialFadeHost = null;
+                materialFadeApplied = false;
+                materialPlainFadeColor = Integer.MIN_VALUE;
+                if (materialBackTarget != null) actionBarContainer.removeView(materialBackTarget);
+                contentView.removeView(materialCoordinator);
+                contentView.addView(listView, 0, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+                contentView.addView(actionBarContainer, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT,
+                        LayoutHelper.WRAP_CONTENT, Gravity.TOP));
+                listView.setPadding(0, needActionBarPadding() ? ActionBar.getCurrentActionBarHeight() : AndroidUtilities.dp(12), 0, 0);
+                listView.setClipToPadding(false);
+                contentView.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundGray));
+                actionBarContainer.setPadding(0, 0, 0, 0);
+                actionBar.backButtonImageView.setVisibility(View.VISIBLE);
+                actionBar.getTitlesContainer().setVisibility(View.VISIBLE);
+                actionBar.getTitlesContainer().setAlpha(1f);
+                actionBarBackground.setVisibility(View.VISIBLE);
+                materialCoordinator = null;
+                materialCollapsingToolbar = null;
+            }
+        }
+        actionBar.setMaterialActivityHeader(enabled);
+        actionBar.setPlainBackCircle(!enabled && NekoConfig.fadeViewOtherActivities());
+        if (progressiveFadeController != null) {
+            progressiveFadeController.setFadeViewVisibility(enabled ? View.GONE : View.VISIBLE);
+            if (enabled) progressiveFadeController.stopContinuousUpdates();
+        }
+        applyHeaderInsets();
+        updateMaterialHeader();
+        updateActionBarVisible(true, false);
+        contentView.invalidate();
+    }
+
+    private void createMaterialHeader() {
+        boolean dark = ColorUtils.calculateLuminance(getThemedColor(Theme.key_windowBackgroundGray)) < 0.5;
+        ContextThemeWrapper materialContext = new ContextThemeWrapper(getContext(), dark
+                ? com.google.android.material.R.style.Theme_Material3_Dark_NoActionBar
+                : com.google.android.material.R.style.Theme_Material3_Light_NoActionBar);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            materialContext.getTheme().applyStyle(dark
+                    ? com.google.android.material.R.style.ThemeOverlay_Material3_DynamicColors_Dark
+                    : com.google.android.material.R.style.ThemeOverlay_Material3_DynamicColors_Light, true);
+        }
+        int surface = ColorUtils.setAlphaComponent(getThemedColor(Theme.key_windowBackgroundGray), 255);
+        int onSurface = getThemedColor(Theme.key_windowBackgroundWhiteBlackText);
+        int buttonSurface = ColorUtils.blendARGB(surface, onSurface, 0.08f);
+        int onButton = onSurface;
+        contentView.setBackgroundColor(surface);
+        materialCoordinator = new CoordinatorLayout(materialContext);
+        // The controls retain their status-bar inset; only the fade may extend above it.
+        materialCoordinator.setClipChildren(false);
+        materialCoordinator.setClipToPadding(false);
+        materialCoordinator.setBackgroundColor(surface);
+        contentView.addView(materialCoordinator, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+        materialAppBar = new AppBarLayout(materialContext);
+        materialAppBar.setBackgroundColor(surface);
+        materialAppBar.setTargetElevation(0);
+        materialAppBar.setStateListAnimator(null);
+        materialAppBar.setLiftOnScroll(false);
+        // Material 3 can animate liftOnScrollColor on collapse even when
+        // liftOnScroll is false. The fade owns this background completely.
+        materialAppBar.setLiftOnScrollColor(null);
+        materialAppBar.setLiftable(false);
+        materialAppBar.setLifted(false);
+        materialAppBar.setStatusBarForeground(null);
+        CoordinatorLayout.LayoutParams bar = new CoordinatorLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        bar.setBehavior(new AppBarLayout.Behavior());
+        materialCoordinator.addView(materialAppBar, bar);
+        materialFadeHost = new FrameLayout(materialContext);
+        materialFadeHost.setClickable(false);
+        materialCoordinator.addView(materialFadeHost, 0, new CoordinatorLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        materialAppBar.addOnOffsetChangedListener((appBar, offset) -> {
+            if (materialFadeEnabled()) {
+                if (materialFadeController != null) materialFadeController.invalidate();
+                contentView.invalidate();
+            }
+        });
+        materialCollapsingToolbar = new CollapsingToolbarLayout(materialContext);
+        materialCollapsingToolbar.setId(View.generateViewId());
+        materialCollapsingToolbar.setMinimumHeight(AndroidUtilities.dp(64));
+        materialCollapsingToolbar.setBackgroundColor(surface);
+        materialCollapsingToolbar.setContentScrimColor(surface);
+        materialCollapsingToolbar.setStatusBarScrimColor(surface);
+        materialCollapsingToolbar.setTitleCollapseMode(CollapsingToolbarLayout.TITLE_COLLAPSE_MODE_SCALE);
+        materialCollapsingToolbar.setExpandedTitleTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_DisplaySmall);
+        materialCollapsingToolbar.setCollapsedTitleTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_HeadlineSmall);
+        // Keep Material's default typography when the selected family has no
+        // variable rounded face. Supported families use the same ROND/wght path
+        // as ActionBar rather than replacing Flex with plain Google Sans.
+        materialDefaultExpandedTypeface = materialCollapsingToolbar.getExpandedTitleTypeface();
+        materialDefaultCollapsedTypeface = materialCollapsingToolbar.getCollapsedTitleTypeface();
+        materialFontGeneration = -1;
+        materialCollapsingToolbar.setExpandedTitleColor(onSurface);
+        materialCollapsingToolbar.setCollapsedTitleTextColor(onSurface);
+        materialCollapsingToolbar.setExpandedTitleMargin(AndroidUtilities.dp(24), 0, AndroidUtilities.dp(24), AndroidUtilities.dp(24));
+        materialCollapsingToolbar.setMaxLines(2);
+        materialCollapsingToolbar.setExtraMultilineHeightEnabled(true);
+        AppBarLayout.LayoutParams collapsing = new AppBarLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, AndroidUtilities.dp(152));
+        collapsing.setScrollFlags(AppBarLayout.LayoutParams.SCROLL_FLAG_SCROLL
+                | AppBarLayout.LayoutParams.SCROLL_FLAG_EXIT_UNTIL_COLLAPSED
+                | AppBarLayout.LayoutParams.SCROLL_FLAG_SNAP);
+        materialAppBar.addView(materialCollapsingToolbar, collapsing);
+        materialToolbar = new Toolbar(materialContext);
+        materialToolbar.setBackgroundColor(Color.TRANSPARENT);
+        materialToolbar.setId(View.generateViewId());
+        materialToolbar.setPadding(AndroidUtilities.dp(16), 0, AndroidUtilities.dp(16), 0);
+        materialToolbar.setContentInsetsRelative(0, 0);
+        materialToolbar.setContentInsetStartWithNavigation(AndroidUtilities.dp(64));
+        materialToolbar.setTitleMarginStart(0);
+        GradientDrawable circle = new GradientDrawable();
+        circle.setShape(GradientDrawable.OVAL);
+        circle.setColor(buttonSurface);
+        circle.setSize(AndroidUtilities.dp(40), AndroidUtilities.dp(40));
+        Drawable arrow = materialContext.getDrawable(R.drawable.ic_material_header_back).mutate();
+        arrow.setTint(onButton);
+        LayerDrawable back = new LayerDrawable(new Drawable[]{circle, arrow});
+        back.setLayerSize(0, AndroidUtilities.dp(40), AndroidUtilities.dp(40));
+        back.setLayerSize(1, AndroidUtilities.dp(24), AndroidUtilities.dp(24));
+        back.setLayerGravity(1, Gravity.CENTER);
+        materialToolbar.setNavigationIcon(back);
+        materialToolbar.setNavigationContentDescription(LocaleController.getString(R.string.AccDescrGoBack));
+        materialToolbar.setNavigationOnClickListener(v -> {
+            if (isSearchFieldVisible()) actionBar.closeSearchField();
+            else finishFragment();
+        });
+        CollapsingToolbarLayout.LayoutParams toolbar = new CollapsingToolbarLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, AndroidUtilities.dp(64));
+        toolbar.setCollapseMode(CollapsingToolbarLayout.LayoutParams.COLLAPSE_MODE_PIN);
+        materialCollapsingToolbar.addView(materialToolbar, toolbar);
+    }
+
+    private void updateMaterialHeader() {
+        if (!materialHeaderEnabled() || materialCollapsingToolbar == null) return;
+        int generation = zxc.iconic.xenon.helpers.ClientFonts.generation();
+        if (materialFontGeneration != generation) {
+            materialFontGeneration = generation;
+            boolean rounded = zxc.iconic.xenon.helpers.TypefaceHelper.supportsRoundedTypeface();
+            Typeface title = rounded ? zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(550, false) : null;
+            materialCollapsingToolbar.setExpandedTitleTypeface(rounded ? title : materialDefaultExpandedTypeface);
+            materialCollapsingToolbar.setCollapsedTitleTypeface(rounded ? title : materialDefaultCollapsedTypeface);
+        }
+        materialHeaderSearching = isSearchFieldVisible();
+        materialCollapsingToolbar.setTitleEnabled(!materialHeaderSearching);
+        materialCollapsingToolbar.setTitle(getActionBarTitle());
+        // Expanded titles stay at the start and retain their full multiline width.
+        materialCollapsingToolbar.setMaxLines(2);
+        materialCollapsingToolbar.setExtraMultilineHeightEnabled(true);
+        int horizontal = NekoConfig.centerTitle ? Gravity.CENTER_HORIZONTAL : Gravity.START;
+        materialCollapsingToolbar.setExpandedTitleGravity(Gravity.BOTTOM | Gravity.START);
+        materialCollapsingToolbar.setCollapsedTitleGravity(Gravity.CENTER_VERTICAL | horizontal);
+        // Leave room for the existing search/overflow menu, which stays interactive.
+        int menuWidth = actionBar.createMenu().getMeasuredWidth();
+        int trailing = menuWidth == 0 ? 0 : menuWidth + AndroidUtilities.dp(16);
+        int leading = AndroidUtilities.dp(64);
+        int titleInset = Math.max(leading, trailing);
+        Paint titleMeasure = new Paint(Paint.ANTI_ALIAS_FLAG);
+        titleMeasure.setTypeface(materialCollapsingToolbar.getCollapsedTitleTypeface());
+        titleMeasure.setTextSize(24 * materialToolbar.getResources().getDisplayMetrics().scaledDensity);
+        boolean fitsScreenCenter = titleMeasure.measureText(getActionBarTitle().toString())
+                <= materialToolbar.getWidth() - 2 * titleInset;
+        boolean symmetric = NekoConfig.centerTitle && fitsScreenCenter;
+        materialToolbar.setContentInsetStartWithNavigation(symmetric ? titleInset : leading);
+        materialToolbar.setTitleMarginEnd(symmetric ? titleInset : trailing);
+        if (materialHeaderSearching) materialAppBar.setExpanded(false, false);
+        updateMaterialFade();
+    }
+
+    private FrameLayout materialFadeHost;
+    private ProgressiveFadeBlurController materialFadeController;
+    private ChatActivityFadeView materialPlainFade;
+    private View materialBackTarget;
+    private boolean materialFadeApplied;
+    private int materialPlainFadeColor = Integer.MIN_VALUE;
+
+    private int materialListOverlap() {
+        // The viewport starts at screen y=0 when collapsed, not below the status
+        // bar. Padding keeps the first row in exactly the same visual position.
+        return AndroidUtilities.dp(64) + headerInsetTop;
+    }
+
+    private float settingsFadeProgress() {
+        if (listView == null || !listView.canScrollVertically(-1)) return 0f;
+        View first = listView.layoutManager.findViewByPosition(0);
+        if (first == null) return 1f;
+        float distance = Math.max(0f, listView.getPaddingTop() - first.getTop());
+        return Math.min(1f, distance / Math.max(1, AndroidUtilities.dp(48)));
+    }
+
+    private int settingsFadeZoneTop(int headerBottom) {
+        return headerBottom + Math.round(AndroidUtilities.dp(12) * settingsFadeProgress());
+    }
+
+    private IBlur3Capture materialFadeCapture() {
+        final View host = materialFadeHost;
+        final ViewGroup root = contentView;
+        final ViewGroupPartRenderer renderer = new ViewGroupPartRenderer(listView, root, listView::drawChild);
+        return new IBlur3Capture() {
+            private final PointF origin = new PointF();
+            private final RectF rootBounds = new RectF();
+
+            @Override
+            public void capture(Canvas canvas, RectF bounds) {
+                if (!ViewPositionWatcher.computeCoordinatesInParent(host, root, origin)) return;
+                rootBounds.set(bounds);
+                rootBounds.offset(origin.x, origin.y);
+                int save = canvas.save();
+                try {
+                    canvas.translate(-origin.x, -origin.y);
+                    renderer.capture(canvas, rootBounds);
+                } finally {
+                    canvas.restoreToCount(save);
+                }
+            }
+        };
+    }
+
+    private boolean materialFadeEnabled() {
+        return materialHeaderEnabled() && NekoConfig.fadeViewOtherActivities();
+    }
+
+    private void updateMaterialFade() {
+        if (materialFadeHost == null || materialCollapsingToolbar == null) return;
+        boolean fade = materialFadeEnabled();
+        if (materialFadeApplied != fade) {
+            materialFadeApplied = fade;
+            int surface = ColorUtils.setAlphaComponent(getThemedColor(Theme.key_windowBackgroundGray), 255);
+            if (fade) {
+                // A transparent ColorDrawable is converted back into a Material
+                // shape by AppBarLayout. Remove the drawable instead, so scroll
+                // state changes cannot paint a rectangular tonal surface.
+                materialAppBar.setBackground(null);
+                materialCollapsingToolbar.setBackground(null);
+                materialCollapsingToolbar.setContentScrim(null);
+                materialCollapsingToolbar.setStatusBarScrim(null);
+            } else {
+                materialAppBar.setBackgroundColor(surface);
+                materialCollapsingToolbar.setBackgroundColor(surface);
+                materialCollapsingToolbar.setContentScrimColor(surface);
+                materialCollapsingToolbar.setStatusBarScrimColor(surface);
+            }
+            applyHeaderInsets();
+            listView.requestLayout();
+        }
+        materialFadeHost.setVisibility(fade ? View.VISIBLE : View.GONE);
+        if (!fade) {
+            if (materialFadeController != null) {
+                materialFadeController.setFadeViewVisibility(View.GONE);
+                materialFadeController.stopContinuousUpdates();
+            }
+            return;
+        }
+        int headerBottom = Math.max(headerInsetTop + AndroidUtilities.dp(64), materialAppBar.getBottom());
+        int zone = settingsFadeZoneTop(headerBottom);
+        boolean blur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                && (NekoConfig.blurredFadeViewEnabled() || NekoConfig.progressiveFadeBlurOtherActivitiesEnabled());
+        if (blur && materialFadeController == null) {
+            materialFadeController = new ProgressiveFadeBlurController(materialFadeHost, listView, -1,
+                    () -> getThemedColor(Theme.key_windowBackgroundGray));
+            materialFadeController.setUniformBlurAllowed(true);
+            materialFadeController.setContentCapture(materialFadeHost, materialFadeCapture());
+            materialFadeController.setOpaqueFade(true);
+            materialFadeController.setFadeHeightTop(AndroidUtilities.dp(32), false);
+        }
+        if (materialFadeController != null) {
+            materialFadeController.setFadeViewVisibility(blur ? View.VISIBLE : View.GONE);
+            materialFadeController.setAlpha(1f);
+            if (blur) {
+                materialFadeController.setProgressiveBlurZoneTop(headerBottom + AndroidUtilities.dp(31));
+                materialFadeController.setFadeZoneTop(zone);
+                materialFadeController.invalidate();
+            } else materialFadeController.stopContinuousUpdates();
+        }
+        if (!blur && materialPlainFade == null) {
+            materialPlainFade = new ChatActivityFadeView(contentView.getContext());
+            materialPlainFade.setupColorKey(Theme.key_windowBackgroundGray);
+            materialPlainFade.setOpaqueFade(true);
+            materialPlainFade.setFadeTopAlpha(255);
+            materialPlainFade.setDim(255 * 88 / 100);
+            materialFadeHost.addView(materialPlainFade, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+        }
+        if (materialPlainFade != null) {
+            materialPlainFade.setVisibility(blur ? View.GONE : View.VISIBLE);
+            materialPlainFade.setAlpha(1f);
+            materialPlainFade.setFadeZoneTop(zone);
+            materialPlainFade.setFadeHeightTop(AndroidUtilities.dp(32), false);
+            int color = getThemedColor(Theme.key_windowBackgroundGray);
+            if (materialPlainFadeColor != color) {
+                materialPlainFadeColor = color;
+                materialPlainFade.setDimColor(color);
+                materialPlainFade.updateColors(resourcesProvider);
+            }
+        }
     }
 
     protected String getKey() {
@@ -462,27 +889,24 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
         return true;
     }
 
-    // Plain top fade without blur: same 48dp gradient as the progressive
-    // path, solid theme color instead of a live capture. Dimming is fixed
-    // at 88%: the slider only affects the progressive version.
+    // Theme-colored alternative using the same short edge as the blurred fade.
     private void ensurePlainTopFade(int fadeZone) {
         if (plainTopFadeView == null) {
             plainTopFadeView = new ChatActivityFadeView(contentView.getContext());
             plainTopFadeView.setupColorKey(Theme.key_windowBackgroundGray);
             plainTopFadeView.setOpaqueFade(true);
-            plainTopFadeView.setFadeHeightTop(AndroidUtilities.dp(48), false);
+            plainTopFadeView.setFadeHeightTop(AndroidUtilities.dp(32), false);
             plainTopFadeView.setFadeTopAlpha(255);
             lastPlainFadeColor = Integer.MIN_VALUE;
             plainTopFadeView.setDim(255 * 88 / 100);
             contentView.addView(plainTopFadeView, contentView.indexOfChild(actionBarBackground), LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
         }
-        // Cover the visible header even when the list padding is small (zone
-        // computed by the caller, gradient start lowered ~5% down). Stretch
-        // the gradient over the whole zone: smooth, from below the back
-        // circle fading out to the top. Non-progressive starts a bit lower.
-        final int plainZone = fadeZone + AndroidUtilities.dp(12);
+        // Keep the transition within the last 32dp instead of stretching the
+        // mask across the header; its lower edge stays above the first item.
+        final int plainZone = fadeZone;
+        plainTopFadeView.setAlpha(1f);
         plainTopFadeView.setFadeZoneTop(plainZone);
-        plainTopFadeView.setFadeHeightTop(Math.max(AndroidUtilities.dp(48), plainZone), false);
+        plainTopFadeView.setFadeHeightTop(AndroidUtilities.dp(32), false);
         final int color = getThemedColor(Theme.key_windowBackgroundGray);
         if (color != lastPlainFadeColor) {
             lastPlainFadeColor = color;
@@ -622,10 +1046,44 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
 
     @Override
     public void onInsets(int left, int top, int right, int bottom) {
-        var topPadding = needActionBarPadding() ? ActionBar.getCurrentActionBarHeight() : AndroidUtilities.dp(12);
-        listView.setPadding(0, top + topPadding, 0, bottom);
-        actionBarContainer.setPadding(0, top, 0, 0);
+        headerInsetLeft = left;
+        headerInsetTop = top;
+        headerInsetRight = right;
+        headerInsetBottom = bottom;
+        applyHeaderInsets();
         super.onInsets(left, top, right, bottom);
+    }
+
+    private void applyHeaderInsets() {
+        if (listView == null || actionBarContainer == null) return;
+        if (materialHeaderEnabled() && materialCoordinator != null) {
+            // Insets belong to the whole nested-scrolling layout. Padding the
+            // RecyclerView at the top clips row text but leaves section fills
+            // visible there, producing empty "ghost" cards below the app bar.
+            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) materialCoordinator.getLayoutParams();
+            if (params.leftMargin != headerInsetLeft || params.topMargin != 0
+                    || params.rightMargin != headerInsetRight) {
+                params.setMargins(headerInsetLeft, 0, headerInsetRight, 0);
+                materialCoordinator.setLayoutParams(params);
+            }
+            // Keep the coordinator's bounds behind the status bar. Its padding
+            // insets the app bar and list; the fade cancels only that padding.
+            if (materialCoordinator.getPaddingTop() != headerInsetTop) {
+                materialCoordinator.setPadding(0, headerInsetTop, 0, 0);
+            }
+            CoordinatorLayout.LayoutParams fadeParams = (CoordinatorLayout.LayoutParams) materialFadeHost.getLayoutParams();
+            if (fadeParams.topMargin != -headerInsetTop) {
+                fadeParams.topMargin = -headerInsetTop;
+                materialFadeHost.setLayoutParams(fadeParams);
+            }
+            listView.setPadding(0, materialFadeEnabled() ? materialListOverlap() : 0, 0, headerInsetBottom);
+            listView.setClipToPadding(!materialFadeEnabled());
+            actionBarContainer.setPadding(0, AndroidUtilities.dp(4), 0, AndroidUtilities.dp(4));
+        } else {
+            int topPadding = needActionBarPadding() ? ActionBar.getCurrentActionBarHeight() : AndroidUtilities.dp(12);
+            listView.setPadding(0, headerInsetTop + topPadding, 0, headerInsetBottom);
+            actionBarContainer.setPadding(0, headerInsetTop, 0, 0);
+        }
     }
 
     /* Blur */
@@ -651,7 +1109,8 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
     }
 
     protected void blur3_InvalidateBlur() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || scrollableViewNoiseSuppressor == null) {
+        if (materialHeaderEnabled() || Build.VERSION.SDK_INT < Build.VERSION_CODES.S
+                || scrollableViewNoiseSuppressor == null) {
             return;
         }
 

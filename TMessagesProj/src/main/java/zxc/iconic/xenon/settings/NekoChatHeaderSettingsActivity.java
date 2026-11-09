@@ -45,6 +45,8 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
 
     private boolean advancedSettings;
 
+    private final int materialActivityHeadersRow = rowId++;
+    private final int materialHeadersInDialogsRow = rowId++;
     private final int removeHeaderPillRow = rowId++;
     private final int centerHeaderRow = rowId++;
     private final int avatarPlacementRow = rowId++;
@@ -118,6 +120,12 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
         items.add(UItem.asShadow(null));
 
         items.add(UItem.asHeader("Header"));
+        items.add(UItem.asCheck(materialActivityHeadersRow, "\"material\" headers in activities")
+                .setChecked(NekoConfig.materialActivityHeaders).slug("materialActivityHeaders"));
+        if (NekoConfig.materialActivityHeaders) {
+            items.add(UItem.asCheck(materialHeadersInDialogsRow, "Apply in dialogs activity too")
+                    .setChecked(NekoConfig.materialHeadersInDialogs).slug("materialHeadersInDialogs"));
+        }
         items.add(UItem.asCheck(removeHeaderPillRow, "Remove header pill").setChecked(NekoConfig.material3ChatHeaders).slug("removeHeaderPill"));
         items.add(UItem.asCheck(centerHeaderRow, LocaleController.getString(R.string.CenterChatHeader)).setChecked(NekoConfig.centerChatHeader).slug("centerHeader"));
         items.add(UItem.asCheck(biggerAvatarRow, "Bigger avatar").setChecked(NekoConfig.biggerAvatar).slug("biggerAvatar"));
@@ -223,7 +231,17 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
     @Override
     protected void onItemClick(UItem item, View view, int position, float x, float y) {
         var id = item.id;
-        if (id == removeHeaderPillRow) {
+        if (id == materialActivityHeadersRow) {
+            NekoConfig.toggleMaterialActivityHeaders();
+            if (view instanceof TextCheckCell) {
+                ((TextCheckCell) view).setChecked(NekoConfig.materialActivityHeaders);
+            }
+            syncMaterialHeader();
+            listView.adapter.update(true);
+        } else if (id == materialHeadersInDialogsRow) {
+            NekoConfig.toggleMaterialHeadersInDialogs();
+            if (view instanceof TextCheckCell) ((TextCheckCell) view).setChecked(NekoConfig.materialHeadersInDialogs);
+        } else if (id == removeHeaderPillRow) {
             NekoConfig.toggleMaterial3ChatHeaders();
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.material3ChatHeaders);
@@ -264,7 +282,7 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.progressiveFadeBlur);
             }
-            if (!otherWasActive && NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()) {
+            if (!NekoConfig.materialActivityHeaders && !otherWasActive && NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()) {
                 showRestartBulletin();
             }
             if (listView != null && listView.adapter != null) {
@@ -278,7 +296,7 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
             }
             // The blur controller is created in createView: restart when it
             // needs to be created now. The plain fade appears live regardless.
-            if (NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()) {
+            if (!NekoConfig.materialActivityHeaders && NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()) {
                 showRestartBulletin();
             }
         } else if (id == blurredFadeDimmingRow) {

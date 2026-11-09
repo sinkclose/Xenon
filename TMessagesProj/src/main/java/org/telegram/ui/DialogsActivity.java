@@ -258,6 +258,8 @@ import org.telegram.ui.Components.ShareTopView;
 import org.telegram.ui.Components.SharedMediaLayout;
 import org.telegram.ui.Components.SimpleThemeDescription;
 import org.telegram.ui.Components.ProgressiveFadeBlurController;
+import org.telegram.ui.Components.MaterialActivityTitleView;
+import org.telegram.ui.Components.chat.layouts.ChatActivityFadeView;
 import org.telegram.ui.Components.SizeNotifierFrameLayout;
 import org.telegram.ui.Components.StickersAlert;
 import org.telegram.ui.Components.SwipeGestureSettingsView;
@@ -422,7 +424,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         Runnable saveScrollPositionRunnable = () -> {
             if (listView != null && listView.getScrollState() == RecyclerView.SCROLL_STATE_IDLE && listView.getChildCount() > 0 && listView.getLayoutManager() != null) {
                 boolean hasHiddenArchive = dialogsType == DIALOGS_TYPE_DEFAULT && hasHiddenArchive() && archivePullViewState == ARCHIVE_ITEM_STATE_HIDDEN;
-                float tabsTranslation = scrollYOffset;
+                float tabsTranslation = dialogsListScrollOffset();
                 LinearLayoutManager layoutManager = ((LinearLayoutManager) listView.getLayoutManager());
                 View view = null;
                 int position = -1;
@@ -635,6 +637,152 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     float panTranslationY;
 
     private View blurredView;
+    private MaterialActivityTitleView materialDialogsTitle;
+    private int materialTitleScroll;
+    private boolean materialDialogsApplied;
+
+    private int materialTitleCollapseAt(float distance) {
+        int titleRange = materialDialogsTitleRange();
+        int combinedRange = titleRange + getMaxScrollYOffsetWithoutSearch();
+        return Math.round(titleRange * Math.max(0f, Math.min(1f, distance / Math.max(1, combinedRange))));
+    }
+
+    private int dialogsListScrollOffset() {
+        return Math.round(scrollYOffset) - (dialogsMaterialHeaderEnabled() ? materialTitleScroll : 0);
+    }
+
+    private int materialDialogsTitleRange() {
+        return dialogsMaterialHeaderEnabled() ? dp(88) : 0;
+    }
+
+    private float materialDialogsTitleFraction() {
+        if (viewPages == null || viewPages[0] == null) return 0;
+        return Math.min(1f, materialTitleScroll / (float) Math.max(1, materialDialogsTitleRange()));
+    }
+
+    private float materialDialogsExtraHeight() {
+        if (!dialogsMaterialHeaderEnabled()) return 0;
+        float visible = (1f - searchAnimationProgress) * (1f - progressToActionMode) * (1f - getRightSlidingProgress());
+        return (dp(64) - ActionBar.getCurrentActionBarHeight()
+                + materialDialogsTitleRange() * (1f - materialDialogsTitleFraction())) * visible;
+    }
+
+    private ChatActivityFadeView materialDialogsPlainFade;
+    private int materialDialogsFadeColor = Integer.MIN_VALUE;
+
+    private boolean dialogsMaterialHeaderEnabled() {
+        return NekoConfig.materialActivityHeaders && NekoConfig.materialHeadersInDialogs && !onlySelect;
+    }
+
+    private int materialDialogsLeadingInset() {
+        View back = actionBar.getBackButton();
+        boolean navigation = back != null && back.getVisibility() == View.VISIBLE && back.getAlpha() > 0.01f
+                && actionBar.getBackButton().getDrawable() != null;
+        int inset = dp(navigation ? 80 : 24);
+        if (hasStories || hasOnlySlefStories) {
+            int stories = dialogStoriesCell == null ? dp(80) : dialogStoriesCell.getExternalHeaderLeadingInset();
+            inset = Math.max(inset, Math.max(dp(80), stories));
+        }
+        return inset;
+    }
+
+    private float materialDialogsTitleVisibility() {
+        if (!dialogsMaterialHeaderEnabled() || searchIsShowed) return 0f;
+        return Math.max(0f, Math.min(1f, (1f - searchAnimationProgress)
+                * (1f - progressToActionMode) * (1f - getRightSlidingProgress())));
+    }
+
+    private void syncDialogsMaterialHeader() {
+        if (actionBar == null || !(fragmentView instanceof ContentView)) return;
+        ContentView contentView = (ContentView) fragmentView;
+        boolean material = dialogsMaterialHeaderEnabled();
+        actionBar.setMaterialActivityHeader(material);
+        if (materialDialogsApplied != material) {
+            materialDialogsApplied = material;
+            if (viewPages != null) for (ViewPage page : viewPages) {
+                if (page != null) {
+                    materialTitleScroll = 0;
+                    page.listView.requestLayout();
+                }
+            }
+            invalidateScrollY = true;
+            contentView.requestLayout();
+        }
+        float titleVisibility = materialDialogsTitleVisibility();
+        boolean showTitle = titleVisibility > 0.001f;
+        if (material && materialDialogsTitle == null) {
+            materialDialogsTitle = new MaterialActivityTitleView(contentView.getContext());
+        }
+        // createView can replace ContentView while this fragment is retained.
+        // A non-null title may still belong to the previous root.
+        if (material && materialDialogsTitle.getParent() != contentView) {
+            AndroidUtilities.removeFromParent(materialDialogsTitle);
+            contentView.addView(materialDialogsTitle, contentView.indexOfChild(actionBar),
+                    LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 152, Gravity.TOP));
+        }
+        if (materialDialogsTitle != null) {
+            materialDialogsTitle.setVisibility(showTitle ? View.VISIBLE : View.GONE);
+            materialDialogsTitle.setAlpha(titleVisibility);
+            materialDialogsTitle.setTranslationY(statusBarHeight);
+            if (showTitle) materialDialogsTitle.update(actionBar.getTitle(), materialDialogsTitleFraction(), NekoConfig.centerTitle,
+                    NekoConfig.fadeViewOtherActivities(), getThemedColor(Theme.key_windowBackgroundGray),
+                    getThemedColor(Theme.key_windowBackgroundWhiteBlackText), actionBar.createMenu().getMeasuredWidth(),
+                    materialDialogsLeadingInset());
+        }
+        if (showTitle) {
+            // Keep the title above the fade and page containers created later.
+            materialDialogsTitle.bringToFront();
+            actionBar.bringToFront();
+            actionBar.getTitlesContainer().setVisibility(View.INVISIBLE);
+            actionBar.setTranslationY(dp(4));
+        }
+        if (dialogStoriesCell != null) dialogStoriesCell.setExternalHeaderTitle(material);
+        if (progressiveFadeController != null) progressiveFadeController.setUniformBlurAllowed(material);
+        boolean fade = material && NekoConfig.fadeViewOtherActivities() && !searchIsShowed && progressToActionMode == 0;
+        boolean blur = fade && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                && (NekoConfig.blurredFadeViewEnabled() || NekoConfig.progressiveFadeBlurOtherActivitiesEnabled());
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                && (blur || NekoConfig.progressiveFadeBlurOtherActivitiesEnabled())
+                && progressiveFadeController == null && viewPages != null && viewPages[0] != null) {
+            progressiveFadeController = new ProgressiveFadeBlurController(contentView, viewPages[0],
+                    contentView.indexOfChild(searchTabsAndFiltersLayout), () -> getThemedColor(Theme.key_windowBackgroundGray));
+            progressiveFadeController.setUniformBlurAllowed(material);
+        }
+        if (progressiveFadeController != null) {
+            // Material owns its dimming in the blur drawable, regardless of
+            // whether the controller was created at startup or enabled live.
+            progressiveFadeController.setDimEnabled(material || dialogsTopDimOverlay == null);
+            progressiveFadeController.setOpaqueFade(true);
+            progressiveFadeController.setFadeHeightTop(dp(material ? 32 : 48), false);
+        }
+        if (material && progressiveFadeController != null) {
+            progressiveFadeController.setFadeViewVisibility(blur ? View.VISIBLE : View.GONE);
+            if (!blur) progressiveFadeController.stopContinuousUpdates();
+        }
+        if (materialDialogsPlainFade == null && fade && !blur) {
+            materialDialogsPlainFade = new ChatActivityFadeView(contentView.getContext());
+            materialDialogsPlainFade.setupColorKey(Theme.key_windowBackgroundGray);
+            materialDialogsPlainFade.setOpaqueFade(true);
+            materialDialogsPlainFade.setFadeTopAlpha(255);
+            materialDialogsPlainFade.setFadeHeightTop(dp(32), false);
+            materialDialogsPlainFade.setDim(255 * 88 / 100);
+            contentView.addView(materialDialogsPlainFade, contentView.indexOfChild(searchTabsAndFiltersLayout),
+                    LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+        }
+        if (materialDialogsPlainFade != null) {
+            materialDialogsPlainFade.setVisibility(fade && !blur ? View.VISIBLE : View.GONE);
+            int zone = Math.max(actionBar.getBottom() + getInlineSearchHeight() + dp(SEARCH_TABS_HEIGHT),
+                    contentView.getActionBarTop() + contentView.getActionBarFullHeight() + dp(48));
+            materialDialogsPlainFade.setFadeZoneTop(zone);
+            int color = getThemedColor(Theme.key_windowBackgroundGray);
+            if (materialDialogsFadeColor != color) {
+                materialDialogsFadeColor = color;
+                materialDialogsPlainFade.setDimColor(color);
+                materialDialogsPlainFade.updateColors(resourceProvider);
+            }
+        }
+    }
+
     private ProgressiveFadeBlurController progressiveFadeController;
     private DialogsActivityTopBubblesFadeView dialogsTopDimOverlay;
     private View capturePage;
@@ -976,6 +1124,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 h += storiesHeight * (1f - searchAnimationProgress) * (1f - rightSlidingProgress) * (1f - progressToActionMode);
             }
             h += storiesOverscroll;
+            h += materialDialogsExtraHeight();
             h += getInlineSearchHeight() * (1f - progressToActionMode) * (1f - searchAnimationProgress) * (1f - rightSlidingProgress);
 
             return (int) h;
@@ -1006,7 +1155,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 canvas.save();
 
                 final boolean doNotClip = child == topPanelLayout || child == filterTabsView;
-                if (!doNotClip) {
+                if (!doNotClip && !(dialogsMaterialHeaderEnabled() && NekoConfig.fadeViewOtherActivities() && !searchIsShowed && progressToActionMode == 0)) {
                     canvas.clipRect(0, -getY() + getActionBarTop() + getActionBarFullHeight(), getMeasuredWidth(), getMeasuredHeight());
                 }
                 if (slideFragmentProgress != 1f) {
@@ -1039,6 +1188,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
         @Override
         public void drawBlurRect(Canvas canvas, float y, Rect rectTmp, Paint blurScrimPaint, boolean top) {
+            if (dialogsMaterialHeaderEnabled() && !searchIsShowed && progressToActionMode == 0) {
+                if (!NekoConfig.fadeViewOtherActivities()) {
+                    int old = blurScrimPaint.getColor();
+                    blurScrimPaint.setColor(getThemedColor(Theme.key_windowBackgroundGray));
+                    canvas.drawRect(rectTmp, blurScrimPaint);
+                    blurScrimPaint.setColor(old);
+                }
+                return;
+            }
             // Opaque (transparent) rect only when the live fade actually exists:
             // enabling the toggle without restart leaves the controller null,
             // and drawing opaque here would be a solid rectangle with no fade.
@@ -1103,6 +1261,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 RecyclerView.ViewHolder holder = recyclerView.findViewHolderForLayoutPosition(firstItemPosition);
                 if (holder != null) {
                     float visiblePartAfterScroll = recyclerView.getPaddingTop() - holder.itemView.getY();
+                    if (dialogsMaterialHeaderEnabled()) {
+                        // Stories and title consume the same scroll interval.
+                        materialTitleScroll = materialTitleCollapseAt(visiblePartAfterScroll);
+                        visiblePartAfterScroll -= materialTitleScroll;
+                    }
                     if (visiblePartAfterScroll >= 0) {
                         int maxScrollYOffset = getMaxScrollYOffset();
                         float newTranslation = -visiblePartAfterScroll;
@@ -1116,6 +1279,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         DialogsActivity.this.setScrollY(0);
                     }
                 } else {
+                    if (dialogsMaterialHeaderEnabled()) materialTitleScroll = materialDialogsTitleRange();
                     DialogsActivity.this.setScrollY(-getMaxScrollYOffset());
                 }
             }
@@ -1133,7 +1297,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     actionBarSearchPaint.setColor(getThemedColor(Theme.key_windowBackgroundWhite));
                 } else if (searchAnimationProgress == 0) {
                     if (fragmentSearchField != null) {
-                        fragmentSearchField.setTranslationY(scrollYOffset + getSearchFieldAdditionOffset());
+                        fragmentSearchField.setTranslationY(scrollYOffset + getSearchFieldAdditionOffset() + materialDialogsExtraHeight());
                     }
                 }
                 blurBounds.set(0, top, getMeasuredWidth(), top + actionBarHeight - dp(2 * searchAnimationProgress));
@@ -1167,7 +1331,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 dp(hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + getInlineSearchHeight() + scrollYOffset,
                 progressToActionMode * (dp(hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + getInlineSearchHeight())
             );
-            storiesYOffset = tabsYOffset;
+            storiesYOffset = tabsYOffset + materialDialogsExtraHeight();
+            tabsYOffset += materialDialogsExtraHeight();
             if ((rightSlidingDialogContainer != null && rightSlidingDialogContainer.hasFragment())) {
                 final float rightSlidingProgress = rightSlidingDialogContainer.openedProgress;
 
@@ -1206,8 +1371,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
             updateContextViewPosition();
             updateStoriesViewAlpha(storiesAlpha);
+            syncDialogsMaterialHeader();
             if (progressiveFadeController != null) {
-                if (!NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()) {
+                if (!progressiveFadeController.isEnabled()) {
                     // Master blur went off (toggle or power saver): hide the blur
                     // fade and overlay so the stock rect / shadow path draws instead.
                     progressiveFadeController.syncState();
@@ -1216,7 +1382,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     }
                 } else {
                     if (dialogsTopDimOverlay != null) {
-                        dialogsTopDimOverlay.setVisibility(searchIsShowed ? View.GONE : View.VISIBLE);
+                        dialogsTopDimOverlay.setVisibility(searchIsShowed || dialogsMaterialHeaderEnabled() ? View.GONE : View.VISIBLE);
                     }
                     progressiveFadeController.setTopOffset(top);
                 // The list below is clipped at the header bottom (see drawChild),
@@ -1227,11 +1393,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 final int listClipTop = (int) (-getY() + top + actionBarHeight);
                 final int fadeTop = (int) (top + actionBar.getHeight() + getInlineSearchHeight() + dp(SEARCH_TABS_HEIGHT));
                 final int fadeZone = Math.max(fadeTop, listClipTop + dp(48));
-                progressiveFadeController.setFadeZoneTop(fadeZone);
+                progressiveFadeController.setProgressiveBlurZoneTop(dialogsMaterialHeaderEnabled() ? fadeZone : -1);
+                final int visibleFadeZone = dialogsMaterialHeaderEnabled()
+                        ? Math.max(actionBar.getBottom(), listClipTop) + dp(12) : fadeZone;
+                progressiveFadeController.setFadeZoneTop(visibleFadeZone);
                 if (dialogsTopDimOverlay != null) {
                     // Theme-colored gradient over the blur (bottom-scrim look),
                     // alpha from the shared dimming settings. Never black.
-                    dialogsTopDimOverlay.setPosition(0, fadeZone);
+                    dialogsTopDimOverlay.setPosition(0, visibleFadeZone);
                     final int dimBase = getThemedColor(Theme.key_windowBackgroundGray);
                     dialogsTopDimOverlay.setColor(NekoConfig.blurredFadeDimming
                         ? Theme.multAlpha(dimBase, NekoConfig.blurredFadeDimStrength / 100f)
@@ -2184,7 +2353,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
         @Override
         public boolean dispatchTouchEvent(MotionEvent ev) {
-            if (ev.getAction() == MotionEvent.ACTION_DOWN && ev.getY() < (getPaddingTop() + scrollYOffset)) {
+            if (ev.getAction() == MotionEvent.ACTION_DOWN && ev.getY() < (getPaddingTop() + dialogsListScrollOffset())) {
                 return false;
             }
 
@@ -2223,14 +2392,19 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 if (holder != null) {
                     int top = holder.itemView.getTop();
                     if (parentPage.dialogsType == DIALOGS_TYPE_DEFAULT && hasHiddenArchive() && parentPage.archivePullViewState == ARCHIVE_ITEM_STATE_HIDDEN) {
-                        pos = Math.max(1, pos);
+                        if (pos == 0) {
+                            View firstDialog = parentPage.layoutManager.findViewByPosition(1);
+                            if (firstDialog != null) top = firstDialog.getTop();
+                            else top += holder.itemView.getMeasuredHeight();
+                            pos = 1;
+                        }
                     }
                     ignoreLayout = true;
                     parentPage.layoutManager.scrollToPositionWithOffset(pos, (int) (top - lastListPadding + scrollAdditionalOffset + parentPage.pageAdditionalOffset));
                     ignoreLayout = false;
                 }
             } else if (pos == RecyclerView.NO_POSITION && firstLayout) {
-                parentPage.layoutManager.scrollToPositionWithOffset(parentPage.dialogsType == DIALOGS_TYPE_DEFAULT && hasHiddenArchive() ? 1 : 0, (int) scrollYOffset);
+                parentPage.layoutManager.scrollToPositionWithOffset(parentPage.dialogsType == DIALOGS_TYPE_DEFAULT && hasHiddenArchive() ? 1 : 0, dialogsListScrollOffset());
             }
 
             ignoreLayout = true;
@@ -2240,6 +2414,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
             if (!actionModeFullyShowed) {
                 t += getInlineSearchHeight();
+            }
+            if (dialogsMaterialHeaderEnabled() && !actionModeFullyShowed) {
+                t += materialDialogsTitleRange() + dp(64) - ActionBar.getCurrentActionBarHeight();
             }
             additionalPadding = 0;
 
@@ -2276,10 +2453,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             ignoreLayout = false;
 
             if (firstLayout && getMessagesController().dialogsLoaded) {
-                if (parentPage.dialogsType == DIALOGS_TYPE_DEFAULT && hasHiddenArchive()) {
+                if (dialogsMaterialHeaderEnabled() || parentPage.dialogsType == DIALOGS_TYPE_DEFAULT && hasHiddenArchive()) {
                     ignoreLayout = true;
                     LinearLayoutManager layoutManager = (LinearLayoutManager) getLayoutManager();
-                    layoutManager.scrollToPositionWithOffset(1, (int) scrollYOffset);
+                    layoutManager.scrollToPositionWithOffset(parentPage.dialogsType == DIALOGS_TYPE_DEFAULT && hasHiddenArchive() ? 1 : 0,
+                            dialogsListScrollOffset());
                     ignoreLayout = false;
                 }
                 firstLayout = false;
@@ -2574,7 +2752,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
         @Override
         public void updateClip(int[] clip) {
-            int y = (int) (getPaddingTop() + scrollYOffset);
+            int y = getPaddingTop() + dialogsListScrollOffset();
             clip[0] = y;
             clip[1] = y + getMeasuredHeight();
         }
@@ -3259,6 +3437,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             mainTabsActivityController.detachIosBottomSearch(fragmentSearchField);
         }
         super.onFragmentDestroy();
+        materialDialogsTitle = null;
+        materialDialogsApplied = false;
+        materialDialogsPlainFade = null;
+        materialDialogsFadeColor = Integer.MIN_VALUE;
         if (progressiveFadeController != null) {
             progressiveFadeController.stopContinuousUpdates();
             progressiveFadeController = null;
@@ -5614,11 +5796,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             final FrameLayout.LayoutParams layoutParams = LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT);
             contentView.addView(actionBar, layoutParams);
         //}
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && (NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()
+                || dialogsMaterialHeaderEnabled() && NekoConfig.fadeViewOtherActivities() && NekoConfig.blurredFadeViewEnabled())) {
             progressiveFadeController = new ProgressiveFadeBlurController(contentView, viewPages[0], contentView.indexOfChild(searchTabsAndFiltersLayout), () -> getThemedColor(Theme.key_windowBackgroundGray));
             // In-drawable dimming stays off: the static theme-colored gradient
             // overlay below takes over that role (driven by the same dimming
             // settings), so the two never stack into double-dark.
+            progressiveFadeController.setUniformBlurAllowed(dialogsMaterialHeaderEnabled());
             progressiveFadeController.setDimEnabled(false);
             // No flip: flipped top fade is opaque at its bottom edge = hard cutoff
             // under the folders. Normal orientation fades out smoothly like the
@@ -6043,6 +6227,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     private boolean checkAutoscrollToStories(ViewPage viewPage) {
+        int titleRange = materialDialogsTitleRange();
+        if (!searchIsShowed && titleRange > 0 && materialTitleScroll > 0
+                && materialTitleScroll < titleRange && !rightSlidingDialogContainer.hasFragment()) {
+            int target = materialTitleScroll < titleRange / 2 ? 0 : titleRange;
+            int combinedRange = titleRange + getMaxScrollYOffsetWithoutSearch();
+            viewPage.scroller.smoothScrollBy(Math.round((target - materialTitleScroll) * combinedRange / (float) titleRange));
+            return true;
+        }
         if (!rightSlidingDialogContainer.hasFragment()) {
             int scrollY = (int) -scrollYOffset;
             int actionBarHeight = getMaxScrollYOffset();
@@ -6954,7 +7146,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             topBubblesFadeView.setTranslationY(fadeViewT - searchOffset);
             final float s = lerp(dp(7), dp(50), Math.min(topPanelsVisibility, filtersTabVisibility));
             topBubblesFadeView.setPosition(s, Math.min(dp(40), topPanelsHeight + filtersTabHeight - s));
-            topBubblesFadeView.setAlpha(Math.max(filtersTabVisibility, topPanelsVisibility));
+            topBubblesFadeView.setAlpha(dialogsMaterialHeaderEnabled() ? 0f : Math.max(filtersTabVisibility, topPanelsVisibility));
         }
     }
 
@@ -7203,7 +7395,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
 
         viewPages[a].dialogsAdapter.setDialogsType(viewPages[a].dialogsType);
-        viewPages[a].layoutManager.scrollToPositionWithOffset(viewPages[a].dialogsType == DIALOGS_TYPE_DEFAULT && hasHiddenArchive() && viewPages[a].archivePullViewState == ARCHIVE_ITEM_STATE_HIDDEN ? 1 : 0, (int) scrollYOffset);
+        viewPages[a].layoutManager.scrollToPositionWithOffset(viewPages[a].dialogsType == DIALOGS_TYPE_DEFAULT && hasHiddenArchive() && viewPages[a].archivePullViewState == ARCHIVE_ITEM_STATE_HIDDEN ? 1 : 0, dialogsListScrollOffset());
         checkListLoad(viewPages[a]);
     }
 
@@ -7322,7 +7514,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     if (viewPages[a].dialogsType == DIALOGS_TYPE_DEFAULT && viewPages[a].archivePullViewState == ARCHIVE_ITEM_STATE_HIDDEN && hasHiddenArchive()) {
                         int p = viewPages[a].layoutManager.findFirstVisibleItemPosition();
                         if (p == 0 || p == 1) {
-                            viewPages[a].layoutManager.scrollToPositionWithOffset(1, (int) scrollYOffset);
+                            viewPages[a].layoutManager.scrollToPositionWithOffset(1, dialogsListScrollOffset());
                         }
                     }
                     viewPages[a].listView.setScrollingTouchSlop(RecyclerView.TOUCH_SLOP_DEFAULT);
@@ -7401,6 +7593,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     @Override
     public void onResume() {
         super.onResume();
+        syncDialogsMaterialHeader();
         if (dialogStoriesCell != null) {
             dialogStoriesCell.onResume();
         }
@@ -7531,7 +7724,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         if (viewPages != null) {
             for (int a = 0; a < viewPages.length; a++) {
                 if (viewPages[a].dialogsType == 0 && viewPages[a].archivePullViewState == ARCHIVE_ITEM_STATE_HIDDEN && viewPages[a].layoutManager.findFirstVisibleItemPosition() == 0 && hasHiddenArchive()) {
-                    viewPages[a].layoutManager.scrollToPositionWithOffset(1, (int) scrollYOffset);
+                    viewPages[a].layoutManager.scrollToPositionWithOffset(1, dialogsListScrollOffset());
                 }
                 if (a == 0) {
                     viewPages[a].dialogsAdapter.resume();
@@ -10154,7 +10347,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     viewPages[0].dialogsItemAnimator.prepareForRemove();
                     viewPages[0].updateList(true);
 
-                    viewPages[0].layoutManager.scrollToPositionWithOffset(viewPages[0].dialogsType == 0 && hasHiddenArchive() && viewPages[0].archivePullViewState == ARCHIVE_ITEM_STATE_HIDDEN ? 1 : 0, (int) scrollYOffset);
+                    viewPages[0].layoutManager.scrollToPositionWithOffset(viewPages[0].dialogsType == 0 && hasHiddenArchive() && viewPages[0].archivePullViewState == ARCHIVE_ITEM_STATE_HIDDEN ? 1 : 0, dialogsListScrollOffset());
 
                     animate = true;
                 } else if (currentDialogIndex >= 0 && selectedDialogIndex == currentDialogIndex) {
@@ -10928,7 +11121,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
         if (viewPage.dialogsType == 0 && hasHiddenArchive() && viewPage.listView.getChildCount() == 0 && viewPage.archivePullViewState == ARCHIVE_ITEM_STATE_HIDDEN) {
             LinearLayoutManager layoutManager = (LinearLayoutManager) viewPage.listView.getLayoutManager();
-            layoutManager.scrollToPositionWithOffset(1, (int) scrollYOffset);
+            layoutManager.scrollToPositionWithOffset(1, dialogsListScrollOffset());
         }
 
         if (viewPage.dialogsAdapter.isDataSetChanged() || newMessage) {
@@ -14919,7 +15112,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     private void drawHeaderShadow(Canvas canvas, int sy) {
-        if (parentLayout == null || actionBar == null /*|| !actionBar.getCastShadows()*/) {
+        if (dialogsMaterialHeaderEnabled() || parentLayout == null || actionBar == null /*|| !actionBar.getCastShadows()*/) {
             return;
         }
         // With the progressive fade the header zone is transparent, so a shadow

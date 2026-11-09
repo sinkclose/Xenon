@@ -317,7 +317,7 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
 
     @Override
     protected boolean needActionBarPadding() {
-        return false;
+        return NekoConfig.materialActivityHeaders;
     }
 
     @Override
@@ -325,7 +325,8 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
         return false;
     }
 
-    // Main screen with the logo header keeps the stock look, no fade.
+    // The original logo layout keeps its stock background. Material mode is
+    // handled by the shared collapsing header and its independent fade host.
     @Override
     protected boolean fadeViewEnabled() {
         return false;
@@ -339,7 +340,7 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
             return;
         }
 
-        items.add(UItem.asCustomShadow(topView, 200 - 12).setChecked(true));
+        if (!NekoConfig.materialActivityHeaders) items.add(UItem.asCustomShadow(topView, 200 - 12).setChecked(true));
         if (osuLogo != null) {
             items.add(UItem.asCheck(logoMusicRow, LocaleController.getString(R.string.OsuLogoMusic))
                     .setChecked(NekoConfig.osuLogoSystemMusic));

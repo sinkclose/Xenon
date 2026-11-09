@@ -964,6 +964,11 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
             titleView.setTranslationY(bottomY + dp(14) - offset + dp(FAKE_TOP_PADDING) - dp(6) * subtitleOverlayContainer.getTotalVisibility());
             int cellWidth = dp(72);
             lastViewRight += -cellWidth + getAvatarRight(cellWidth, collapsedProgress) + dp(12);
+            float leadingInset = lastViewRight + dp(8);
+            if (progress >= 0.95f && Math.abs(externalHeaderLeadingInset - leadingInset) >= 0.5f) {
+                externalHeaderLeadingInset = leadingInset;
+                if (externalHeaderTitle && getParent() instanceof View) ((View) getParent()).invalidate();
+            }
             float textWidth = titleView.getDrawable().getCurrentWidth();
             float fit = zxc.iconic.xenon.NekoConfig.centerTitle && textWidth > 0f
                     ? Math.max(0.85f, Math.min(1f, actionBar.getTitleAvailableWidth(lastViewRight) / textWidth)) : 1f;
@@ -2255,8 +2260,30 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
         }
     }
 
+    private boolean externalHeaderTitle;
+    private float externalHeaderLeadingInset;
+
+    public int getExternalHeaderLeadingInset() {
+        int count = Math.min(miniItems.size(), collapsedStoryLimit);
+        if (count == 0) return 0;
+        if (Math.min(collapsedProgress, collapsedProgress2) >= 0.95f && externalHeaderLeadingInset > 0f) {
+            return (int) Math.ceil(externalHeaderLeadingInset);
+        }
+        // Expanded avatars span the whole screen. Reserve the collapsed stack's
+        // target width instead, so that transition cannot push the logo away.
+        return (int) Math.ceil(menuItemsOffset + getAvatarRight(dp(72), 1f)
+                + dp(COLLAPSED_DIS * Math.max(0, count - 1) + 20));
+    }
+
+
+    public void setExternalHeaderTitle(boolean external) {
+        if (externalHeaderTitle == external) return;
+        externalHeaderTitle = external;
+        checkUi_titleVisibility();
+    }
+
     private void checkUi_titleVisibility() {
-        final float progress = MathUtils.clamp(Math.min(collapsedProgress, collapsedProgress2), 0, 1);
+        final float progress = externalHeaderTitle ? 0f : MathUtils.clamp(Math.min(collapsedProgress, collapsedProgress2), 0, 1);
         final float titleVisibility = animatorHasTitleText.getFloatValue();
         final float logoVisibility = 1f - titleVisibility;
         final float titleAlpha = titleVisibility * progress;

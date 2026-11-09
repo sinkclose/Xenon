@@ -23,6 +23,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Canvas;
+import android.graphics.Typeface;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.PorterDuff;
@@ -214,11 +215,39 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     // Plain circle behind the back button (settings "fade in other
     // activities"). No blur, no outline: same white as settings rows and
     // switch thumbs (key_windowBackgroundWhite), arrow shifted into center.
+    private boolean materialActivityHeader;
+    private Drawable materialSavedBackground;
+    private int materialHeaderFontGeneration = -1;
+
+    public void setMaterialActivityHeader(boolean enabled) {
+        int generation = zxc.iconic.xenon.helpers.ClientFonts.generation();
+        if (materialActivityHeader == enabled && (!enabled || materialHeaderFontGeneration == generation)) return;
+        boolean changed = materialActivityHeader != enabled;
+        materialHeaderFontGeneration = generation;
+        materialActivityHeader = enabled;
+        if (changed) {
+            if (enabled) {
+                materialSavedBackground = getBackground();
+                setBackground(null);
+            } else setBackground(materialSavedBackground);
+        }
+        setPlainBackCircle(enabled);
+        if (menu != null) menu.setGlassMode(!enabled && glassMode && !nonIsland);
+        for (SimpleTextView title : titleTextView) {
+            if (title != null) title.setTypeface(enabled && !zxc.iconic.xenon.helpers.TypefaceHelper.supportsRoundedTypeface()
+                    ? Typeface.create("sans-serif", Typeface.NORMAL)
+                    : zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(
+                            zxc.iconic.xenon.helpers.TypefaceHelper.supportsRoundedTypeface() ? (materialActivityHeader ? 550 : 650) : 700, false));
+        }
+        requestLayout();
+        invalidate();
+    }
+
     private boolean plainBackCircle;
     private final Paint plainBackCirclePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     public boolean hasPlainButtonCircles() {
-        return plainBackCircle && !nonIsland;
+        return (plainBackCircle || materialActivityHeader) && (!nonIsland || materialActivityHeader);
     }
 
     public void setPlainBackCircle(boolean enabled) {
@@ -227,7 +256,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         }
         plainBackCircle = enabled;
         if (backButtonImageView != null) {
-            backButtonImageView.setTranslationX(enabled ? dp(8) : 0);
+            backButtonImageView.setTranslationX(enabled ? dp(materialActivityHeader ? 17 : 8) : 0);
         }
         if (menu != null) {
             for (int i = 0; i < menu.getChildCount(); i++) {
@@ -239,11 +268,14 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     }
 
     void drawPlainButtonCircle(Canvas canvas, float cx, float cy) {
-        if (!plainBackCircle || nonIsland) {
+        if ((!plainBackCircle && !materialActivityHeader) || nonIsland && !materialActivityHeader) {
             return;
         }
-        plainBackCirclePaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider));
-        canvas.drawCircle(cx, cy, dp(23), plainBackCirclePaint);
+        plainBackCirclePaint.setColor(materialActivityHeader
+                ? ColorUtils.blendARGB(Theme.getColor(Theme.key_windowBackgroundGray, resourcesProvider),
+                    Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider), 0.08f)
+                : Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider));
+        canvas.drawCircle(cx, cy, dp(materialActivityHeader ? 20 : 23), plainBackCirclePaint);
     }
 
     public void setChatAvatarContainer(ChatAvatarContainer chatAvatarContainer) {
@@ -587,7 +619,8 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             titleTextView[i].setTextColor(getThemedColor(Theme.key_actionBarDefaultTitle));
         }
         titleTextView[i].setEmojiColor(titleTextView[i].getTextColor());
-        titleTextView[i].setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
+        titleTextView[i].setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(
+                zxc.iconic.xenon.helpers.TypefaceHelper.supportsRoundedTypeface() ? (materialActivityHeader ? 550 : 650) : 700, false));
         titleTextView[i].setDrawablePadding(dp(4));
         titleTextView[i].setPadding(0, dp(8), 0, dp(8));
         titleTextView[i].setRightDrawableTopPadding(-dp(1));
@@ -1622,7 +1655,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         int textLeft;
         if (backButtonImageView != null && backButtonImageView.getVisibility() != GONE) {
             backButtonImageView.measure(MeasureSpec.makeMeasureSpec(dp(54), MeasureSpec.EXACTLY), actionBarHeightSpec);
-            textLeft = dp(AndroidUtilities.isTablet() ? 80 : 72);
+            textLeft = dp(materialActivityHeader ? 80 : AndroidUtilities.isTablet() ? 80 : 72);
         } else {
             textLeft = dp(AndroidUtilities.isTablet() ? 26 : 18);
         }
@@ -1686,7 +1719,8 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
                 }
 
                 if (titleTextView[i] != null && titleTextView[i].getVisibility() != GONE) {
-                    titleTextView[i].measure(MeasureSpec.makeMeasureSpec(availableWidth, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(dp(24) + titleTextView[i].getPaddingTop() + titleTextView[i].getPaddingBottom(), MeasureSpec.AT_MOST));
+                    if (materialActivityHeader) titleTextView[i].setTextSize(24);
+                    titleTextView[i].measure(MeasureSpec.makeMeasureSpec(availableWidth, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(dp(materialActivityHeader ? 32 : 24) + titleTextView[i].getPaddingTop() + titleTextView[i].getPaddingBottom(), MeasureSpec.AT_MOST));
                     if (centerScale) {
                         CharSequence text = titleTextView[i].getText();
                         titleTextView[i].setPivotX(titleTextView[i].getTextPaint().measureText(text, 0, text.length()) / 2f);
@@ -1742,7 +1776,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         int textLeft;
         if (backButtonImageView != null && backButtonImageView.getVisibility() != GONE) {
             backButtonImageView.layout(0, additionalTop, backButtonImageView.getMeasuredWidth(), additionalTop + backButtonImageView.getMeasuredHeight());
-            textLeft = glassMode ? dp(76) : dp(AndroidUtilities.isTablet() ? 80 : 72);
+            textLeft = materialActivityHeader ? dp(80) : glassMode ? dp(76) : dp(AndroidUtilities.isTablet() ? 80 : 72);
         } else {
             textLeft = glassMode ? dp(24) : dp(AndroidUtilities.isTablet() ? 26 : 18);
         }
@@ -1760,7 +1794,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
                     }
                 }
                 if (rightmostCenter != Float.NEGATIVE_INFINITY) {
-                    menu.offsetLeftAndRight(Math.round(getWidth() - dp(35) - menu.getX() - rightmostCenter));
+                    menu.offsetLeftAndRight(Math.round(getWidth() - dp(materialActivityHeader ? 44 : 35) - menu.getX() - rightmostCenter));
                 }
             }
         }
@@ -2667,7 +2701,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     }
 
     public boolean prepareLiquidGlassHeader(BlurredBackgroundDrawable[] members, LiquidTouchEffect[] effects) {
-        if (!glassMode || nonIsland || glassOnlyBack || plainBackCircle
+        if (materialActivityHeader || !glassMode || nonIsland || glassOnlyBack || plainBackCircle
                 || liquidAvatar == null || actionModeVisible || searchFactor > 0f
                 || glassDrawable == null || glassDrawableBack == null) return false;
         prepareLiquidGlassSurfaces();
@@ -2775,7 +2809,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         final int menuWidth = liquidGlassMenuWidth;
         final boolean hasBackButton = liquidGlassHasBack;
 
-        if (glassDrawable != null && !glassOnlyBack && drawGlassTitle && !m3ChatHeader && !liquidGlassGroupDrawn) {
+        if (!materialActivityHeader && glassDrawable != null && !glassOnlyBack && drawGlassTitle && !m3ChatHeader && !liquidGlassGroupDrawn) {
             if (nonIsland) {
                 glassDrawable.setBounds(0, 0, getWidth(), getHeight());
             } else {
@@ -2800,7 +2834,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             }
             if (save != -1) canvas.restoreToCount(save);
         }
-        if (glassDrawableBack != null && hasBackButton && !nonIsland && !liquidGlassGroupDrawn) {
+        if (!materialActivityHeader && glassDrawableBack != null && hasBackButton && !nonIsland && !liquidGlassGroupDrawn) {
             glassDrawableBack.setBounds(0, t, s + p * 2, b);
             int save = beginLiquid(canvas, liquidBack);
             LiquidTouchEffect.updateBackground(glassDrawableBack, liquidTouchAllowed() ? liquidBack : null, 0f, 0f);
@@ -2810,11 +2844,11 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         }
         if (plainBackCircle && hasBackButton && !nonIsland) {
             int save = beginLiquid(canvas, liquidBack);
-            drawPlainButtonCircle(canvas, dp(35), (t + b) / 2f);
+            drawPlainButtonCircle(canvas, dp(materialActivityHeader ? 44 : 35), (t + b) / 2f);
             if (liquidTouchAllowed()) liquidBack.drawHighlight(canvas, dp(23), dp(6));
             if (save != -1) canvas.restoreToCount(save);
         }
-        if (glassDrawableMenu != null && menuWidth > 0 && !nonIsland && !glassOnlyBack && !doNotDrawGlassMenu && !avatarRightBigger && !liquidGlassGroupDrawn) {
+        if (!materialActivityHeader && glassDrawableMenu != null && menuWidth > 0 && !nonIsland && !glassOnlyBack && !doNotDrawGlassMenu && !avatarRightBigger && !liquidGlassGroupDrawn) {
             glassDrawableMenu.setBounds(getWidth() - Math.max(s, menuWidth) - p * 2, t, getWidth(), b);
             glassDrawableMenu.setAlpha(hasForcedMenuWidth ? 255 : (int) (255 * animatorHasMenuItems.getFloatValue()));
             boolean liquidSelection = actionModeVisible && actionMode != null && liquidTouchAllowed();
@@ -2833,7 +2867,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             if (save != -1) canvas.restoreToCount(save);
         }
 
-        if (blurredBackground && actionBarColor != Color.TRANSPARENT) {
+        if (!materialActivityHeader && blurredBackground && actionBarColor != Color.TRANSPARENT) {
             rectTmp.set(0, 0, getMeasuredWidth(), getMeasuredHeight());
             blurScrimPaint.setColor(actionBarColor);
             if (adaptiveBackground) {

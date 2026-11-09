@@ -248,6 +248,8 @@ public class NekoConfig {
     public static int progressiveFadeBlurMaxRadius = 20;
     public static int progressiveFadeBlurSamples = 11;
     public static int progressiveFadeBlurRefreshRate = 120;
+    public static boolean materialActivityHeaders = false;
+    public static boolean materialHeadersInDialogs = false;
     public static boolean progressiveFadeBlurOtherActivities = false;
     public static final int AVATAR_PLACEMENT_LEFT = 0;
     public static final int AVATAR_PLACEMENT_CENTER = 1;
@@ -559,6 +561,8 @@ public class NekoConfig {
             progressiveFadeBlurMaxRadius = preferences.getInt("progressiveFadeBlurMaxRadius", 20);
             progressiveFadeBlurSamples = preferences.getInt("progressiveFadeBlurSamples", 11);
             progressiveFadeBlurRefreshRate = preferences.getInt("progressiveFadeBlurRefreshRate", 120);
+            materialActivityHeaders = preferences.getBoolean("materialActivityHeaders", false);
+            materialHeadersInDialogs = preferences.getBoolean("materialHeadersInDialogs", false);
             progressiveFadeBlurOtherActivities = preferences.getBoolean("progressiveFadeBlurOtherActivities", false);
             openAnimationStyle = preferences.getInt("openAnimationStyle", ANIMATION_STYLE_DEFAULT);
             closeAnimationStyle = preferences.getInt("closeAnimationStyle", ANIMATION_STYLE_DEFAULT);
@@ -1055,6 +1059,18 @@ public class NekoConfig {
         SharedPreferences.Editor editor = preferences.edit();
         editor.putInt("progressiveFadeBlurRefreshRate", progressiveFadeBlurRefreshRate);
         editor.apply();
+    }
+
+    public static void toggleMaterialHeadersInDialogs() {
+        materialHeadersInDialogs = !materialHeadersInDialogs;
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
+                .edit().putBoolean("materialHeadersInDialogs", materialHeadersInDialogs).apply();
+    }
+
+    public static void toggleMaterialActivityHeaders() {
+        materialActivityHeaders = !materialActivityHeaders;
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
+                .edit().putBoolean("materialActivityHeaders", materialActivityHeaders).apply();
     }
 
     public static void toggleProgressiveFadeBlurOtherActivities() {
