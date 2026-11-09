@@ -20,6 +20,7 @@ import android.content.DialogInterface;
 import android.graphics.Bitmap;
 import android.graphics.BitmapShader;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.Matrix;
 import android.graphics.Paint;
@@ -332,6 +333,33 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
         return zxc.iconic.xenon.NekoConfig.material3Dialogs && progressViewStyle == 0;
     }
 
+    private static class SheetPrimaryButton extends TextView {
+        private boolean filled;
+
+        SheetPrimaryButton(Context context) {
+            super(context);
+        }
+
+        void setFillColor(int color) {
+            int opaqueColor = ColorUtils.setAlphaComponent(color, 255);
+            int textColor = ColorUtils.calculateContrast(Color.WHITE, opaqueColor)
+                    >= ColorUtils.calculateContrast(Color.BLACK, opaqueColor) ? Color.WHITE : Color.BLACK;
+            super.setTextColor(textColor);
+            setBackground(Theme.AdaptiveRipple.filledRect(color, dp(24)));
+            filled = true;
+        }
+
+        @Override
+        public void setTextColor(int color) {
+            if (filled) {
+                // Callers mark destructive dialog actions by recoloring getButton().
+                setFillColor(color);
+            } else {
+                super.setTextColor(color);
+            }
+        }
+    }
+
     // internal helper for AlertDialog.show() path (via create()+BaseFragment.showDialog)
     private boolean tryShowAsReplacement() {
         if (shouldReplaceWithSheet()) {
@@ -457,7 +485,8 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
             int redColor = getThemedColor(Theme.key_text_RedBold);
 
             if (hasNeg) {
-                TextView negBtn = new TextView(context);
+                TextView negBtn = !hasPos && !hasNeg2 && !hasNeu
+                        ? new SheetPrimaryButton(context) : new TextView(context);
                 negBtn.setTag(Dialog.BUTTON_NEGATIVE);
                 negBtn.setText(negativeButtonText);
                 negBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
@@ -467,9 +496,8 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
                 negBtn.setPadding(dp(16), dp(10), dp(16), dp(10));
                 if (!hasPos && !hasNeg2 && !hasNeu) {
                     int primaryColor = isRed ? redColor : Theme.getColor(Theme.key_featuredStickers_addButton, rp);
-                    negBtn.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText, rp));
                     negBtn.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
-                    negBtn.setBackground(Theme.AdaptiveRipple.filledRect(primaryColor, dp(24)));
+                    ((SheetPrimaryButton) negBtn).setFillColor(primaryColor);
                 } else {
                     negBtn.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector, rp), 2));
                 }
@@ -517,17 +545,16 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
                 buttonsLayout.addView(neuBtn, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48, 0, 4, 0, 0));
             }
             if (hasPos) {
-                TextView posBtn = new TextView(context);
+                SheetPrimaryButton posBtn = new SheetPrimaryButton(context);
                 posBtn.setTag(Dialog.BUTTON_POSITIVE);
                 posBtn.setText(positiveButtonText);
                 posBtn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
                 boolean isRed = red != null && red.length > 0 && red[0];
                 int primaryColor = isRed ? redColor : Theme.getColor(Theme.key_featuredStickers_addButton, rp);
-                posBtn.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText, rp));
                 posBtn.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
                 posBtn.setGravity(Gravity.CENTER);
                 posBtn.setPadding(dp(16), dp(10), dp(16), dp(10));
-                posBtn.setBackground(Theme.AdaptiveRipple.filledRect(primaryColor, dp(24)));
+                posBtn.setFillColor(primaryColor);
                 posBtn.setOnClickListener(v -> {
                     sheet.dismiss();
                     if (positiveButtonListener != null) {

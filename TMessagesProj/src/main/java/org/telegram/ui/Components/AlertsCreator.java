@@ -2625,6 +2625,7 @@ public class AlertsCreator {
 
         Context context = fragment.getParentActivity();
         AlertDialog.Builder builder = new AlertDialog.Builder(context, resourcesProvider);
+        boolean sheetStyle = zxc.iconic.xenon.NekoConfig.replaceDialogsWithSheet;
         long selfUserId = UserConfig.getInstance(account).getClientUserId();
 
         CheckBoxCell[] cell = new CheckBoxCell[1];
@@ -2637,7 +2638,7 @@ public class AlertsCreator {
             }
         };
         NotificationCenter.listenEmojiLoading(messageTextView);
-        messageTextView.setTextColor(Theme.getColor(Theme.key_dialogTextBlack));
+        messageTextView.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, resourcesProvider));
         messageTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
         messageTextView.setGravity((LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP);
 
@@ -2656,17 +2657,21 @@ public class AlertsCreator {
         builder.setView(frameLayout);
 
         AvatarDrawable avatarDrawable = new AvatarDrawable();
-        avatarDrawable.setTextSize(dp(18));
+        avatarDrawable.setTextSize(dp(sheetStyle ? 24 : 18));
 
         BackupImageView imageView = new BackupImageView(context);
-        imageView.setRoundRadius(dp(15));
-        frameLayout.addView(imageView, LayoutHelper.createFrame(30, 30, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, 22, 5, 22, 0));
+        imageView.setRoundRadius(dp(sheetStyle ? 24 : 15));
+        if (sheetStyle) {
+            frameLayout.addView(imageView, LayoutHelper.createFrame(48, 48, Gravity.TOP | Gravity.CENTER_HORIZONTAL, 0, 0, 0, 0));
+        } else {
+            frameLayout.addView(imageView, LayoutHelper.createFrame(30, 30, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, 22, 5, 22, 0));
+        }
 
         final AnimatedTextView textView = new AnimatedTextView(context);
-        textView.setTextColor(Theme.getColor(Theme.key_actionBarDefaultSubmenuItem));
+        textView.setTextColor(Theme.getColor(sheetStyle ? Theme.key_dialogTextBlack : Theme.key_actionBarDefaultSubmenuItem, resourcesProvider));
         textView.setTextSize(dp(20));
-        textView.setTypeface(AndroidUtilities.bold());
-        textView.setGravity((LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.CENTER_VERTICAL);
+        textView.setTypeface(sheetStyle ? zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false) : AndroidUtilities.bold());
+        textView.setGravity(sheetStyle ? Gravity.CENTER : (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.CENTER_VERTICAL);
         textView.setEllipsizeByGradient(true);
         if (clear) {
             if (clearingCache) {
@@ -2693,8 +2698,13 @@ public class AlertsCreator {
                 textView.setText(LocaleController.getString(R.string.DeleteChatUser));
             }
         }
-        frameLayout.addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 24, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, (LocaleController.isRTL ? 22 : 65), 7.66f, (LocaleController.isRTL ? 65 : 22), 0));
-        frameLayout.addView(messageTextView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, 24, 49, 24, 1));
+        if (sheetStyle) {
+            frameLayout.addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 32, Gravity.TOP, 24, 60, 24, 0));
+            frameLayout.addView(messageTextView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP, 24, 104, 24, 1));
+        } else {
+            frameLayout.addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 24, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, (LocaleController.isRTL ? 22 : 65), 7.66f, (LocaleController.isRTL ? 65 : 22), 0));
+            frameLayout.addView(messageTextView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, 24, 49, 24, 1));
+        }
 
         final TLRPC.Chat mfChat = ChatObject.isMonoForum(chat) ? fragment.getMessagesController().getMonoForumLinkedChat(chat.id) : null;
         boolean canRevokeInbox = user != null && !user.bot && user.id != selfUserId && MessagesController.getInstance(account).canRevokePmInbox;
