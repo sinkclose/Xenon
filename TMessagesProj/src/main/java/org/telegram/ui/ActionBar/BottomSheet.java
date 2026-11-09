@@ -447,7 +447,41 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
         private float y = 0f;
         private float swipeBackX = 0f;
         private boolean allowedSwipeToBack;
+        private boolean outsideTouch;
+        private boolean outsideMoved, outsideSystemGestureEdge;
+        private float outsideDownX, outsideDownY;
+
+        private void cancelTouchTracking() {
+            boolean wasTracking = startedTracking || y != 0f || swipeBackX != 0f;
+            outsideTouch = false;
+            maybeStartTracking = startedTracking = allowedSwipeToBack = false;
+            startedTrackingPointerId = -1;
+            y = swipeBackX = 0f;
+            if (velocityTracker != null) { velocityTracker.recycle(); velocityTracker = null; }
+            if (wasTracking && containerView != null) {
+                containerView.setTranslationX(0f);
+                containerView.setTranslationY(0f);
+                onContainerViewTranslation();
+                invalidate();
+            }
+        }
         public boolean processTouchEvent(MotionEvent ev, boolean intercept) {
+            // The system cancels the app's touch stream when it takes over edge Back.
+            // Cancellation must never commit either of the sheet's swipe recognizers.
+            if (ev == null || ev.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+                cancelTouchTracking();
+                return false;
+            }
+            if (predictiveBackTransformActive) return false;
+            if (outsideTouch) {
+                if (Math.abs(ev.getX() - outsideDownX) >= touchSlop
+                        || Math.abs(ev.getY() - outsideDownY) >= touchSlop) outsideMoved = true;
+                if (ev.getActionMasked() == MotionEvent.ACTION_UP) {
+                    outsideTouch = false;
+                    if (!outsideMoved && !outsideSystemGestureEdge) onDismissWithTouchOutside();
+                }
+                return true;
+            }
             if (dismissed) {
                 return false;
             }
@@ -544,7 +578,21 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
                     startedTrackingX = (int) ev.getX();
                     startedTrackingY = (int) ev.getY();
                     if (isTouchOutside(startedTrackingX, startedTrackingY)) {
-                        onDismissWithTouchOutside();
+                        // Wait for a tap release: an edge Back starts outside short sheets.
+                        outsideTouch = true;
+                        outsideDownX = ev.getX();
+                        outsideDownY = ev.getY();
+                        outsideMoved = false;
+                        int edge = AndroidUtilities.dp(24);
+                        if (Build.VERSION.SDK_INT >= 29 && getRootWindowInsets() != null) {
+                            android.graphics.Insets insets = getRootWindowInsets().getSystemGestureInsets();
+                            outsideSystemGestureEdge = outsideDownX < Math.max(edge, insets.left)
+                                    || outsideDownX > getWidth() - Math.max(edge, insets.right);
+                        } else {
+                            outsideSystemGestureEdge = outsideDownX < edge || outsideDownX > getWidth() - edge;
+                        }
+                        outsideSystemGestureEdge &= Build.VERSION.SDK_INT >= 34
+                                && zxc.iconic.xenon.NekoConfig.predictiveBackAnimation;
                         return true;
                     }
                     onScrollUpBegin(y);
@@ -1266,6 +1314,9 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
 
     public BottomSheet(Context context, boolean needFocus, EdgeToEdge edgeToEdge, Theme.ResourcesProvider resourcesProvider) {
         super(context, R.style.TransparentDialog);
+        // Outside taps are handled by the sheet container after ACTION_UP.
+        // Dialog's own outside-down handling races the system Back gesture.
+        setCanceledOnTouchOutside(false);
         this.resourcesProvider = resourcesProvider;
         if (BuildConfig.DEBUG_PRIVATE_VERSION) {
             LeakDetector.getInstance().add(this);
@@ -1665,7 +1716,10 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
 
     public void setPredictiveBackTransformActive(boolean active) {
         predictiveBackTransformActive = active;
-        if (container != null) container.invalidate();
+        if (container != null) {
+            if (active) container.cancelTouchTracking();
+            container.invalidate();
+        }
     }
 
     protected boolean isPredictiveBackTransformActive() {
@@ -1707,8 +1761,17 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
 
     @RequiresApi(api = Build.VERSION_CODES.S)
     private void setupBackdropBlur(Activity activity) {
-        if (getWindow() == null) return;
-        backdropBlur = new WindowBackdropBlur(getWindow(), activity.findViewById(android.R.id.content));
+        if (attachedFragment == null && getWindow() == null) return;
+        if (backdropBlur != null) backdropBlur.release();
+        if (attachedFragment != null) {
+            View background = attachedFragment.getFragmentView();
+            if (background == null || background == container) return;
+            backdropBlur = new WindowBackdropBlur(container, background);
+        } else {
+            // The content view is reliable even when the device reports native
+            // cross-window blur support but does not render it for this dialog.
+            backdropBlur = new WindowBackdropBlur(getWindow(), activity.findViewById(android.R.id.content), true);
+        }
         float target = zxc.iconic.xenon.NekoConfig.disableBlurBs ? 0f
                 : zxc.iconic.xenon.NekoConfig.blurOverlayRadius * 4f;
         backdropBlur.animateTo(target, zxc.iconic.xenon.NekoConfig.blurSmoothly
@@ -1743,10 +1806,6 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
             super.show();
             zxc.iconic.xenon.helpers.ClientFonts.observeWindow(getWindow().getDecorView());
         zxc.iconic.xenon.helpers.RoundedUiFonts.observe(getWindow().getDecorView());
-            if (Build.VERSION.SDK_INT >= 31 && zxc.iconic.xenon.NekoConfig.blurOverlay && backdropBlur == null) {
-                Activity activity = AndroidUtilities.findActivity(getContext());
-                if (activity != null && !activity.isFinishing()) setupBackdropBlur(activity);
-            }
         }
         if (Build.VERSION.SDK_INT >= 34 && zxc.iconic.xenon.NekoConfig.predictiveBackAnimation) {
             registerPredictiveBack();
@@ -1757,6 +1816,12 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
         }
         dismissed = false;
         cancelSheetAnimation();
+        // Cancel callbacks from an earlier sheet animation before creating the
+        // new blur controller, otherwise they can release the newly opened blur.
+        if (Build.VERSION.SDK_INT >= 31 && zxc.iconic.xenon.NekoConfig.blurOverlay) {
+            Activity activity = AndroidUtilities.findActivity(getContext());
+            if (activity != null && !activity.isFinishing()) setupBackdropBlur(activity);
+        }
         containerView.measure(
             View.MeasureSpec.makeMeasureSpec(AndroidUtilities.displaySize.x + backgroundPaddingLeft * 2, View.MeasureSpec.AT_MOST),
             View.MeasureSpec.makeMeasureSpec(AndroidUtilities.displaySize.y, View.MeasureSpec.AT_MOST)
@@ -2199,7 +2264,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
         dismissed = true;
         cancelBlurRadiusAnimation();
         final boolean predictiveDismiss = predictiveBackDismissProgress >= 0f;
-        dismissBackdropBlur();
+        if (!predictiveDismiss) dismissBackdropBlur();
         if (onHideListener != null) {
             onHideListener.onDismiss(this);
         }
@@ -2244,7 +2309,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
                     }
                 }
                 if (predictiveDismiss) {
-                    ValueAnimator backdrop = ValueAnimator.ofFloat(0f, 1f);
+                    ValueAnimator backdrop = ValueAnimator.ofFloat(predictiveBackDismissProgress, 1f);
                     backdrop.addUpdateListener(a -> setPredictiveBackProgress((float) a.getAnimatedValue()));
                     animators.add(backdrop);
                 } else {

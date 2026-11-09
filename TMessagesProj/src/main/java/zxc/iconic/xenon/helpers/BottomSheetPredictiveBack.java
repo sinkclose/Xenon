@@ -33,6 +33,10 @@ public final class BottomSheetPredictiveBack {
         if (callback instanceof Callback) ((Callback) callback).release();
     }
 
+    static float scaleForIntensity(float materialScale, int intensity) {
+        return Math.max(.1f, 1f + (materialScale - 1f) * Math.max(0f, intensity / 10f));
+    }
+
     private static final class ChildTransform {
         final View view;
         final float scaleY, pivotY;
@@ -89,12 +93,13 @@ public final class BottomSheetPredictiveBack {
             lastProgress = Math.max(0f, Math.min(1f, event.getProgress()));
             progressed |= lastProgress > 0f;
             if (view.getWidth() <= 0 || view.getHeight() <= 0) return;
-            float intensity = Math.max(0f, NekoConfig.predictiveBackIntensity / 10f);
-            float progress = Math.max(0f, Math.min(1f, lastProgress * intensity));
+            float progress = lastProgress;
             // Use the helper's easing and bottom anchor, but scale the entire sheet
             // uniformly so its background and content share the same geometry.
             helper.updateBackProgress(progress);
-            float sheetScale = view.getScaleX();
+            // Scale the deformation after Material easing. Multiplying progress saturates
+            // above 1x and makes the upper half of the intensity slider ineffective.
+            float sheetScale = scaleForIntensity(view.getScaleX(), NekoConfig.predictiveBackIntensity);
             view.setScaleX(sheetScale * scaleX);
             view.setScaleY(sheetScale * scaleY);
             for (ChildTransform child : children) {
@@ -103,6 +108,7 @@ public final class BottomSheetPredictiveBack {
                 child.view.setPivotY(child.pivotY);
                 child.view.setScaleY(child.scaleY);
             }
+            sheet.setPredictiveBackProgress(lastProgress);
             sheet.getContainer().invalidate();
         }
 
@@ -122,12 +128,14 @@ public final class BottomSheetPredictiveBack {
                 runningAnim = null;
                 restoreTransforms();
             }
-            if (!started || !progressed) {
-                if (started) {
-                    helper.onHandleBackInvoked();
-                    restoreTransforms();
-                    started = false;
-                }
+            if (!started) {
+                sheet.onBackPressed();
+                return;
+            }
+            if (!progressed) {
+                if (helper != null) helper.onHandleBackInvoked();
+                started = false;
+                restoreTransforms();
                 sheet.onBackPressed();
                 return;
             }

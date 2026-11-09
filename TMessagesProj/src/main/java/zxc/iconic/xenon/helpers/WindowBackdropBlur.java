@@ -26,8 +26,14 @@ public final class WindowBackdropBlur implements View.OnAttachStateChangeListene
     private final View foreground;
     private final View background;
     private final Window window;
+    private final boolean preferViewBlur;
     private final WindowManager manager;
     private final Consumer<Boolean> blurEnabledListener = enabled -> update();
+    private final android.view.ViewTreeObserver.OnPreDrawListener attributesListener = () -> {
+        update();
+        return true;
+    };
+    private android.view.ViewTreeObserver observer;
     private View windowRoot;
     private ValueAnimator animator;
     private float radius;
@@ -38,17 +44,22 @@ public final class WindowBackdropBlur implements View.OnAttachStateChangeListene
     private boolean originalFlag;
 
     public WindowBackdropBlur(Window window, View background) {
-        this(window.getDecorView(), background, window);
+        this(window, background, false);
+    }
+
+    public WindowBackdropBlur(Window window, View background, boolean preferViewBlur) {
+        this(window.getDecorView(), background, window, preferViewBlur);
     }
 
     public WindowBackdropBlur(View foreground, View background) {
-        this(foreground, background, null);
+        this(foreground, background, null, false);
     }
 
-    private WindowBackdropBlur(View foreground, View background, Window window) {
+    private WindowBackdropBlur(View foreground, View background, Window window, boolean preferViewBlur) {
         this.foreground = foreground;
         this.background = background;
         this.window = window;
+        this.preferViewBlur = preferViewBlur;
         manager = foreground.getContext().getSystemService(WindowManager.class);
         foreground.addOnAttachStateChangeListener(this);
         if (foreground.isAttachedToWindow()) onViewAttachedToWindow(foreground);
@@ -116,7 +127,8 @@ public final class WindowBackdropBlur implements View.OnAttachStateChangeListene
     private void update() {
         if (released || !foreground.isAttachedToWindow()) return;
         WindowManager.LayoutParams params = attributes();
-        boolean nativeBlur = manager != null && manager.isCrossWindowBlurEnabled() && params != null;
+        boolean nativeBlur = !preferViewBlur && manager != null && manager.isCrossWindowBlurEnabled()
+                && params != null && (background == null || background.getWindowToken() != foreground.getWindowToken());
         if (nativeBlur && radius > 0f) {
             if (!nativeApplied) {
                 originalRadius = params.getBlurBehindRadius();
@@ -175,6 +187,8 @@ public final class WindowBackdropBlur implements View.OnAttachStateChangeListene
         listening = false;
         clearNative();
         setFallback(0f);
+        if (observer != null && observer.isAlive()) observer.removeOnPreDrawListener(attributesListener);
+        observer = null;
         foreground.removeOnAttachStateChangeListener(this);
         windowRoot = null;
     }
@@ -183,6 +197,8 @@ public final class WindowBackdropBlur implements View.OnAttachStateChangeListene
     public void onViewAttachedToWindow(View v) {
         if (released) return;
         windowRoot = foreground.getRootView();
+        observer = foreground.getViewTreeObserver();
+        observer.addOnPreDrawListener(attributesListener);
         if (manager != null && !listening) {
             listening = true;
             manager.addCrossWindowBlurEnabledListener(foreground.getContext().getMainExecutor(), blurEnabledListener);
