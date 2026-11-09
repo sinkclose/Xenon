@@ -310,6 +310,7 @@ public final class ClientFonts {
                     Typeface target = resolve(state.original);
                     state.applied = target;
                     if (current != target) label.setTypeface(target);
+                    if (useGoogleSans()) label.setIncludeFontPadding(false);
                 }
             }
         }

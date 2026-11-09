@@ -8712,7 +8712,7 @@ public class MessageObject {
                             .setBreakStrategy(StaticLayout.BREAK_STRATEGY_HIGH_QUALITY)
                             .setHyphenationFrequency(StaticLayout.HYPHENATION_FREQUENCY_NONE)
                             .setAlignment(alignment);
-            if (dontIncludePad) {
+            if (dontIncludePad || zxc.iconic.xenon.helpers.ClientFonts.useGoogleSans()) {
                 builder.setIncludePad(false);
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -8733,7 +8733,7 @@ public class MessageObject {
                                 .setBreakStrategy(StaticLayout.BREAK_STRATEGY_SIMPLE)
                                 .setHyphenationFrequency(StaticLayout.HYPHENATION_FREQUENCY_NONE)
                                 .setAlignment(alignment);
-                if (dontIncludePad) {
+                if (dontIncludePad || zxc.iconic.xenon.helpers.ClientFonts.useGoogleSans()) {
                     builder.setIncludePad(false);
                 }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {

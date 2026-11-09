@@ -203,7 +203,7 @@ public class ChatActivityActionsButtonsLayout extends LinearLayout implements Li
         forwardButton.setPadding(AndroidUtilities.dp(7), 0, AndroidUtilities.dp(7), 0);
         forwardButton.setCompoundDrawablePadding(AndroidUtilities.dp(6));
         forwardButton.setTextColor(Theme.getColor(Theme.key_glass_defaultText, resourcesProvider));
-        forwardButton.setTypeface(AndroidUtilities.bold());
+        forwardButton.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         Drawable image = getContext().getResources().getDrawable(iconRes).mutate();
         image.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_glass_defaultIcon, resourcesProvider), PorterDuff.Mode.MULTIPLY));
         forwardButton.setCompoundDrawablesWithIntrinsicBounds(iconLeft ? image : null, null, iconLeft ? null : image, null);

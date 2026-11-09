@@ -11709,7 +11709,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
         selectedMessagesCountTextView = new AnimatedTextView(actionMode.getContext(), true, true, true);
         selectedMessagesCountTextView.setTextSize(dp(18));
-        selectedMessagesCountTextView.setTypeface(AndroidUtilities.bold());
+        selectedMessagesCountTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         selectedMessagesCountTextView.setTextColor(getThemedColor(Theme.key_actionBarActionModeDefaultIcon));
         selectedMessagesCountTextView.setOnTouchListener((v, event) -> true);
         selectedMessagesCountTextView.setEllipsizeByGradient(true);
@@ -11956,7 +11956,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         searchCountText.setAnimationProperties(.25f, 0, 280, CubicBezierInterpolator.EASE_OUT_QUINT);
 //        searchCountText.setScaleProperty(.5f);
         searchCountText.setTextSize(dp(15));
-        searchCountText.setTypeface(AndroidUtilities.bold());
+        searchCountText.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         searchCountText.setTextColor(getThemedColor(Theme.key_chat_searchPanelText));
         searchCountText.setGravity(Gravity.LEFT);
         searchContainer.addView(searchCountText, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, 30, Gravity.CENTER_VERTICAL, 0, -1, 97.33f, 0));
@@ -11967,7 +11967,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         searchExpandList.setScaleProperty(.7f);
         searchExpandList.setTextSize(dp(15));
         searchExpandList.setGravity(Gravity.RIGHT);
-        searchExpandList.setTypeface(AndroidUtilities.bold());
+        searchExpandList.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         searchExpandList.setTextColor(getThemedColor(Theme.key_windowBackgroundWhiteBlueText2));
         searchExpandList.setText(LocaleController.getString(isMessagesSearchListVisible() ? R.string.SearchAsChat : R.string.SearchAsList));
         searchExpandList.adaptWidth = false;
@@ -11981,7 +11981,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
         searchOtherButton = new AnimatedTextView(getContext(), true, true, true);
         searchOtherButton.setGravity(Gravity.CENTER);
-        searchOtherButton.setTypeface(AndroidUtilities.bold());
+        searchOtherButton.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         searchOtherButton.setTextColor(getThemedColor(Theme.key_chat_fieldOverlayText));
         searchOtherButton.setTextSize(AndroidUtilities.dp(15));
         searchOtherButton.setBackground(Theme.createSelectorWithBackgroundDrawable(getThemedColor(Theme.key_windowBackgroundWhite), Theme.blendOver(getThemedColor(Theme.key_windowBackgroundWhite), getThemedColor(Theme.key_listSelector))));

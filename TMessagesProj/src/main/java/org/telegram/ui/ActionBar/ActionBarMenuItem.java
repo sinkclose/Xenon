@@ -26,6 +26,8 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.ShapeDrawable;
 import android.os.Build;
 import android.text.Editable;
+import android.text.SpannableString;
+import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.text.method.LinkMovementMethod;
@@ -85,6 +87,7 @@ import org.telegram.ui.Components.RLottieDrawable;
 import org.telegram.ui.Components.RLottieImageView;
 import org.telegram.ui.Components.Reactions.ReactionsLayoutInBubble;
 import org.telegram.ui.Components.TextAnimationEditText;
+import org.telegram.ui.Components.TypefaceSpan;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
 import org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundProvider;
 import org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl;
@@ -1310,13 +1313,23 @@ public class ActionBarMenuItem extends FrameLayout {
         return iconView != null ? iconView : textView;
     }
 
+    private static CharSequence roundedSearchHint(CharSequence hint) {
+        if (TextUtils.isEmpty(hint) || !zxc.iconic.xenon.helpers.TypefaceHelper.supportsRoundedTypeface()) {
+            return hint;
+        }
+        SpannableString styled = new SpannableString(hint);
+        styled.setSpan(new TypefaceSpan(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false)),
+                0, styled.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return styled;
+    }
+
     public void setSearchFieldHint(CharSequence hint) {
         searchFieldHint = hint;
         setContentDescription(hint);
         if (searchFieldCaption == null) {
             return;
         }
-        searchField.setHint(hint);
+        searchField.setHint(roundedSearchHint(hint));
     }
 
     public void setSearchFieldText(CharSequence text, boolean animated) {
@@ -1633,7 +1646,7 @@ public class ActionBarMenuItem extends FrameLayout {
             searchField.setHandlesColor(getThemedColor(Theme.key_chat_TextSelectionCursor));
 
             if (searchFieldHint != null) {
-                searchField.setHint(searchFieldHint);
+                searchField.setHint(roundedSearchHint(searchFieldHint));
                 setContentDescription(searchFieldHint);
             }
             if (searchFieldText != null) {

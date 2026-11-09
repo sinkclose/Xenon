@@ -645,6 +645,9 @@ public class AnimatedTextView extends View {
         }
 
         private StaticLayout makeLayout(CharSequence textPart, int width) {
+            final boolean includePad = includeFontPadding
+                    && !zxc.iconic.xenon.helpers.ClientFonts.useGoogleSans()
+                    && !zxc.iconic.xenon.helpers.TypefaceHelper.isCurrentRoundedTypeface(textPaint.getTypeface());
             if (width <= 0) {
                 width = Math.min(AndroidUtilities.displaySize.x, AndroidUtilities.displaySize.y);
             }
@@ -655,7 +658,7 @@ public class AnimatedTextView extends View {
                         .setAlignment(Layout.Alignment.ALIGN_NORMAL)
                         .setEllipsize(TextUtils.TruncateAt.END)
                         .setEllipsizedWidth(width)
-                        .setIncludePad(includeFontPadding)
+                        .setIncludePad(includePad)
                         .build();
             } else {
                 return new StaticLayout(
@@ -666,7 +669,7 @@ public class AnimatedTextView extends View {
                     Layout.Alignment.ALIGN_NORMAL,
                     1,
                     0,
-                    includeFontPadding,
+                    includePad,
                     TextUtils.TruncateAt.END,
                     width
                 );
