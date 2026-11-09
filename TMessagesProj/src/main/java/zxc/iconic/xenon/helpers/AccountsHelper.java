@@ -296,7 +296,7 @@ public class AccountsHelper {
 
             textView = new TextView(context);
             textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
-            textView.setTextColor(Theme.getColor(Theme.key_dialogTextBlack, resourcesProvider));
+            textView.setTextColor(Theme.getColor(NekoConfig.material3Popups ? Theme.key_actionBarDefaultSubmenuItem : Theme.key_dialogTextBlack, resourcesProvider));
             textView.setMaxLines(2);
             textView.setEllipsize(TextUtils.TruncateAt.END);
             addView(textView, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, Gravity.CENTER_VERTICAL, 14, 0, 14, 0));
@@ -308,7 +308,7 @@ public class AccountsHelper {
                 ((org.telegram.ui.Components.MaterialPopupRowDrawable) getBackground()).setCorners(top, bottom);
             } else {
                 setBackground(new org.telegram.ui.Components.MaterialPopupRowDrawable(
-                        Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider), top, bottom));
+                        Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground, resourcesProvider), top, bottom));
             }
         }
 

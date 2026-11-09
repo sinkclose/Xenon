@@ -296,7 +296,7 @@ public class MessageSeenView extends FrameLayout {
             @Override
             protected void onMeasure(int widthSpec, int heightSpec) {
                 int height = MeasureSpec.getSize(heightSpec);
-                int listViewTotalHeight = AndroidUtilities.dp(4) + AndroidUtilities.dp(zxc.iconic.xenon.NekoConfig.material3Popups ? 58 : 50) * getAdapter().getItemCount();
+                int listViewTotalHeight = AndroidUtilities.dp(zxc.iconic.xenon.NekoConfig.material3Popups ? 0 : 4) + AndroidUtilities.dp(zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 50) * getAdapter().getItemCount();
 
                 if (listViewTotalHeight > height) {
                     listViewTotalHeight = height;
@@ -312,7 +312,6 @@ public class MessageSeenView extends FrameLayout {
             public void getItemOffsets(@NonNull Rect outRect, @NonNull View view, @NonNull RecyclerView parent, @NonNull RecyclerView.State state) {
                 int p = parent.getChildAdapterPosition(view);
                 if (zxc.iconic.xenon.NekoConfig.material3Popups) {
-                    outRect.bottom = AndroidUtilities.dp(2);
                     return;
                 }
                 if (p == users.size() - 1) {
@@ -330,7 +329,7 @@ public class MessageSeenView extends FrameLayout {
             @Override
             public RecyclerView.ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
                 UserCell userCell = new UserCell(parent.getContext());
-                userCell.setLayoutParams(new RecyclerView.LayoutParams(LayoutHelper.MATCH_PARENT, AndroidUtilities.dp(zxc.iconic.xenon.NekoConfig.material3Popups ? 58 : 50)));
+                userCell.setLayoutParams(new RecyclerView.LayoutParams(LayoutHelper.MATCH_PARENT, AndroidUtilities.dp(zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 50)));
                 return new RecyclerListView.Holder(userCell);
             }
 
@@ -408,7 +407,7 @@ public class MessageSeenView extends FrameLayout {
 
         @Override
         protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-            super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(zxc.iconic.xenon.NekoConfig.material3Popups ? 58 : 50), View.MeasureSpec.EXACTLY));
+            super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 50), View.MeasureSpec.EXACTLY));
         }
 
         public void setUser(TLObject object, int date) {

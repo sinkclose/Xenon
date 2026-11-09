@@ -34501,19 +34501,23 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     MessageSeenView finalMessageSeenView = messageSeenView;
 
                     ActionBarMenuSubItem cell = new ActionBarMenuSubItem(getParentActivity(), true, false, themeDelegate);
-                    cell.setItemHeight(44);
+                    cell.setItemHeight(zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 44);
                     cell.setTextAndIcon(LocaleController.getString(R.string.Back), R.drawable.msg_arrow_back);
                     cell.getTextView().setPadding(LocaleController.isRTL ? 0 : AndroidUtilities.dp(40), 0, LocaleController.isRTL ? AndroidUtilities.dp(40) : 0, 0);
 
                     FrameLayout backContainer = new FrameLayout(contentView.getContext());
 
                     LinearLayout linearLayout = new LinearLayout(contentView.getContext());
-                    linearLayout.setBackgroundColor(getThemedColor(Theme.key_actionBarDefaultSubmenuBackground));
+                    if (!zxc.iconic.xenon.NekoConfig.material3Popups) {
+                        linearLayout.setBackgroundColor(getThemedColor(Theme.key_actionBarDefaultSubmenuBackground));
+                    } else {
+                        linearLayout.setPadding(AndroidUtilities.dp(4), AndroidUtilities.dp(4), AndroidUtilities.dp(4), 0);
+                    }
                     linearLayout.setOrientation(LinearLayout.VERTICAL);
                     RecyclerListView listView2 = finalMessageSeenView.createListView();
-                    backContainer.addView(cell);
+                    backContainer.addView(cell, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 44));
                     linearLayout.addView(backContainer);
-                    linearLayout.addView(new ActionBarPopupWindow.GapView(contentView.getContext(), themeDelegate), LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 8));
+                    if (!zxc.iconic.xenon.NekoConfig.material3Popups) linearLayout.addView(new ActionBarPopupWindow.GapView(contentView.getContext(), themeDelegate), LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 8));
                     backContainer.setOnClickListener(new View.OnClickListener() {
                         @Override
                         public void onClick(View view) {
@@ -34579,8 +34583,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
                     foregroundIndex[0] = popupLayout.addViewToSwipeBack(linearLayout);
 
-                    popupLayout.addView(messageSeenLayout, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 44));
-                    addGap = true;
+                    popupLayout.addView(messageSeenLayout, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT,
+                            zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 44));
+                    if (!zxc.iconic.xenon.NekoConfig.material3Popups) addGap = true;
                 } else if (showPrivateMessageSeen) {
                     MessagePrivateSeenView messagePrivateSeenView = new MessagePrivateSeenView(getContext(), MessagePrivateSeenView.TYPE_SEEN, message, () -> {
                         closeMenu(true);

@@ -155,7 +155,7 @@ public class SenderSelectPopup extends ActionBarPopupWindow {
         headerText.setPadding(dp, AndroidUtilities.dp(12), dp, AndroidUtilities.dp(12));
         if (zxc.iconic.xenon.NekoConfig.material3Popups) {
             headerText.setBackground(new MaterialPopupRowDrawable(
-                    Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider), true, sendAsPeers.peers.isEmpty()));
+                    Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground, resourcesProvider), true, sendAsPeers.peers.isEmpty()));
         }
         recyclerContainer.addView(headerText, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
@@ -524,7 +524,7 @@ public class SenderSelectPopup extends ActionBarPopupWindow {
                 ((MaterialPopupRowDrawable) getBackground()).setCorners(top, bottom);
             } else {
                 setBackground(new MaterialPopupRowDrawable(
-                        Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider), top, bottom));
+                        Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground, resourcesProvider), top, bottom));
             }
         }
 
