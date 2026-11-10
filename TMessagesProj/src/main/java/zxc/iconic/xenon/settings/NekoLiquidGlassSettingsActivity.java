@@ -47,6 +47,16 @@ public class NekoLiquidGlassSettingsActivity extends BaseNekoSettingsActivity {
 
     // --- Strength sliders ---
     private final int blurStrengthRow = rowId++;
+    private final int ios27LiquidGlassRow = rowId++;
+    private final int ios27GlassBlurRow = rowId++;
+    private final int ios27GlassRefractionRow = rowId++;
+    private final int ios27GlassDispersionRow = rowId++;
+    private final int ios27GlassAlphaRow = rowId++;
+    private final int ios27GlassTintRow = rowId++;
+    private final int ios27GlassTintBlackWhiteRow = rowId++;
+    private final int ios27GlassGlareRow = rowId++;
+    private final int ios27GlassGlareAngleRow = rowId++;
+    private final int ios27GlassLightIntensityRow = rowId++;
     private final int tintStrengthRow = rowId++;
 
     // --- Existing toggles ---
@@ -94,9 +104,13 @@ public class NekoLiquidGlassSettingsActivity extends BaseNekoSettingsActivity {
     }
 
     private CharSequence glassGlareModeValue() {
-        if (NekoConfig.glassGlareMode == NekoConfig.GLASS_GLARE_FULL) {
+        return glassGlareModeValue(NekoConfig.glassGlareMode);
+    }
+
+    private CharSequence glassGlareModeValue(int mode) {
+        if (mode == NekoConfig.GLASS_GLARE_FULL) {
             return LocaleController.getString(R.string.GlassGlareFull);
-        } else if (NekoConfig.glassGlareMode == NekoConfig.GLASS_GLARE_SOLID) {
+        } else if (mode == NekoConfig.GLASS_GLARE_SOLID) {
             return LocaleController.getString(R.string.GlassGlareSolid);
         }
         return LocaleController.getString(R.string.GlassGlareDisable);
@@ -104,6 +118,17 @@ public class NekoLiquidGlassSettingsActivity extends BaseNekoSettingsActivity {
 
     @Override
     protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            items.add(UItem.asCheck(ios27LiquidGlassRow,
+                    LocaleController.getString(R.string.Ios27LiquidGlass),
+                    LocaleController.getString(R.string.Ios27LiquidGlassInfo))
+                    .setChecked(NekoConfig.ios27LiquidGlass).slug("ios27LiquidGlass"));
+            items.add(UItem.asShadow(null));
+        }
+        if (NekoConfig.ios27LiquidGlass) {
+            fillIos27Items(items);
+            return;
+        }
         // --- Blur and Liquid glass section ---
         items.add(UItem.asHeader(LocaleController.getString(R.string.BlurAndLiquidGlass)));
         if (canLiquidGlass()) {
@@ -260,6 +285,56 @@ public class NekoLiquidGlassSettingsActivity extends BaseNekoSettingsActivity {
         items.add(UItem.asShadow(null));
     }
 
+    private void addIos27Slider(ArrayList<UItem> items, int id, int title,
+            int min, int max, float value, float scale,
+            java.util.function.Consumer<Float> setter, String slug) {
+        items.add(SeekbarCellFactory.of(id,
+                new SeekbarConfig(LocaleController.getString(title), String.valueOf(min), String.valueOf(max),
+                        min, max, progress -> {
+                            setter.accept(progress / scale);
+                            invalidatePreview();
+                        }), Math.round(value * scale)).slug(slug));
+    }
+
+    private void fillIos27Items(ArrayList<UItem> items) {
+        items.add(UItem.asHeader(LocaleController.getString(R.string.Ios27LiquidGlass)));
+        ensurePreviewCreated();
+        if (previewContainer != null) {
+            items.add(UItem.asCustom(previewContainer, GlassPreviewCell.heightDp() + 16));
+        }
+        addIos27Slider(items, ios27GlassBlurRow, R.string.AdvancedGlassBlur, 0, 40,
+                NekoConfig.ios27GlassBlur, 1f, v -> NekoConfig.setIos27GlassBlur(Math.round(v)), "ios27GlassBlur");
+        addIos27Slider(items, ios27GlassRefractionRow, R.string.AdvancedGlassRefraction, 0, 200,
+                NekoConfig.ios27GlassRefraction, 100f, NekoConfig::setIos27GlassRefraction, "ios27GlassRefraction");
+        addIos27Slider(items, ios27GlassDispersionRow, R.string.AdvancedGlassDispersion, 0, 100,
+                NekoConfig.ios27GlassDispersion, 100f, NekoConfig::setIos27GlassDispersion, "ios27GlassDispersion");
+        addIos27Slider(items, ios27GlassAlphaRow, R.string.AdvancedGlassAlpha, 0, 100,
+                NekoConfig.ios27GlassAlpha, 1f, v -> NekoConfig.setIos27GlassAlpha(Math.round(v)), "ios27GlassAlpha");
+        addIos27Slider(items, ios27GlassTintRow, R.string.AdvancedGlassTintPercent, 0, 100,
+                NekoConfig.ios27GlassTintPercent, 1f, v -> NekoConfig.setIos27GlassTintPercent(Math.round(v)), "ios27GlassTintPercent");
+        items.add(UItem.asCheck(ios27GlassTintBlackWhiteRow,
+                LocaleController.getString(R.string.AdvancedGlassTintBlackWhite),
+                LocaleController.getString(R.string.AdvancedGlassTintBlackWhiteDesc))
+                .setChecked(NekoConfig.ios27GlassTintBlackWhite).slug("ios27GlassTintBlackWhite"));
+        items.add(UItem.asShadow(null));
+        items.add(TextSettingsCellFactory.of(glassGlareRow, LocaleController.getString(R.string.GlassGlare),
+                glassGlareModeValue(NekoConfig.ios27GlassGlareMode)).slug("ios27GlassGlareMode"));
+        if (NekoConfig.ios27GlassGlareMode != NekoConfig.GLASS_GLARE_DISABLE) {
+            addIos27Slider(items, ios27GlassLightIntensityRow, R.string.Ios27GlassLightIntensity, 0, 100,
+                    NekoConfig.ios27GlassLightIntensity, 100f, NekoConfig::setIos27GlassLightIntensity, "ios27GlassLightIntensity");
+            if (NekoConfig.ios27GlassGlareMode == NekoConfig.GLASS_GLARE_FULL) {
+                addIos27Slider(items, ios27GlassGlareRow, R.string.AdvancedGlassGlare, 10, 200,
+                        NekoConfig.ios27GlassGlare, 100f, NekoConfig::setIos27GlassGlare, "ios27GlassGlare");
+                addIos27Slider(items, ios27GlassGlareAngleRow, R.string.GlassGlareAngle, 0, 360,
+                        NekoConfig.ios27GlassGlareAngle, 1f, NekoConfig::setIos27GlassGlareAngle, "ios27GlassGlareAngle");
+            }
+        }
+        items.add(UItem.asShadow(LocaleController.getString(R.string.Ios27GlassSettingsInfo)));
+        items.add(UItem.asButton(resetRow, R.drawable.msg_reset,
+                LocaleController.getString(R.string.AdvancedGlassReset)).accent().slug("ios27GlassReset"));
+        items.add(UItem.asShadow(null));
+    }
+
     private void invalidatePreview() {
         if (previewCell != null) {
             previewCell.invalidateGlass();
@@ -269,6 +344,7 @@ public class NekoLiquidGlassSettingsActivity extends BaseNekoSettingsActivity {
     @Override
     public void onResume() {
         super.onResume();
+        if (listView != null) listView.adapter.update(true);
         invalidatePreview();
     }
 
@@ -277,7 +353,16 @@ public class NekoLiquidGlassSettingsActivity extends BaseNekoSettingsActivity {
         if (!item.enabled) return;
         final int id = item.id;
 
-        if (id == liquidGlassFlagRow) {
+        if (id == ios27LiquidGlassRow) {
+            NekoConfig.toggleIos27LiquidGlass();
+            listView.adapter.update(true);
+            listView.post(this::invalidatePreview);
+            showRestartBulletin();
+        } else if (id == ios27GlassTintBlackWhiteRow) {
+            NekoConfig.toggleIos27GlassTintBlackWhite();
+            listView.adapter.update(true);
+            listView.post(this::invalidatePreview);
+        } else if (id == liquidGlassFlagRow) {
             LiteMode.toggleFlag(LiteMode.FLAG_LIQUID_GLASS);
             listView.adapter.update(true);
             listView.post(this::invalidatePreview);
@@ -336,9 +421,11 @@ public class NekoLiquidGlassSettingsActivity extends BaseNekoSettingsActivity {
         entries.add(LocaleController.getString(R.string.GlassGlareFull));
         entries.add(LocaleController.getString(R.string.GlassGlareSolid));
         entries.add(LocaleController.getString(R.string.GlassGlareDisable));
+        final boolean ios27 = NekoConfig.ios27LiquidGlass;
         PopupHelper.show(entries, LocaleController.getString(R.string.GlassGlare),
-                NekoConfig.glassGlareMode, getParentActivity(), view, i -> {
-                    NekoConfig.setGlassGlareMode(i);
+                ios27 ? NekoConfig.ios27GlassGlareMode : NekoConfig.glassGlareMode, getParentActivity(), view, i -> {
+                    if (ios27) NekoConfig.setIos27GlassGlareMode(i);
+                    else NekoConfig.setGlassGlareMode(i);
                     listView.adapter.update(true);
                     listView.post(this::invalidatePreview);
                     showRestartBulletin();
@@ -346,11 +433,13 @@ public class NekoLiquidGlassSettingsActivity extends BaseNekoSettingsActivity {
     }
 
     private void confirmReset() {
+        final boolean ios27 = NekoConfig.ios27LiquidGlass;
         AlertDialog.Builder b = new AlertDialog.Builder(getParentActivity(), resourcesProvider);
         b.setTitle(LocaleController.getString(R.string.AdvancedGlassReset));
         b.setMessage(LocaleController.getString(R.string.AdvancedGlassResetConfirm));
         b.setPositiveButton(LocaleController.getString(R.string.Reset), (d, w) -> {
-            NekoConfig.resetAdvancedGlassToDefaults();
+            if (ios27) NekoConfig.resetIos27GlassToDefaults();
+            else NekoConfig.resetAdvancedGlassToDefaults();
             listView.adapter.update(true);
             listView.post(this::invalidatePreview);
             BulletinFactory.of(this).createSimpleBulletin(R.raw.chats_infotip,

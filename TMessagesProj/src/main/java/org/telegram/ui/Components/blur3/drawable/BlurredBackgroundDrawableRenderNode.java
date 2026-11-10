@@ -14,6 +14,7 @@ import android.os.Build;
 import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 
+import org.telegram.messenger.AndroidUtilities;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.blur3.LiquidGlassEffect;
 import org.telegram.ui.Components.blur3.source.BlurredBackgroundSource;
@@ -36,10 +37,19 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
     private boolean prismPipelineActive;
     private boolean retainSurfaceDisplayList;
     int liquidGlassSamplePadding;
+    private int requestedLiquidGlassSamplePadding;
+    private int ios27MaterialRevision = -1;
 
     /** Extra backdrop pixels for lenses whose refraction can cross the opposite edge. */
     public void setLiquidGlassSamplePadding(int padding) {
-        padding = Math.max(0, padding);
+        requestedLiquidGlassSamplePadding = Math.max(0, padding);
+        syncLiquidGlassSamplePadding();
+    }
+
+    private void syncLiquidGlassSamplePadding() {
+        int padding = Math.max(requestedLiquidGlassSamplePadding,
+                zxc.iconic.xenon.NekoConfig.ios27LiquidGlass
+                        ? dp(zxc.iconic.xenon.NekoConfig.getIos27GlassSamplePaddingDp()) : 0);
         if (liquidGlassSamplePadding == padding) return;
         liquidGlassSamplePadding = padding;
         onBoundPropsChanged();
@@ -110,6 +120,14 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
 
     @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
     private void ensureLiquidGlassEffect() {
+        syncLiquidGlassSamplePadding();
+        if (zxc.iconic.xenon.NekoConfig.ios27LiquidGlass
+                && ios27MaterialRevision != zxc.iconic.xenon.NekoConfig.getIos27GlassRevision()) {
+            ios27MaterialRevision = zxc.iconic.xenon.NekoConfig.getIos27GlassRevision();
+            updateColors();
+            renderNodeInvalidated = true;
+            if (prismPipeline != null) prismPipeline.invalidateAll();
+        }
         if (liquidGlassEffectAllowed && getAlpha() > 0
                 && (liquidGlassEffect == null || !liquidGlassEffect.isConfigurationCurrent())) {
             liquidGlassEffect = new LiquidGlassEffect(renderNodeFill, fixedRefraction, onShadersReady);
@@ -171,7 +189,7 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
             ensureLiquidGlassEffect();
         }
         if (Build.VERSION.SDK_INT >= 33 && (retainSurfaceDisplayList
-                || liquidGlassEffect != null && zxc.iconic.xenon.NekoConfig.usePrismGlass)) {
+                || liquidGlassEffect != null && zxc.iconic.xenon.NekoConfig.isPrismGlassEnabled())) {
             // Explicit calls (including GlassEngine captures) must refresh source commands.
             updatePrismDisplayList(true);
             return;
@@ -206,7 +224,7 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
 
 
         c = renderNode.beginRecording();
-        if (Color.alpha(backgroundColor) == 255) {
+        if (!zxc.iconic.xenon.NekoConfig.ios27LiquidGlass && Color.alpha(backgroundColor) == 255) {
             c.drawColor(backgroundColor);
         } else {
             c.drawRenderNode(renderNodeFill);
@@ -232,11 +250,11 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
             //     backgroundColor so the refraction stays clearly visible
             //     and the look mirrors the subtle premultiplied tint of the
             //     base shader rather than producing an aggressive flat wash.
-            if (zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass) {
+            if (zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled()) {
                 // Advanced glass has no color uniform — it only does refraction +
                 // chromatic dispersion. Draw a SOFT overlay scaled by the
                 // advancedGlassTintPercent slider so the surface gets a tint.
-                final int percent = zxc.iconic.xenon.NekoConfig.advancedGlassTintPercent;
+                final int percent = zxc.iconic.xenon.NekoConfig.getGlassTintPercent();
                 if (percent > 0 && Color.alpha(backgroundColor) != 0) {
                     final float strength = Math.min(100, Math.max(0, percent)) / 100f * 0.60f;
                     c.drawColor(Theme.multAlpha(backgroundColor, strength));
@@ -251,12 +269,12 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
             // Base shader path (liquidGlassEffect != null && liquid glass && !advanced):
             // shader applies the tint internally — no overlay needed.
         }
-        if (strokeColorTop != 0) {
+        if (!zxc.iconic.xenon.NekoConfig.ios27LiquidGlass && strokeColorTop != 0) {
             drawStroke(c, 0, 0, boundProps.boundsWithPadding.width(),
                     boundProps.boundsWithPadding.height(), boundProps.radii,
                     boundProps.strokeWidthTop, true, paintStrokeTop);
         }
-        if (strokeColorBottom != 0) {
+        if (!zxc.iconic.xenon.NekoConfig.ios27LiquidGlass && strokeColorBottom != 0) {
             drawStroke(c, 0, 0, boundProps.boundsWithPadding.width(),
                     boundProps.boundsWithPadding.height(), boundProps.radii,
                     boundProps.strokeWidthBottom, false, paintStrokeBottom);
@@ -266,8 +284,9 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
         // Sync renderNode alpha every time the display list is rebuilt.
         // This covers the case where advancedGlassAlpha or useAdvancedLiquidGlass
         // changed without a subsequent setAlpha() call (parent alpha stayed at 255).
-        final float _glassAlphaFactor = !fixedRefraction && zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass
-                ? Math.max(0f, Math.min(1f, zxc.iconic.xenon.NekoConfig.advancedGlassAlpha / 100f))
+        final float _glassAlphaFactor = (!fixedRefraction || zxc.iconic.xenon.NekoConfig.ios27LiquidGlass)
+                && zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled()
+                ? Math.max(0f, Math.min(1f, zxc.iconic.xenon.NekoConfig.getGlassAlphaPercent() / 100f))
                 : 1f;
         renderNode.setAlpha(getAlpha() / 255f * _glassAlphaFactor);
     }
@@ -308,7 +327,7 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
             ensureLiquidGlassEffect();
         }
         final boolean retainedPipeline = Build.VERSION.SDK_INT >= 33 && (retainSurfaceDisplayList
-                || liquidGlassEffect != null && zxc.iconic.xenon.NekoConfig.usePrismGlass);
+                || liquidGlassEffect != null && zxc.iconic.xenon.NekoConfig.isPrismGlassEnabled());
         if (prismPipelineActive != retainedPipeline) {
             prismPipelineActive = retainedPipeline;
             renderNodeInvalidated = true;
@@ -327,9 +346,12 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
         }
         renderNodeInvalidated = false;
 
-        int color = Theme.multAlpha(shadowColor, renderNode.getAlpha() * shadowAlpha);
+        final boolean ios27 = zxc.iconic.xenon.NekoConfig.ios27LiquidGlass;
+        int color = ios27 ? Theme.multAlpha(Theme.isCurrentThemeDark() ? 0x0a000000 : 0x05000000, renderNode.getAlpha())
+                : Theme.multAlpha(shadowColor, renderNode.getAlpha() * shadowAlpha);
         if (Color.alpha(color) != 0) {
-            paintShadow.setShadowLayer(shadowLayerRadius, shadowLayerDx, shadowLayerDy, color);
+            paintShadow.setShadowLayer(ios27 ? AndroidUtilities.dpf2(15f) : shadowLayerRadius,
+                    ios27 ? 0f : shadowLayerDx, ios27 ? AndroidUtilities.dpf2(8f) : shadowLayerDy, color);
             boundProps.drawShadows(canvas, paintShadow, inAppKeyboardOptimization);
         }
 
@@ -354,8 +376,9 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
 
         // In advanced glass mode, advancedGlassAlpha scales the drawable alpha
         // so the entire glass surface (refraction + tint) can be made translucent.
-        final float glassAlphaFactor = !fixedRefraction && zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass
-                ? Math.max(0f, Math.min(1f, zxc.iconic.xenon.NekoConfig.advancedGlassAlpha / 100f))
+        final float glassAlphaFactor = (!fixedRefraction || zxc.iconic.xenon.NekoConfig.ios27LiquidGlass)
+                && zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled()
+                ? Math.max(0f, Math.min(1f, zxc.iconic.xenon.NekoConfig.getGlassAlphaPercent() / 100f))
                 : 1f;
         final float renderAlpha = alpha / 255f * glassAlphaFactor;
         if (oldAlpha == alpha && renderNode.getAlpha() == renderAlpha) {

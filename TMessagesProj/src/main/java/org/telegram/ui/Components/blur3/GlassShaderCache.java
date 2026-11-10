@@ -24,6 +24,8 @@ public final class GlassShaderCache {
     private static final Pool advanced = new Pool(R.raw.liquid_glass_shader_advanced, 12);
     private static final Pool prismStandard = new Pool(R.raw.prism_glass_shader, 12);
     private static final Pool prismAdvanced = new Pool(R.raw.prism_glass_shader_advanced, 12);
+    private static final Pool ios27 = new Pool(R.raw.ios27_liquid_glass, 12);
+    private static final Pool ios27Highlight = new Pool(R.raw.ios27_glass_highlight, 16);
     private static final Pool highlight = new Pool(R.raw.liquid_glass_highlight, 16);
     private static final ConcurrentHashMap<Integer, Pool> progressive = new ConcurrentHashMap<>();
 
@@ -39,7 +41,8 @@ public final class GlassShaderCache {
         if (refractionEnabled) {
             refractionPool(useAdvanced, prism).refill();
         }
-        highlight.refill();
+        if (zxc.iconic.xenon.NekoConfig.ios27LiquidGlass) ios27Highlight.refill();
+        else highlight.refill();
         // Navigation capsules use fixed advanced refraction even in standard mode.
         if (refractionEnabled && !useAdvanced) {
             refractionPool(true, prism).refill();
@@ -47,6 +50,7 @@ public final class GlassShaderCache {
     }
 
     private static Pool refractionPool(boolean useAdvanced, boolean prism) {
+        if (zxc.iconic.xenon.NekoConfig.ios27LiquidGlass) return ios27;
         return prism ? (useAdvanced ? prismAdvanced : prismStandard) : (useAdvanced ? advanced : standard);
     }
 
@@ -65,7 +69,7 @@ public final class GlassShaderCache {
     }
 
     static RuntimeShader acquireHighlight(Runnable onReady) {
-        return highlight.acquire(onReady);
+        return (zxc.iconic.xenon.NekoConfig.ios27LiquidGlass ? ios27Highlight : highlight).acquire(onReady);
     }
 
     public static RuntimeShader acquireProgressive(int samples, Supplier<String> source, Runnable onReady) {

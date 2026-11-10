@@ -1,0 +1,169 @@
+uniform shader img;
+uniform float2 resolution;
+
+uniform float2 size;
+uniform float2 center;
+uniform float4 radius;
+uniform float refractionHeight;
+uniform float refractionAmount;
+uniform float depthEffect;
+uniform float chromaticAberration;
+uniform float darkMode;
+uniform float pixelScale;
+uniform float4 lensParams;
+uniform float lightIntensity;
+uniform float lightAngle;
+
+half4 sampleBackdrop(float2 coord) {
+    return img.eval(clamp(coord, float2(0.5), resolution - float2(0.5)));
+}
+
+// NOTE: blur is no longer done inside the shader.
+// RenderEffect.createBlurEffect() on the source RenderNode provides a proper
+// hardware-accelerated separable Gaussian before the shader ever sees the
+// pixels. This removes the broken-glass artifact that multi-tap in-shader
+// sampling produced and eliminates the per-pixel texture-read explosion that
+// was caused by calling the blur helper inside the chromatic-dispersion loop.
+
+float radiusAt(float2 coord, float4 radii) {
+    if (coord.x >= 0.0) {
+        if (coord.y <= 0.0) return radii.y;
+        else return radii.z;
+    } else {
+        if (coord.y <= 0.0) return radii.x;
+        else return radii.w;
+    }
+}
+
+float sdRoundedRect(float2 coord, float2 halfSize, float r) {
+    float2 cornerCoord = abs(coord) - (halfSize - float2(r));
+    float outside = length(max(cornerCoord, 0.0)) - r;
+    float inside = min(max(cornerCoord.x, cornerCoord.y), 0.0);
+    return outside + inside;
+}
+
+float2 gradSdRoundedRect(float2 coord, float2 halfSize, float r) {
+    float2 cornerCoord = abs(coord) - (halfSize - float2(r));
+    if (cornerCoord.x >= 0.0 || cornerCoord.y >= 0.0) {
+        float2 outside = max(cornerCoord, 0.0);
+        return sign(coord) * outside / max(length(outside), 0.0001);
+    } else {
+        float gradX = step(cornerCoord.y, cornerCoord.x);
+        return sign(coord) * float2(gradX, 1.0 - gradX);
+    }
+}
+
+float circleMap(float x) {
+    return 1.0 - sqrt(max(0.0, 1.0 - x * x));
+}
+
+float refractionDistance(float sd, float maxHeight) {
+    // Opposing edge normals meet on the medial axis. Make displacement
+    // vanish there even when the requested lens depth exceeds the glass size.
+    // The Figma capsule bends the backdrop across its full short axis.
+    // Keep displacement below the medial axis, but do not flatten the lens.
+    float height = min(lensParams.w, maxHeight);
+    if (height <= 0.0 || -sd >= height) return 0.0;
+    float edge = clamp(1.0 + min(sd, 0.0) / height, 0.0, 1.0);
+    return -lensParams.x * pow(circleMap(edge), lensParams.y);
+}
+
+half4 opticalColor(float2 coord) {
+    float2 halfSize = size * 0.5;
+    float2 centeredCoord = coord - center;
+    float r = radiusAt(centeredCoord, radius);
+
+    float sd = sdRoundedRect(centeredCoord, halfSize, r);
+
+    float d = refractionDistance(sd, min(halfSize.x, halfSize.y));
+
+    // Edge zone: apply lens refraction
+    // Use the actual outline normal, without an axial/radial warp of capsules.
+    float2 grad = gradSdRoundedRect(centeredCoord, halfSize, r);
+    float2 radial = centeredCoord / max(length(centeredCoord), 0.0001);
+    grad += lensParams.z * radial;
+    grad /= max(length(grad), 0.0001);
+
+    // Measured inverse map: samples move inward while visible features expand
+    // toward the rim. The radial normal term is fitted independently of Splay.
+    float2 refractedCoord = coord + d * grad;
+
+    half4 baseColor = sampleBackdrop(refractedCoord);
+    if (chromaticAberration <= 0.0) {
+        return baseColor;
+    }
+
+    // 7-channel chromatic dispersion
+    // Dispersion follows optical displacement, not a fixed subpixel cap.
+    float2 dispersedCoord = (refractedCoord - coord) * chromaticAberration;
+
+    half4 color = half4(0.0);
+
+    half4 red = sampleBackdrop(refractedCoord + dispersedCoord);
+    color.r += red.r / 3.5;
+    color.a += red.a / 7.0;
+
+    half4 orange = sampleBackdrop(refractedCoord + dispersedCoord * (2.0 / 3.0));
+    color.r += orange.r / 3.5;
+    color.g += orange.g / 7.0;
+    color.a += orange.a / 7.0;
+
+    half4 yellow = sampleBackdrop(refractedCoord + dispersedCoord * (1.0 / 3.0));
+    color.r += yellow.r / 3.5;
+    color.g += yellow.g / 3.5;
+    color.a += yellow.a / 7.0;
+
+    half4 green = sampleBackdrop(refractedCoord);
+    color.g += green.g / 3.5;
+    color.a += green.a / 7.0;
+
+    half4 cyan = sampleBackdrop(refractedCoord - dispersedCoord * (1.0 / 3.0));
+    color.g += cyan.g / 3.5;
+    color.b += cyan.b / 3.0;
+    color.a += cyan.a / 7.0;
+
+    half4 blue = sampleBackdrop(refractedCoord - dispersedCoord * (2.0 / 3.0));
+    color.b += blue.b / 3.0;
+    color.a += blue.a / 7.0;
+
+    half4 purple = sampleBackdrop(refractedCoord - dispersedCoord);
+    color.r += purple.r / 7.0;
+    color.b += purple.b / 3.0;
+    color.a += purple.a / 7.0;
+
+    return color;
+}
+
+// Regular / Small fills, bottom to top: luminosity, dodge, white, black.
+half4 main(float2 coord) {
+    half4 c = opticalColor(coord);
+    half3 rgb = c.a > 0.0001 ? c.rgb / c.a : half3(0.0);
+    float luminance = dot(float3(rgb), float3(0.3, 0.59, 0.11));
+    if (darkMode > 0.5) {
+        // Dark Regular / Small: #999999, luminosity at 17%; no white backing.
+        rgb = clamp(rgb + half((0.6 - luminance) * 0.17), 0.0, 1.0);
+    } else {
+        // Bottom to top, not a single white SRC_OVER wash.
+        rgb = clamp(rgb + half((0.972549 - luminance) * 0.2), 0.0, 1.0);
+        rgb = min(half3(1.0), rgb + half3(0.266667 * 0.6));
+        rgb = mix(rgb, half3(1.0), 0.25) * 0.75;
+    }
+    // Inner shadows use shifted, expanded masks, not exponential rim bands.
+    // Negative spread (-40) expands the transparent interior of the shadow.
+    float2 local = coord - center;
+    float2 halfSize = size * 0.5;
+    float scale = min(pixelScale, min(size.x, size.y) / 48.0);
+    float offset = 40.0 * scale;
+    float2 lightDirection = float2(sin(lightAngle), cos(lightAngle));
+    float2 up = local - lightDirection * offset;
+    float2 down = local + lightDirection * offset;
+    float upperDistance = sdRoundedRect(up, halfSize, radiusAt(up, radius)) - offset;
+    float lowerDistance = sdRoundedRect(down, halfSize, radiusAt(down, radius)) - offset;
+    // Smooth approximation of the Gaussian mask convolution (radius / 2 sigma).
+    float upperLight = smoothstep(-10.0 * scale, 10.0 * scale, upperDistance);
+    float lowerLight = smoothstep(-10.0 * scale, 10.0 * scale, lowerDistance);
+    float upperBurn = smoothstep(-30.0 * scale, 30.0 * scale, upperDistance);
+    rgb = max(half3(0.0), rgb - half3(upperBurn * 0.098039));
+    rgb = min(half3(1.0), rgb + half3((upperLight + lowerLight) * mix(0.156863, 0.101961, darkMode) * (lightIntensity / 0.25)));
+    return half4(rgb * c.a, c.a);
+}

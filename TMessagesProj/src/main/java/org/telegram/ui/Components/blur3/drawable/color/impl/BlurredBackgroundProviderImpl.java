@@ -27,7 +27,9 @@ public class BlurredBackgroundProviderImpl {
      * painting everything black/white.
      */
     public static boolean isBlackWhiteTintEnabled() {
-        return zxc.iconic.xenon.NekoConfig.advancedGlassTintBlackWhite && SharedConfig.chatBlurEnabled();
+        return (zxc.iconic.xenon.NekoConfig.ios27LiquidGlass
+                ? zxc.iconic.xenon.NekoConfig.ios27GlassTintBlackWhite
+                : zxc.iconic.xenon.NekoConfig.advancedGlassTintBlackWhite) && SharedConfig.chatBlurEnabled();
     }
 
     private static boolean useBlackWhiteTint() {
@@ -469,7 +471,7 @@ public class BlurredBackgroundProviderImpl {
      * identical to the pre-feature look.
      */
     public static int tintWithAccent(int color, Theme.ResourcesProvider resourcesProvider) {
-        final int percent = zxc.iconic.xenon.NekoConfig.advancedGlassTintPercent;
+        final int percent = zxc.iconic.xenon.NekoConfig.getGlassTintPercent();
         if (percent <= 0) {
             return color;
         }

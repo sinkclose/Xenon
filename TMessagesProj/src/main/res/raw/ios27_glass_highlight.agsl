@@ -1,0 +1,62 @@
+uniform float2 size;
+uniform float2 origin;
+uniform float4 cornerRadii;
+layout(color) uniform half4 color;
+
+float radiusAt(float2 coord, float4 radii) {
+    if (coord.x >= 0.0) {
+        if (coord.y <= 0.0) return radii.y;
+        else return radii.z;
+    } else {
+        if (coord.y <= 0.0) return radii.x;
+        else return radii.w;
+    }
+}
+
+float sdRoundedRect(float2 coord, float2 halfSize, float r) {
+    float2 cornerCoord = abs(coord) - (halfSize - float2(r));
+    float outside = length(max(cornerCoord, 0.0)) - r;
+    float inside = min(max(cornerCoord.x, cornerCoord.y), 0.0);
+    return outside + inside;
+}
+
+float2 gradSdRoundedRect(float2 coord, float2 halfSize, float r) {
+    float2 cornerCoord = abs(coord) - (halfSize - float2(r));
+    if (cornerCoord.x >= 0.0 || cornerCoord.y >= 0.0) {
+        float2 outside = max(cornerCoord, 0.0);
+        return sign(coord) * outside / max(length(outside), 0.0001);
+    } else {
+        float gradX = step(cornerCoord.y, cornerCoord.x);
+        return sign(coord) * float2(gradX, 1.0 - gradX);
+    }
+}
+
+uniform float pixelScale;
+uniform float darkMode;
+uniform float lightIntensity;
+uniform float lightAngle;
+uniform float lightFalloff;
+uniform float solidGlare;
+half4 main(float2 coord) {
+    float2 p = coord - origin - size * 0.5;
+    float2 h = size * 0.5;
+    float r = radiusAt(p, cornerRadii);
+    float sd = sdRoundedRect(p, h, r);
+    float inward = max(-sd, 0.0) / max(pixelScale, 0.001);
+    float2 n = gradSdRoundedRect(p, h, r);
+    float directional = abs(dot(n, float2(sin(lightAngle), cos(lightAngle))));
+    float vertical = solidGlare > 0.5 ? 1.0 : pow(directional, lightFalloff);
+    float rim = 1.0 - smoothstep(0.25, 0.75, inward);
+    float edge = exp(-inward * inward / 0.9);
+    float soft = 0.0;
+    // Linear burn contour (0.815686), paired dodge inner shadows (0.156863),
+    // and broad upper burn shadow (0.901961), approximated as distance bands.
+    float innerLight = mix(0.156863, 0.101961, darkMode);
+    float contour = mix(0.184314, 0.349020, darkMode);
+    // GLASS lightIntensity=.25. Inner shadows are composited with the backdrop
+    // in the material shader; this overlay only contributes the optical rim.
+    float white = clamp(edge * lightIntensity * vertical, 0.0, 0.9);
+    float black = clamp(rim * contour, 0.0, 0.9);
+    float alpha = white + black * (1.0 - white);
+    return half4(half3(white), half(alpha)) * color;
+}

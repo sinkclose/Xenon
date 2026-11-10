@@ -461,4 +461,8 @@
     <string name="SendAsGif">Отправить как GIF</string>
     <string name="ConvertingPhotoToGif">Конвертация фото в GIF…</string>
     <string name="PhotoToGifFailed">Не удалось преобразовать фото в GIF. Попробуйте ещё раз.</string>
+    <string name="Ios27LiquidGlass">iOS 27 Liquid Glass</string>
+    <string name="Ios27LiquidGlassInfo">Стекло по мотивам UI-кита Apple iOS 27 с отдельными настройками. После смены стиля перезапустите приложение для обновления всех поверхностей.</string>
+    <string name="Ios27GlassSettingsInfo">Эти настройки применяются только к iOS 27 Liquid Glass. Сброс возвращает исходные значения, не затрагивая другие стили стекла.</string>
+    <string name="Ios27GlassLightIntensity">Яркость бликов</string>
 </resources>

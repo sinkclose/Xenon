@@ -3,11 +3,18 @@ uniform float2 resolution;
 // Specialized at construction for the fixed slots in each host's group.
 const int SHAPE_COUNT = 8;
 uniform float4 shapes[8];
+uniform float4 lensParams[8];
 uniform float4 cornerRadii[8];
 uniform float4 tints[8];
 uniform float opacity[8];
 uniform float merges[64];
 uniform float advanced;
+uniform float ios27;
+uniform float ios27LightIntensity;
+uniform float ios27LightFalloff;
+uniform float ios27SolidGlare;
+uniform float darkMode;
+uniform float pixelScale;
 uniform float refractive;
 uniform float depth;
 uniform float amount;
@@ -262,6 +269,30 @@ float dispersionSpread(float2 p, Surface s) {
     return result;
 }
 
+float4 surfaceLens(Surface s) {
+    float4 result = lensParams[0] * s.a.x;
+    if (SHAPE_COUNT > 1) result += lensParams[1] * s.a.y;
+    if (SHAPE_COUNT > 2) result += lensParams[2] * s.a.z;
+    if (SHAPE_COUNT > 3) result += lensParams[3] * s.a.w;
+    if (SHAPE_COUNT > 4) result += lensParams[4] * s.b.x;
+    if (SHAPE_COUNT > 5) result += lensParams[5] * s.b.y;
+    if (SHAPE_COUNT > 6) result += lensParams[6] * s.b.z;
+    if (SHAPE_COUNT > 7) result += lensParams[7] * s.b.w;
+    return result;
+}
+
+float2 surfaceCenter(Surface s) {
+    float2 result = shapes[0].xy * s.a.x;
+    if (SHAPE_COUNT > 1) result += shapes[1].xy * s.a.y;
+    if (SHAPE_COUNT > 2) result += shapes[2].xy * s.a.z;
+    if (SHAPE_COUNT > 3) result += shapes[3].xy * s.a.w;
+    if (SHAPE_COUNT > 4) result += shapes[4].xy * s.b.x;
+    if (SHAPE_COUNT > 5) result += shapes[5].xy * s.b.y;
+    if (SHAPE_COUNT > 6) result += shapes[6].xy * s.b.z;
+    if (SHAPE_COUNT > 7) result += shapes[7].xy * s.b.w;
+    return result;
+}
+
 float4 surfaceTint(Surface s) {
     float4 result = tints[0] * s.a.x;
     if (SHAPE_COUNT > 1) {
@@ -332,8 +363,21 @@ half4 main(float2 p) {
         displacement = float2(0.0);
     } else if (advanced > 0.5) {
         float maxDepth = surfaceDepth(s);
-        float edge = clamp(1.0 + min(s.d, 0.0) / max(min(depth, maxDepth), 0.001), 0.0, 1.0);
-        displacement = grad * amount * (1.0 - sqrt(max(0.0, 1.0 - edge * edge)));
+        float band = min(depth, maxDepth);
+        float edge = clamp(1.0 + min(s.d, 0.0) / max(band, 0.001), 0.0, 1.0);
+        float lensScale = ios27 > 0.5 ? band / max(depth, 0.001) : 1.0;
+        displacement = grad * amount * lensScale * (1.0 - sqrt(max(0.0, 1.0 - edge * edge)));
+        if (ios27 > 0.5) {
+            float4 lens = surfaceLens(s);
+            float2 radial = p - surfaceCenter(s);
+            radial /= max(length(radial), 0.0001);
+            float slope = min(length(grad), 1.0);
+            float2 normal = grad + radial * lens.z * slope;
+            normal /= max(length(normal), 0.0001);
+            float e = clamp(1.0 + min(s.d, 0.0) / max(lens.w, 0.001), 0.0, 1.0);
+            float profile = pow(1.0 - sqrt(max(0.0, 1.0 - e * e)), lens.y);
+            displacement = -normal * lens.x * profile * slope;
+        }
     } else if (intensity != 0.0 && s.d > -thickness) {
         float sd = min(s.d, 0.0);
         float nc = clamp((thickness + sd) / thickness, 0.0, 1.0);
@@ -349,6 +393,7 @@ half4 main(float2 p) {
     if (advanced > 0.5 && dispersion > 0.0) {
         float spread = dispersionSpread(p, s);
         float2 delta = displacement * dispersion * clamp(spread, -1.0, 1.0);
+        if (ios27 > 0.5) delta = displacement * dispersion;
         half4 red = sampleBackdrop(uv + delta);
         half4 orange = sampleBackdrop(uv + delta * (2.0 / 3.0));
         half4 yellow = sampleBackdrop(uv + delta * (1.0 / 3.0));
@@ -361,6 +406,35 @@ half4 main(float2 p) {
                       (cyan.b + blue.b + purple.b) / 3.0,
                       (red.a + orange.a + yellow.a + green.a + cyan.a + blue.a + purple.a) / 7.0);
     }
+    if (ios27 > 0.5) {
+        half3 rgb = color.a > 0.0001 ? color.rgb / color.a : half3(0.0);
+        float luminance = dot(float3(rgb), float3(0.3, 0.59, 0.11));
+        if (darkMode > 0.5) {
+            rgb = clamp(rgb + half((0.6 - luminance) * 0.17), 0.0, 1.0);
+        } else {
+            rgb = clamp(rgb + half((0.972549 - luminance) * 0.2), 0.0, 1.0);
+            rgb = min(half3(1.0), rgb + half3(0.266667 * 0.6));
+            rgb = mix(rgb, half3(1.0), 0.25) * 0.75;
+        }
+        float inward = max(-s.d, 0.0) / max(pixelScale, 0.001);
+        float directional = abs(dot(grad, float2(sin(angle), cos(angle))));
+        float vertical = ios27SolidGlare > 0.5 ? 1.0 : pow(directional, ios27LightFalloff);
+        float scale = max(0.001, min(pixelScale, surfaceDepth(s) / 24.0));
+        // Query the actual shifted union, so inner shadows also follow its neck.
+        float shift = 40.0 * scale;
+        float2 lightDirection = float2(sin(angle), cos(angle));
+        float upperDistance = surface(p - lightDirection * shift).d - shift;
+        float lowerDistance = surface(p + lightDirection * shift).d - shift;
+        float upperLight = smoothstep(-10.0 * scale, 10.0 * scale, upperDistance);
+        float lowerLight = smoothstep(-10.0 * scale, 10.0 * scale, lowerDistance);
+        float burn = smoothstep(-30.0 * scale, 30.0 * scale, upperDistance);
+        rgb = max(half3(0.0), rgb - half3(burn * 0.098039));
+        rgb = min(half3(1.0), rgb + half3((upperLight + lowerLight) * mix(0.156863, 0.101961, darkMode) * (ios27LightIntensity / 0.25)));
+        float white = clamp(exp(-inward * inward / 0.9) * ios27LightIntensity * vertical, 0.0, 0.9);
+        float black = clamp((1.0 - smoothstep(0.25, 0.75, inward)) * mix(0.184314, 0.349020, darkMode), 0.0, 0.9);
+        rgb = mix(rgb * half(1.0 - black), half3(1.0), half(white));
+        color = half4(rgb * color.a, color.a);
+    }
     half4 tint = half4(surfaceTint(s));
     color = tint + color * (1.0 - tint.a);
     float touch = 0.0;
@@ -369,7 +443,7 @@ half4 main(float2 p) {
     }
     color.rgb = min(half3(color.a), color.rgb + half3(min(touch, 0.35) * color.a));
     // Light follows the outer union normal, so no internal seam remains at the neck.
-    float light = glare <= 0.0 || abs(s.d) >= 1.2 ? 0.0 : pow(abs(dot(grad, float2(cos(angle), sin(angle)))), max(0.1, glare));
+    float light = ios27 > 0.5 || glare <= 0.0 || abs(s.d) >= 1.2 ? 0.0 : pow(abs(dot(grad, float2(cos(angle), sin(angle)))), max(0.1, glare));
     float rim = 1.0 - smoothstep(0.0, 1.2, abs(s.d));
     color.rgb = min(half3(color.a), color.rgb + half3(light * rim * 0.165 * color.a));
     return color * half(coverage * glassAlpha * alpha);

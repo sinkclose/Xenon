@@ -430,11 +430,13 @@ public class DownscaleScrollableNoiseSuppressor {
             // Source pixels depend on capture scale, not on downstream materials.
             // Prism updates the blur graph independently when only settings change.
             builder.add(k);
-            final boolean prism = android.os.Build.VERSION.SDK_INT >= 33 && zxc.iconic.xenon.NekoConfig.usePrismGlass;
+            final boolean prism = android.os.Build.VERSION.SDK_INT >= 33 && zxc.iconic.xenon.NekoConfig.isPrismGlassEnabled();
             builder.add(prism);
             if (!prism) {
                 builder.add(zxc.iconic.xenon.NekoConfig.blurStrength);
-                builder.add(zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass);
+                builder.add(zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled());
+                builder.add(zxc.iconic.xenon.NekoConfig.ios27LiquidGlass);
+                builder.add(zxc.iconic.xenon.NekoConfig.ios27GlassBlur);
             }
             final long hash = builder.get();
 
@@ -475,10 +477,14 @@ public class DownscaleScrollableNoiseSuppressor {
 
         private int materialBlurStrength = Integer.MIN_VALUE;
         private boolean materialAdvanced;
+        private boolean materialIos27;
+        private int materialIos27Blur = -1;
 
         private boolean materialChanged() {
             return materialBlurStrength != zxc.iconic.xenon.NekoConfig.blurStrength
-                    || materialAdvanced != zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass;
+                    || materialAdvanced != zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled()
+                    || materialIos27 != zxc.iconic.xenon.NekoConfig.ios27LiquidGlass
+                    || materialIos27Blur != zxc.iconic.xenon.NekoConfig.ios27GlassBlur;
         }
 
         private boolean hasFilterDisplayLists() {
@@ -489,7 +495,7 @@ public class DownscaleScrollableNoiseSuppressor {
         private SourcePart() {
             if (isLiquidGlassEnabled) {
                 renderNodesForGlass = new DownscaledRenderNode("glass", 0, true);
-                if (zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass) {
+                if (zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled()) {
                     // Advanced glass: GPU hardware Gaussian blur on the downscaled source.
                     // Blur lives here, not in the AGSL shader. This eliminates the broken-glass
                     // artifact and the per-pixel texture-read explosion from multi-tap shader sampling.
@@ -533,7 +539,7 @@ public class DownscaleScrollableNoiseSuppressor {
             if (renderNodesForGlass != null) {
                 int scale = blurScale(glassRadius, 2);
                 renderNodesForGlass.setScale(scale, scale);
-                if (zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass) {
+                if (zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled()) {
                     renderNodesForGlass.setPrimaryEffectBlur(glassRadius);
                 } else {
                     renderNodesForGlass.setPrimaryEffectBlur(glassRadius, RenderNodeEffects.getSaturationX1_25RenderEffect());
@@ -552,7 +558,9 @@ public class DownscaleScrollableNoiseSuppressor {
             // glass result, so the two blur radii never accumulate.
             renderNodesForBlur.invalidateRenderNodes(renderNode);
             materialBlurStrength = zxc.iconic.xenon.NekoConfig.blurStrength;
-            materialAdvanced = zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass;
+            materialAdvanced = zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled();
+            materialIos27 = zxc.iconic.xenon.NekoConfig.ios27LiquidGlass;
+            materialIos27Blur = zxc.iconic.xenon.NekoConfig.ios27GlassBlur;
         }
     }
 

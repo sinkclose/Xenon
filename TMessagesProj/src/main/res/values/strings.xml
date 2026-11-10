@@ -11872,4 +11872,8 @@
     <string name="NoPaidMessagesTokenUsed">un1 used your QR code and can message you for free</string>
     <string name="NoPaidMessagesTokenUsedOut">You used the QR code of un1 and can message them for free</string>
     <string name="NoPaidMessagesTokenImported">You can now message **%1$s** for free.</string>
+    <string name="Ios27LiquidGlass">iOS 27 Liquid Glass</string>
+    <string name="Ios27LiquidGlassInfo">Glass inspired by the Apple iOS 27 UI kit, with independent settings. Restart the app after switching styles to refresh all surfaces.</string>
+    <string name="Ios27GlassSettingsInfo">These settings apply only to iOS 27 Liquid Glass. Reset restores its original values without changing other glass styles.</string>
+    <string name="Ios27GlassLightIntensity">Highlight brightness</string>
 </resources>

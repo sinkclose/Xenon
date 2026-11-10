@@ -272,7 +272,7 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
     private void syncWallpaperEffect() {
         // Mirror the glass-content blur from DownscaleScrollableNoiseSuppressor
         // so wallpaper and messages share one softness (the Blur slider).
-        final boolean advanced = zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass;
+        final boolean advanced = zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled();
         final float full = org.telegram.messenger.AndroidUtilities.dpf2(
                 zxc.iconic.xenon.NekoConfig.getGlassBlurRadiusDp());
         final float radius = org.telegram.ui.Components.blur3.DownscaleScrollableNoiseSuppressor.downscaleRadius(full, 2);
@@ -326,7 +326,7 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
         if (underSource == null) {
             return;
         }
-        if (!isUnblurredCanvas(canvas) && zxc.iconic.xenon.NekoConfig.blurStrength > 0
+        if (!isUnblurredCanvas(canvas) && zxc.iconic.xenon.NekoConfig.getGlassBlurRadiusDp() > 0
                 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && wallpaperParentW > 0 && wallpaperParentH > 0) {
             syncWallpaperEffect();
             recordWallpaperIfNeeded();
@@ -388,7 +388,7 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
 
     @RequiresApi(api = Build.VERSION_CODES.S)
     private void syncGlassBlur() {
-        if (zxc.iconic.xenon.NekoConfig.useAdvancedLiquidGlass) {
+        if (zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled()) {
             setBlur(org.telegram.messenger.AndroidUtilities.dpf2(
                     zxc.iconic.xenon.NekoConfig.getGlassBlurRadiusDp()));
         } else {

@@ -1335,7 +1335,7 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
 
         @Override
         public void bindView(View view, UItem item, boolean divider, UniversalAdapter adapter, UniversalRecyclerView listView) {
-            ((SeekbarCell) view).bind((SeekbarConfig) item.object, item.intValue);
+            ((SeekbarCell) view).bind((SeekbarConfig) item.object, item.intValue, item);
         }
 
         public static UItem of(int id, SeekbarConfig config, int currentValue) {
@@ -1365,11 +1365,16 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
             this.resourcesProvider = resourcesProvider;
         }
 
-        public void bind(SeekbarConfig config, int currentValue) {
+        public void bind(SeekbarConfig config, int currentValue, UItem item) {
             if (seekbar != null) {
                 removeView(seekbar);
             }
-            seekbar = new AltSeekbar(getContext(), config.onDrag, config.min, config.max,
+            seekbar = new AltSeekbar(getContext(), progress -> {
+                // Recycled holders rebind from this UItem, not from the config
+                // field that the external callback saves. Keep both current.
+                item.intValue = Math.round(progress);
+                config.onDrag.run(progress);
+            }, config.min, config.max,
                     config.title, config.left, config.right, resourcesProvider, config.description);
             seekbar.setValueFormatter(config.valueFormatter);
             seekbar.setOnDragStateChanged(config.onDragStateChanged);
