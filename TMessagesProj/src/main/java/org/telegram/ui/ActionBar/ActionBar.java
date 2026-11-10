@@ -32,6 +32,7 @@ import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.VectorDrawable;
+import android.os.Build;
 import android.text.SpannableString;
 import android.text.TextPaint;
 import android.text.TextUtils;
@@ -263,6 +264,23 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     }
 
     private boolean plainBackCircle;
+    private org.telegram.ui.Components.FadeHeaderButtonGlass fadeButtonGlass;
+
+    public void setFadeButtonGlass(org.telegram.ui.Components.FadeHeaderButtonGlass glass) {
+        if (fadeButtonGlass == glass) return;
+        if (fadeButtonGlass != null) fadeButtonGlass.release();
+        fadeButtonGlass = glass;
+        if (glass != null) {
+            setClipChildren(false);
+            setClipToPadding(false);
+            if (menu != null) {
+                menu.setClipChildren(false);
+                menu.setClipToPadding(false);
+            }
+        }
+        invalidate();
+        if (menu != null) menu.invalidate();
+    }
     private final Paint plainBackCirclePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     public boolean hasPlainButtonCircles() {
@@ -278,6 +296,9 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             backButtonImageView.setTranslationX(enabled ? dp(materialActivityHeader ? 17 : 8) : 0);
         }
         if (menu != null) {
+            // The menu can retain its measured size when only the bar requests
+            // layout. Circle mode changes the children's margins as well.
+            menu.requestLayout();
             for (int i = 0; i < menu.getChildCount(); i++) {
                 menu.getChildAt(i).invalidate();
             }
@@ -286,10 +307,21 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         invalidate();
     }
 
+    public int beginFadeButtonContent(Canvas canvas, View child, boolean localCanvas) {
+        return fadeButtonGlass != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                ? fadeButtonGlass.beginChild(canvas, child, localCanvas) : -1;
+    }
+
     void drawPlainButtonCircle(Canvas canvas, float cx, float cy) {
+        drawPlainButtonCircle(canvas, this, cx, cy);
+    }
+
+    void drawPlainButtonCircle(Canvas canvas, View host, float cx, float cy) {
         if ((!plainBackCircle && !materialActivityHeader) || nonIsland && !materialActivityHeader) {
             return;
         }
+        if (!materialActivityHeader && fadeButtonGlass != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                && fadeButtonGlass.draw(canvas, host, cx, cy)) return;
         plainBackCirclePaint.setColor(materialActivityHeader
                 ? ColorUtils.blendARGB(Theme.getColor(Theme.key_windowBackgroundGray, resourcesProvider),
                     Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider), 0.08f)
@@ -485,6 +517,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     }
 
     protected boolean shouldClipChild(View child) {
+        if (fadeButtonGlass != null && (child == menu || child == backButtonImageView)) return false;
         return clipContent && (child == titleTextView[0] || child == titleTextView[1] || child == subtitleTextView || child == menu || child == backButtonImageView || child == additionalSubtitleTextView || child == titlesContainer);
     }
 
@@ -498,6 +531,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             return true;
         }
 
+        int fadeSave = child == backButtonImageView ? beginFadeButtonContent(canvas, child, false) : -1;
         LiquidTouchEffect liquid = child == backButtonImageView ? liquidBack
                 : child == menu ? liquidMenu : null;
         final int liquidSave = beginLiquid(canvas, liquid);
@@ -547,6 +581,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             canvas.restore();
         }
         if (liquidSave != -1) canvas.restoreToCount(liquidSave);
+        if (fadeSave != -1) canvas.restoreToCount(fadeSave);
         return result;
     }
 
@@ -2169,12 +2204,14 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (fadeButtonGlass != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) fadeButtonGlass.observeTouch(ev);
         // Custom glass pill only gates touches while it is actually on screen.
         // When search / action mode is open, stock hides the avatar container and
         // the pill geometry changes, so the bounds check must not swallow touches
         // meant for the search field, menu or back button (e.g. taps on the chat
         // title area while searching were silently dropped).
-        if (chatAvatarContainer != null && glassMode && chatAvatarContainer.getVisibility() == VISIBLE && !isSearchFieldVisible && !actionModeVisible && searchFactor <= 0f && getActionModeFactor() <= 0f) {
+        if (!materialActivityHeader && !externalHeaderFade && !hasPlainButtonCircles()
+                && chatAvatarContainer != null && glassMode && chatAvatarContainer.getVisibility() == VISIBLE && !isSearchFieldVisible && !actionModeVisible && searchFactor <= 0f && getActionModeFactor() <= 0f) {
             if (ev.getAction() == MotionEvent.ACTION_DOWN) {
                 final int x = (int) ev.getX();
                 final int y = (int) ev.getY();
@@ -2828,6 +2865,9 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         final int t = liquidGlassTop, b = liquidGlassBottom;
         final int menuWidth = liquidGlassMenuWidth;
         final boolean hasBackButton = liquidGlassHasBack;
+        if (!materialActivityHeader && fadeButtonGlass != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            fadeButtonGlass.drawToolbar(canvas, this, dp(35), (t + b) / 2f);
+        }
 
         if (!materialActivityHeader && !externalHeaderFade && glassDrawable != null && !glassOnlyBack && drawGlassTitle && !m3ChatHeader && !liquidGlassGroupDrawn) {
             if (nonIsland) {

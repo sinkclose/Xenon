@@ -195,8 +195,16 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
         if (searchItem == null) return;
         android.view.ViewGroup.MarginLayoutParams params =
                 (android.view.ViewGroup.MarginLayoutParams) searchItem.getLayoutParams();
-        // 48dp buttons with 46dp circles already leave 2dp; add 10dp for the 12dp edge inset.
-        int margin = NekoConfig.fadeViewOtherActivities() ? AndroidUtilities.dp(10) : 0;
+        int margin = 0;
+        if (materialHeaderEnabled() || NekoConfig.fadeViewOtherActivities()) {
+            int radius = AndroidUtilities.dp(materialHeaderEnabled() ? 20 : 23);
+            int edge = AndroidUtilities.dp(materialHeaderEnabled() ? 24 : 12);
+            int searchWidth = params.width > 0 ? params.width : searchItem.getMeasuredWidth();
+            android.view.ViewGroup.MarginLayoutParams syncParams =
+                    (android.view.ViewGroup.MarginLayoutParams) syncItem.getLayoutParams();
+            int syncWidth = syncParams.width > 0 ? syncParams.width : syncItem.getMeasuredWidth();
+            margin = Math.max(0, edge + radius * 2 - (searchWidth + syncWidth) / 2 - syncParams.leftMargin);
+        }
         if (params.rightMargin != margin) {
             params.rightMargin = margin;
             searchItem.setLayoutParams(params);

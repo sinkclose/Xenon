@@ -110,6 +110,13 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
             scrollableViewNoiseSuppressor = new DownscaleScrollableNoiseSuppressor();
             iBlur3SourceGlassFrosted = new BlurredBackgroundSourceRenderNode(null);
             iBlur3SourceGlass = new BlurredBackgroundSourceRenderNode(null);
+            iBlur3SourceGlass.setScrollableNoiseSuppressor(scrollableViewNoiseSuppressor,
+                    DownscaleScrollableNoiseSuppressor.DRAW_GLASS);
+            iBlur3SourceGlass.setUnderSource(new org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceColor() {
+                @Override public void draw(Canvas canvas, float left, float top, float right, float bottom) {
+                    canvas.drawColor(getThemedColor(Theme.key_windowBackgroundWhite));
+                }
+            });
             iBlur3SourceGlassFrosted.setupRenderer(new RenderNodeWithHash.Renderer() {
                 @Override
                 public void renderNodeCalculateHash(IBlur3Hash hash) {
@@ -134,6 +141,7 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
 
     @Override
     public View createView(Context context) {
+        fadeButtonGlass = null;
         materialHeaderApplied = false;
         materialCoordinator = null;
         materialCollapsingToolbar = null;
@@ -182,6 +190,12 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
                     }
                     iBlur3Invalidated = false;
                 }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && iBlur3SourceGlass != null
+                        && !materialHeaderEnabled() && NekoConfig.fadeViewOtherActivities()) {
+                    if (fadeButtonGlass == null) fadeButtonGlass = new org.telegram.ui.Components.FadeHeaderButtonGlass(
+                            this, iBlur3SourceGlass, resourcesProvider);
+                    actionBar.setFadeButtonGlass(fadeButtonGlass);
+                } else actionBar.setFadeButtonGlass(null);
                 super.dispatchDraw(canvas);
             }
 
@@ -304,6 +318,8 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
         };
         contentView.addView(actionBarBackground, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 200, Gravity.TOP));
         actionBarContainer = new FrameLayout(context);
+        actionBarContainer.setClipChildren(false);
+        actionBarContainer.setClipToPadding(false);
         actionBarContainer.addView(actionBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.FILL_HORIZONTAL | Gravity.BOTTOM));
         contentView.addView(actionBarContainer, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.FILL_HORIZONTAL | Gravity.TOP));
 
@@ -326,6 +342,8 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
         }
 
         syncMaterialHeader();
+        contentView.setClipChildren(false);
+        contentView.setClipToPadding(false);
         return fragmentView = contentView;
     }
 
@@ -1097,6 +1115,7 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
     // Plain (non-blurred) top fade: same zone as the progressive path, solid
     // theme color instead of a live capture. Shown when the toggle is on but
     // the progressive path is off.
+    private org.telegram.ui.Components.FadeHeaderButtonGlass fadeButtonGlass;
     private ChatActivityFadeView plainTopFadeView;
     private int lastPlainFadeColor = Integer.MIN_VALUE;
 

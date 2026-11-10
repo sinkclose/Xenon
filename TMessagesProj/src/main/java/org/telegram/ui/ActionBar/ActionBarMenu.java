@@ -698,7 +698,9 @@ public class ActionBarMenu extends LinearLayout implements LiquidTouchDispatcher
     }
 
     public void setGlassMode(boolean glassMode) {
+        if (this.glassMode == glassMode) return;
         this.glassMode = glassMode;
+        requestLayout();
     }
 
     private final java.util.IdentityHashMap<View, int[]> plainCircleMargins = new java.util.IdentityHashMap<>();

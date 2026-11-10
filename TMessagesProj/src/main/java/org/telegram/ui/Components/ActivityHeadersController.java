@@ -38,6 +38,8 @@ public final class ActivityHeadersController {
     private final MaterialActivityTitleView title;
     private final ChatActivityFadeView plain;
     private ProgressiveFadeBlurController blur;
+    private org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode buttonSource;
+    private FadeHeaderButtonGlass buttonGlass;
     private boolean paused;
     private final float barTranslation;
     private final ContentCapture capture;
@@ -284,6 +286,28 @@ public final class ActivityHeadersController {
         // after attach. It must never cover the external title or live fade.
         if (bar.getBackground() != null) bar.setBackground(null);
         bar.setPlainBackCircle(material || fade);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && fade && !material) {
+            if (buttonSource == null) {
+                buttonSource = new org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode(null);
+                buttonGlass = new FadeHeaderButtonGlass(overlay, buttonSource, fragment.getResourceProvider());
+            }
+            if (org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS)) {
+                buttonSource.setGlassBlur(AndroidUtilities.dp(8));
+            } else buttonSource.setPlainBlur(AndroidUtilities.dpf2(NekoConfig.blurStrength * 4f / 3f));
+            if (overlay.getWidth() > 0 && overlay.getHeight() > 0) {
+                android.graphics.Canvas backdrop = buttonSource.beginRecording(overlay.getWidth(), overlay.getHeight());
+                try {
+                    backdrop.drawColor(Theme.getColor(Theme.key_windowBackgroundGray, fragment.getResourceProvider()));
+                    ((View) scrolling.getParent()).getLocationInWindow(scrollLocation);
+                    overlay.getLocationInWindow(overlayLocation);
+                    backdrop.translate(scrollLocation[0] - overlayLocation[0], scrollLocation[1] - overlayLocation[1]);
+                    capture.capture(backdrop, scrolling);
+                } finally {
+                    buttonSource.endRecording();
+                }
+            }
+            bar.setFadeButtonGlass(buttonGlass);
+        } else bar.setFadeButtonGlass(null);
         bar.setTranslationY(material ? AndroidUtilities.dp(4) : 0);
         bar.setExternalHeaderTitleVisible(!material || !normal);
         title.setVisibility(material && normal ? View.VISIBLE : View.GONE);
@@ -328,6 +352,7 @@ public final class ActivityHeadersController {
         bar.setMaterialActivityHeader(false);
         bar.setExternalHeaderFade(false);
         bar.setPlainBackCircle(false);
+        bar.setFadeButtonGlass(null);
         bar.setBackground(background);
         bar.setCastShadows(shadows);
         bar.setTranslationY(barTranslation);
@@ -369,7 +394,7 @@ public final class ActivityHeadersController {
         final Paint surface = new Paint();
         int surfaceBottom;
         boolean drawSurface;
-        Overlay(android.content.Context context) { super(context); setWillNotDraw(false); }
+        Overlay(android.content.Context context) { super(context); setWillNotDraw(false); setClipChildren(false); setClipToPadding(false); }
         @Override protected void onDraw(android.graphics.Canvas canvas) {
             if (drawSurface) canvas.drawRect(0, 0, getWidth(), surfaceBottom, surface);
         }

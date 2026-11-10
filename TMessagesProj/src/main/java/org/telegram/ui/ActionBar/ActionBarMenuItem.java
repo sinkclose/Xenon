@@ -305,16 +305,19 @@ public class ActionBarMenuItem extends FrameLayout {
 
     @Override
     public void draw(Canvas canvas) {
+        int fadeSave = parentMenu != null && parentMenu.parentActionBar != null
+                ? parentMenu.parentActionBar.beginFadeButtonContent(canvas, this, true) : -1;
         if ((plainButtonCircle || iconView != null && iconView.getVisibility() == VISIBLE) && parentMenu != null
                 && !parentMenu.searchFieldVisible()
                 && !parentMenu.isActionMode && parentMenu.parentActionBar != null) {
-            parentMenu.parentActionBar.drawPlainButtonCircle(canvas, getWidth() / 2f, getHeight() / 2f);
+            parentMenu.parentActionBar.drawPlainButtonCircle(canvas, this, getWidth() / 2f, getHeight() / 2f);
         }
         if (fixBackground) {
             getBackground().draw(canvas);
         }
 
         super.draw(canvas);
+        if (fadeSave != -1) canvas.restoreToCount(fadeSave);
     }
 
     @Override
