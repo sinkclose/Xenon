@@ -298,6 +298,19 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
         animatorInputCollapsed.setValue(collapsed, isLaidOut() && getVisibility() == VISIBLE);
     }
 
+    public float getSearchButtonCenterX(View ancestor) {
+        ButtonHolder holder = buttonHolders[BUTTON_SEARCH];
+        if (holder == null || holder.button.getMeasuredWidth() == 0) return Float.NaN;
+        View view = holder.button;
+        float x = view.getMeasuredWidth() * .5f;
+        while (view != ancestor) {
+            x += view.getX();
+            if (!(view.getParent() instanceof View)) return Float.NaN;
+            view = (View) view.getParent();
+        }
+        return x;
+    }
+
     private int getCollapsedInset() {
         if (!iosInputLayout || !centerUsesAvailableWidth) return 0;
         // Match the chat field's 10% resting-width reduction, split between both sides.

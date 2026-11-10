@@ -20732,6 +20732,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     centerX = selfWidth - insetSystemRight - inputMargin
                             - ChatActivityEnterView.getIosCollapsedRecordButtonRightInset(inputWidth)
                             - sideControlsButtonsLayout.getLeft();
+                } else if (NekoConfig.iosLikeInputField && ChatObject.isChannelAndNotMegaGroup(currentChat)
+                        && bottomChannelButtonsLayout != null
+                        && bottomChannelButtonsLayout.getVisibility() == View.VISIBLE) {
+                    centerX = bottomChannelButtonsLayout.getSearchButtonCenterX(this)
+                            - sideControlsButtonsLayout.getLeft();
                 } else if (chatActivityEnterView != null && chatActivityEnterView.isIosLikeInputField()) {
                     centerX = chatActivityEnterView.getIosRecordButtonRestingCenterX(this)
                             - sideControlsButtonsLayout.getLeft();

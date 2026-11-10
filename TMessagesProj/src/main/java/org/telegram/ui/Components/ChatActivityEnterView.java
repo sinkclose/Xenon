@@ -686,9 +686,15 @@ public class ChatActivityEnterView extends FrameLayout implements
     }
 
     public float getIosRecordButtonRestingCenterX(View ancestor) {
-        // Ignore the recording button's keyboard slide and press deformation.
-        float x = audioVideoButtonContainer.getWidth() * .5f;
-        View view = audioVideoButtonContainer;
+        // The recording view may be GONE after restoring a draft and retain stale bounds.
+        // Anchor to the composer itself, using the empty recording state's inset.
+        boolean keyboardOpen = (iosInputKeyboardTarget != null ? iosInputKeyboardTarget : keyboardVisible)
+                || waitingForKeyboardOpen || isPopupShowing();
+        int availableWidth = getMeasuredWidth() - getPaddingLeft() - getPaddingRight();
+        float rightInset = keyboardOpen ? dp(DEFAULT_HEIGHT) * .5f
+                : getIosCollapsedRecordButtonRightInset(availableWidth);
+        float x = getMeasuredWidth() - getPaddingRight() - rightInset;
+        View view = this;
         while (view != ancestor) {
             x += view.getLeft();
             if (!(view.getParent() instanceof View)) return Float.NaN;
