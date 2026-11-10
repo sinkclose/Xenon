@@ -110,13 +110,13 @@ final class PrismGlassPipeline {
                     canvas.drawColor(drawable.backgroundColor);
                 } else {
                     canvas.drawRenderNode(background);
-                    if (advanced) {
+                    if (advanced && !useIos27) {
                         final int percent = NekoConfig.getGlassTintPercent();
                         if (percent > 0 && Color.alpha(drawable.backgroundColor) != 0) {
                             canvas.drawColor(Theme.multAlpha(drawable.backgroundColor,
                                     Math.min(100, Math.max(0, percent)) / 100f * 0.60f));
                         }
-                    } else if (!hasEffect || !refractionEnabled) {
+                    } else if (!useIos27 && (!hasEffect || !refractionEnabled)) {
                         if (Color.alpha(drawable.backgroundColor) != 0) canvas.drawColor(drawable.backgroundColor);
                     }
                 }

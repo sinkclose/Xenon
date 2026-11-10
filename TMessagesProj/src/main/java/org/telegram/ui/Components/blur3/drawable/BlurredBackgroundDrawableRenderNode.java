@@ -29,6 +29,7 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
     private final RenderNode renderNodeFill;
 
     private final Paint paintShadow = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint paintMaterialTint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint paintStrokeTop = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint paintStrokeBottom = new Paint(Paint.ANTI_ALIAS_FLAG);
 
@@ -265,7 +266,7 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
             //     backgroundColor so the refraction stays clearly visible
             //     and the look mirrors the subtle premultiplied tint of the
             //     base shader rather than producing an aggressive flat wash.
-            if (!fixedIos26Lens && zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled()) {
+            if (!usesIos27Glass() && !fixedIos26Lens && zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled()) {
                 // Advanced glass has no color uniform — it only does refraction +
                 // chromatic dispersion. Draw a SOFT overlay scaled by the
                 // advancedGlassTintPercent slider so the surface gets a tint.
@@ -274,7 +275,7 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
                     final float strength = Math.min(100, Math.max(0, percent)) / 100f * 0.60f;
                     c.drawColor(Theme.multAlpha(backgroundColor, strength));
                 }
-            } else if (liquidGlassEffect == null || !liquidGlassEffect.hasRefractionShader()) {
+            } else if (!usesIos27Glass() && (liquidGlassEffect == null || !liquidGlassEffect.hasRefractionShader())) {
                 // No base AGSL tinting (no effect, or blur mode where the refraction
                 // shader is off): overlay the precomputed (tinted) backgroundColor.
                 if (Color.alpha(backgroundColor) != 0) {
@@ -378,6 +379,13 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
             liquidGlassEffect.drawHighlight(canvas, renderNode.getAlpha());
         }
         canvas.restore();
+        if (ios27 && liquidGlassEffect != null) {
+            // Tint the complete optical material, including its rim, as the union shader does.
+            float strength = Math.max(0f, Math.min(1f,
+                    zxc.iconic.xenon.NekoConfig.getGlassTintPercent() / 100f)) * .60f;
+            paintMaterialTint.setColor(Theme.multAlpha(backgroundColor, strength * renderNode.getAlpha()));
+            boundProps.draw(canvas, paintMaterialTint);
+        }
     }
 
     public void invalidateDisplayList() {
