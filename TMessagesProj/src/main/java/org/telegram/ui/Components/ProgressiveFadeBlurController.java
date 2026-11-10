@@ -79,12 +79,10 @@ public class ProgressiveFadeBlurController {
     private boolean continuousUpdating;
     private boolean updateAtScreenRefreshRate;
     private boolean lastCaptureHadEdgeEffects;
-    private int drawCount;
-    private int lastProcessedDrawCount = -1;
+    private long lastCaptureSettings = Long.MIN_VALUE;
     private final ViewTreeObserver.OnPreDrawListener drawCountListener = new ViewTreeObserver.OnPreDrawListener() {
         @Override
         public boolean onPreDraw() {
-            drawCount++;
             if (continuousUpdating) {
                 // HWUI can refresh child display lists without calling the
                 // parent's dispatchDraw. Preserve changes before that draw
@@ -314,23 +312,45 @@ public class ProgressiveFadeBlurController {
         background = color;
     }
 
+    private long captureSettings(int color) {
+        long hash = color;
+        hash = hash * 31 + (NekoConfig.progressiveFadeBlurEnabled() ? 1 : 0);
+        hash = hash * 31 + NekoConfig.progressiveFadeBlurMaxRadius;
+        hash = hash * 31 + NekoConfig.blurredFadeBlurStrength;
+        hash = hash * 31 + NekoConfig.progressiveFadeBlurSamples;
+        hash = hash * 31 + NekoConfig.blurredFadePixelation;
+        hash = hash * 31 + (dimEnabled && NekoConfig.blurredFadeDimming ? NekoConfig.blurredFadeDimStrength : 0);
+        hash = hash * 31 + Float.floatToIntBits(strengthProgress);
+        hash = hash * 31 + fadeZoneTop;
+        hash = hash * 31 + fadeZoneBottom;
+        hash = hash * 31 + progressiveBlurZoneTop;
+        hash = hash * 31 + topOffset;
+        hash = hash * 31 + (flipped ? 1 : 0);
+        hash = hash * 31 + System.identityHashCode(backgroundCapture);
+        hash = hash * 31 + System.identityHashCode(contentCapture);
+        hash = hash * 31 + System.identityHashCode(captureCoordinateRoot);
+        return hash;
+    }
+
     public void invalidate() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || source.inRecording() || SizeNotifierFrameLayout.drawingBlur) {
             return;
         }
         syncState();
-        if (!isEnabled()) {
+        if (!isEnabled() || fadeView.getVisibility() != View.VISIBLE) {
             return;
         }
         // Ignore the redraw requested by our previous capture, unless the
         // captured content itself is dirty (scrolling/animations can coincide).
         final long transform = captureTransform();
+        final int color = backgroundColorProvider != null ? backgroundColorProvider.getAsInt() : background;
+        final long settings = captureSettings(color);
         final boolean activeEdgeEffects = hasActiveEdgeEffects();
         boolean contentDirty = captureView.isDirty();
         for (int i = 0; i < additionalCaptureViews.size(); i++) {
             contentDirty |= additionalCaptureViews.get(i).isDirty();
         }
-        if (!capturePending && drawCount == lastProcessedDrawCount && !contentDirty
+        if (!capturePending && settings == lastCaptureSettings && !contentDirty
                 && transform == lastCaptureTransform && !activeEdgeEffects && !lastCaptureHadEdgeEffects) {
             return;
         }
@@ -355,7 +375,6 @@ public class ProgressiveFadeBlurController {
         fadeView.removeCallbacks(updateRunnable);
         updatePending = false;
         lastUpdateTime = now;
-        final int color = backgroundColorProvider != null ? backgroundColorProvider.getAsInt() : background;
         if (color != lastBackgroundColor) {
             lastBackgroundColor = color;
             int opaqueColor = (color & 0x00FFFFFF) | 0xFF000000;
@@ -384,12 +403,12 @@ public class ProgressiveFadeBlurController {
             FileLog.e(e);
         }
         fadeView.setDim(dimEnabled && NekoConfig.blurredFadeDimming ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
-        // +1 accounts for the fade-view redraw this record schedules, so it is not
-        // mistaken for a content change on the next draw pass.
+        // Root traversal counts are not content generations: unrelated controls
+        // (or this fade itself) can draw while our captured list is unchanged.
         capturePending = false;
         lastCaptureTransform = transform;
         lastCaptureHadEdgeEffects = activeEdgeEffects;
-        lastProcessedDrawCount = drawCount + 1;
+        lastCaptureSettings = settings;
         fadeView.invalidate();
         if (activeEdgeEffects && continuousUpdating) {
             // Stretch runs in HWUI without changing View translation/scale.

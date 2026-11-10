@@ -92,6 +92,18 @@ public abstract class BaseFragment {
     protected Bundle arguments;
     protected boolean hasOwnBackground = false;
     protected boolean isPaused = true;
+    private org.telegram.ui.Components.ActivityHeadersController activityHeaders;
+
+    public boolean hasSharedActivityHeader() {
+        return activityHeaders != null;
+    }
+
+    private void detachActivityHeaders() {
+        if (activityHeaders != null) {
+            activityHeaders.detach();
+            activityHeaders = null;
+        }
+    }
     protected Dialog parentDialog;
     protected boolean inTransitionAnimation = false;
     protected boolean fragmentBeginToShow;
@@ -380,6 +392,7 @@ public abstract class BaseFragment {
     }
 
     public void onRemoveFromParent() {
+        detachActivityHeaders();
         if (sheetsStack == null || sheetsStack.isEmpty())
             return;
         updateSheetsVisibility();
@@ -511,6 +524,7 @@ public abstract class BaseFragment {
 
     @CallSuper
     public void onFragmentDestroy() {
+        detachActivityHeaders();
         getConnectionsManager().cancelRequestsForGuid(classGuid);
         getMessagesStorage().cancelTasksForGuid(classGuid);
         isFinished = true;
@@ -547,6 +561,10 @@ public abstract class BaseFragment {
     @CallSuper
     public void onResume() {
         isPaused = false;
+        if (activityHeaders == null || !activityHeaders.resume()) {
+            detachActivityHeaders();
+            activityHeaders = org.telegram.ui.Components.ActivityHeadersController.attach(this);
+        }
         if (fragmentView != null) zxc.iconic.xenon.helpers.ClientFonts.observeWindow(fragmentView);
         if (fragmentView != null && (this instanceof org.telegram.ui.ProfileActivity
                 || this instanceof org.telegram.ui.SettingsActivity || this instanceof org.telegram.ui.ChatActivity
@@ -566,6 +584,7 @@ public abstract class BaseFragment {
 
     @CallSuper
     public void onPause() {
+        if (activityHeaders != null) activityHeaders.pause();
         if (actionBar != null) {
             actionBar.onPause();
         }

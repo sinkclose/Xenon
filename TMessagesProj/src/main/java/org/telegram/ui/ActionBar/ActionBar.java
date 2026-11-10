@@ -216,6 +216,25 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     // activities"). No blur, no outline: same white as settings rows and
     // switch thumbs (key_windowBackgroundWhite), arrow shifted into center.
     private boolean materialActivityHeader;
+    private boolean externalHeaderFade;
+    private boolean externalHeaderTitleVisible = true;
+
+    public void setExternalHeaderTitleVisible(boolean visible) {
+        if (externalHeaderTitleVisible == visible) return;
+        externalHeaderTitleVisible = visible;
+        invalidate();
+    }
+
+    private boolean isExternalHeaderTitleChild(View child) {
+        return child != null && (child == titlesContainer || child == titleTextView[0]
+                || child == titleTextView[1] || child == subtitleTextView || child == additionalSubtitleTextView);
+    }
+
+    public void setExternalHeaderFade(boolean enabled) {
+        if (externalHeaderFade == enabled) return;
+        externalHeaderFade = enabled;
+        invalidate();
+    }
     private Drawable materialSavedBackground;
     private int materialHeaderFontGeneration = -1;
 
@@ -471,6 +490,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
     @Override
     protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
+        if (!externalHeaderTitleVisible && isExternalHeaderTitleChild(child)) return true;
         if (parentFragment != null && parentFragment.getParentLayout() != null && parentFragment.getParentLayout().isActionBarInCrossfade()) {
             return false;
         }
@@ -1403,7 +1423,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     public void setBackgroundColor(int color) {
         actionBarColor = color;
         if (!blurredBackground) {
-            super.setBackgroundColor(actionBarColor);
+            super.setBackgroundColor(materialActivityHeader || externalHeaderFade ? Color.TRANSPARENT : actionBarColor);
         }
         if (backButtonImageView != null) {
             Drawable drawable = backButtonImageView.getDrawable();
@@ -2701,7 +2721,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     }
 
     public boolean prepareLiquidGlassHeader(BlurredBackgroundDrawable[] members, LiquidTouchEffect[] effects) {
-        if (materialActivityHeader || !glassMode || nonIsland || glassOnlyBack || plainBackCircle
+        if (materialActivityHeader || externalHeaderFade || !glassMode || nonIsland || glassOnlyBack || plainBackCircle
                 || liquidAvatar == null || actionModeVisible || searchFactor > 0f
                 || glassDrawable == null || glassDrawableBack == null) return false;
         prepareLiquidGlassSurfaces();
@@ -2809,7 +2829,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         final int menuWidth = liquidGlassMenuWidth;
         final boolean hasBackButton = liquidGlassHasBack;
 
-        if (!materialActivityHeader && glassDrawable != null && !glassOnlyBack && drawGlassTitle && !m3ChatHeader && !liquidGlassGroupDrawn) {
+        if (!materialActivityHeader && !externalHeaderFade && glassDrawable != null && !glassOnlyBack && drawGlassTitle && !m3ChatHeader && !liquidGlassGroupDrawn) {
             if (nonIsland) {
                 glassDrawable.setBounds(0, 0, getWidth(), getHeight());
             } else {
@@ -2834,7 +2854,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             }
             if (save != -1) canvas.restoreToCount(save);
         }
-        if (!materialActivityHeader && glassDrawableBack != null && hasBackButton && !nonIsland && !liquidGlassGroupDrawn) {
+        if (!materialActivityHeader && !externalHeaderFade && glassDrawableBack != null && hasBackButton && !nonIsland && !liquidGlassGroupDrawn) {
             glassDrawableBack.setBounds(0, t, s + p * 2, b);
             int save = beginLiquid(canvas, liquidBack);
             LiquidTouchEffect.updateBackground(glassDrawableBack, liquidTouchAllowed() ? liquidBack : null, 0f, 0f);
@@ -2848,7 +2868,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             if (liquidTouchAllowed()) liquidBack.drawHighlight(canvas, dp(23), dp(6));
             if (save != -1) canvas.restoreToCount(save);
         }
-        if (!materialActivityHeader && glassDrawableMenu != null && menuWidth > 0 && !nonIsland && !glassOnlyBack && !doNotDrawGlassMenu && !avatarRightBigger && !liquidGlassGroupDrawn) {
+        if (!materialActivityHeader && !externalHeaderFade && glassDrawableMenu != null && menuWidth > 0 && !nonIsland && !glassOnlyBack && !doNotDrawGlassMenu && !avatarRightBigger && !liquidGlassGroupDrawn) {
             glassDrawableMenu.setBounds(getWidth() - Math.max(s, menuWidth) - p * 2, t, getWidth(), b);
             glassDrawableMenu.setAlpha(hasForcedMenuWidth ? 255 : (int) (255 * animatorHasMenuItems.getFloatValue()));
             boolean liquidSelection = actionModeVisible && actionMode != null && liquidTouchAllowed();
@@ -2867,7 +2887,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             if (save != -1) canvas.restoreToCount(save);
         }
 
-        if (!materialActivityHeader && blurredBackground && actionBarColor != Color.TRANSPARENT) {
+        if (!materialActivityHeader && !externalHeaderFade && blurredBackground && actionBarColor != Color.TRANSPARENT) {
             rectTmp.set(0, 0, getMeasuredWidth(), getMeasuredHeight());
             blurScrimPaint.setColor(actionBarColor);
             if (adaptiveBackground) {

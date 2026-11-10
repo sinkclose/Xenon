@@ -398,6 +398,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             private final Paint blurScrimPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             @Override
             protected void onDraw(@NonNull Canvas canvas) {
+                if (hasSharedActivityHeader()) return;
                 int top = actionBar.getHeight();
                 AndroidUtilities.rectTmp2.set(0, 0, getMeasuredWidth(), top);
                 blurScrimPaint.setColor(Theme.getColor(Theme.key_actionBarDefault, resourceProvider));
@@ -609,6 +610,14 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         updateActionBarVisible(false, true);
     }
     private void updateActionBarVisible(boolean force, boolean animated) {
+        if (hasSharedActivityHeader()) {
+            if (actionBarVisibleAnimator != null) {
+                actionBarVisibleAnimator.cancel();
+                actionBarVisibleAnimator = null;
+            }
+            actionBar.getTitlesContainer().setAlpha(1f);
+            return;
+        }
         final boolean visible;
         if (searchItem.isSearchFieldVisible2()) {
             visible = true;
@@ -647,6 +656,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
     @Override
     public void onResume() {
         super.onResume();
+        if (hasSharedActivityHeader()) updateActionBarVisible(true, false);
         if (listView.adapter != null) {
             listView.adapter.notifyDataSetChanged();
         }

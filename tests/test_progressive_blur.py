@@ -150,6 +150,9 @@ public class ProgressiveBlurHarness {
             'public void stopContinuousUpdates()', 'public void invalidate()',
             'private long captureTransform()', 'private static long viewTransform(View view)',
             'private void drawCapturedView(Canvas c, View view)',
+            'private long captureSettings(int color)',
+            'private float progressiveTopFraction(int height)',
+            'private void captureContent(Canvas canvas, int width, int height)',
             'private boolean hasActiveEdgeEffects()',
             'private static boolean hasActiveEdgeEffects(View view)'))
         runnable = source[source.index('    private final Runnable updateRunnable'):source.index('    private void scheduleUpdate')]
@@ -162,7 +165,7 @@ public class CaptureHarness {
     static void check(boolean condition) { if (!condition) throw new AssertionError(); }
     static class Build {
         static class VERSION { static int SDK_INT = 33; }
-        static class VERSION_CODES { static final int TIRAMISU = 33; }
+        static class VERSION_CODES { static final int TIRAMISU = 33, S = 31; }
     }
     static class SystemClock { static long now = 1000; static long uptimeMillis() { return now; } }
     static class AndroidUtilities {
@@ -174,16 +177,23 @@ public class CaptureHarness {
         static int progressiveFadeBlurRefreshRate = 60, progressiveFadeBlurMaxRadius = 20;
         static int progressiveFadeBlurSamples = 11, blurredFadePixelation = 3, blurredFadeDimStrength = 20;
         static boolean blurredFadeDimming = true;
+        static int blurredFadeBlurStrength = 20;
+        static boolean progressive = true;
+        static boolean progressiveFadeBlurEnabled() { return progressive; }
     }
     static class SizeNotifierFrameLayout { static boolean drawingBlur; }
     static class FileLog { static void e(Exception e) { throw new AssertionError(e); } }
     static class Canvas {
         boolean isHardwareAccelerated() { return true; }
         void drawColor(int c) {} void save() {} void restore() {}
+        int saveLayerAlpha(float l,float t,float r,float b,int a){return 1;}
+        void restoreToCount(int n){}
         void translate(float x, float y) {} void scale(float x, float y, float px, float py) {}
     }
     static class View {
         static final int OVER_SCROLL_NEVER = 2;
+        static final int VISIBLE = 0;
+        int visibility;
         boolean dirty, attached = true;
         float x, y, sx = 1, sy = 1;
         int redraws, posts;
@@ -192,6 +202,8 @@ public class CaptureHarness {
         int getWidth() { return 101; } int getHeight() { return 203; }
         int getLeft() { return 0; } int getTop() { return 0; }
         int getOverScrollMode() { return 0; }
+        int getVisibility() { return visibility; }
+        float getAlpha() { return 1f; }
         float getTranslationX() { return x; } float getTranslationY() { return y; }
         float getScaleX() { return sx; } float getScaleY() { return sy; }
         float getPivotX() { return 0; } float getPivotY() { return 0; }
@@ -217,11 +229,14 @@ public class CaptureHarness {
         int records;
         boolean inRecording() { return false; }
         void setPixelation(int p) {}
+        void setPlainBlur(float radius) {}
         void setProgressiveBlur(float r, int w, int h, float t, float b, int n) { check(w == 34 && h == 68); }
         Canvas beginRecording(int w, int h) { records++; return new Canvas(); }
         void endRecording() {}
     }
     static class ColorSource { void setColor(int c) {} }
+    static class RectF {void set(int l,int t,int r,int b){}}
+    interface IBlur3Capture {void capture(Canvas c,RectF bounds);}
     static class Controller {
         Source source = new Source(); ColorSource underSource = new ColorSource();
         CaptureLayout captureLayout = new CaptureLayout();
@@ -229,6 +244,14 @@ public class CaptureHarness {
         List<View> additionalCaptureViews = new ArrayList<>();
         boolean continuousUpdating, updateAtScreenRefreshRate, updatePending, capturePending, lastCaptureHadEdgeEffects, dimEnabled = true;
         long lastCaptureTransform, lastUpdateTime;
+        long lastCaptureSettings = Long.MIN_VALUE;
+        float strengthProgress=1f;
+        boolean flipped;
+        int progressiveBlurZoneTop=-1,topOffset;
+        View captureCoordinateRoot;
+        IBlur3Capture contentCapture;
+        RectF captureBounds=new RectF();
+        java.util.function.Consumer<Canvas> backgroundCapture;
         int drawCount, lastProcessedDrawCount = -1, background, lastBackgroundColor;
         int fadeZoneTop = 96, fadeZoneBottom = 48;
         IntSupplier backgroundColorProvider;
@@ -256,8 +279,14 @@ public class CaptureHarness {
         SystemClock.now += 20; c.invalidate(); check(c.source.records == 4);
         c.drawCount++; SystemClock.now += 20; extra.x = -50;
         c.invalidate(); check(c.source.records == 5);
-        c.drawCount++; c.drawCount++; c.invalidate();
-        check(c.updatePending); c.stopContinuousUpdates(); check(c.fadeView.pending == null && !c.capturePending);
+        c.startContinuousUpdates();SystemClock.now+=20;c.fadeView.runPending();
+        for (int frame=0;frame<1000;frame++) {
+            SystemClock.now+=20;c.drawCountListener.onPreDraw();c.invalidate();
+            check(c.source.records==5 && !c.updatePending);
+        }
+        c.lastUpdateTime=SystemClock.now;
+        c.captureView.dirty=true;c.invalidate(); // pending work is still cancellable
+        c.stopContinuousUpdates(); check(c.fadeView.pending == null && !c.capturePending);
         c.enabled = false; SystemClock.now += 20; c.invalidate(); check(c.source.records == 5);
         // HWUI may update only a child display list, bypassing the parent's
         // dispatchDraw (and its call to Controller.invalidate).
@@ -284,6 +313,14 @@ public class CaptureHarness {
         check(!c.updatePending);
         c.startContinuousUpdates(); check(c.updatePending);
         c.fadeView.attached = false; c.fadeView.runPending(); check(c.source.records == records + 2);
+        Controller style=new Controller();style.invalidate();SystemClock.now+=20;
+        style.background=123;style.invalidate();check(style.source.records==2);
+        SystemClock.now+=20;NekoConfig.progressiveFadeBlurMaxRadius++;
+        style.invalidate();check(style.source.records==3);
+        SystemClock.now+=20;style.strengthProgress=.5f;style.invalidate();check(style.source.records==4);
+        SystemClock.now+=20;style.fadeZoneTop++;style.invalidate();check(style.source.records==5);
+        SystemClock.now+=20;style.fadeView.visibility=8;style.captureView.dirty=true;
+        style.invalidate();check(style.source.records==5); // hidden fades do no captures
     }
 }
 """.replace('LISTENER', listener).replace('RUNNABLE', runnable).replace('METHODS', methods)
