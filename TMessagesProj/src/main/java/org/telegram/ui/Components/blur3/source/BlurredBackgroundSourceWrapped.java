@@ -23,6 +23,11 @@ public class BlurredBackgroundSourceWrapped implements BlurredBackgroundSource {
     }
 
     @Override
+    public void drawUnblurred(Canvas canvas, float left, float top, float right, float bottom) {
+        if (sourceInternal != null) sourceInternal.drawUnblurred(canvas, left, top, right, bottom);
+    }
+
+    @Override
     public void draw(Canvas canvas, float left, float top, float right, float bottom) {
         if (sourceInternal != null) {
             sourceInternal.draw(canvas, left, top, right, bottom);

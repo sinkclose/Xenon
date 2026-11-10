@@ -106,7 +106,7 @@
     <string name="LiquidGlassSettingsDesc">Расширенные настройки стекла</string>
     <string name="LiquidGlassPreview">Предпросмотр</string>
     <string name="AdvancedGlassSection">Параметры стекла</string>
-    <string name="AdvancedGlassAlpha">Прозрачность стекла</string>
+    <string name="AdvancedGlassAlpha">Прозрачность размытия</string>
     <string name="AdvancedGlassBlur">Сила блюра</string>
     <string name="AdvancedGlassBlurDesc">Влияет на размытие фона и Liquid glass</string>
     <string name="AdvancedGlassRefraction">Сила рефракции</string>

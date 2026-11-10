@@ -26,6 +26,7 @@ import me.vkryl.core.reference.ReferenceList;
 public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSource {
     private final BlurredBackgroundSource fallbackSource;
     private final RenderNode renderNode;
+    private final RenderNode rawNode = new RenderNode("UnfilteredGlassSource");
     private RenderNodeWithHash renderNodeWithHash;
 
     private DownscaleScrollableNoiseSuppressor scrollableNoiseSuppressor;
@@ -368,8 +369,13 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
     /** Use a fixed blur without following the liquid glass settings. */
     @RequiresApi(api = Build.VERSION_CODES.S)
     public void setPlainBlur(float radius) {
+        setPlainBlur(radius, null);
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.S)
+    public void setPlainBlur(float radius, RenderEffect effect) {
         glassBlurEnabled = false;
-        setBlur(radius);
+        setBlur(radius, effect);
     }
 
     /** Keep advanced glass in sync with the slider, preserving the standard style. */
@@ -433,7 +439,8 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
         final int rw = Math.max(1, Math.round(width / s));
         final int rh = Math.max(1, Math.round(height / s));
         renderNode.setPosition(0, 0, rw, rh);
-        recordingCanvas = renderNode.beginRecording(rw, rh);
+        rawNode.setPosition(0, 0, rw, rh);
+        recordingCanvas = rawNode.beginRecording(rw, rh);
         if (s > 1f) {
             recordingCanvas.scale(1f / s, 1f / s);
         }
@@ -450,6 +457,9 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
         }
 
         try {
+            rawNode.endRecording();
+            RecordingCanvas filtered = renderNode.beginRecording();
+            filtered.drawRenderNode(rawNode);
             renderNode.endRecording();
         } finally {
             inRecording = false;
@@ -491,6 +501,11 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
             scrollableNoiseSuppressor.drawInline(canvas, scrollableNoiseSuppressorIndex);
         } else if (isUnblurredCanvas(canvas) && renderNodeWithHash != null) {
             renderNodeWithHash.drawUnfiltered(canvas);
+        } else if (isUnblurredCanvas(canvas) && rawNode.hasDisplayList()) {
+            canvas.save();
+            canvas.scale(renderNode.getScaleX(), renderNode.getScaleY());
+            canvas.drawRenderNode(rawNode);
+            canvas.restore();
         } else {
             canvas.drawRenderNode(renderNode);
         }

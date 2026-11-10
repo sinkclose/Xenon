@@ -26,6 +26,7 @@ final class PrismGlassPipeline {
     private final RenderNode background;
     private final RenderNode surface;
     private boolean sourceInvalidated = true;
+    private float blurOpacity = Float.NaN;
     private boolean initialized;
     private int left, top, right, bottom;
     private int samplePadding;
@@ -56,8 +57,9 @@ final class PrismGlassPipeline {
         final Rect bounds = props.boundsWithPadding;
         final int width = bounds.width(), height = bounds.height();
         final int padding = drawable.liquidGlassSamplePadding;
-        final boolean advanced = !drawable.isFixedIos26Lens() && NekoConfig.isAdvancedGlassEnabled();
-        final boolean useIos27 = !drawable.isFixedIos26Lens() && NekoConfig.ios27LiquidGlass;
+        final boolean advanced = !drawable.isFixedIos26Lens() && NekoConfig.isAdvancedGlassEnabled()
+                && LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
+        final boolean useIos27 = drawable.usesIos27Glass();
         final boolean refractionEnabled = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
         final boolean hasEffect = effect != null && effect.hasRefractionShader();
 
@@ -86,17 +88,20 @@ final class PrismGlassPipeline {
                     props.liquidIndex, drawable.backgroundColor);
         }
 
-        if (sourceInvalidated || mappingChanged || !background.hasDisplayList()) {
+        final float backdropBlurOpacity = (!fixedRefraction || useIos27) && advanced
+                ? Math.max(0f, Math.min(1f, NekoConfig.getGlassAlphaPercent() / 100f)) : 1f;
+        if (sourceInvalidated || mappingChanged || blurOpacity != backdropBlurOpacity || !background.hasDisplayList()) {
             Canvas canvas = background.beginRecording();
             try {
                 canvas.save();
                 canvas.translate(padding - bounds.left, padding - bounds.top);
                 drawable.transformSourceCanvas(canvas);
-                source.draw(canvas,
+                source.drawWithBlurOpacity(canvas,
                         drawable.sourceScaleX * (bounds.left - padding) + drawable.sourceOffsetX + drawable.sourceTranslationX,
                         drawable.sourceScaleY * (bounds.top - padding) + drawable.sourceOffsetY + drawable.sourceTranslationY,
                         drawable.sourceScaleX * (bounds.right + padding) + drawable.sourceOffsetX + drawable.sourceTranslationX,
-                        drawable.sourceScaleY * (bounds.bottom + padding) + drawable.sourceOffsetY + drawable.sourceTranslationY);
+                        drawable.sourceScaleY * (bounds.bottom + padding) + drawable.sourceOffsetY + drawable.sourceTranslationY,
+                        backdropBlurOpacity);
                 canvas.restore();
             } finally {
                 background.endRecording();
@@ -133,10 +138,9 @@ final class PrismGlassPipeline {
             }
         }
 
-        // Alpha is a RenderNode property; it never invalidates either display list.
-        final float glassAlpha = (!fixedRefraction || useIos27) && advanced
-                ? Math.max(0f, Math.min(1f, NekoConfig.getGlassAlphaPercent() / 100f)) : 1f;
-        final float alpha = drawable.getAlpha() / 255f * glassAlpha;
+        background.setAlpha(1f);
+        blurOpacity = backdropBlurOpacity;
+        final float alpha = drawable.getAlpha() / 255f;
         if (surface.getAlpha() != alpha) surface.setAlpha(alpha);
 
         left = bounds.left; top = bounds.top; right = bounds.right; bottom = bounds.bottom;

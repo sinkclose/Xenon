@@ -174,8 +174,8 @@ public final class LiquidGlassInputGroup {
         shader.setFloatUniform("dispersion", Math.max(0f, Math.min(1f, NekoConfig.getGlassDispersion())));
         shader.setFloatUniform("angle", (float) Math.toRadians(NekoConfig.getGlassGlareAngle()));
         shader.setFloatUniform("glare", Math.max(0f, NekoConfig.getGlassGlare()));
-        shader.setFloatUniform("glassAlpha", refractive && NekoConfig.isAdvancedGlassEnabled()
-                ? Math.max(0f, Math.min(1f, NekoConfig.getGlassAlphaPercent() / 100f)) : 1f);
+        // Backdrop blur opacity is resolved before the union refracts the image.
+        shader.setFloatUniform("glassAlpha", 1f);
         shader.setColorUniform("shadow", NekoConfig.ios27LiquidGlass
                 ? (org.telegram.ui.ActionBar.Theme.isCurrentThemeDark() ? 0x0a000000 : 0x05000000) : center.shadowColor);
         shader.setFloatUniform("shadowRadius", NekoConfig.ios27LiquidGlass ? AndroidUtilities.dpf2(15f) : Math.max(1f, center.shadowLayerRadius));
@@ -187,8 +187,10 @@ public final class LiquidGlassInputGroup {
         float sourceX = center.sourceOffsetX - (sourceOrigins == null ? 0f : sourceOrigins[sourceIndex * 2]);
         float sourceY = center.sourceOffsetY - (sourceOrigins == null ? 0f : sourceOrigins[sourceIndex * 2 + 1]);
         recording.translate(-x - sourceX, -y - sourceY);
-        source.draw(recording, x + sourceX, y + sourceY,
-                x + width + sourceX, y + height + sourceY);
+        source.drawWithBlurOpacity(recording, x + sourceX, y + sourceY,
+                x + width + sourceX, y + height + sourceY,
+                refractive && NekoConfig.isAdvancedGlassEnabled()
+                        ? NekoConfig.getGlassAlphaPercent() / 100f : 1f);
         node.endRecording();
         node.setRenderEffect(RenderEffect.createRuntimeShaderEffect(shader, "img"));
         int save = canvas.save();

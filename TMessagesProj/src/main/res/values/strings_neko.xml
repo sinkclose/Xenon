@@ -109,7 +109,7 @@
     <string name="LiquidGlassSettingsDesc">Advanced glass settings</string>
     <string name="LiquidGlassPreview">Preview</string>
     <string name="AdvancedGlassSection">Glass parameters</string>
-    <string name="AdvancedGlassAlpha">Glass transparency</string>
+    <string name="AdvancedGlassAlpha">Blur transparency</string>
     <string name="AdvancedGlassBlur">Blur strength</string>
     <string name="AdvancedGlassBlurDesc">Affects both background blur and Liquid Glass blur</string>
     <string name="AdvancedGlassRefraction">Refraction strength</string>

@@ -34,6 +34,7 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
     private final Paint paintStrokeBottom = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private boolean renderNodeInvalidated;
+    private float recordedBlurOpacity = Float.NaN;
     private PrismGlassPipeline prismPipeline;
     private boolean prismPipelineActive;
     private boolean retainSurfaceDisplayList;
@@ -91,8 +92,8 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
 
     boolean isFixedIos26Lens() { return fixedIos26Lens; }
 
-    private boolean usesIos27Glass() {
-        return !fixedIos26Lens && zxc.iconic.xenon.NekoConfig.ios27LiquidGlass;
+    boolean usesIos27Glass() {
+        return !fixedIos26Lens && liquidGlassEffectAllowed && zxc.iconic.xenon.NekoConfig.ios27LiquidGlass;
     }
 
     @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
@@ -234,7 +235,8 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
                 backgroundColor
             );
         }
-        source.draw(c, sL, sT, sR, sB);
+        source.drawWithBlurOpacity(c, sL, sT, sR, sB, blurAlphaFactor());
+        recordedBlurOpacity = blurAlphaFactor();
         c.restore();
         renderNodeFill.endRecording();
 
@@ -266,7 +268,9 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
             //     backgroundColor so the refraction stays clearly visible
             //     and the look mirrors the subtle premultiplied tint of the
             //     base shader rather than producing an aggressive flat wash.
-            if (!usesIos27Glass() && !fixedIos26Lens && zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled()) {
+            if (!usesIos27Glass() && !fixedIos26Lens && liquidGlassEffectAllowed
+                    && org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS)
+                    && zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled()) {
                 // Advanced glass has no color uniform — it only does refraction +
                 // chromatic dispersion. Draw a SOFT overlay scaled by the
                 // advancedGlassTintPercent slider so the surface gets a tint.
@@ -297,14 +301,8 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
         }
         renderNode.endRecording();
 
-        // Sync renderNode alpha every time the display list is rebuilt.
-        // This covers the case where advancedGlassAlpha or useAdvancedLiquidGlass
-        // changed without a subsequent setAlpha() call (parent alpha stayed at 255).
-        final float _glassAlphaFactor = (!fixedRefraction || usesIos27Glass())
-                && zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled()
-                ? Math.max(0f, Math.min(1f, zxc.iconic.xenon.NekoConfig.getGlassAlphaPercent() / 100f))
-                : 1f;
-        renderNode.setAlpha(getAlpha() / 255f * _glassAlphaFactor);
+        renderNodeFill.setAlpha(1f);
+        renderNode.setAlpha(getAlpha() / 255f);
     }
 
     @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
@@ -314,6 +312,7 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
         }
         if (sourceInvalidated) prismPipeline.invalidateSource();
         prismPipeline.update(this, liquidGlassEffect, fixedRefraction, paintStrokeTop, paintStrokeBottom);
+        recordedBlurOpacity = blurAlphaFactor();
         prismPipelineActive = true;
     }
 
@@ -350,6 +349,8 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
             if (prismPipeline != null) prismPipeline.invalidateAll();
         }
         source.prepareToDraw();
+        if (recordedBlurOpacity != blurAlphaFactor()) renderNodeInvalidated = true;
+        renderNodeFill.setAlpha(1f);
         // The fill node can lose its display list independently during memory
         // trimming. A surviving outer node then only draws its translucent tint.
         if (!hasDisplayList()) {
@@ -393,22 +394,26 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
         if (prismPipeline != null) prismPipeline.invalidateSource();
     }
 
+    private float blurAlphaFactor() {
+        return (!fixedRefraction || usesIos27Glass()) && !fixedIos26Lens && liquidGlassEffectAllowed
+                && org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS)
+                && zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled()
+                ? Math.max(0f, Math.min(1f, zxc.iconic.xenon.NekoConfig.getGlassAlphaPercent() / 100f)) : 1f;
+    }
+
     @Override
     public void setAlpha(int alpha) {
         final int oldAlpha = getAlpha();
 
-        // In advanced glass mode, advancedGlassAlpha scales the drawable alpha
-        // so the entire glass surface (refraction + tint) can be made translucent.
-        final float glassAlphaFactor = (!fixedRefraction || usesIos27Glass())
-                && zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled()
-                ? Math.max(0f, Math.min(1f, zxc.iconic.xenon.NekoConfig.getGlassAlphaPercent() / 100f))
-                : 1f;
-        final float renderAlpha = alpha / 255f * glassAlphaFactor;
-        if (oldAlpha == alpha && renderNode.getAlpha() == renderAlpha) {
+        final float renderAlpha = alpha / 255f;
+        final float blurAlpha = blurAlphaFactor();
+        if (oldAlpha == alpha && renderNode.getAlpha() == renderAlpha
+                && recordedBlurOpacity == blurAlpha) {
             return;
         }
         super.setAlpha(alpha);
         renderNode.setAlpha(renderAlpha);
+        renderNodeFill.setAlpha(1f);
         renderNodeInvalidated = true;
 
         if (oldAlpha == 0 && alpha > 0) {

@@ -57,6 +57,7 @@ public class BlurredBackgroundProviderImpl {
             // Material navigation uses a semantic surface over plain blur, without refraction.
             return new BlurredBackgroundProviderBuilder(resourcesProvider)
                 .setBackgroundColor((r, isDark) -> {
+                    // Material surfaceContainer is independent of glass tint/dimming settings.
                     final float alpha = org.telegram.messenger.SharedConfig.chatBlurEnabled() ? 0.76f : 1f;
                     final int colorBg = MainTabsUiHelper.getNavigationColors(r).surface;
                     return Theme.multAlpha(colorBg, alpha);
