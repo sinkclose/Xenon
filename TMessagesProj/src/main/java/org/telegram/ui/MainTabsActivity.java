@@ -146,7 +146,9 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
                 public void renderNodeCalculateHash(IBlur3Hash hash) {
                     hash.add(getThemedColor(Theme.key_windowBackgroundWhite));
                     hash.add(SharedConfig.chatBlurEnabled());
+                    hash.add(useMaterialTabsBlur());
                     hash.add(useFixedMaterialTabsBlur());
+                    hash.add(NekoConfig.blurStrength);
 
                     for (int a = 0, N = fragmentsArr.size(); a < N; a++) {
                         final FragmentState state = fragmentsArr.valueAt(a);
@@ -199,7 +201,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
                             if (source != null) {
                                 canvas.save();
                                 canvas.translate(fragmentPosition.left, fragmentPosition.top);
-                                if (useFixedMaterialTabsBlur()) {
+                                if (useMaterialTabsBlur()) {
                                     source.drawUnblurred(canvas, 0, 0, width, height);
                                 } else {
                                     source.draw(canvas, 0, 0, width, height);
@@ -1534,6 +1536,11 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     private final @Nullable BlurredBackgroundSourceRenderNode iBlur3SourceTabGlass;
 
     private final RectF fragmentPosition = new RectF();
+    private boolean useMaterialTabsBlur() {
+        return zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar()
+                && SharedConfig.chatBlurEnabled();
+    }
+
     private boolean useFixedMaterialTabsBlur() {
         return zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar()
                 && LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) && SharedConfig.chatBlurEnabled();
@@ -1543,9 +1550,12 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || iBlur3SourceTabGlass == null) {
             return;
         }
-        // Delegates already supply the configured blur. Do not add a fixed
-        // 4dp pass on top of ordinary bottom bars (including at strength zero).
-        iBlur3SourceTabGlass.setPlainBlur(useFixedMaterialTabsBlur() ? dp(24) : 0f);
+        // Material navigation captures the sharp scene and owns its blur pass:
+        // glass keeps 24dp, blur-only follows the client strength, including zero.
+        // Other bottom bars continue to use their delegates' filtered sources.
+        iBlur3SourceTabGlass.setPlainBlur(useMaterialTabsBlur()
+                ? useFixedMaterialTabsBlur() ? dp(24) : AndroidUtilities.dpf2(NekoConfig.blurStrength * 4f / 3f)
+                : 0f);
     }
 
     private void blur3_invalidateBlur() {
