@@ -49,13 +49,15 @@ public class GlassPreviewCell extends View implements NotificationCenter.Notific
     // Covers the maximum standard displacement (9 * 20 dp * 1.5 / sqrt(1.5² - 1))
     // and advanced displacement with full dispersion (32 dp * 2 * 2).
     private final int samplePadding = dp(256);
-    @Nullable private final BlurredBackgroundSourceRenderNode renderNodeSource;
+    @Nullable private BlurredBackgroundSourceRenderNode renderNodeSource;
     @Nullable private BlurredBackgroundDrawable glassDrawable;
 
     private final android.graphics.RectF bubbleRect = new android.graphics.RectF();
     private final float cornerRadius;
     @Nullable private Drawable capturedWallpaper;
     private boolean wallpaperDirty = true;
+    private boolean previewLiquid;
+    private boolean previewSourceDirty;
 
     @RequiresApi(api = 33)
     public GlassPreviewCell(Context context, Theme.ResourcesProvider resourcesProvider) {
@@ -74,13 +76,17 @@ public class GlassPreviewCell extends View implements NotificationCenter.Notific
     private void rebuildGlass() {
         if (renderNodeSource == null) return;
         if (glassDrawable != null) glassDrawable.setCallback(null);
+        previewLiquid = NekoConfig.ios27LiquidGlass
+                || org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS);
         glassDrawable = renderNodeSource.createDrawable();
         glassDrawable.setCallback(this);
         glassDrawable.setSourceOffset(samplePadding, samplePadding);
         if (glassDrawable instanceof BlurredBackgroundDrawableRenderNode) {
             BlurredBackgroundDrawableRenderNode drawable = (BlurredBackgroundDrawableRenderNode) glassDrawable;
             drawable.setLiquidGlassSamplePadding(samplePadding);
-            drawable.setLiquidGlassEffectAllowed();
+            // Blur-only preview must sample the filtered source directly,
+            // without retaining glass optics or their material settings.
+            if (previewLiquid) drawable.setLiquidGlassEffectAllowed();
         }
         glassDrawable.setColorProvider(BlurredBackgroundProviderImpl.chatTitlePill(resourcesProvider));
         glassDrawable.setBounds(
@@ -91,18 +97,13 @@ public class GlassPreviewCell extends View implements NotificationCenter.Notific
 
     /** Call whenever any glass parameter slider changes. */
     public void invalidateGlass() {
-        if (!(glassDrawable instanceof BlurredBackgroundDrawableRenderNode)) {
-            rebuildGlass();
-            refreshRenderNodeBlur();
-            invalidate();
-            return;
-        }
-        // Refresh the cached backgroundColor (tint) before redrawing, otherwise
-        // the B/W toggle and tint slider would not visibly update the preview.
-        glassDrawable.updateColors();
-        // Uniforms update in place; the drawable detects renderer/mode changes on draw.
-        refreshRenderNodeBlur();
-        invalidate();
+        // Rebind the actual GPU source on the next displayed frame. Updating
+        // a filter on a source referenced by retained display lists is not
+        // sufficient to refresh every device's preview image-filter cache.
+        previewSourceDirty = true;
+        wallpaperDirty = true;
+        postInvalidateOnAnimation();
+        if (getParent() instanceof View) ((View) getParent()).invalidate();
     }
 
     /**
@@ -114,7 +115,17 @@ public class GlassPreviewCell extends View implements NotificationCenter.Notific
         if (renderNodeSource == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
         // Advanced glass: apply the blur-slider value so the preview matches the chat.
         // Standard liquid glass: frosted backing blur (8 dp).
-        renderNodeSource.setGlassBlur(dpf2(8f));
+        if (!org.telegram.messenger.SharedConfig.chatBlurEnabled()) {
+            renderNodeSource.setPlainBlur(0f);
+        } else if (previewLiquid) {
+            renderNodeSource.setPlainBlur(dpf2(NekoConfig.getGlassBlurRadiusDp()),
+                    NekoConfig.isAdvancedGlassEnabled() ? null
+                            : org.telegram.messenger.utils.RenderNodeEffects.getSaturationX1_25RenderEffect());
+        } else {
+            // Blur-only chat surfaces use the client blur strength without optics.
+            renderNodeSource.setPlainBlur(dpf2(NekoConfig.blurStrength * 4f / 3f),
+                    org.telegram.messenger.utils.RenderNodeEffects.getSaturationX3RenderEffect());
+        }
         if (glassDrawable instanceof BlurredBackgroundDrawableRenderNode) {
             ((BlurredBackgroundDrawableRenderNode) glassDrawable).invalidateDisplayList();
         }
@@ -217,6 +228,12 @@ public class GlassPreviewCell extends View implements NotificationCenter.Notific
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
         super.onDraw(canvas);
+        if (previewSourceDirty) {
+            previewSourceDirty = false;
+            renderNodeSource = new BlurredBackgroundSourceRenderNode(null);
+            rebuildGlass();
+            wallpaperDirty = true;
+        }
         final Drawable wallpaper = Theme.getCachedWallpaperNonBlocking();
         if (wallpaperDirty || !wallpaperNode.hasDisplayList()
                 || (wallpaper != null && wallpaper != capturedWallpaper)) {
