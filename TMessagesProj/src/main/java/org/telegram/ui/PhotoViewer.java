@@ -9794,6 +9794,11 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
 
         final VideoPlayerSeekBar.SeekBarDelegate seekBarDelegate = new VideoPlayerSeekBar.SeekBarDelegate() {
             @Override
+            public boolean isPlaying() {
+                return isVideoPlaying();
+            }
+
+            @Override
             public void onSeekBarDrag(float progress) {
                 if (videoPlayer != null || getCurrentGif() != null || photoViewerWebView != null && photoViewerWebView.isControllable()) {
                     if (!inPreview && videoTimelineViewContainer.getVisibility() == View.VISIBLE) {
@@ -10382,6 +10387,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     }
 
     private void updatePlayerState(boolean playWhenReady, int playbackState) {
+        if (videoPlayerSeekbarView != null) videoPlayerSeekbarView.invalidate();
         if (videoPlayer == null && (photoViewerWebView == null || !photoViewerWebView.isControllable())) {
             return;
         }
@@ -10551,6 +10557,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     }
 
     private void playVideoOrWeb() {
+        if (videoPlayerSeekbarView != null) videoPlayerSeekbarView.invalidate();
         if (getCurrentGif() != null) {
             getCurrentGif().setPaused(false);
             getCurrentGif().start();
@@ -10570,6 +10577,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     }
 
     private void pauseVideoOrWeb() {
+        if (videoPlayerSeekbarView != null) videoPlayerSeekbarView.invalidate();
         if (getCurrentGif() != null) {
             getCurrentGif().setPaused(true);
             isPlaying = false;

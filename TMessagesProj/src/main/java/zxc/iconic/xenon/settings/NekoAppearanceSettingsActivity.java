@@ -129,6 +129,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
     private final int material3ChatHeadersRow = rowId++;
     private final int loadingIndicatorsRow = rowId++;
     private final int wavyProgressRow = rowId++;
+    private final int seekbarRow = rowId++;
     private final int chatHeaderSettingsRow = rowId++;
     private final int centeredTitleRow = rowId++;
     private final int nonIslandTabBarsRow = rowId++;
@@ -206,7 +207,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         items.add(UItem.asCheck(appBarShadowRow, LocaleController.getString(R.string.DisableAppBarShadow)).slug("appBarShadow").setChecked(NekoConfig.disableAppBarShadow));
         items.add(UItem.asCheck(formatTimeWithSecondsRow, LocaleController.getString(R.string.FormatWithSeconds)).slug("formatTimeWithSeconds").setChecked(NekoConfig.formatTimeWithSeconds));
         items.add(UItem.asCheck(disableNumberRoundingRow, LocaleController.getString(R.string.DisableNumberRounding), "4.8K -> 4777").slug("disableNumberRounding").setChecked(NekoConfig.disableNumberRounding));
-        items.add(UItem.asExpandableSwitch(material3Row, "Material Design 3", material3Count() + "/10")
+        items.add(UItem.asExpandableSwitch(material3Row, "Material Design 3", material3Count() + "/11")
                 .setChecked(material3Count() > 0).setCollapsed(!material3Expanded)
                 .setClickCallback(v -> setMaterial3Enabled(material3Count() == 0)).slug("material3"));
         if (material3Expanded) {
@@ -225,6 +226,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         if (NekoConfig.wavyEnabled) {
             items.add(UItem.asRoundCheckbox(wavyProgressRow, LocaleController.getString(R.string.WavyProgressIndicator)).setChecked(NekoConfig.wavyProgressEnabled).slug("wavyProgress"));
         }
+        items.add(UItem.asRoundCheckbox(seekbarRow, "Seekbar").setChecked(NekoConfig.wavySeekbar).slug("seekbar"));
         items.add(UItem.asRoundCheckbox(material3PopupsRow, LocaleController.getString(R.string.Material3Popups)).setChecked(NekoConfig.material3Popups).slug("material3Popups"));
         items.add(InfoCheckboxCellFactory.of(material3DialogsRow, LocaleController.getString(R.string.Material3Dialogs), NekoConfig.material3Dialogs, this::showDialogsInfo).slug("material3Dialogs"));
         }
@@ -316,7 +318,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
     }
 
     private int material3Count() {
-        return (NekoConfig.material3Switches ? 1 : 0) + (NekoConfig.m3SectionsStyle ? 1 : 0) + (NekoConfig.materialSliders ? 1 : 0) + (NekoConfig.material3BottomNavigationBar ? 1 : 0) + (NekoConfig.md3Folders ? 1 : 0) + (NekoConfig.wavyEnabled ? 1 : 0) + (NekoConfig.wavyProgressEnabled ? 1 : 0) + (NekoConfig.material3Dialogs ? 1 : 0) + (NekoConfig.material3Popups ? 1 : 0) + (NekoConfig.materialActivityHeaders ? 1 : 0);
+        return (NekoConfig.wavySeekbar ? 1 : 0) + (NekoConfig.material3Switches ? 1 : 0) + (NekoConfig.m3SectionsStyle ? 1 : 0) + (NekoConfig.materialSliders ? 1 : 0) + (NekoConfig.material3BottomNavigationBar ? 1 : 0) + (NekoConfig.md3Folders ? 1 : 0) + (NekoConfig.wavyEnabled ? 1 : 0) + (NekoConfig.wavyProgressEnabled ? 1 : 0) + (NekoConfig.material3Dialogs ? 1 : 0) + (NekoConfig.material3Popups ? 1 : 0) + (NekoConfig.materialActivityHeaders ? 1 : 0);
     }
 
     private void setMaterial3Enabled(boolean enabled) {
@@ -328,6 +330,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         if (NekoConfig.md3Folders != enabled) NekoConfig.toggleMd3Folders();
         if (NekoConfig.wavyEnabled != enabled) NekoConfig.toggleWavyEnabled();
         if (NekoConfig.wavyProgressEnabled != enabled) NekoConfig.toggleWavyProgressEnabled();
+        if (NekoConfig.wavySeekbar != enabled) NekoConfig.toggleWavySeekbar();
         if (NekoConfig.material3Dialogs != enabled) NekoConfig.toggleMaterial3Dialogs();
         if (NekoConfig.material3Popups != enabled) NekoConfig.toggleMaterial3Popups();
         setMaterialActivityHeadersEnabled(enabled);
@@ -554,6 +557,9 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
             if (view instanceof InfoCheckCell) {
                 ((InfoCheckCell) view).setChecked(NekoConfig.wavyEnabled);
             }
+            listView.adapter.update(true);
+        } else if (id == seekbarRow) {
+            NekoConfig.toggleWavySeekbar();
             listView.adapter.update(true);
         } else if (id == wavyProgressRow) {
             NekoConfig.toggleWavyProgressEnabled();

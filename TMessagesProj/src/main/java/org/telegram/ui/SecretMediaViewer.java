@@ -568,6 +568,7 @@ public class SecretMediaViewer implements NotificationCenter.NotificationCenterD
             videoPlayer.setDelegate(new VideoPlayer.VideoPlayerDelegate() {
                 @Override
                 public void onStateChanged(boolean playWhenReady, int playbackState) {
+                    if (seekbarView != null) seekbarView.invalidate();
                     if (videoPlayer == null || currentMessageObject == null) {
                         return;
                     }
@@ -883,6 +884,11 @@ public class SecretMediaViewer implements NotificationCenter.NotificationCenterD
         containerView.addView(secretDeleteTimer, LayoutHelper.createFrame(119, 48, Gravity.TOP | Gravity.RIGHT, 0, 0, 0, 0));
 
         final VideoPlayerSeekBar.SeekBarDelegate seekBarDelegate = new VideoPlayerSeekBar.SeekBarDelegate() {
+            @Override
+            public boolean isPlaying() {
+                return videoPlayer != null && videoPlayer.isPlaying();
+            }
+
             @Override
             public void onSeekBarDrag(float progress) {
                 if (videoPlayer != null) {

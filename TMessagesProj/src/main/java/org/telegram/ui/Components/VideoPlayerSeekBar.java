@@ -13,6 +13,9 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
+import android.graphics.Region;
+
+import zxc.iconic.xenon.NekoConfig;
 import android.os.Build;
 import android.os.SystemClock;
 import android.text.Layout;
@@ -41,6 +44,9 @@ public class VideoPlayerSeekBar {
 
     public interface SeekBarDelegate {
         void onSeekBarDrag(float progress);
+        default boolean isPlaying() {
+            return true;
+        }
         default void onSeekBarContinuousDrag(float progress) {
         }
     }
@@ -72,6 +78,13 @@ public class VideoPlayerSeekBar {
     private float currentRadius;
     private long lastUpdateTime;
     private View parentView;
+    private final Path wavePath = new Path();
+    private final Paint wavePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final RectF thumbRect = new RectF();
+    private final AnimatedFloat thumbPressed;
+    private final AnimatedFloat waveAmplitude;
+    private float currentWaveAmplitude;
+    private float wavyThumbHalfWidth;
 
     private int lineHeight = AndroidUtilities.dp(4);
     private int smallLineHeight = AndroidUtilities.dp(2);
@@ -94,6 +107,8 @@ public class VideoPlayerSeekBar {
             strokePaint.setStrokeWidth(1);
         }
         parentView = parent;
+        thumbPressed = new AnimatedFloat(0f, parent, 0, 300, CubicBezierInterpolator.EASE_OUT_QUINT);
+        waveAmplitude = new AnimatedFloat(0f, parent, 0, 300, CubicBezierInterpolator.EASE_OUT_QUINT);
         thumbWidth = AndroidUtilities.dp(24);
         currentRadius = AndroidUtilities.dp(6);
         animateThumbLoopBackProgress = new AnimatedFloat(0f, parent, 0, 300, CubicBezierInterpolator.EASE_OUT_QUINT);
@@ -120,6 +135,7 @@ public class VideoPlayerSeekBar {
                     animatedThumbX = thumbX;
                 }
                 pressed = pressedDelayed = true;
+                parentView.invalidate();
                 draggingThumbX = thumbX;
                 thumbDX = (int) (x - thumbX);
                 return true;
@@ -131,6 +147,7 @@ public class VideoPlayerSeekBar {
                     delegate.onSeekBarDrag((float) thumbX / (float) (width - thumbWidth));
                 }
                 pressed = false;
+                parentView.invalidate();
                 AndroidUtilities.runOnUIThread(() -> pressedDelayed = false, 50);
                 return true;
             }
@@ -369,6 +386,16 @@ public class VideoPlayerSeekBar {
             loopBack = 0;
         }
 
+        currentWaveAmplitude = waveAmplitude.set(delegate != null && delegate.isPlaying() ? 1f : 0f);
+        wavyThumbHalfWidth = AndroidUtilities.dpf2(2.25f) * (1f - 0.5f * thumbPressed.set(pressed ? 1f : 0f));
+        int trackSave = canvas.save();
+        if (NekoConfig.wavySeekbar && transitionProgress < 1f) {
+            float thumbCenter = horizontalPadding + AndroidUtilities.lerp(
+                    thumbWidth / 2f + (pressed ? draggingThumbX : currentThumbX),
+                    (parentView.getWidth() - horizontalPadding * 2f) * getProgress(), transitionProgress);
+            canvas.clipRect(thumbCenter + (wavyThumbHalfWidth + AndroidUtilities.dp(4)) * (1f - transitionProgress),
+                    0, Math.max(width, parentView.getWidth()), height);
+        }
         // background
         rect.right = horizontalPadding + AndroidUtilities.lerp(width - thumbWidth / 2f, parentView.getWidth() - horizontalPadding * 2f, transitionProgress);
         setPaintColor(selected ? backgroundSelectedColor : backgroundColor, 1f - transitionProgress);
@@ -404,6 +431,8 @@ public class VideoPlayerSeekBar {
             }
         }
 
+        canvas.restoreToCount(trackSave);
+
         int newRad = AndroidUtilities.dp(pressed ? 8 : 6);
         if (currentRadius != newRad) {
             long newUpdateTime = SystemClock.elapsedRealtime();
@@ -436,16 +465,16 @@ public class VideoPlayerSeekBar {
             if (transitionProgress > 0f && rect.width() > 0) {
                 // progress stroke
                 strokePaint.setAlpha((int) (transitionProgress * 255 * 0.2f));
-                drawProgressBar(canvas, rect, strokePaint);
+                drawActiveProgress(canvas, rect, strokePaint);
             }
             setPaintColor(ColorUtils.blendARGB(progressColor, smallLineColor, transitionProgress), 1f);
-            drawProgressBar(canvas, rect, paint);
+            drawActiveProgress(canvas, rect, paint);
 
             rect.left = wasLeft;
 
             setPaintColor(ColorUtils.blendARGB(circleColor, getProgress() == 0 ? Color.TRANSPARENT : smallLineColor, transitionProgress), 1f - transitionProgress);
             float wasRight = horizontalPadding + AndroidUtilities.lerp(thumbWidth / 2f + loopBackWasThumbX, (parentView.getWidth() - horizontalPadding * 2f) * (loopBackWasThumbX / (float) (width - thumbWidth)), transitionProgress);
-            canvas.drawCircle(wasRight, rect.centerY(), circleRadius * loopBack, paint);
+            drawThumb(canvas, wasRight, rect.centerY(), circleRadius * loopBack, loopBack);
         }
 
         // progress
@@ -453,16 +482,73 @@ public class VideoPlayerSeekBar {
         if (transitionProgress > 0f && rect.width() > 0) {
             // progress stroke
             strokePaint.setAlpha((int) (transitionProgress * 255 * 0.2f));
-            drawProgressBar(canvas, rect, strokePaint);
+            drawActiveProgress(canvas, rect, strokePaint);
         }
         setPaintColor(ColorUtils.blendARGB(progressColor, smallLineColor, transitionProgress), 1f);
-        drawProgressBar(canvas, rect, paint);
+        drawActiveProgress(canvas, rect, paint);
 
         // circle
         setPaintColor(ColorUtils.blendARGB(circleColor, getProgress() == 0 ? Color.TRANSPARENT : smallLineColor, transitionProgress), 1f - transitionProgress);
-        canvas.drawCircle(rect.right, rect.centerY(), circleRadius * (1f - loopBack), paint);
+        drawThumb(canvas, rect.right, rect.centerY(), circleRadius * (1f - loopBack), 1f - loopBack);
 
         drawTimestampLabel(canvas);
+    }
+
+    private void drawThumb(Canvas canvas, float x, float y, float radius, float scale) {
+        if (!NekoConfig.wavySeekbar) {
+            canvas.drawCircle(x, y, radius, paint);
+            return;
+        }
+        float halfWidth = wavyThumbHalfWidth * (1f - transitionProgress) * scale;
+        float halfHeight = AndroidUtilities.dpf2(9.75f) * (1f - transitionProgress) * scale;
+        thumbRect.set(x - halfWidth, y - halfHeight, x + halfWidth, y + halfHeight);
+        canvas.drawRoundRect(thumbRect, halfWidth, halfWidth, paint);
+    }
+
+    private void drawActiveProgress(Canvas canvas, RectF bounds, Paint source) {
+        if (!NekoConfig.wavySeekbar || transitionProgress >= 1f) {
+            drawProgressBar(canvas, bounds, source);
+            return;
+        }
+        float visible = 1f - transitionProgress;
+        float end = bounds.right - (wavyThumbHalfWidth + AndroidUtilities.dp(4)) * visible;
+        if (end <= bounds.left) return;
+        float wavelength = AndroidUtilities.dp(32);
+        float amplitude = AndroidUtilities.dp(2.5f) * visible * currentWaveAmplitude;
+        // MediaActionDrawable advances one wavelength per second. A positive
+        // phase in sin(x + phase) moves the linear wave to the left.
+        double phase = (SystemClock.elapsedRealtime() % 1000L) * Math.PI * 2 / 1000.0;
+        wavePath.rewind();
+        int steps = Math.max(1, (int) Math.ceil((end - bounds.left) / AndroidUtilities.dpf2(1)));
+        for (int i = 0; i <= steps; i++) {
+            float x = bounds.left + (end - bounds.left) * i / steps;
+            float y = bounds.centerY() + amplitude * (float) Math.sin(
+                    (x - horizontalPadding) * Math.PI * 2 / wavelength + phase);
+            if (i == 0) wavePath.moveTo(x, y);
+            else wavePath.lineTo(x, y);
+        }
+        int save = canvas.save();
+        // Keep chapter separators at their existing timeline positions.
+        if (timestamps != null && !timestamps.isEmpty()) {
+            float left = horizontalPadding + AndroidUtilities.lerp(thumbWidth / 2f, 0, transitionProgress);
+            float right = horizontalPadding + AndroidUtilities.lerp(width - thumbWidth / 2f,
+                    parentView.getWidth() - horizontalPadding * 2f, transitionProgress);
+            float gap = AndroidUtilities.dpf2(TIMESTAMP_GAP * timestampsAppearing) / 2f;
+            for (int i = 0; i < timestamps.size(); i++) {
+                float x = AndroidUtilities.lerp(left, right, timestamps.get(i).first);
+                canvas.clipRect(x - gap, 0, x + gap, height, Region.Op.DIFFERENCE);
+            }
+        }
+        wavePaint.set(source);
+        wavePaint.setStyle(Paint.Style.STROKE);
+        wavePaint.setStrokeWidth(bounds.height());
+        wavePaint.setStrokeCap(Paint.Cap.ROUND);
+        wavePaint.setStrokeJoin(Paint.Join.ROUND);
+        canvas.drawPath(wavePath, wavePaint);
+        canvas.restoreToCount(save);
+        if (currentWaveAmplitude > 0f) {
+            parentView.postInvalidateOnAnimation();
+        }
     }
 
     private float timestampsAppearing = 0;
