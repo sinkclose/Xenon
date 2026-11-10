@@ -1143,7 +1143,7 @@ public class StickersAlert extends BottomSheet implements NotificationCenter.Not
         containerView.addView(shadow[1], frameLayoutParams);
 
         pickerBottomLayout = new AnimatedTextView(context);
-        pickerBottomLayout.setBackground(Theme.createSelectorWithBackgroundDrawable(getThemedColor(Theme.key_dialogBackground), getThemedColor(Theme.key_listSelector)));
+        pickerBottomLayout.setBackground(Theme.createSelectorWithBackgroundDrawable(getSheetBackgroundColor(), getThemedColor(Theme.key_listSelector)));
         pickerBottomLayout.setTextColor(getThemedColor(buttonTextColorKey = Theme.key_dialogTextBlue2));
         pickerBottomLayout.setTextSize(dp(14));
         pickerBottomLayout.setPadding(dp(18), 0, dp(18), 0);
@@ -1178,7 +1178,7 @@ public class StickersAlert extends BottomSheet implements NotificationCenter.Not
         previewSendButton = new TextView(context);
         previewSendButton.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
         previewSendButton.setTextColor(getThemedColor(Theme.key_dialogTextBlue2));
-        previewSendButton.setBackground(Theme.createSelectorWithBackgroundDrawable(getThemedColor(Theme.key_dialogBackground), getThemedColor(Theme.key_listSelector)));
+        previewSendButton.setBackground(Theme.createSelectorWithBackgroundDrawable(getSheetBackgroundColor(), getThemedColor(Theme.key_listSelector)));
         previewSendButton.setGravity(Gravity.CENTER);
         previewSendButton.setPadding(dp(29), 0, dp(29), 0);
         previewSendButton.setTypeface(AndroidUtilities.bold());
@@ -2112,14 +2112,14 @@ public class StickersAlert extends BottomSheet implements NotificationCenter.Not
             pickerBottomLayout.setAlpha(0f);
         } else if (backgroundColorKey >= 0 && backgroundSelectorColorKey >= 0) {
             pickerBottomLayout.setBackground(Theme.createSimpleSelectorRoundRectDrawable(dp(24), getThemedColor(backgroundColorKey), getThemedColor(backgroundSelectorColorKey)));
-            pickerBottomFrameLayout.setBackgroundColor(getThemedColor(Theme.key_dialogBackground));
+            pickerBottomFrameLayout.setBackgroundColor(getSheetBackgroundColor());
             params.leftMargin = params.topMargin = params.rightMargin = params.bottomMargin = dp(8);
             emptyParams.bottomMargin = gridParams.bottomMargin = shadowParams.bottomMargin = dp(64);
             if (pickerBottomLayout.getAlpha() < 1f) {
                 pickerBottomLayout.animate().alpha(1f).setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT).setDuration(240).start();
             }
         } else {
-            pickerBottomLayout.setBackground(Theme.createSelectorWithBackgroundDrawable(getThemedColor(Theme.key_dialogBackground), Theme.multAlpha(getThemedColor(Theme.key_text_RedBold), .1f)));
+            pickerBottomLayout.setBackground(Theme.createSelectorWithBackgroundDrawable(getSheetBackgroundColor(), Theme.multAlpha(getThemedColor(Theme.key_text_RedBold), .1f)));
             pickerBottomFrameLayout.setBackgroundColor(Color.TRANSPARENT);
             params.leftMargin = params.topMargin = params.rightMargin = params.bottomMargin = 0;
             emptyParams.bottomMargin = gridParams.bottomMargin = shadowParams.bottomMargin = dp(48);
@@ -2140,6 +2140,12 @@ public class StickersAlert extends BottomSheet implements NotificationCenter.Not
 
     public void updateColors() {
         updateColors(false);
+    }
+
+    private int sheetSurfaceColorKey() {
+        // Match BottomSheet's surface choice when the theme changes as well.
+        return Theme.getActiveTheme().isMonet() && Theme.isCurrentThemeDark()
+                ? Theme.key_windowBackgroundWhite : Theme.key_dialogBackground;
     }
 
     private List<ThemeDescription> animatingDescriptions;
@@ -2178,8 +2184,12 @@ public class StickersAlert extends BottomSheet implements NotificationCenter.Not
             }
         }
 
+        setBackgroundColor(getThemedColor(sheetSurfaceColorKey()));
         if (!Theme.isAnimatingColor() && animatingDescriptions != null) {
             animatingDescriptions = null;
+        }
+        if (pickerBottomFrameLayout != null && pickerBottomFrameLayout.getBackground() != null) {
+            pickerBottomFrameLayout.setBackgroundColor(getSheetBackgroundColor());
         }
     }
 
@@ -2188,7 +2198,7 @@ public class StickersAlert extends BottomSheet implements NotificationCenter.Not
         final ArrayList<ThemeDescription> descriptions = new ArrayList<>();
         final ThemeDescription.ThemeDescriptionDelegate delegate = this::updateColors;
 
-        descriptions.add(new ThemeDescription(containerView, 0, null, null, new Drawable[]{shadowDrawable}, null, Theme.key_dialogBackground));
+        descriptions.add(new ThemeDescription(containerView, 0, null, null, new Drawable[]{shadowDrawable}, null, sheetSurfaceColorKey()));
         descriptions.add(new ThemeDescription(containerView, 0, null, null, null, null, Theme.key_sheet_scrollUp));
 
         adapter.getThemeDescriptions(descriptions, delegate);
