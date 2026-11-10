@@ -2035,14 +2035,13 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     private boolean predictiveBackCommitting;
     private boolean predictiveBackActive;
     private boolean predictiveBackFramePending;
-    private float predictiveBackEndAlpha;
+    private float predictiveBackTouchY;
+    private float predictiveBackDirection;
     private int predictiveBackGeneration;
     private int predictiveBackBackgroundAlpha;
     private float predictiveBackContainerAlpha, predictiveBackNavigationAlpha;
     private int predictiveBackSurfaceVisibility;
     private final float[] predictiveBackTarget = new float[15];
-    private long predictiveBackTargetTime;
-    private final Runnable predictiveBackTargetUpdater = this::updatePredictiveBackTargetFrame;
 
     private ChatActivity parentChatActivity;
     private BaseFragment parentFragment;
@@ -18422,6 +18421,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             photoBackCallback = new OnBackAnimationCallback() {
                 @Override
                 public void onBackStarted(BackEvent event) {
+                    predictiveBackTouchY = event.getTouchY();
+                    predictiveBackDirection = event.getSwipeEdge() == BackEvent.EDGE_LEFT ? 1f : -1f;
                     startPredictiveBack();
                 }
 
@@ -18429,8 +18430,17 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                 public void onBackProgressed(BackEvent event) {
                     if (predictiveBackActive && predictiveBackAnimator == null) {
                         float intensity = Math.max(NekoConfig.predictiveBackIntensity / 10f, 0.001f);
-                        // Leave a small remaining distance so commit can retarget without a jump.
-                        setPredictiveBackProgress(Math.min(event.getProgress() * intensity, 0.99f));
+                        // Preview follows the gesture; the thumbnail becomes the target only on commit.
+                        float progress = Math.max(0f, Math.min(event.getProgress() * intensity, 0.99f));
+                        if (progress > 0f) {
+                            float maxOffset = windowView.getHeight() * 0.08f * progress;
+                            float offsetY = Math.max(-maxOffset, Math.min(maxOffset,
+                                    (event.getTouchY() - predictiveBackTouchY) * 0.2f));
+                            animationValues[1][3] = animationValues[0][3]
+                                    + animatingImageView.getLayoutParams().height * animationValues[0][1] * 0.16f
+                                    + offsetY / progress;
+                        }
+                        setPredictiveBackProgress(progress);
                     }
                 }
 
@@ -18459,7 +18469,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                             predictiveBackCommitting = true;
                             return;
                         }
-                        updatePredictiveBackTarget(true);
+                        updatePredictiveBackTarget();
                         predictiveBackCommitting = true;
                         // Keep the prepared frame and geometry until closePhoto takes over.
                         predictiveBackGeneration++;
@@ -18524,19 +18534,22 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             // Keep rendering the live player until its current frame is ready for the transition.
             animatingImageView.setVisibility(View.INVISIBLE);
         }
-        if (object == null) {
-            fillCloseFallbackTarget(predictiveBackTarget);
-        }
-        predictiveBackEndAlpha = object == null || object.fadeIn || object.drawUnderChatUi ? 0f : 1f;
-        System.arraycopy(predictiveBackTarget, 0, animationValues[1], 0, predictiveBackTarget.length);
+        // Keep the full photo above the chat throughout the gesture, without thumbnail cropping.
+        closeTransitionPlace = null;
+        animatingImageView.setAnimationValues(animationValues, false, false);
+        animatingImageView.setAnimationClipBounds(true);
+        System.arraycopy(animationValues[0], 0, animationValues[1], 0, animationValues[0].length);
+        animationValues[1][0] *= 0.68f;
+        animationValues[1][1] *= 0.68f;
+        animationValues[1][2] += animatingImageView.getLayoutParams().width * animationValues[0][0] * 0.16f
+                + predictiveBackDirection * windowView.getWidth() * 0.12f;
+        animationValues[1][3] += animatingImageView.getLayoutParams().height * animationValues[0][1] * 0.16f;
         if (animatingImageView.getBitmap() == null && !predictiveBackFramePending) {
             resetPredictiveBack();
             return;
         }
         animatingImageView.setAlpha(1f);
         setPredictiveBackProgress(0f);
-        predictiveBackTargetTime = SystemClock.uptimeMillis();
-        containerView.postOnAnimation(predictiveBackTargetUpdater);
         final int generation = ++predictiveBackGeneration;
         if (predictiveBackFramePending) {
             try {
@@ -18591,7 +18604,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         }
         setPredictiveBackProgress(predictiveBackProgress);
         if (predictiveBackCommitting) {
-            updatePredictiveBackTarget(true);
+            updatePredictiveBackTarget();
             predictiveBackGeneration++;
             closePhoto(true, false);
         }
@@ -18637,47 +18650,25 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         }
     }
 
-    private void updatePredictiveBackTargetFrame() {
-        if (!predictiveBackActive || predictiveBackCommitting || !isVisible) {
-            return;
-        }
-        updatePredictiveBackTarget(false);
-        containerView.postOnAnimation(predictiveBackTargetUpdater);
-    }
-
-    private void updatePredictiveBackTarget(boolean committing) {
-        long now = SystemClock.uptimeMillis();
-        float blend = 1f - (float) Math.exp(-Math.min(32, Math.max(0, now - predictiveBackTargetTime)) / 80f);
-        predictiveBackTargetTime = now;
+    private void updatePredictiveBackTarget() {
         ViewGroup.LayoutParams layout = animatingImageView.getLayoutParams();
         PlaceProviderObject object = readPredictiveBackTarget(layout.width, layout.height, false);
         if (object == null) {
             fillCloseFallbackTarget(predictiveBackTarget);
         }
         predictiveBackPlace = object;
-        float endAlpha = object == null || object.fadeIn ? 0f : 1f;
         closeTransitionPlace = object;
-        if (object != null && object.drawUnderChatUi) {
-            endAlpha = 0f;
-        }
-        if (!committing) {
-            predictiveBackEndAlpha += (endAlpha - predictiveBackEndAlpha) * blend;
-        }
         for (int i = 0; i < predictiveBackTarget.length; i++) {
-            if (committing) {
-                // Finish at the latest position without jumping from the smoothed preview.
-                float p = predictiveBackProgress;
-                if (p < 0.999f) {
-                    float current = animationValues[0][i] * (1f - p) + animationValues[1][i] * p;
-                    animationValues[0][i] = (current - predictiveBackTarget[i] * p) / (1f - p);
-                }
-                animationValues[1][i] = predictiveBackTarget[i];
-            } else {
-                animationValues[1][i] += (predictiveBackTarget[i] - animationValues[1][i]) * blend;
+            // Rebase the close animation so its first frame exactly matches the gesture preview.
+            float p = predictiveBackProgress;
+            if (p < 0.999f) {
+                float current = animationValues[0][i] * (1f - p) + animationValues[1][i] * p;
+                animationValues[0][i] = (current - predictiveBackTarget[i] * p) / (1f - p);
             }
+            animationValues[1][i] = predictiveBackTarget[i];
         }
         animatingImageView.setAnimationProgress(predictiveBackProgress);
-        animatingImageView.setAlpha(1f - predictiveBackProgress + predictiveBackEndAlpha * predictiveBackProgress);
+        animatingImageView.setAlpha(1f);
         containerView.invalidate();
         invalidateBlur();
     }
@@ -18688,7 +18679,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             return;
         }
         animatingImageView.setAnimationProgress(predictiveBackProgress);
-        animatingImageView.setAlpha(1f - predictiveBackProgress + predictiveBackEndAlpha * predictiveBackProgress);
+        animatingImageView.setAlpha(1f);
         clippingImageProgress = predictiveBackProgress;
         backgroundDrawable.setAlpha((int) (predictiveBackBackgroundAlpha * (1f - predictiveBackProgress)));
         containerView.setAlpha(predictiveBackContainerAlpha * (1f - predictiveBackProgress));
@@ -18704,9 +18695,6 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             ((ChatActivity) parentFragment).invalidatePhotoViewerTransition();
         }
         predictiveBackFramePending = false;
-        if (containerView != null) {
-            containerView.removeCallbacks(predictiveBackTargetUpdater);
-        }
         predictiveBackGeneration++;
         if (predictiveBackAnimator != null) {
             ValueAnimator animator = predictiveBackAnimator;
@@ -19210,7 +19198,6 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                     predictiveBackActive = false;
                     predictiveBackViews = null;
                     predictiveBackCommitting = false;
-                    containerView.removeCallbacks(predictiveBackTargetUpdater);
                     animatorSet.start();
                 };
                 if (allowStart[0]) {
