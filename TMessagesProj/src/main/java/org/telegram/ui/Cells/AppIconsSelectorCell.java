@@ -294,6 +294,7 @@ public class AppIconsSelectorCell extends RecyclerListView implements Notificati
 
     public static class AdaptiveIconImageView extends ImageView {
         private Drawable foreground;
+        private boolean adaptiveLayerPreview;
         private Path path = new Path();
         private int outerPadding = AndroidUtilities.dp(5);
         private int backgroundOuterPadding = AndroidUtilities.dp(42);
@@ -304,6 +305,8 @@ public class AppIconsSelectorCell extends RecyclerListView implements Notificati
 
         public void setForeground(int res) {
             foreground = ContextCompat.getDrawable(getContext(), res);
+            adaptiveLayerPreview = res == R.drawable.ic_xenon_foreground;
+            updatePath();
             invalidate();
         }
 
@@ -327,6 +330,26 @@ public class AppIconsSelectorCell extends RecyclerListView implements Notificati
 
         @Override
         public void draw(Canvas canvas) {
+            if (adaptiveLayerPreview) {
+                // AdaptiveIconDrawable exposes the center 72dp of its 108dp layers.
+                // Draw that same viewport instead of applying legacy bitmap padding.
+                int save = canvas.save();
+                canvas.clipPath(path);
+                float contentWidth = getWidth() - getPaddingLeft() - getPaddingRight();
+                float contentHeight = getHeight() - getPaddingTop() - getPaddingBottom();
+                canvas.scale(1.5f * contentWidth / getWidth(), 1.5f * contentHeight / getHeight(), getWidth() / 2f, getHeight() / 2f);
+                Drawable background = getDrawable() != null ? getDrawable() : getBackground();
+                if (background != null) {
+                    background.setBounds(0, 0, getWidth(), getHeight());
+                    background.draw(canvas);
+                }
+                if (foreground != null) {
+                    foreground.setBounds(0, 0, getWidth(), getHeight());
+                    foreground.draw(canvas);
+                }
+                canvas.restoreToCount(save);
+                return;
+            }
             canvas.save();
             canvas.clipPath(path);
             canvas.scale(1f + backgroundOuterPadding / (float) getWidth(), 1f + backgroundOuterPadding / (float) getHeight(), getWidth() / 2f, getHeight() / 2f);

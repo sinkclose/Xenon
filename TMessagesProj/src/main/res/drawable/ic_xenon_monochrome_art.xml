@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Original detailed third mask, without the outpaint that filled its cutouts.
+     Fur is 60% opaque; eye whites and catchlights remain opaque. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:gravity="fill">
+        <bitmap android:src="@drawable/ic_xenon_monochrome_v3_source" android:gravity="fill"
+            android:filter="true" android:alpha="0.6" android:tint="#FFFFFFFF" android:tintMode="src_in" />
+    </item>
+    <item android:gravity="fill">
+        <vector android:width="108dp" android:height="108dp" android:viewportWidth="1254" android:viewportHeight="1254">
+            <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd"
+                android:pathData="M465,241 C393,241 348,348 348,472 C348,600 394,686 470,686 C554,686 611,594 611,469 C611,344 551,241 465,241 Z M425,391 A75,80 0,1 0,425,551 A75,80 0,1 0,425,391 Z M791,241 C711,241 650,347 650,472 C650,601 708,686 790,686 C873,686 932,593 932,468 C932,342 869,241 791,241 Z M739,391 A75,80 0,1 0,739,551 A75,80 0,1 0,739,391 Z" />
+            <path android:fillColor="#FFFFFFFF"
+                android:pathData="M392,411 A20,20 0,1 0,392,451 A20,20 0,1 0,392,411 Z M706,411 A20,20 0,1 0,706,451 A20,20 0,1 0,706,411 Z" />
+        </vector>
+    </item>
+</layer-list>

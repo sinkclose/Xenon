@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 108dp adaptive layer. Face and ears stay inside the centered 66dp safe circle.
+     The outpainted torso extends to y=122dp, beyond the entire adaptive layer,
+     so neither a hard crop nor a bottom contour can appear inside launcher masks. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:width="108dp" android:height="108dp" android:gravity="fill">
+        <inset android:insetLeft="20.37037%" android:insetRight="20.37037%"
+            android:insetTop="24.074074%" android:insetBottom="-12.962963%">
+            <bitmap android:src="@drawable/ic_xenon_cat_extended" android:gravity="fill" android:filter="true" />
+        </inset>
+    </item>
+</layer-list>

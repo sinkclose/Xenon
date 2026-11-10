@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Preserve the detailed third mask. Its lower baseline sits below the visible
+     72dp launcher viewport (y=18..90dp), while the ears remain inside the safe zone. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:width="108dp" android:height="108dp" android:gravity="fill">
+        <inset android:insetLeft="20.37037%" android:insetRight="20.37037%"
+            android:insetTop="28.703704%" android:insetBottom="12.037037%"
+            android:drawable="@drawable/ic_xenon_monochrome_art" />
+    </item>
+</layer-list>
