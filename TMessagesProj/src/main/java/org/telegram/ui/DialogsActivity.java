@@ -763,13 +763,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             materialDialogsPlainFade = new ChatActivityFadeView(contentView.getContext());
             materialDialogsPlainFade.setupColorKey(Theme.key_windowBackgroundGray);
             materialDialogsPlainFade.setOpaqueFade(true);
-            materialDialogsPlainFade.setFadeTopAlpha(255);
             materialDialogsPlainFade.setFadeHeightTop(dp(32), false);
-            materialDialogsPlainFade.setDim(255 * 88 / 100);
             contentView.addView(materialDialogsPlainFade, contentView.indexOfChild(searchTabsAndFiltersLayout),
                     LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
         }
         if (materialDialogsPlainFade != null) {
+            materialDialogsPlainFade.setFadeTopAlpha(NekoConfig.blurredFadeDimming ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
             materialDialogsPlainFade.setVisibility(fade && !blur ? View.VISIBLE : View.GONE);
             int zone = Math.max(actionBar.getBottom() + getInlineSearchHeight() + dp(SEARCH_TABS_HEIGHT),
                     contentView.getActionBarTop() + contentView.getActionBarFullHeight() + dp(48));

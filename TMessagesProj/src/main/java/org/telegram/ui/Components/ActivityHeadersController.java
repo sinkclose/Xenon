@@ -295,6 +295,7 @@ public final class ActivityHeadersController {
         boolean useBlur = fade && blur != null && blur.isEnabled();
         plain.setVisibility(fade && !useBlur ? View.VISIBLE : View.GONE);
         plain.setFadeZoneTop(edge);
+        plain.setFadeTopAlpha(NekoConfig.blurredFadeDimming ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
         if (blur != null) {
             blur.setFadeViewVisibility(useBlur ? View.VISIBLE : View.GONE);
             if (useBlur) {

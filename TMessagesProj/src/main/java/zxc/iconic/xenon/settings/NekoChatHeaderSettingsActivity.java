@@ -184,21 +184,19 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
                     NekoConfig.blurredFadePixelation).slug("blurredFadePixelation"));
             }
         }
-        if (NekoConfig.blurredFadeView) {
-            items.add(UItem.asCheck(blurredFadeDimmingRow, LocaleController.getString(R.string.BlurredFadeDimming)).setChecked(NekoConfig.blurredFadeDimming).slug("blurredFadeDimming"));
-            if (NekoConfig.blurredFadeDimming && advancedSettings) {
-                items.add(SeekbarCellFactory.of(blurredFadeDimStrengthRow,
-                        new SeekbarConfig(LocaleController.getString(R.string.BlurredFadeDimStrength),
-                                "0", "100", 0, 100,
-                                progress -> {
-                                    int v = Math.max(0, Math.min(100, Math.round(progress)));
-                                    if (v != NekoConfig.blurredFadeDimStrength) {
-                                            markAdvancedChange();
-                                        NekoConfig.setBlurredFadeDimStrength(v);
-                                    }
-                                }),
-                        NekoConfig.blurredFadeDimStrength).slug("blurredFadeDimStrength"));
-            }
+        items.add(UItem.asCheck(blurredFadeDimmingRow, LocaleController.getString(R.string.BlurredFadeDimming)).setChecked(NekoConfig.blurredFadeDimming).slug("blurredFadeDimming"));
+        if (NekoConfig.blurredFadeDimming && advancedSettings) {
+            items.add(SeekbarCellFactory.of(blurredFadeDimStrengthRow,
+                    new SeekbarConfig(LocaleController.getString(R.string.BlurredFadeDimStrength),
+                            "0", "100", 0, 100,
+                            progress -> {
+                                int v = Math.max(0, Math.min(100, Math.round(progress)));
+                                if (v != NekoConfig.blurredFadeDimStrength) {
+                                    markAdvancedChange();
+                                    NekoConfig.setBlurredFadeDimStrength(v);
+                                }
+                            }),
+                    NekoConfig.blurredFadeDimStrength).slug("blurredFadeDimStrength"));
         }
         items.add(TextSettingsCellFactory.of(avatarPlacementRow, LocaleController.getString(R.string.AvatarPlacement), placementName(effectivePlacement())));
         items.add(UItem.asShadow(null));

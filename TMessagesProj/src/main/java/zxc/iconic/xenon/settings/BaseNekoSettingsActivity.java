@@ -838,11 +838,10 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
             materialPlainFade = new ChatActivityFadeView(contentView.getContext());
             materialPlainFade.setupColorKey(Theme.key_windowBackgroundGray);
             materialPlainFade.setOpaqueFade(true);
-            materialPlainFade.setFadeTopAlpha(255);
-            materialPlainFade.setDim(255 * 88 / 100);
             materialFadeHost.addView(materialPlainFade, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
         }
         if (materialPlainFade != null) {
+            materialPlainFade.setFadeTopAlpha(NekoConfig.blurredFadeDimming ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
             materialPlainFade.setVisibility(blur ? View.GONE : View.VISIBLE);
             materialPlainFade.setAlpha(1f);
             materialPlainFade.setFadeZoneTop(zone);
@@ -896,14 +895,14 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
             plainTopFadeView.setupColorKey(Theme.key_windowBackgroundGray);
             plainTopFadeView.setOpaqueFade(true);
             plainTopFadeView.setFadeHeightTop(AndroidUtilities.dp(32), false);
-            plainTopFadeView.setFadeTopAlpha(255);
             lastPlainFadeColor = Integer.MIN_VALUE;
-            plainTopFadeView.setDim(255 * 88 / 100);
             contentView.addView(plainTopFadeView, contentView.indexOfChild(actionBarBackground), LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
         }
         // Keep the transition within the last 32dp instead of stretching the
         // mask across the header; its lower edge stays above the first item.
         final int plainZone = fadeZone;
+        // A color-source fade has no separate dim layer; tint strength is its alpha.
+        plainTopFadeView.setFadeTopAlpha(NekoConfig.blurredFadeDimming ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
         plainTopFadeView.setAlpha(1f);
         plainTopFadeView.setFadeZoneTop(plainZone);
         plainTopFadeView.setFadeHeightTop(AndroidUtilities.dp(32), false);
