@@ -116,6 +116,26 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout implements 
 
     private final Path clipPath = new Path();
     private final RectF clipRectF = new RectF();
+    private View capsuleView;
+
+    public void setCapsuleView(View view) {
+        capsuleView = view;
+        checkBoundsAndClipping();
+        invalidate();
+    }
+
+    private float cornerRadius(float width, float height) {
+        if (NonIslandHelper.chatElements()) return 0f;
+        float maximum = Math.max(0f, Math.min(width, height) / 2f);
+        float regular = Math.min(dp(18), maximum);
+        for (int i = 0; i < getEntriesCount(); i++) {
+            final ListAnimator.Entry<AnimatedLinearLayout.Holder> entry = getEntry(i);
+            if (entry.item.view == capsuleView) {
+                return regular + (maximum - regular) * entry.getVisibility();
+            }
+        }
+        return regular;
+    }
 
     private void checkBoundsAndClipping() {
         final float bgHeight = getMetadata().getTotalHeight();
@@ -124,7 +144,7 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout implements 
         clipRectF.set(getPaddingLeft(), getPaddingTop(), getMeasuredWidth() - getPaddingRight(), getPaddingTop() + bgHeight);
         if (liquidTouch != null) liquidTouch.setBounds(clipRectF.left, clipRectF.top, clipRectF.right, clipRectF.bottom);
 
-        final float r = NonIslandHelper.chatElements() ? 0 : Math.min(dp(18), Math.min(clipRectF.width(), clipRectF.height()) / 2f);
+        final float r = cornerRadius(clipRectF.width(), clipRectF.height());
         clipPath.rewind();
         clipPath.addRoundRect(clipRectF, r, r, Path.Direction.CW);
 
@@ -132,7 +152,7 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout implements 
             backgroundDrawable.setAlpha((int) (bgAlpha * 255));
             backgroundDrawable.setBounds(getPaddingLeft() - dp(7), 0, getMeasuredWidth() - getPaddingRight() + dp(7), getPaddingTop() + getPaddingBottom() + (int) bgHeight);
             if (!NonIslandHelper.chatElements()) {
-                backgroundDrawable.setRadius(Math.min(dp(18), bgHeight / 2));
+                backgroundDrawable.setRadius(cornerRadius(backgroundDrawable.getBounds().width(), backgroundDrawable.getBounds().height()));
             }
         }
     }
@@ -170,7 +190,7 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout implements 
 
         if (backgroundDrawable != null && !liquidGlassGroupDrawn) {
             backgroundDrawable.draw(canvas);
-            if (liquidTouchAllowed()) liquidTouch.drawHighlight(canvas, dp(18));
+            if (liquidTouchAllowed()) liquidTouch.drawHighlight(canvas, cornerRadius(clipRectF.width(), clipRectF.height()));
         }
 
         boolean callDrawn = false;
