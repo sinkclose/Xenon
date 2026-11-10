@@ -47,6 +47,8 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
     private ClientFontPicker fontPicker;
     private final int material3Row = rowId++;
     private boolean material3Expanded;
+    private final int materialActivityHeadersRow = rowId++;
+    private final int materialHeadersInDialogsRow = rowId++;
     private final int ios26Row = rowId++;
     private final int iosLikeInputFieldRow = rowId++;
     private final int liquidChatElementsRow = rowId++;
@@ -204,10 +206,16 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         items.add(UItem.asCheck(appBarShadowRow, LocaleController.getString(R.string.DisableAppBarShadow)).slug("appBarShadow").setChecked(NekoConfig.disableAppBarShadow));
         items.add(UItem.asCheck(formatTimeWithSecondsRow, LocaleController.getString(R.string.FormatWithSeconds)).slug("formatTimeWithSeconds").setChecked(NekoConfig.formatTimeWithSeconds));
         items.add(UItem.asCheck(disableNumberRoundingRow, LocaleController.getString(R.string.DisableNumberRounding), "4.8K -> 4777").slug("disableNumberRounding").setChecked(NekoConfig.disableNumberRounding));
-        items.add(UItem.asExpandableSwitch(material3Row, "Material Design 3", material3Count() + "/9")
+        items.add(UItem.asExpandableSwitch(material3Row, "Material Design 3", material3Count() + "/10")
                 .setChecked(material3Count() > 0).setCollapsed(!material3Expanded)
                 .setClickCallback(v -> setMaterial3Enabled(material3Count() == 0)).slug("material3"));
         if (material3Expanded) {
+        items.add(UItem.asRoundCheckbox(materialActivityHeadersRow, "Headers")
+                .setChecked(NekoConfig.materialActivityHeaders).slug("materialActivityHeaders"));
+        if (NekoConfig.materialActivityHeaders) {
+            items.add(UItem.asRoundCheckbox(materialHeadersInDialogsRow, "Apply in dialogs activity too")
+                    .setChecked(NekoConfig.materialHeadersInDialogs).slug("materialHeadersInDialogs"));
+        }
         items.add(UItem.asRoundCheckbox(material3SwitchesRow, LocaleController.getString(R.string.Switches)).setChecked(NekoConfig.material3Switches).slug("material3Switches"));
         items.add(UItem.asRoundCheckbox(m3SectionsStyleRow, LocaleController.getString(R.string.ListItems)).setChecked(NekoConfig.m3SectionsStyle).slug("m3SectionsStyle"));
         items.add(UItem.asRoundCheckbox(materialSlidersRow, LocaleController.getString(R.string.MaterialSliders)).setChecked(NekoConfig.materialSliders).slug("materialSliders"));
@@ -308,7 +316,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
     }
 
     private int material3Count() {
-        return (NekoConfig.material3Switches ? 1 : 0) + (NekoConfig.m3SectionsStyle ? 1 : 0) + (NekoConfig.materialSliders ? 1 : 0) + (NekoConfig.material3BottomNavigationBar ? 1 : 0) + (NekoConfig.md3Folders ? 1 : 0) + (NekoConfig.wavyEnabled ? 1 : 0) + (NekoConfig.wavyProgressEnabled ? 1 : 0) + (NekoConfig.material3Dialogs ? 1 : 0) + (NekoConfig.material3Popups ? 1 : 0);
+        return (NekoConfig.material3Switches ? 1 : 0) + (NekoConfig.m3SectionsStyle ? 1 : 0) + (NekoConfig.materialSliders ? 1 : 0) + (NekoConfig.material3BottomNavigationBar ? 1 : 0) + (NekoConfig.md3Folders ? 1 : 0) + (NekoConfig.wavyEnabled ? 1 : 0) + (NekoConfig.wavyProgressEnabled ? 1 : 0) + (NekoConfig.material3Dialogs ? 1 : 0) + (NekoConfig.material3Popups ? 1 : 0) + (NekoConfig.materialActivityHeaders ? 1 : 0);
     }
 
     private void setMaterial3Enabled(boolean enabled) {
@@ -322,8 +330,15 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         if (NekoConfig.wavyProgressEnabled != enabled) NekoConfig.toggleWavyProgressEnabled();
         if (NekoConfig.material3Dialogs != enabled) NekoConfig.toggleMaterial3Dialogs();
         if (NekoConfig.material3Popups != enabled) NekoConfig.toggleMaterial3Popups();
+        setMaterialActivityHeadersEnabled(enabled);
         refreshListStyle();
         showRestartBulletin();
+    }
+
+    private void setMaterialActivityHeadersEnabled(boolean enabled) {
+        if (NekoConfig.materialActivityHeaders != enabled) NekoConfig.toggleMaterialActivityHeaders();
+        syncMaterialHeader();
+        listView.adapter.update(true);
     }
 
     @Override
@@ -333,6 +348,11 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
             fontPicker().show();
         } else if (id == material3Row) {
             material3Expanded = !material3Expanded;
+            listView.adapter.update(true);
+        } else if (id == materialActivityHeadersRow) {
+            setMaterialActivityHeadersEnabled(!NekoConfig.materialActivityHeaders);
+        } else if (id == materialHeadersInDialogsRow) {
+            NekoConfig.toggleMaterialHeadersInDialogs();
             listView.adapter.update(true);
         } else if (id == ios26Row) {
             ios26Expanded = !ios26Expanded;
