@@ -141,7 +141,7 @@ public class StickerSizePreviewMessagesCell extends LinearLayout {
     private HintView2 timeHint;
 
     private void showTimeHint(ChatMessageCell cell) {
-        if (cell == null || cell.timeLayout == null || cell.getMessageObject() == null ||
+        if (fragmentView == null || cell == null || cell.timeLayout == null || cell.getMessageObject() == null ||
                 cell.getMessageObject().messageOwner == null ||
                 (NekoConfig.hideTimeOnSticker && cell.getMessageObject().isAnyKindOfSticker())
         ) {

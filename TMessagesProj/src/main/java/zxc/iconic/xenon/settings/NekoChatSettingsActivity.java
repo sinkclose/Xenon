@@ -692,7 +692,12 @@ public class NekoChatSettingsActivity extends BaseNekoSettingsActivity implement
         @Override
         public void bindView(View view, UItem item, boolean divider, UniversalAdapter adapter, UniversalRecyclerView listView) {
             var messagesCell = (StickerSizePreviewMessagesCell) view;
-            var frameLayout = (FrameLayout) listView.getParent();
+            android.view.ViewParent parent = listView.getParent();
+            // Material headers insert a CoordinatorLayout between the list and its host.
+            while (parent != null && !(parent instanceof FrameLayout)) {
+                parent = parent.getParent();
+            }
+            var frameLayout = parent instanceof FrameLayout ? (FrameLayout) parent : null;
             messagesCell.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
             messagesCell.setFragmentView(frameLayout);
         }
