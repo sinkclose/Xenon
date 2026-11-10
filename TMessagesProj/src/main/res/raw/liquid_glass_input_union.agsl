@@ -37,6 +37,11 @@ half4 sampleBackdrop(float2 coord) {
 
 float touchLight(float2 p, float4 glow) {
     if (glow.w <= 0.0) return 0.0;
+    if (ios27 > 0.5) {
+        float distance = length(p - glow.xy) / max(glow.z, 0.001);
+        float halo = exp(-6.0 * distance * distance) * (1.0 - smoothstep(0.8, 1.0, distance));
+        return glow.w * 0.025 * halo;
+    }
     float halo = 1.0 - smoothstep(glow.z * 0.5, max(glow.z, 0.001), length(p - glow.xy));
     return glow.w * (0.08 + 0.15 * halo);
 }

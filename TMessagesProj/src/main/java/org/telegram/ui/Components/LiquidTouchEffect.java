@@ -45,6 +45,7 @@ public final class LiquidTouchEffect {
     private final RectF glowBounds = new RectF();
     private RadialGradient glowShader;
     private float glowX, glowY, glowRadius;
+    private boolean glowSoft;
     private float scaleX = 1f, scaleY = 1f, translationX, translationY;
 
     public LiquidTouchEffect(View host) {
@@ -266,7 +267,8 @@ public final class LiquidTouchEffect {
         float y = Math.max(bounds.top, Math.min(bounds.bottom, downY + offsetY));
         values[offset] = x * scaleX + translationX - originX;
         values[offset + 1] = y * scaleY + translationY - originY;
-        values[offset + 2] = Math.max(1f, Math.min(bounds.width(), bounds.height()) * 1.5f * Math.min(scaleX, scaleY));
+        values[offset + 2] = Math.max(1f, Math.min(bounds.width(), bounds.height())
+                * (zxc.iconic.xenon.NekoConfig.ios27LiquidGlass ? 3f : 1.5f) * Math.min(scaleX, scaleY));
         values[offset + 3] = bounds.isEmpty() ? 0f : Math.max(0f, Math.min(1f, progress));
     }
 
@@ -297,28 +299,32 @@ public final class LiquidTouchEffect {
         glowBounds.set(bounds.left + inset, bounds.top + inset, bounds.right - inset, bounds.bottom - inset);
         if (glowBounds.isEmpty()) return;
         float p = Math.min(1f, progress);
+        final boolean soft = zxc.iconic.xenon.NekoConfig.ios27LiquidGlass;
         glowClip.rewind();
         glowClip.addRoundRect(glowBounds, cornerRadius, cornerRadius, Path.Direction.CW);
         int save = canvas.save();
         canvas.clipPath(glowClip);
         glowPaint.setShader(null);
         glowPaint.setColor(0xffffffff);
-        glowPaint.setAlpha(Math.round(255f * 0.08f * p));
+        glowPaint.setAlpha(Math.round(255f * (soft ? 0f : 0.08f) * p));
         canvas.drawRect(glowBounds, glowPaint);
         float x = Math.max(glowBounds.left, Math.min(glowBounds.right, downX + offsetX));
         float y = Math.max(glowBounds.top, Math.min(glowBounds.bottom, downY + offsetY));
-        float radius = Math.min(glowBounds.width(), glowBounds.height()) * 1.5f;
-        if (glowShader == null || glowX != x || glowY != y || glowRadius != radius) {
+        float radius = Math.min(glowBounds.width(), glowBounds.height()) * (soft ? 3f : 1.5f);
+        if (glowShader == null || glowX != x || glowY != y || glowRadius != radius || glowSoft != soft) {
             // Samples of the reference smoothstep(radius, radius * .5, distance).
             glowShader = new RadialGradient(x, y, radius,
-                    new int[]{0xffffffff, 0xffffffff, 0xd7ffffff, 0x80ffffff, 0x28ffffff, 0x00ffffff},
-                    new float[]{0f, .5f, .625f, .75f, .875f, 1f}, Shader.TileMode.CLAMP);
+                    soft ? new int[]{0xffffffff, 0xc7ffffff, 0x66ffffff, 0x21ffffff, 0x06ffffff, 0x00ffffff}
+                            : new int[]{0xffffffff, 0xffffffff, 0xd7ffffff, 0x80ffffff, 0x28ffffff, 0x00ffffff},
+                    soft ? new float[]{0f, .2f, .4f, .6f, .8f, 1f}
+                            : new float[]{0f, .5f, .625f, .75f, .875f, 1f}, Shader.TileMode.CLAMP);
             glowX = x;
             glowY = y;
             glowRadius = radius;
+            glowSoft = soft;
         }
         glowPaint.setShader(glowShader);
-        glowPaint.setAlpha(Math.round(255f * 0.15f * p));
+        glowPaint.setAlpha(Math.round(255f * (soft ? 0.025f : 0.15f) * p));
         canvas.drawRect(glowBounds, glowPaint);
         canvas.restoreToCount(save);
     }
