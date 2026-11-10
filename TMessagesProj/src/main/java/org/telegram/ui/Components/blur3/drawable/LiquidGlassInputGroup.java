@@ -24,6 +24,7 @@ public final class LiquidGlassInputGroup {
     private final RuntimeShader shader;
     private final int shapeCount;
     private final float[] shapes = new float[32];
+    private final float[] shapeScales = new float[16];
     private final float[] lensParams = new float[32];
     private int ios27MaterialRevision = -1;
     private final float[] radii = new float[8];
@@ -111,6 +112,9 @@ public final class LiquidGlassInputGroup {
             lensParams[j] *= NekoConfig.ios27GlassRefraction / .7f;
             float scale = Math.min(b.width() / Math.max(1, members[i].getPaddedBounds().width()),
                     b.height() / Math.max(1, members[i].getPaddedBounds().height()));
+            // Preserve the affine shape: a stretched circle is an ellipse, not a capsule.
+            shapeScales[i * 2] = b.width() / Math.max(1, members[i].getPaddedBounds().width()) / Math.max(.001f, scale);
+            shapeScales[i * 2 + 1] = b.height() / Math.max(1, members[i].getPaddedBounds().height()) / Math.max(.001f, scale);
             radii[i] = Math.min(members[i].boundProps.radii[0] * scale * visibility,
                     Math.min(shapes[j + 2], shapes[j + 3]));
             for (int corner = 0; corner < 4; corner++) {
@@ -134,6 +138,7 @@ public final class LiquidGlassInputGroup {
             touchActive |= glows[j + 3] > 0f;
         }
         shader.setFloatUniform("shapes", shapes);
+        shader.setFloatUniform("shapeScales", shapeScales);
         shader.setFloatUniform("lensParams", lensParams);
         shader.setFloatUniform("cornerRadii", cornerRadii);
         shader.setFloatUniform("tints", colors);

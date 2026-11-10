@@ -223,12 +223,16 @@ public final class LiquidTouchEffect {
         float min = Math.min(width, height), max = Math.max(width, height);
         float dragScale = Math.min(0.12f, AndroidUtilities.dpf2(4f) / height);
         float scale = 1f + dragScale * pressStrength * progress;
-        dragScale *= dragStrength;
         double angle = Math.atan2(offsetY, offsetX);
-        scaleX = scale + dragScale * (float) Math.abs(Math.cos(angle) * offsetX / max) * Math.min(width / height, 1f);
-        scaleY = scale + dragScale * (float) Math.abs(Math.sin(angle) * offsetY / max) * Math.min(height / width, 1f);
-        translationX = min * (float) Math.tanh(0.05f * dragStrength * offsetX / min) + (1f - scaleX) * bounds.centerX();
-        translationY = min * (float) Math.tanh(0.05f * dragStrength * offsetY / min) + (1f - scaleY) * bounds.centerY();
+        float stretchX = .70f * dragScale * dragStrength * (float) Math.abs(Math.cos(angle) * offsetX / max) * Math.min(width / height, 1f);
+        float stretchY = .70f * dragScale * dragStrength * (float) Math.abs(Math.sin(angle) * offsetY / max) * Math.min(height / width, 1f);
+        scaleX = scale + stretchX;
+        scaleY = scale + stretchY;
+        // Keep the trailing edge anchored while stretching toward the finger.
+        translationX = min * .12f * (float) Math.tanh(.25f * dragStrength * offsetX / min)
+                + Math.signum(offsetX) * stretchX * width * .5f + (1f - scaleX) * bounds.centerX();
+        translationY = min * .12f * (float) Math.tanh(.25f * dragStrength * offsetY / min)
+                + Math.signum(offsetY) * stretchY * height * .5f + (1f - scaleY) * bounds.centerY();
     }
 
     /** origin is the drawable's origin in the effect's coordinates (negative for a parent drawable). */

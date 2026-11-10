@@ -3,6 +3,7 @@ uniform float2 resolution;
 // Specialized at construction for the fixed slots in each host's group.
 const int SHAPE_COUNT = 8;
 uniform float4 shapes[8];
+uniform float2 shapeScales[8];
 uniform float4 lensParams[8];
 uniform float4 cornerRadii[8];
 uniform float4 tints[8];
@@ -75,26 +76,36 @@ float3 shapeDistance(float2 p, float4 shape, float4 corners, float alpha) {
 }
 
 struct Surface { float d; float2 normal; float4 a; float4 b; };
+float3 transformedShapeDistance(float2 p, float4 shape, float4 corners, float alpha, float2 scale) {
+    if (scale.x == 1.0 && scale.y == 1.0) return shapeDistance(p, shape, corners, alpha);
+    scale = max(scale, float2(0.001));
+    float2 local = (p - shape.xy) / scale;
+    float3 field = shapeDistance(local, float4(0.0, 0.0, shape.z / scale.x, shape.w / scale.y), corners, alpha);
+    float2 gradient = field.yz / scale;
+    float magnitude = max(length(gradient), 0.001);
+    return float3(field.x / magnitude, gradient / magnitude);
+}
+
 Surface surface(float2 p) {
     Surface s;
     s.d = 100000.0;
     s.normal = float2(0.0);
     s.a = float4(0.0); s.b = float4(0.0);
-    float3 field0 = shapeDistance(p, shapes[0], cornerRadii[0], opacity[0]);
+    float3 field0 = transformedShapeDistance(p, shapes[0], cornerRadii[0], opacity[0], shapeScales[0]);
     float d0 = field0.x;
-    float3 field1 = SHAPE_COUNT > 1 ? shapeDistance(p, shapes[1], cornerRadii[1], opacity[1]) : float3(100000.0, 0.0, 0.0);
+    float3 field1 = SHAPE_COUNT > 1 ? transformedShapeDistance(p, shapes[1], cornerRadii[1], opacity[1], shapeScales[1]) : float3(100000.0, 0.0, 0.0);
     float d1 = field1.x;
-    float3 field2 = SHAPE_COUNT > 2 ? shapeDistance(p, shapes[2], cornerRadii[2], opacity[2]) : float3(100000.0, 0.0, 0.0);
+    float3 field2 = SHAPE_COUNT > 2 ? transformedShapeDistance(p, shapes[2], cornerRadii[2], opacity[2], shapeScales[2]) : float3(100000.0, 0.0, 0.0);
     float d2 = field2.x;
-    float3 field3 = SHAPE_COUNT > 3 ? shapeDistance(p, shapes[3], cornerRadii[3], opacity[3]) : float3(100000.0, 0.0, 0.0);
+    float3 field3 = SHAPE_COUNT > 3 ? transformedShapeDistance(p, shapes[3], cornerRadii[3], opacity[3], shapeScales[3]) : float3(100000.0, 0.0, 0.0);
     float d3 = field3.x;
-    float3 field4 = SHAPE_COUNT > 4 ? shapeDistance(p, shapes[4], cornerRadii[4], opacity[4]) : float3(100000.0, 0.0, 0.0);
+    float3 field4 = SHAPE_COUNT > 4 ? transformedShapeDistance(p, shapes[4], cornerRadii[4], opacity[4], shapeScales[4]) : float3(100000.0, 0.0, 0.0);
     float d4 = field4.x;
-    float3 field5 = SHAPE_COUNT > 5 ? shapeDistance(p, shapes[5], cornerRadii[5], opacity[5]) : float3(100000.0, 0.0, 0.0);
+    float3 field5 = SHAPE_COUNT > 5 ? transformedShapeDistance(p, shapes[5], cornerRadii[5], opacity[5], shapeScales[5]) : float3(100000.0, 0.0, 0.0);
     float d5 = field5.x;
-    float3 field6 = SHAPE_COUNT > 6 ? shapeDistance(p, shapes[6], cornerRadii[6], opacity[6]) : float3(100000.0, 0.0, 0.0);
+    float3 field6 = SHAPE_COUNT > 6 ? transformedShapeDistance(p, shapes[6], cornerRadii[6], opacity[6], shapeScales[6]) : float3(100000.0, 0.0, 0.0);
     float d6 = field6.x;
-    float3 field7 = SHAPE_COUNT > 7 ? shapeDistance(p, shapes[7], cornerRadii[7], opacity[7]) : float3(100000.0, 0.0, 0.0);
+    float3 field7 = SHAPE_COUNT > 7 ? transformedShapeDistance(p, shapes[7], cornerRadii[7], opacity[7], shapeScales[7]) : float3(100000.0, 0.0, 0.0);
     float d7 = field7.x;
     if (opacity[0] > 0.0) {
         s.d = d0; s.normal = field0.yz; s.a.x = 1.0;
