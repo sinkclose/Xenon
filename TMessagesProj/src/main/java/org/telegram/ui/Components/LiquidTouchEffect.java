@@ -149,10 +149,8 @@ public final class LiquidTouchEffect {
                     release();
                     return;
                 }
-                // Bound stretching even during long text-selection / recording gestures.
-                float limit = Math.max(bounds.width(), bounds.height()) * 2f;
-                offsetX = Math.max(-limit, Math.min(limit, event.getX(index) - downX));
-                offsetY = Math.max(-limit, Math.min(limit, event.getY(index) - downY));
+                offsetX = event.getX(index) - downX;
+                offsetY = event.getY(index) - downY;
                 invalidateHost();
                 break;
             case MotionEvent.ACTION_UP:
