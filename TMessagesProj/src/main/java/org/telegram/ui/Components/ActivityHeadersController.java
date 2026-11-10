@@ -139,6 +139,7 @@ public final class ActivityHeadersController {
         plain.setFadeHeightTop(AndroidUtilities.dp(32), false);
         overlay.addView(plain, new FrameLayout.LayoutParams(-1, -1));
         title = new MaterialActivityTitleView(content.getContext());
+        title.setOnClickListener(v -> bar.performClick());
         FrameLayout.LayoutParams titleParams = new FrameLayout.LayoutParams(-1, AndroidUtilities.dp(152), Gravity.TOP);
         titleParams.topMargin = statusInset();
         overlay.addView(title, titleParams);

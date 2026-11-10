@@ -712,6 +712,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         boolean showTitle = titleVisibility > 0.001f;
         if (material && materialDialogsTitle == null) {
             materialDialogsTitle = new MaterialActivityTitleView(contentView.getContext());
+            materialDialogsTitle.setOnClickListener(v -> actionBar.performClick());
         }
         // createView can replace ContentView while this fragment is retained.
         // A non-null title may still belong to the previous root.
@@ -736,6 +737,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             actionBar.getTitlesContainer().setVisibility(View.INVISIBLE);
             actionBar.setTranslationY(dp(4));
         }
+        // Topics own an embedded toolbar above the dialogs toolbar. Bringing
+        // the Material title forward must not leave the invisible dialogs bar
+        // intercepting taps intended for the topic's chat name and avatar.
+        if (material && rightSlidingDialogContainer != null && rightSlidingDialogContainer.hasFragment()
+                && !searchIsShowed) rightSlidingDialogContainer.bringToFront();
         if (dialogStoriesCell != null) dialogStoriesCell.setExternalHeaderTitle(material);
         if (progressiveFadeController != null) progressiveFadeController.setUniformBlurAllowed(material);
         boolean fade = material && NekoConfig.fadeViewOtherActivities() && !searchIsShowed && progressToActionMode == 0;

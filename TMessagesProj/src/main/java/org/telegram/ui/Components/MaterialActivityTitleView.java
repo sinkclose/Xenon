@@ -114,6 +114,15 @@ public class MaterialActivityTitleView extends View {
     }
 
     @Override
+    public boolean onTouchEvent(android.view.MotionEvent event) {
+        // The view retains its expanded height while the drawn title collapses.
+        // Let touches below the visible header reach the list.
+        if (event.getActionMasked() == android.view.MotionEvent.ACTION_DOWN
+                && event.getY() > AndroidUtilities.dp(152 - 88 * fraction)) return false;
+        return super.onTouchEvent(event);
+    }
+
+    @Override
     protected void onDraw(Canvas canvas) {
         int save = canvas.save();
         canvas.clipRect(0, 0, getWidth(), AndroidUtilities.dp(152 - 88 * fraction));
