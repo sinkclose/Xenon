@@ -109,6 +109,8 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
     private String lastSearchString;
 
     private FrameLayout topView;
+    private TextView titleView;
+    private TextView subtitleView;
     private FrameLayout logoContainer;
     private OsuCatLogoView osuLogo;
     private int headerLogoType = -1;
@@ -130,7 +132,7 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
         updateHeaderLogo();
         topView.addView(logoContainer, LayoutHelper.createFrame(120, 120, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 23 - 12, 0, 0));
 
-        var titleView = new TextView(context);
+        titleView = new TextView(context);
         titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22);
         titleView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         titleView.setGravity(Gravity.CENTER);
@@ -140,7 +142,7 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
         titleView.setTextColor(getThemedColor(Theme.key_windowBackgroundWhiteBlackText));
         topView.addView(titleView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 138.333f - 12, 0, 0));
 
-        var subtitleView = new TextView(context);
+        subtitleView = new TextView(context);
         subtitleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
         subtitleView.setGravity(Gravity.CENTER);
         subtitleView.setSingleLine();
@@ -340,7 +342,13 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
             return;
         }
 
-        if (!NekoConfig.materialActivityHeaders) items.add(UItem.asCustomShadow(topView, 200 - 12).setChecked(true));
+        boolean materialHeader = materialHeaderEnabled();
+        titleView.setVisibility(materialHeader ? View.GONE : View.VISIBLE);
+        subtitleView.setVisibility(materialHeader ? View.GONE : View.VISIBLE);
+        if (!materialHeader || osuLogo != null) {
+            // Keep the osu logo in the list below both expanded and collapsed Material titles.
+            items.add(UItem.asCustomShadow(topView, materialHeader ? 142 : 200 - 12).setChecked(true));
+        }
         if (osuLogo != null) {
             items.add(UItem.asCheck(logoMusicRow, LocaleController.getString(R.string.OsuLogoMusic))
                     .setChecked(NekoConfig.osuLogoSystemMusic));
