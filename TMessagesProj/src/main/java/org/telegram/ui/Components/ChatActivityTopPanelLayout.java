@@ -131,7 +131,11 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout implements 
         for (int i = 0; i < getEntriesCount(); i++) {
             final ListAnimator.Entry<AnimatedLinearLayout.Holder> entry = getEntry(i);
             if (entry.item.view == capsuleView) {
-                return regular + (maximum - regular) * entry.getVisibility();
+                // Extra panels extend the surface, but must not enlarge the pinned capsule's corners.
+                final float insets = Math.max(0f, height - getMetadata().getTotalHeight());
+                final float capsuleHeight = capsuleView.getMeasuredHeight() + insets;
+                final float capsuleRadius = Math.min(maximum, capsuleHeight / 2f);
+                return regular + (capsuleRadius - regular) * entry.getVisibility();
             }
         }
         return regular;
