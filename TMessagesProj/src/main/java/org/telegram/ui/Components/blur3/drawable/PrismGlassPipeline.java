@@ -56,7 +56,8 @@ final class PrismGlassPipeline {
         final Rect bounds = props.boundsWithPadding;
         final int width = bounds.width(), height = bounds.height();
         final int padding = drawable.liquidGlassSamplePadding;
-        final boolean advanced = NekoConfig.isAdvancedGlassEnabled();
+        final boolean advanced = !drawable.isFixedIos26Lens() && NekoConfig.isAdvancedGlassEnabled();
+        final boolean useIos27 = !drawable.isFixedIos26Lens() && NekoConfig.ios27LiquidGlass;
         final boolean refractionEnabled = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
         final boolean hasEffect = effect != null && effect.hasRefractionShader();
 
@@ -72,7 +73,7 @@ final class PrismGlassPipeline {
                 || strokeWidthTop != props.strokeWidthTop || strokeWidthBottom != props.strokeWidthBottom
                 || !Arrays.equals(radii, props.radii) || this.advanced != advanced
                 || this.refractionEnabled != refractionEnabled || this.hasEffect != hasEffect
-                || tintPercent != NekoConfig.getGlassTintPercent() || ios27 != NekoConfig.ios27LiquidGlass;
+                || tintPercent != NekoConfig.getGlassTintPercent() || ios27 != useIos27;
 
         // Updating RenderEffect uniforms is independent of recording draw commands.
         // The effect selects the optimized Prism program with the same optical
@@ -105,7 +106,7 @@ final class PrismGlassPipeline {
         if (surfaceChanged) {
             Canvas canvas = surface.beginRecording();
             try {
-                if (!NekoConfig.ios27LiquidGlass && Color.alpha(drawable.backgroundColor) == 255) {
+                if (!useIos27 && Color.alpha(drawable.backgroundColor) == 255) {
                     canvas.drawColor(drawable.backgroundColor);
                 } else {
                     canvas.drawRenderNode(background);
@@ -119,11 +120,11 @@ final class PrismGlassPipeline {
                         if (Color.alpha(drawable.backgroundColor) != 0) canvas.drawColor(drawable.backgroundColor);
                     }
                 }
-                if (!NekoConfig.ios27LiquidGlass && drawable.strokeColorTop != 0) {
+                if (!useIos27 && drawable.strokeColorTop != 0) {
                     BlurredBackgroundDrawable.drawStroke(canvas, 0, 0, width, height, props.radii,
                             props.strokeWidthTop, true, strokeTop);
                 }
-                if (!NekoConfig.ios27LiquidGlass && drawable.strokeColorBottom != 0) {
+                if (!useIos27 && drawable.strokeColorBottom != 0) {
                     BlurredBackgroundDrawable.drawStroke(canvas, 0, 0, width, height, props.radii,
                             props.strokeWidthBottom, false, strokeBottom);
                 }
@@ -133,7 +134,7 @@ final class PrismGlassPipeline {
         }
 
         // Alpha is a RenderNode property; it never invalidates either display list.
-        final float glassAlpha = (!fixedRefraction || NekoConfig.ios27LiquidGlass) && advanced
+        final float glassAlpha = (!fixedRefraction || useIos27) && advanced
                 ? Math.max(0f, Math.min(1f, NekoConfig.getGlassAlphaPercent() / 100f)) : 1f;
         final float alpha = drawable.getAlpha() / 255f * glassAlpha;
         if (surface.getAlpha() != alpha) surface.setAlpha(alpha);
@@ -149,7 +150,7 @@ final class PrismGlassPipeline {
         System.arraycopy(props.radii, 0, radii, 0, radii.length);
         this.advanced = advanced; this.refractionEnabled = refractionEnabled; this.hasEffect = hasEffect;
         tintPercent = NekoConfig.getGlassTintPercent();
-        ios27 = NekoConfig.ios27LiquidGlass;
+        ios27 = useIos27;
         sourceInvalidated = false;
         initialized = true;
     }

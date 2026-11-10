@@ -64,6 +64,14 @@ public final class GlassShaderCache {
         return pool.acquire(onReady);
     }
 
+    static RuntimeShader acquireIos26Refraction(Runnable onReady) {
+        return advanced.acquire(onReady);
+    }
+
+    static RuntimeShader acquireIos26Highlight(Runnable onReady) {
+        return highlight.acquire(onReady);
+    }
+
     static RuntimeShader acquireHighlight() {
         return acquireHighlight(null);
     }

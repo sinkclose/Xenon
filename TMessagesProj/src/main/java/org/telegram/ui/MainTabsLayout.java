@@ -412,7 +412,7 @@ public class MainTabsLayout extends AnimatedLinearLayout {
             };
             BlurredBackgroundDrawableRenderNode lens = new BlurredBackgroundDrawableRenderNode(combined);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                lens.setLiquidGlassEffectAllowed(true); // Fixed slider value of 50; still respects LiteMode.
+                lens.setFixedIos26Lens(); // Local optics; independent of the global glass style.
                 lens.setRetainSurfaceDisplayList(true);
             }
             lens.setThickness(dp(10));
