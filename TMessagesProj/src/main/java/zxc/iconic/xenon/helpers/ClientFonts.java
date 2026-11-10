@@ -108,7 +108,11 @@ public final class ClientFonts {
                 activity.getWindow().getDecorView().getViewTreeObserver().addOnGlobalLayoutListener(listener);
             }
             public void onActivityResumed(Activity activity) {
-                if (family != null) applyTree(activity.getWindow().getDecorView(), true);
+                if (family != null) {
+                    // Theme initializes account controllers; wait until application/account startup is complete.
+                    refreshThemePaints();
+                    applyTree(activity.getWindow().getDecorView(), true);
+                }
             }
             public void onActivityDestroyed(Activity activity) {
                 ViewTreeObserver.OnGlobalLayoutListener listener = windows.remove(activity);
@@ -134,8 +138,12 @@ public final class ClientFonts {
     public static void setUseGoogleSans(boolean enabled) {
         preferences().edit().putBoolean("useGoogleSans", enabled).apply();
         googleSansEnabled = enabled;
-        generation++;
-        TypefaceHelper.clearFontSupportCache();
+        try {
+            // Reload the regular family too: Flex is selected independently by TypefaceHelper.
+            select(preferences().getString("selected", ""));
+        } catch (IOException error) {
+            FileLog.e(error);
+        }
     }
 
     public static File directory() { return new File(application.getFilesDir(), "client-fonts"); }
