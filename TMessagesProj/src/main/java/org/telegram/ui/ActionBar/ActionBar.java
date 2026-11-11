@@ -100,6 +100,30 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     private BlurredBackgroundDrawable glassDrawableBack;
     private BlurredBackgroundDrawable glassDrawableMenu;
     public boolean nonIsland;
+    public boolean materialChatHeader;
+    private BlurredBackgroundDrawable materialChatCorners;
+    private final android.graphics.Path materialChatCornerPath = new android.graphics.Path();
+
+    public void drawMaterialChatCorners(Canvas canvas, float top) {
+        if (!materialChatHeader || materialChatCorners == null || getAlpha() == 0f) return;
+        float radius = dp(28);
+        float width = getWidth();
+        materialChatCornerPath.rewind();
+        materialChatCornerPath.moveTo(0, top);
+        materialChatCornerPath.lineTo(radius, top);
+        materialChatCornerPath.quadTo(0, top, 0, top + radius);
+        materialChatCornerPath.close();
+        materialChatCornerPath.moveTo(width, top);
+        materialChatCornerPath.lineTo(width - radius, top);
+        materialChatCornerPath.quadTo(width, top, width, top + radius);
+        materialChatCornerPath.close();
+        int save = canvas.save();
+        canvas.clipPath(materialChatCornerPath);
+        materialChatCorners.setBounds(0, (int) top, getWidth(), (int) Math.ceil(top + radius));
+        materialChatCorners.setAlpha(Math.round(255 * getAlpha()));
+        materialChatCorners.draw(canvas);
+        canvas.restoreToCount(save);
+    }
     public boolean m3ChatHeader;
     public boolean centerChatHeader;
     public boolean textOnlyPill;
@@ -350,6 +374,10 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
         final int glassRadius = nonIsland ? 0 : 23;
         final int glassPadding = nonIsland ? 0 : 6;
+        if (materialChatHeader) {
+            materialChatCorners = factory.create(this, colorProvider).setRadius(0).setPadding(0);
+            materialChatCorners.setStrokeWidth(0, 0);
+        }
 
         glassDrawable = factory.create(this)
             .setColorProvider(colorProvider)
@@ -2653,7 +2681,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
     public void setLiquidTouchAvatar(ChatAvatarContainer avatar) {
         liquidAvatar = avatar;
-        setLiquidTouchEnabled(zxc.iconic.xenon.NekoConfig.liquidChatElements);
+        setLiquidTouchEnabled(zxc.iconic.xenon.NekoConfig.liquidChatElementsEnabled());
         if (liquidBack == null) {
             liquidBack = new LiquidTouchEffect(this);
             liquidMenu = new LiquidTouchEffect(this);

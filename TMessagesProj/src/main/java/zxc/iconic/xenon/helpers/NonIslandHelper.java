@@ -32,6 +32,10 @@ public class NonIslandHelper {
         return NekoConfig.nonIslandChatElements;
     }
 
+    public static boolean chatHeader() {
+        return chatElements() || NekoConfig.materialChatElements;
+    }
+
     public static boolean hideFadeView() {
         return NekoConfig.hideFadeView;
     }

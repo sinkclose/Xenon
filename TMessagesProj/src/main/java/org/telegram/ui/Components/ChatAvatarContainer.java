@@ -425,7 +425,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     }
 
     private boolean liquidTouchAllowed() {
-        return liquidTouchEnabled && !zxc.iconic.xenon.helpers.NonIslandHelper.chatElements()
+        return liquidTouchEnabled && !zxc.iconic.xenon.helpers.NonIslandHelper.chatHeader()
                 && (actionBar == null || actionBar.getSearchFactor() <= 0f && actionBar.getActionModeFactor() <= 0f);
     }
 
@@ -439,7 +439,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     }
 
     private float getPressBounceScale() {
-        return liquidTouchEnabled && !zxc.iconic.xenon.helpers.NonIslandHelper.chatElements()
+        return liquidTouchEnabled && !zxc.iconic.xenon.helpers.NonIslandHelper.chatHeader()
                 ? 1f : bounce.getScale(.02f);
     }
 
@@ -948,7 +948,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     private boolean glassMode;
 
     public void setGlassMode() {
-        if (zxc.iconic.xenon.helpers.NonIslandHelper.chatElements()) return;
+        if (zxc.iconic.xenon.helpers.NonIslandHelper.chatHeader()) return;
         if (titleTextView != null) {
             titleTextView.setTextSizePx(dp(17.5f));
         }
@@ -961,7 +961,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     private boolean m3HeaderMode;
 
     public void setM3HeaderMode(boolean enabled) {
-        if (zxc.iconic.xenon.helpers.NonIslandHelper.chatElements()) enabled = false;
+        if (zxc.iconic.xenon.helpers.NonIslandHelper.chatHeader()) enabled = false;
         m3HeaderMode = enabled;
         updateAvatarSizeIfNeeded();
         if (subtitleTextView != null) {

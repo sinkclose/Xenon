@@ -229,6 +229,8 @@ public class NekoConfig {
     public static boolean iosListItems = false;
     public static boolean m3SectionsStyle = false;
     public static boolean material3ChatHeaders = false;
+    public static boolean chatHeadersCustomization = true;
+    public static boolean materialChatElements = false;
     public static boolean materialSliders = false;
     public static boolean iosSliders = false;
     public static boolean iosBottomBar = false;
@@ -568,6 +570,8 @@ public class NekoConfig {
             iosListItems = preferences.getBoolean("iosListItems", false);
             m3SectionsStyle = preferences.getBoolean("m3SectionsStyle", false) && !iosListItems;
             material3ChatHeaders = preferences.getBoolean("material3ChatHeaders", false);
+            chatHeadersCustomization = preferences.getBoolean("chatHeadersCustomization", true);
+            materialChatElements = preferences.getBoolean("materialChatElements", false);
             iosSliders = preferences.getBoolean("iosSliders", false);
             materialSliders = preferences.getBoolean("materialSliders", false) && !iosSliders;
             centerChatHeader = preferences.getBoolean("centerChatHeader", false);
@@ -604,6 +608,13 @@ public class NekoConfig {
             nonIslandTabBars = preferences.getBoolean("nonIslandTabBars", false);
             nonIslandGlobalSearch = preferences.getBoolean("nonIslandGlobalSearch", false);
             nonIslandChatElements = preferences.getBoolean("nonIslandChatElements", false);
+            if (materialChatElements) {
+                nonIslandChatElements = false;
+                iosLikeInputField = false;
+                chatHeadersCustomization = false;
+            } else if (nonIslandChatElements) {
+                chatHeadersCustomization = false;
+            }
             hideFadeView = preferences.getBoolean("hideFadeView", false);
             disableGlassGlare = preferences.getBoolean("disableGlassGlare", true);
             // The Telegram stroke glare is always disabled in favor of the shader glare.
@@ -2357,6 +2368,10 @@ public class NekoConfig {
 
     public static void toggleNonIslandChatElements() {
         nonIslandChatElements = !nonIslandChatElements;
+        if (nonIslandChatElements) {
+            setMaterialChatElements(false);
+            setChatHeadersCustomization(false);
+        }
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("nonIslandChatElements", nonIslandChatElements);
@@ -2455,6 +2470,7 @@ public class NekoConfig {
 
     public static void toggleIosLikeInputField() {
         iosLikeInputField = !iosLikeInputField;
+        if (iosLikeInputField) setMaterialChatElements(false);
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         preferences.edit().putBoolean("iosLikeInputField", iosLikeInputField).apply();
     }
@@ -2463,6 +2479,58 @@ public class NekoConfig {
         liquidChatElements = !liquidChatElements;
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         preferences.edit().putBoolean("liquidChatElements", liquidChatElements).apply();
+    }
+
+    public static boolean chatHeadersCustomizationEnabled() {
+        return chatHeadersCustomization && !nonIslandChatElements && !materialChatElements;
+    }
+
+    public static boolean useCustomHeaderPill() {
+        return chatHeadersCustomizationEnabled() && material3ChatHeaders;
+    }
+
+    public static boolean useCenteredChatHeader() {
+        return chatHeadersCustomizationEnabled() && centerChatHeader;
+    }
+
+    public static boolean useBiggerChatAvatar() {
+        return chatHeadersCustomizationEnabled() && biggerAvatar;
+    }
+
+    public static int getChatAvatarPlacement() {
+        return chatHeadersCustomizationEnabled() ? avatarPlacement : AVATAR_PLACEMENT_LEFT;
+    }
+
+    public static boolean liquidChatElementsEnabled() {
+        return liquidChatElements && !materialChatElements;
+    }
+
+    public static void setChatHeadersCustomization(boolean enabled) {
+        chatHeadersCustomization = enabled;
+        SharedPreferences.Editor editor = ApplicationLoader.applicationContext
+                .getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE).edit();
+        editor.putBoolean("chatHeadersCustomization", enabled);
+        if (enabled) {
+            materialChatElements = false;
+            nonIslandChatElements = false;
+            editor.putBoolean("materialChatElements", false).putBoolean("nonIslandChatElements", false);
+        }
+        editor.apply();
+    }
+
+    public static void setMaterialChatElements(boolean enabled) {
+        materialChatElements = enabled;
+        SharedPreferences.Editor editor = ApplicationLoader.applicationContext
+                .getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE).edit();
+        editor.putBoolean("materialChatElements", enabled);
+        if (enabled) {
+            iosLikeInputField = false;
+            chatHeadersCustomization = false;
+            nonIslandChatElements = false;
+            editor.putBoolean("iosLikeInputField", false)
+                    .putBoolean("chatHeadersCustomization", false).putBoolean("nonIslandChatElements", false);
+        }
+        editor.apply();
     }
 
     public static void toggleShowOnlineDotsInChat() {
