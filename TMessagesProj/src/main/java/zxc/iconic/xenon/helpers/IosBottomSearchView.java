@@ -131,6 +131,13 @@ public final class IosBottomSearchView extends FrameLayout {
     }
 
     public float getProgress() { return progress; }
+    public void setPredictiveBackProgress(float progress) {
+        if (transition != null) {
+            transition.cancel();
+            transition = null;
+        }
+        applyProgress(progress);
+    }
     public boolean isActive() { return active; }
     public FragmentSearchField getField() { return field; }
     public void closeSearch() { if (active) closeAction.run(); }

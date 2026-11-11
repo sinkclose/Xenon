@@ -1267,8 +1267,12 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
         return currentState == EXPANDED_STATE;
     }
 
+    public boolean canScrollToFirst() {
+        return layoutManager.findFirstVisibleItemPosition() != 0;
+    }
+
     public boolean scrollToFirst() {
-        if (layoutManager.findFirstVisibleItemPosition() != 0) {
+        if (canScrollToFirst()) {
             recyclerListView.smoothScrollToPosition(0);
             return true;
         }

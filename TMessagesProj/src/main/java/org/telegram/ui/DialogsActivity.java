@@ -983,6 +983,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
     private AnimatorSet tabsAnimation;
     private boolean tabsAnimationInProgress;
+    private boolean predictiveFolderBack;
+    private zxc.iconic.xenon.helpers.PredictiveTabBack.Target predictiveFolderTarget;
+    private zxc.iconic.xenon.helpers.PredictiveTabBack.Target predictiveSearchTarget;
+    private boolean predictiveSearchBack, predictiveSearchClosing;
     private boolean animatingForward;
     private float additionalOffset;
     private boolean backAnimation;
@@ -1092,6 +1096,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
 
         public boolean checkTabsAnimationInProgress() {
+            if (predictiveFolderBack) return true;
             if (tabsAnimationInProgress) {
                 boolean cancel = false;
                 if (backAnimation) {
@@ -3438,6 +3443,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
     @Override
     public void onFragmentDestroy() {
+        if (predictiveSearchTarget != null) predictiveSearchTarget.end(false);
+        if (predictiveFolderTarget != null) predictiveFolderTarget.end(false);
         if (mainTabsActivityController != null && fragmentSearchField != null) {
             mainTabsActivityController.detachIosBottomSearch(fragmentSearchField);
         }
@@ -7842,12 +7849,132 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
     }
 
+    public zxc.iconic.xenon.helpers.PredictiveTabBack.Target getPredictiveTabBackTarget() {
+        if (hasShownSheet() || visibleDialog != null && visibleDialog.isShowing() || filterOptions != null
+                || filterTabsView != null && filterTabsView.isEditing()
+                || actionBar != null && actionBar.isActionModeShowed()) return null;
+        if (animatorSearchVisible.getValue()) return getPredictiveSearchBackTarget();
+        if (rightSlidingDialogContainer != null && rightSlidingDialogContainer.hasFragment()) {
+            return rightSlidingDialogContainer.getPredictiveBackTarget();
+        }
+        if (hasShownSheet() || visibleDialog != null && visibleDialog.isShowing()
+                || rightSlidingDialogContainer != null && rightSlidingDialogContainer.hasFragment()
+                || filterOptions != null || searching || animatorSearchVisible.getValue()
+                || actionBar != null && (actionBar.isActionModeShowed() || actionBar.isSearchFieldVisible())
+                || filterTabsView == null || filterTabsView.getVisibility() != View.VISIBLE
+                || filterTabsView.isEditing() || filterTabsView.isAnimatingIndicator()
+                || tabsAnimationInProgress || startedTracking || viewPages == null || viewPages.length < 2
+                || viewPages[0].getMeasuredWidth() <= 0 || filterTabsView.isFirstTabSelected()
+                || filterTabsView.getCurrentTabId() == filterTabsView.getFirstTabId()
+                || filterTabsView.isLocked(filterTabsView.getFirstTabId())) return null;
+        final int firstId = filterTabsView.getFirstTabId();
+        return predictiveFolderTarget = new zxc.iconic.xenon.helpers.PredictiveTabBack.Target() {
+            @Override public boolean begin() {
+                predictiveFolderBack = true;
+                tabsAnimationInProgress = true;
+                actionBar.setEnabled(false);
+                filterTabsView.setEnabled(false);
+                viewPages[1].selectedType = firstId;
+                viewPages[1].setVisibility(View.VISIBLE);
+                showScrollbars(false);
+                switchToCurrentSelectedMode(true);
+                animatingForward = false;
+                update(0);
+                return true;
+            }
+
+            @Override public void update(float progress) {
+                if (!predictiveFolderBack) return;
+                float p = Math.max(0, Math.min(1, progress));
+                float width = viewPages[0].getMeasuredWidth();
+                viewPages[0].setTranslationX(width * p);
+                viewPages[1].setTranslationX(-width * (1 - p));
+                // A full preview must remain reversible until the gesture is committed.
+                filterTabsView.selectTabWithId(firstId, Math.min(p, .99999f));
+                blur3_InvalidateBlur();
+            }
+
+            @Override public void end(boolean commit) {
+                if (!predictiveFolderBack) return;
+                if (commit) {
+                    ViewPage previous = viewPages[0];
+                    viewPages[0] = viewPages[1];
+                    viewPages[1] = previous;
+                    updateCounters(false);
+                    viewPages[0].dialogsAdapter.resume();
+                    viewPages[1].dialogsAdapter.pause();
+                }
+                viewPages[0].setTranslationX(0);
+                viewPages[1].setTranslationX(0);
+                viewPages[1].setVisibility(View.GONE);
+                filterTabsView.selectTabWithId(viewPages[0].selectedType, 1);
+                filterTabsView.stopAnimatingIndicator();
+                predictiveFolderBack = false;
+                predictiveFolderTarget = null;
+                tabsAnimationInProgress = false;
+                maybeStartTracking = false;
+                actionBar.setEnabled(true);
+                filterTabsView.setEnabled(true);
+                showScrollbars(true);
+                checkListLoad(viewPages[0]);
+                blur3_InvalidateBlur();
+            }
+        };
+    }
+
+    private zxc.iconic.xenon.helpers.PredictiveTabBack.Target getPredictiveSearchBackTarget() {
+        if (!searchIsShowed || animatorSearchVisible.isAnimating() || searchAnimator != null
+                || predictiveSearchBack || searchViewPager == null || fragmentSearchField == null
+                || viewPages == null || viewPages[0] == null) return null;
+        return predictiveSearchTarget = new zxc.iconic.xenon.helpers.PredictiveTabBack.Target() {
+            @Override public boolean begin() {
+                predictiveSearchBack = true;
+                animatorSearchVisible.cancel();
+                viewPages[0].listView.show();
+                update(0);
+                return true;
+            }
+            @Override public void update(float progress) {
+                if (!predictiveSearchBack) return;
+                float visible = 1 - Math.max(0, Math.min(1, progress));
+                // Preserve the logical state and the query until the gesture is committed.
+                animatorSearchVisible.forceValue(true, visible);
+                setSearchAnimationProgress(visible, true);
+                if (mainTabsActivityController != null && isIosBottomSearch()) {
+                    mainTabsActivityController.setIosBottomSearchBackProgress(visible);
+                }
+            }
+            @Override public void end(boolean commit) {
+                if (!predictiveSearchBack) return;
+                predictiveSearchBack = false;
+                predictiveSearchTarget = null;
+                if (commit) {
+                    predictiveSearchClosing = true;
+                    try {
+                        fragmentSearchField.editText.getText().clear();
+                        fragmentSearchFieldWatcher.toggleSearch(false);
+                        fragmentSearchField.editText.clearFocus();
+                    } finally {
+                        predictiveSearchClosing = false;
+                    }
+                } else {
+                    animatorSearchVisible.forceValue(true, 1);
+                    setSearchAnimationProgress(1, true);
+                    viewPages[0].listView.hide();
+                    if (mainTabsActivityController != null && isIosBottomSearch()) {
+                        mainTabsActivityController.setIosBottomSearchActive(true, false);
+                    }
+                }
+            }
+        };
+    }
+
     @Override
     public boolean onBackPressed(boolean invoked) {
         if (hasShownSheet()) {
             if (invoked) closeSheet();
             return false;
-        } else if (rightSlidingDialogContainer.hasFragment() && rightSlidingDialogContainer.getFragment().onBackPressed(invoked)) {
+        } else if (!animatorSearchVisible.getValue() && rightSlidingDialogContainer.hasFragment() && rightSlidingDialogContainer.getFragment().onBackPressed(invoked)) {
             if (invoked) {
                 rightSlidingDialogContainer.finishPreview();
                 if (searchViewPager != null) {
@@ -7888,7 +8015,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         } else if (commentView != null && commentView.isPopupShowing()) {
             if (invoked) commentView.hidePopup(true);
             return false;
-        } else if (dialogStoriesCell.isFullExpanded() && dialogStoriesCell.scrollToFirst()) {
+        } else if (dialogStoriesCell != null && dialogStoriesCell.isFullExpanded() && dialogStoriesCell.canScrollToFirst()) {
+            if (invoked) dialogStoriesCell.scrollToFirst();
             return false;
         }
         return super.onBackPressed(invoked);
@@ -8043,6 +8171,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     private void showSearch(boolean show, boolean startFromDownloads, boolean animated, boolean forceNotOnlyDialogs) {
+        if (predictiveSearchBack && predictiveSearchTarget != null) predictiveSearchTarget.end(false);
+        if (predictiveSearchClosing) animated = false;
         if (isIosBottomSearch() && mainTabsActivityController != null) {
             mainTabsActivityController.setIosBottomSearchActive(show, animated);
         }
@@ -8340,8 +8470,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 }
                 viewPages[0].setAlpha(1f - progress);
                 if (!budget) {
-                    viewPages[0].setScaleX(.9f + .1f * progress);
-                    viewPages[0].setScaleY(.9f + .1f * progress);
+                    viewPages[0].setScaleX(1f - .05f * progress);
+                    viewPages[0].setScaleY(1f - .05f * progress);
                 }
             }
             if (rightSlidingDialogContainer != null) {
@@ -8355,8 +8485,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             if (searchViewPager != null) {
                 searchViewPager.setAlpha(progress);
                 if (!budget) {
-                    searchViewPager.setScaleX(1f + .05f * (1f - progress));
-                    searchViewPager.setScaleY(1f + .05f * (1f - progress));
+                    searchViewPager.setScaleX(1f + .1f * (1f - progress));
+                    searchViewPager.setScaleY(1f + .1f * (1f - progress));
                 }
             }
         }

@@ -48,6 +48,8 @@ public abstract class RightSlidingDialogContainer extends FrameLayout {
     boolean isPaused;
     public int fragmentViewPadding;
     private boolean replaceAnimationInProgress;
+    private boolean predictiveBack;
+    private zxc.iconic.xenon.helpers.PredictiveTabBack.Target predictiveBackTarget;
     INavigationLayout navigationLayout;
 
     public RightSlidingDialogContainer(@NonNull Context context) {
@@ -55,6 +57,7 @@ public abstract class RightSlidingDialogContainer extends FrameLayout {
     }
 
     public void presentFragment(INavigationLayout navigationLayout, BaseFragment fragment) {
+        if (predictiveBackTarget != null) predictiveBackTarget.end(false);
         if (isPaused) {
             return;
         }
@@ -260,7 +263,54 @@ public abstract class RightSlidingDialogContainer extends FrameLayout {
         return currentFragment != null;
     }
 
+    public zxc.iconic.xenon.helpers.PredictiveTabBack.Target getPredictiveBackTarget() {
+        if (currentActionBarView != null && currentActionBarView.isSearchFieldVisible()) {
+            return currentActionBarView.getPredictiveSearchBackTarget();
+        }
+        if (!isOpenned || currentFragment == null || openAnimator != null || replaceAnimationInProgress
+                || startedTracking || predictiveBack || BaseFragment.hasSheets(currentFragment)
+                || currentFragment.visibleDialog != null && currentFragment.visibleDialog.isShowing()
+                || currentActionBarView != null && (currentActionBarView.isSearchFieldVisible()
+                || currentActionBarView.isActionModeShowed()) || !currentFragment.onBackPressed(false)) return null;
+        return predictiveBackTarget = new zxc.iconic.xenon.helpers.PredictiveTabBack.Target() {
+            @Override public boolean begin() {
+                predictiveBack = true;
+                notificationsLocker.lock();
+                openAnimationStarted(false);
+                return true;
+            }
+            @Override public void update(float progress) {
+                if (!predictiveBack) return;
+                openedProgress = 1 - Math.max(0, Math.min(1, progress));
+                updateOpenAnimationProgress();
+            }
+            @Override public void end(boolean commit) {
+                if (!predictiveBack) return;
+                predictiveBack = false;
+                predictiveBackTarget = null;
+                openedProgress = commit ? 0 : 1;
+                isOpenned = !commit;
+                updateOpenAnimationProgress();
+                if (commit && currentFragment != null) {
+                    currentFragment.onPause();
+                    currentFragment.onFragmentDestroy();
+                    removeAllViews();
+                    currentFragment = null;
+                    NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.needCheckSystemBarColors);
+                }
+                notificationsLocker.unlock();
+                openAnimationFinished(!commit);
+            }
+        };
+    }
+
+    @Override protected void onDetachedFromWindow() {
+        if (predictiveBackTarget != null) predictiveBackTarget.end(false);
+        super.onDetachedFromWindow();
+    }
+
     public void finishPreview() {
+        if (predictiveBackTarget != null) predictiveBackTarget.end(false);
         if (!isOpenned) {
             return;
         }
@@ -338,6 +388,7 @@ public abstract class RightSlidingDialogContainer extends FrameLayout {
 
     @Override
     public boolean onTouchEvent(MotionEvent ev) {
+        if (predictiveBack) return true;
         if (navigationLayout != null && navigationLayout.isInPreviewMode()) {
             return false;
         }

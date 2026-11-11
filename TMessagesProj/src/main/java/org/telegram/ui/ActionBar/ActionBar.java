@@ -1641,6 +1641,74 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         closeSearchField(true);
     }
 
+    public zxc.iconic.xenon.helpers.PredictiveTabBack.Target getPredictiveSearchBackTarget() {
+        if (!isSearchFieldVisible || menu == null || isActionModeShowed()
+                || searchVisibleAnimator != null && searchVisibleAnimator.isRunning()) return null;
+        ActionBarMenuItem search = null;
+        for (int i = 0; i < menu.getChildCount(); i++) {
+            View child = menu.getChildAt(i);
+            if (child instanceof ActionBarMenuItem && ((ActionBarMenuItem) child).isSearchFieldVisible()) {
+                search = (ActionBarMenuItem) child;
+                break;
+            }
+        }
+        if (search == null || search.getSearchContainer() == null
+                || search.listener != null && (!search.listener.canCollapseSearch() || !search.listener.canToggleSearch())) return null;
+        final ActionBarMenuItem item = search;
+        final View field = item.getSearchContainer();
+        final ArrayList<View> titles = new ArrayList<>();
+        if (!onSearchChangedIgnoreTitles()) {
+            if (titleTextView[0] != null) titles.add(titleTextView[0]);
+            if (subtitleTextView != null && !TextUtils.isEmpty(subtitle)) titles.add(subtitleTextView);
+        }
+        final float originalAlpha = field.getAlpha(), originalSearch = searchFieldVisibleAlpha;
+        final int[] visibility = new int[titles.size()];
+        final float[] alpha = new float[titles.size()], scaleX = new float[titles.size()], scaleY = new float[titles.size()];
+        for (int i = 0; i < titles.size(); i++) {
+            View title = titles.get(i);
+            visibility[i] = title.getVisibility();
+            alpha[i] = title.getAlpha(); scaleX[i] = title.getScaleX(); scaleY[i] = title.getScaleY();
+        }
+        return new zxc.iconic.xenon.helpers.PredictiveTabBack.Target() {
+            private boolean active;
+            @Override public boolean begin() { active = true; return true; }
+            @Override public void update(float progress) {
+                if (!active) return;
+                float p = Math.max(0, Math.min(1, progress));
+                field.setAlpha(originalAlpha * (1 - p));
+                searchFieldVisibleAlpha = originalSearch * (1 - p);
+                for (View title : titles) {
+                    title.setVisibility(View.VISIBLE);
+                    title.setAlpha(p);
+                    title.setScaleX(.95f + .05f * p);
+                    title.setScaleY(.95f + .05f * p);
+                }
+                if (backgroundUpdateListener != null) backgroundUpdateListener.run();
+                invalidate();
+            }
+            @Override public void end(boolean commit) {
+                if (!active) return;
+                active = false;
+                if (commit) closeSearchField();
+                if (commit && !isSearchFieldVisible) {
+                    if (searchVisibleAnimator != null) searchVisibleAnimator.end();
+                    if (item.searchContainerAnimator != null) item.searchContainerAnimator.end();
+                } else {
+                    field.setAlpha(originalAlpha);
+                    searchFieldVisibleAlpha = originalSearch;
+                    for (int i = 0; i < titles.size(); i++) {
+                        View title = titles.get(i);
+                        title.setVisibility(visibility[i]); title.setAlpha(alpha[i]);
+                        title.setScaleX(scaleX[i]); title.setScaleY(scaleY[i]);
+                    }
+                }
+                if (backgroundUpdateListener != null) backgroundUpdateListener.run();
+                requestLayout();
+                invalidate();
+            }
+        };
+    }
+
     public void closeSearchField(boolean closeKeyboard) {
         if (!isSearchFieldVisible || menu == null) {
             return;
