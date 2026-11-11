@@ -252,9 +252,13 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
             }
             updatePreview();
         } else if (id == blurredFadeViewRow) {
+            final boolean otherWasActive = NekoConfig.progressiveFadeBlurOtherActivitiesEnabled();
             NekoConfig.toggleBlurredFadeView();
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.blurredFadeView);
+            }
+            if (!NekoConfig.materialActivityHeaders && !otherWasActive && NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()) {
+                showRestartBulletin();
             }
             if (listView != null && listView.adapter != null) {
                 listView.adapter.update(true);

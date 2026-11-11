@@ -33,6 +33,8 @@ import me.vkryl.android.AnimatorUtils;
 import me.vkryl.android.animator.BoolAnimator;
 import me.vkryl.android.animator.FactorAnimator;
 
+import zxc.iconic.xenon.NekoConfig;
+
 @SuppressLint("ViewConstructor")
 public class ChatActivitySideControlsButtonsLayout extends FrameLayout implements FactorAnimator.Target {
     public static final int BUTTON_ATTACH = 0;
@@ -191,11 +193,17 @@ public class ChatActivitySideControlsButtonsLayout extends FrameLayout implement
     }
 
     private int gravity = Gravity.LEFT | Gravity.BOTTOM;
+
+    public int getButtonSize() {
+        // Includes 6 dp of touch padding on either side of the visible circle.
+        return NekoConfig.materialChatElements ? 64 : 56;
+    }
+
     /** Called after the host lays us out, so disabling iOS input restores gravity. */
     public void setInputButtonCenterX(float centerX) {
         if (!Float.isNaN(centerX)) {
-            // Move the column's hit area along with its 56 dp buttons.
-            offsetLeftAndRight(Math.round(centerX - dp(56) * .5f));
+            // Move the column's hit area along with its buttons.
+            offsetLeftAndRight(Math.round(centerX - dp(getButtonSize()) * .5f));
         }
     }
 
@@ -303,7 +311,7 @@ public class ChatActivitySideControlsButtonsLayout extends FrameLayout implement
                 holder.button.setTranslationY(dp(80) * (1f - visibility) - totalHeight);
             }
 
-            final int height = dp(44);
+            final int height = dp(buttonId == BUTTON_ATTACH ? 44 : getButtonSize() - 12);
             final int gap = dp(10 + 10 * counterVisibility);
 
             totalHeight += (height + gap) * visibility;
@@ -345,7 +353,7 @@ public class ChatActivitySideControlsButtonsLayout extends FrameLayout implement
                 buttonId == BUTTON_ATTACH ? CubicBezierInterpolator.EASE_OUT_QUINT : AnimatorUtils.DECELERATE_INTERPOLATOR,
                 buttonId == BUTTON_ATTACH ? 300 : 280);
 
-            int size = 56, iconSize = 48;
+            int size = getButtonSize(), iconSize = 48;
             if (buttonId == BUTTON_ATTACH) {
                 size = 50;
                 iconSize = 32;

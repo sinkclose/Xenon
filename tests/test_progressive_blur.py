@@ -336,6 +336,7 @@ public class CaptureHarness {
         source = (ROOT / 'org/telegram/ui/ChatActivity.java').read_text()
         code = source[source.index('    private long lastFadeBlurUpdateTime;'):source.index('    private boolean fadeBlurStockApplied;')]
         capture = "\n".join(method(source, signature) for signature in (
+            'private boolean isChatFadeDimmingEnabled()',
             'private void invalidateFadeBlurImpl()', 'private void captureFadeBlur()'))
         harness = r"""
 public class ChatCaptureHarness {
@@ -345,7 +346,7 @@ public class ChatCaptureHarness {
         static class VERSION_CODES { static final int TIRAMISU = 33; }
     }
     static class NekoConfig {
-        static boolean enabled = true, progressive;
+        static boolean enabled = true, progressive, materialChatElements;
         static int progressiveFadeBlurRefreshRate = 60;
         static int blurredFadePixelation = 3, progressiveFadeBlurMaxRadius = 20;
         static int progressiveFadeBlurSamples = 11, blurredFadeBlurStrength = 10, blurredFadeDimStrength = 20;

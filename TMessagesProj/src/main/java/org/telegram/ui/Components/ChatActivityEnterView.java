@@ -808,6 +808,10 @@ public class ChatActivityEnterView extends FrameLayout implements
 
     private boolean materialInputLayout;
 
+    public int getEmptyInputHeight() {
+        return dp(materialInputLayout ? 52 : DEFAULT_HEIGHT);
+    }
+
     public boolean isMaterialInputField() {
         return materialInputLayout && !recordingAudioVideo && recordInterfaceState == 0
                 && (recordedAudioPanel == null || recordedAudioPanel.getVisibility() != VISIBLE);
@@ -898,17 +902,24 @@ public class ChatActivityEnterView extends FrameLayout implements
         if (doneButton != null && doneButton.getVisibility() == VISIBLE) actionWidth = Math.max(actionWidth, doneButton.width());
         if (slowModeButton != null && slowModeButton.getVisibility() == VISIBLE) actionWidth = Math.max(actionWidth, slowModeButton.getLayoutParams().width);
         field.rightMargin = Math.max(dp(60), actionWidth + dp(8));
+        int extraLeft = 0;
+        if (botCommandsMenuButton != null && botCommandsMenuButton.getVisibility() == VISIBLE && botCommandsMenuButton.getTag() != null) {
+            extraLeft = botCommandsMenuButton.getMeasuredWidth() + dp(7);
+        } else if (senderSelectView != null && senderSelectView.getVisibility() == VISIBLE) {
+            extraLeft = senderSelectView.getMeasuredWidth() + dp(7);
+        }
         FrameLayout.LayoutParams attach = (FrameLayout.LayoutParams) attachButton.getLayoutParams();
         attach.gravity = Gravity.BOTTOM | Gravity.LEFT;
-        attach.leftMargin = dp(2);
+        attach.leftMargin = dp(2) + extraLeft;
         attach.rightMargin = 0;
         attach.bottomMargin = dp(4);
         attachButton.setTranslationX(0);
         attachButton.setScaleX(1f);
         attachButton.setScaleY(1f);
         attachButton.setAlpha(editingMessageObject != null && !editingMessageObject.canEditMedia() ? 0.4f : 1f);
+        attachButton.setEnabled(editingMessageObject == null || editingMessageObject.canEditMedia());
         attachButton.setColorFilter(getThemedColor(Theme.key_glass_defaultIcon));
-        attachButton.setVisibility(VISIBLE);
+        attachButton.setVisibility(isLiveComment ? GONE : VISIBLE);
         FrameLayout.LayoutParams emoji = (FrameLayout.LayoutParams) emojiButton.getLayoutParams();
         emoji.gravity = Gravity.BOTTOM | Gravity.RIGHT;
         emoji.leftMargin = 0;
@@ -933,9 +944,6 @@ public class ChatActivityEnterView extends FrameLayout implements
         rightInset += dp(4);
         if (messageEditText != null) {
             FrameLayout.LayoutParams text = (FrameLayout.LayoutParams) messageEditText.getLayoutParams();
-            int extraLeft = botCommandsMenuButton != null && botCommandsMenuButton.getVisibility() == VISIBLE
-                    ? botCommandsMenuButton.getMeasuredWidth()
-                    : senderSelectView != null && senderSelectView.getVisibility() == VISIBLE ? senderSelectView.getMeasuredWidth() : 0;
             text.leftMargin = dp(50) + extraLeft;
             text.rightMargin = rightInset;
             text.bottomMargin = dp(4);
@@ -3504,7 +3512,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                 if (adjustPanLayoutHelper != null && adjustPanLayoutHelper.animationInProgress()) {
                     return;
                 }
-                if (attachLayoutPaddingAlpha == 0f && !(iosInputLayout && editingMessageObject != null)) return;
+                if (attachLayoutPaddingAlpha == 0f && !materialInputLayout && !(iosInputLayout && editingMessageObject != null)) return;
                 delegate.didPressAttachButton();
             });
             attachButton.setContentDescription(getString(R.string.AccDescrAttachButton));
@@ -15377,6 +15385,12 @@ public class ChatActivityEnterView extends FrameLayout implements
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         configureIosInputLayout();
         configureMaterialInputLayout();
+        if (senderSelectView != null) {
+            FrameLayout.LayoutParams sender = (FrameLayout.LayoutParams) senderSelectView.getLayoutParams();
+            boolean centered = isMaterialInputField();
+            sender.gravity = Gravity.LEFT | (centered ? Gravity.CENTER_VERTICAL : Gravity.BOTTOM);
+            sender.topMargin = sender.bottomMargin = centered ? 0 : dp(4);
+        }
         int wasHeight = textFieldContainer.getMeasuredHeight();
         if (botCommandsMenuButton != null && botCommandsMenuButton.getTag() != null) {
             botCommandsMenuButton.measure(widthMeasureSpec, heightMeasureSpec);

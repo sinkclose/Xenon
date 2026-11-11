@@ -102,11 +102,17 @@ public class ChatActivityBlurredRoundButton extends FrameLayout implements Facto
     private @Nullable ImageView loadingIndicatorView;
     private CircularProgressDrawable loadingIndicatorDrawable;
     private Theme.ResourcesProvider resourcesProvider;
+    private float buttonRadius = dp(BUTTON_SIZE / 2f);
 
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
-        if (backgroundDrawable != null) backgroundDrawable.setBounds(0, 0, w, h);
+        buttonRadius = Math.max(0, Math.min(w, h) * .5f - dp(CLICK_ZONE_MARGIN));
+        if (backgroundDrawable != null) {
+            backgroundDrawable.setBounds(0, 0, w, h);
+            backgroundDrawable.setRadius(buttonRadius);
+        }
+        updateColors();
     }
 
     @Override
@@ -130,7 +136,7 @@ public class ChatActivityBlurredRoundButton extends FrameLayout implements Facto
 
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
-        if (liquidTouchAllowed() && !liquidGroupDrawn) liquidTouch.drawHighlight(canvas, dp(22), dp(6));
+        if (liquidTouchAllowed() && !liquidGroupDrawn) liquidTouch.drawHighlight(canvas, buttonRadius, dp(6));
         super.dispatchDraw(canvas);
     }
 
@@ -191,7 +197,7 @@ public class ChatActivityBlurredRoundButton extends FrameLayout implements Facto
         backgroundDrawable = drawable;
         if (backgroundDrawable != null) {
             backgroundDrawable.setPadding(dp(CLICK_ZONE_MARGIN));
-            backgroundDrawable.setRadius(dp(BUTTON_SIZE / 2f));
+            backgroundDrawable.setRadius(buttonRadius);
         }
     }
 
@@ -279,7 +285,7 @@ public class ChatActivityBlurredRoundButton extends FrameLayout implements Facto
 
         final int color = Theme.getColor(Theme.key_glass_defaultIcon, resourcesProvider);
         setIconColor(Theme.getColor(Theme.key_glass_defaultIcon, resourcesProvider));
-        int rad = dp(22);
+        float rad = buttonRadius;
         int pressedColor = Theme.multAlpha(color, .15f);
         setBackground(Theme.createInsetRoundRectDrawable(pressedColor, rad, dp(6)));
     }

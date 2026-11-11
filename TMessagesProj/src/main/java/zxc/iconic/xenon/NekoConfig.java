@@ -1129,7 +1129,7 @@ public class NekoConfig {
     }
 
     public static boolean progressiveFadeBlurEnabled() {
-        return progressiveFadeBlur && SharedConfig.chatBlurEnabled();
+        return progressiveFadeBlur && blurredFadeViewEnabled();
     }
 
     public static boolean progressiveFadeBlurOtherActivitiesEnabled() {

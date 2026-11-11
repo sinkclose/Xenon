@@ -8421,7 +8421,7 @@ if (feedIntegration != null) {
         sideControlsButtonsLayout.setOnLongClickListener(this::onSideControlButtonOnLongClick);
         {
             final int indexToAdd = chatActivityFadeView != null ? contentView.indexOfChild(chatActivityFadeView) : -1;
-            contentView.addView(sideControlsButtonsLayout, indexToAdd, LayoutHelper.createFrame(57, 300, Gravity.RIGHT | Gravity.BOTTOM));
+            contentView.addView(sideControlsButtonsLayout, indexToAdd, LayoutHelper.createFrame(sideControlsButtonsLayout.getButtonSize() + 1, 300, Gravity.RIGHT | Gravity.BOTTOM));
         }
 
         updateMessageListAccessibilityVisibility();
