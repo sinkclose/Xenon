@@ -162,6 +162,7 @@ import org.telegram.tgnet.tl.TL_chatlists;
 import org.telegram.tgnet.tl.TL_forum;
 import org.telegram.tgnet.tl.TL_stars;
 import org.telegram.tgnet.tl.TL_stories;
+import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.ActionBarLayout;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
@@ -784,10 +785,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                     }
                 );
             }
-            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
-                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
-                (OnBackAnimationCallback) onBackAnimationCallback
-            );
+            setAppBackCallbackRegistered(true);
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && (NekoConfig.predictiveBackAnimationStyle == NekoConfig.ANIMATION_STYLE_IOS
                 || NekoConfig.predictiveBackAnimationStyle == NekoConfig.ANIMATION_STYLE_SLIDE
                 || NekoConfig.predictiveBackAnimationStyle == NekoConfig.ANIMATION_STYLE_AOSP_LEGACY
@@ -806,10 +804,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                     NekoConfig.predictiveBackAnimationStyle
                 );
             }
-            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
-                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
-                (OnBackAnimationCallback) onBackAnimationCallback
-            );
+            setAppBackCallbackRegistered(true);
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && NekoConfig.predictiveBackAnimationStyle == NekoConfig.ANIMATION_STYLE_AOSP_ALT && NekoConfig.predictiveBackIntensity > 0 && actionBarLayout != null) {
             if (onBackAnimationCallback == null) {
                 onBackAnimationCallback = zxc.iconic.xenon.helpers.IosPredictiveBack.createCallback(
@@ -826,10 +821,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                     false
                 );
             }
-            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
-                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
-                (OnBackAnimationCallback) onBackAnimationCallback
-            );
+            setAppBackCallbackRegistered(true);
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && NekoConfig.predictiveBackAnimationStyle == NekoConfig.ANIMATION_STYLE_FADE && NekoConfig.predictiveBackIntensity > 0 && actionBarLayout != null) {
             if (onBackAnimationCallback == null) {
                 onBackAnimationCallback = zxc.iconic.xenon.helpers.IosPredictiveBack.createCallback(
@@ -846,10 +838,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                     true
                 );
             }
-            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
-                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
-                (OnBackAnimationCallback) onBackAnimationCallback
-            );
+            setAppBackCallbackRegistered(true);
         } else if (Build.VERSION.SDK_INT >= 34 && NekoConfig.predictiveBackAnimation) {
             if (onBackAnimationCallback == null) {
                 onBackAnimationCallback =  new OnBackAnimationCallback() {
@@ -939,10 +928,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                     }
                 };
             }
-            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
-                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
-                (OnBackAnimationCallback) onBackAnimationCallback
-            );
+            setAppBackCallbackRegistered(true);
         } else if (Build.VERSION.SDK_INT >= 33) {
             if (onBackInvokedCallback == null) {
                 onBackInvokedCallback = new OnBackInvokedCallback() {
@@ -962,10 +948,16 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                     }
                 };
             }
-            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
-                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
-                (OnBackInvokedCallback) onBackInvokedCallback
-            );
+            setAppBackCallbackRegistered(true);
+        }
+
+        if (Build.VERSION.SDK_INT >= 33) {
+            systemBackStateListener = () -> {
+                updateSystemBackState();
+                return true;
+            };
+            getWindow().getDecorView().getViewTreeObserver().addOnPreDrawListener(systemBackStateListener);
+            updateSystemBackState();
         }
 
         //if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -989,6 +981,81 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
     private Object onBackAnimationCallback;
     private Object onBackInvokedCallback;
+    private boolean appBackCallbackRegistered;
+    private zxc.iconic.xenon.helpers.PredictiveTabBack tabBackCallback;
+    private ViewTreeObserver.OnPreDrawListener systemBackStateListener;
+
+    private void setAppBackCallbackRegistered(boolean registered) {
+        if (Build.VERSION.SDK_INT < 33 || appBackCallbackRegistered == registered) return;
+        OnBackInvokedCallback callback = onBackAnimationCallback instanceof OnBackInvokedCallback
+                ? (OnBackInvokedCallback) onBackAnimationCallback
+                : onBackInvokedCallback instanceof OnBackInvokedCallback
+                ? (OnBackInvokedCallback) onBackInvokedCallback : null;
+        if (callback == null) return;
+        if (Build.VERSION.SDK_INT >= 34 && callback instanceof OnBackAnimationCallback) {
+            if (tabBackCallback == null) {
+                tabBackCallback = new zxc.iconic.xenon.helpers.PredictiveTabBack(
+                        (OnBackAnimationCallback) callback, this::getPredictiveTabBackTarget);
+            }
+            callback = tabBackCallback;
+        }
+        if (registered) {
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, callback);
+        } else {
+            getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(callback);
+        }
+        appBackCallbackRegistered = registered;
+    }
+
+    private void updateSystemBackState() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            setAppBackCallbackRegistered(shouldHandleBackInApp());
+        }
+    }
+
+    /** Determine the destination before the gesture; never dismiss UI while querying it. */
+    private boolean shouldHandleBackInApp() {
+        if (Build.VERSION.SDK_INT >= 34 && tabBackCallback != null && tabBackCallback.isRunning()) return true;
+        if (actionBarLayout == null || switchingAccount || visibleActionMode != null
+                || !sheetFragmentsStack.isEmpty() || actionBarLayout.getFragmentStack().size() != 1
+                || actionBarLayout.isTransitionAnimationInProgress() || actionBarLayout.isSwipeInProgress()) return true;
+        if (AndroidUtilities.isTablet() && (rightActionBarLayout != null && !rightActionBarLayout.getFragmentStack().isEmpty()
+                || layersActionBarLayout != null && !layersActionBarLayout.getFragmentStack().isEmpty())) return true;
+        if (!onBackPressed(false) || GroupCallPip.onBackPressed(false)) return true;
+        BaseFragment root = actionBarLayout.getLastFragment();
+        if (root instanceof MainTabsActivity && !((MainTabsActivity) root).canUseSystemBack()) return true;
+        BaseFragment content = root instanceof MainTabsActivity ? ((MainTabsActivity) root).getCurrentVisibleFragment() : root;
+        // Unknown root fragments keep their own back semantics (login, account setup, etc.).
+        if (!(content instanceof DialogsActivity)) return true;
+        DialogsActivity dialogs = (DialogsActivity) content;
+        if (dialogs.rightSlidingDialogContainer != null && dialogs.rightSlidingDialogContainer.hasFragment()) return true;
+        if (BaseFragment.hasSheets(root) || BaseFragment.hasSheets(content)
+                || root.visibleDialog != null && root.visibleDialog.isShowing()
+                || content.visibleDialog != null && content.visibleDialog.isShowing()) return true;
+        ActionBar bar = content.getActionBar();
+        ActionBar rootBar = root.getActionBar();
+        if (bar != null && (bar.isSearchFieldVisible() || bar.isActionModeShowed())
+                || rootBar != null && (rootBar.isSearchFieldVisible() || rootBar.isActionModeShowed())) return true;
+        return !root.onBackPressed(false);
+    }
+
+    private zxc.iconic.xenon.helpers.PredictiveTabBack.Target getPredictiveTabBackTarget() {
+        if (actionBarLayout == null || actionBarLayout.getFragmentStack().isEmpty() || switchingAccount
+                || visibleActionMode != null || !sheetFragmentsStack.isEmpty()
+                || actionBarLayout.isTransitionAnimationInProgress() || actionBarLayout.isSwipeInProgress()
+                || !onBackPressed(false) || GroupCallPip.onBackPressed(false)) return null;
+        if (AndroidUtilities.isTablet() && (rightActionBarLayout != null && !rightActionBarLayout.getFragmentStack().isEmpty()
+                || layersActionBarLayout != null && !layersActionBarLayout.getFragmentStack().isEmpty())) return null;
+        BaseFragment root = actionBarLayout.getLastFragment();
+        if (BaseFragment.hasSheets(root) || root.visibleDialog != null && root.visibleDialog.isShowing()
+                || root.getActionBar() != null && root.getActionBar().isActionModeShowed()) return null;
+        if (actionBarLayout.getFragmentStack().size() != 1) {
+            return root.getActionBar() == null ? null : root.getActionBar().getPredictiveSearchBackTarget();
+        }
+        if (root instanceof MainTabsActivity) return ((MainTabsActivity) root).getPredictiveTabBackTarget();
+        if (root instanceof DialogsActivity) return ((DialogsActivity) root).getPredictiveTabBackTarget();
+        return root.getActionBar() == null ? null : root.getActionBar().getPredictiveSearchBackTarget();
+    }
 
     public static void showAttachMenuBot(LaunchActivity launchActivity, int currentAccount, TLRPC.TL_attachMenuBot attachMenuBot, String startApp, boolean sidemenu) {
         BaseFragment lastFragment = getLastFragment();
@@ -7181,15 +7248,12 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         } catch (Exception e) {
             FileLog.e(e);
         }
-        if (Build.VERSION.SDK_INT >= 34) {
-            if (onBackAnimationCallback instanceof OnBackAnimationCallback) {
-                getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback((OnBackAnimationCallback) onBackAnimationCallback);
-            }
-        } else if (Build.VERSION.SDK_INT >= 33) {
-            if (onBackInvokedCallback instanceof OnBackInvokedCallback) {
-                getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback((OnBackInvokedCallback) onBackInvokedCallback);
-            }
+        if (systemBackStateListener != null) {
+            getWindow().getDecorView().getViewTreeObserver().removeOnPreDrawListener(systemBackStateListener);
+            systemBackStateListener = null;
         }
+        if (Build.VERSION.SDK_INT >= 34 && tabBackCallback != null) tabBackCallback.cancel();
+        setAppBackCallbackRegistered(false);
         Bulletin.removeDelegate(frameLayout);
         VideoAds.dropCache();
 

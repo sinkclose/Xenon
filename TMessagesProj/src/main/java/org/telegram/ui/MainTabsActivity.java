@@ -851,6 +851,31 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
     private DialogsActivity dialogsActivity;
 
+    public boolean canUseSystemBack() {
+        return viewPager != null && !viewPager.isTouch() && !viewPager.isManualScrolling()
+                && viewPager.getCurrentPosition() == getStartPosition();
+    }
+
+    public zxc.iconic.xenon.helpers.PredictiveTabBack.Target getPredictiveTabBackTarget() {
+        BaseFragment content = getCurrentVisibleFragment();
+        if (viewPager == null || viewPager.isTouch() || viewPager.isManualScrolling() || hasShownSheet()
+                || visibleDialog != null && visibleDialog.isShowing() || content == null
+                || BaseFragment.hasSheets(content) || content.visibleDialog != null && content.visibleDialog.isShowing()
+                || content.getActionBar() != null && content.getActionBar().isActionModeShowed()) return null;
+        if (!(content instanceof DialogsActivity) && content.getActionBar() != null
+                && content.getActionBar().isSearchFieldVisible()) return content.getActionBar().getPredictiveSearchBackTarget();
+        if (content instanceof DialogsActivity) {
+            zxc.iconic.xenon.helpers.PredictiveTabBack.Target folder = ((DialogsActivity) content).getPredictiveTabBackTarget();
+            if (folder != null) return folder;
+        }
+        if (!content.onBackPressed(false) || viewPager.getCurrentPosition() == getStartPosition()) return null;
+        return new zxc.iconic.xenon.helpers.PredictiveTabBack.Target() {
+            @Override public boolean begin() { return viewPager.beginPredictiveBack(getStartPosition()); }
+            @Override public void update(float progress) { viewPager.updatePredictiveBack(progress); }
+            @Override public void end(boolean commit) { viewPager.endPredictiveBack(commit); }
+        };
+    }
+
     @Override
     public boolean onBackPressed(boolean invoked) {
         final boolean result = super.onBackPressed(invoked);
@@ -1415,6 +1440,10 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         @Override
         public void setIosBottomSearchActive(boolean active, boolean animated) {
             if (iosBottomSearch != null) iosBottomSearch.setActive(active, animated);
+        }
+
+        @Override public void setIosBottomSearchBackProgress(float progress) {
+            if (iosBottomSearch != null) iosBottomSearch.setPredictiveBackProgress(progress);
         }
 
         @Override

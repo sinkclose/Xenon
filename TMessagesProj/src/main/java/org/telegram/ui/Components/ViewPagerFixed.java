@@ -228,11 +228,66 @@ public class ViewPagerFixed extends FrameLayout {
     }
 
     public boolean isManualScrolling() {
-        return manualScrolling != null && manualScrolling.isRunning();
+        return predictiveBackActive || manualScrolling != null && manualScrolling.isRunning();
+    }
+
+    private boolean predictiveBackActive;
+
+    @Override protected void onDetachedFromWindow() {
+        if (predictiveBackActive) endPredictiveBack(false);
+        super.onDetachedFromWindow();
+    }
+
+    public boolean beginPredictiveBack(int page) {
+        if (predictiveBackActive || manualScrolling != null || tabsAnimationInProgress || startedTracking
+                || viewPages[0] == null || viewPages[1] != null || getMeasuredWidth() <= 0
+                || adapter == null || page < 0 || page >= adapter.getItemCount()
+                || page == currentPosition || !adapter.canScrollTo(page)) return false;
+        predictiveBackActive = true;
+        notificationsLocker.lock();
+        animatingForward = page > currentPosition;
+        nextPosition = page;
+        updateViewForIndex(1);
+        if (tabsView != null) tabsView.setEnabled(false);
+        updatePredictiveBack(0);
+        return true;
+    }
+
+    public void updatePredictiveBack(float progress) {
+        if (!predictiveBackActive || viewPages[1] == null) return;
+        float p = Math.max(0, Math.min(1, progress));
+        float width = viewPages[0].getMeasuredWidth();
+        float direction = animatingForward ? -1 : 1;
+        setTranslationX(viewPages[0], direction * width * p);
+        setTranslationX(viewPages[1], -direction * width * (1 - p));
+        currentProgress = p;
+        // This is gesture-driven: update the indicator and visible-fragment lifecycle too.
+        onTabAnimationUpdate(false);
+        invalidate();
+    }
+
+    public void endPredictiveBack(boolean commit) {
+        if (!predictiveBackActive) return;
+        updatePredictiveBack(commit ? 1 : 0);
+        if (commit && viewPages[1] != null) swapViews();
+        if (viewPages[1] != null) {
+            viewsByType.put(viewTypes[1], viewPages[1]);
+            removeView(viewPages[1]);
+            viewPages[1] = null;
+        }
+        setTranslationX(viewPages[0], 0);
+        nextPosition = currentPosition;
+        currentProgress = 0;
+        predictiveBackActive = false;
+        if (tabsView != null) tabsView.setEnabled(true);
+        onTabAnimationUpdate(false);
+        onScrollEnd();
+        notificationsLocker.unlock();
     }
 
     private ValueAnimator manualScrolling;
     public boolean scrollToPosition(int page) {
+        if (predictiveBackActive) return false;
         if (page == currentPosition || (manualScrolling != null && nextPosition == page)) {
             return false;
         }
@@ -576,6 +631,7 @@ public class ViewPagerFixed extends FrameLayout {
     }
 
     public boolean onInterceptTouchEvent(MotionEvent ev) {
+        if (predictiveBackActive) return true;
         if (tabsView != null && tabsView.isAnimatingIndicator()) {
             return false;
         }
@@ -600,6 +656,7 @@ public class ViewPagerFixed extends FrameLayout {
     }
 
     public boolean onTouchEventInternal(MotionEvent ev) {
+        if (predictiveBackActive) return true;
         if (tabsView != null && tabsView.animatingIndicator) {
             return false;
         }
