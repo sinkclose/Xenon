@@ -92,6 +92,16 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
         }
         return null;
     }
+
+    private ChatActivityEnterView findMaterialComposer() {
+        if (!zxc.iconic.xenon.NekoConfig.materialChatElements) return null;
+        for (int i = 0; i < inputIslandBubbleContainer.getChildCount(); i++) {
+            View child = inputIslandBubbleContainer.getChildAt(i);
+            if (child instanceof ChatActivityEnterView && child.getVisibility() == VISIBLE
+                    && ((ChatActivityEnterView) child).isMaterialInputField()) return (ChatActivityEnterView) child;
+        }
+        return null;
+    }
     private final LiquidPressAnimationSuppressor liquidPressAnimations = new LiquidPressAnimationSuppressor();
 
     public void setLiquidTouchEnabled(boolean enabled) {
@@ -107,7 +117,8 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
     }
 
     private boolean liquidTouchAllowed() {
-        if (liquidTouch == null || !drawInputBackground || zxc.iconic.xenon.helpers.NonIslandHelper.chatElements()) return false;
+        if (liquidTouch == null || !drawInputBackground || zxc.iconic.xenon.NekoConfig.materialChatElements
+                || zxc.iconic.xenon.helpers.NonIslandHelper.chatElements()) return false;
         for (int i = 0; i < inputIslandBubbleContainer.getChildCount(); i++) {
             View child = inputIslandBubbleContainer.getChildAt(i);
             if (child instanceof ChatActivityActionsButtonsLayout && ((ChatActivityActionsButtonsLayout) child).hasVisibleButtons()) {
@@ -430,7 +441,26 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
             tmpRect.right = getMeasuredWidth();
         }
 
-        if (iosComposer != null && iosSideDrawables[0] != null) {
+        ChatActivityEnterView materialComposer = drawInputBackground ? findMaterialComposer() : null;
+        if (materialComposer != null && iosSideDrawables[1] != null) {
+            float originX = inputIslandBubbleContainer.getX() + materialComposer.getX();
+            float originY = inputIslandBubbleContainer.getY() + materialComposer.getY();
+            materialComposer.getMaterialInputSurfaceBounds(iosSurfaceBounds[1], iosSurfaceBounds[2], originX, originY);
+            blurredBackgroundDrawable.setRadius(dp(26));
+            blurredBackgroundDrawable.setStrokeWidth(0, 0);
+            RectF field = iosSurfaceBounds[1];
+            blurredBackgroundDrawable.setBounds(Math.round(field.left), Math.round(field.top),
+                    Math.round(field.right), Math.round(field.bottom));
+            blurredBackgroundDrawable.draw(canvas);
+            // The recording/send control draws its themed circular fill above this blur.
+            BlurredBackgroundDrawable action = iosSideDrawables[1];
+            action.setRadius(dp(26));
+            action.setStrokeWidth(0, 0);
+            action.setAlpha(blurredBackgroundDrawable.getAlpha());
+            RectF bounds = iosSurfaceBounds[2];
+            action.setBounds(Math.round(bounds.left), Math.round(bounds.top), Math.round(bounds.right), Math.round(bounds.bottom));
+            action.draw(canvas);
+        } else if (iosComposer != null && iosSideDrawables[0] != null) {
             float originX = inputIslandBubbleContainer.getX() + iosComposer.getX();
             float originY = inputIslandBubbleContainer.getY() + iosComposer.getY();
             iosComposer.getIosInputSurfaceBounds(iosSurfaceBounds, originX, originY, tmpRect.top, tmpRect.bottom);
