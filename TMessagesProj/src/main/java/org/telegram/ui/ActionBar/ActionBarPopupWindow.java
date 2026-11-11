@@ -877,6 +877,11 @@ public class ActionBarPopupWindow extends PopupWindow {
         }
 
         public void setupRadialSelectors(int color) {
+            if (zxc.iconic.xenon.NekoConfig.material3Popups) {
+                // Material rows own both their surface and pressed-state animation.
+                updateRadialSelectors();
+                return;
+            }
             int count = linearLayout.getChildCount();
             for (int a = 0; a < count; a++) {
                 View child = linearLayout.getChildAt(a);
