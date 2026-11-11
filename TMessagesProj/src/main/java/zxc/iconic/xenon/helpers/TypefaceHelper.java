@@ -198,21 +198,67 @@ public class TypefaceHelper {
     }
 
     public static Typeface createRoundedTypeface(int weight, boolean italic) {
-        Typeface base = createTypeface(weight, italic);
-        if (!supportsRoundedTypeface()) return base;
+        if (!supportsRoundedTypeface()) return createTypeface(weight, italic);
         String key = ClientFonts.generation() + ":" + weight + ":" + italic;
         synchronized (roundedVariants) {
             Typeface result = roundedVariants.get(key);
             if (result == null) {
-                Paint paint = new Paint();
-                Typeface source = flexBase();
-                paint.setTypeface(Build.VERSION.SDK_INT >= 28 ? Typeface.create(source, weight, italic) : source);
-                paint.setFontVariationSettings("'ROND' 100, 'wght' " + weight);
-                result = paint.getTypeface();
+                // Variation settings on the primary face do not reach Android's fallback
+                // fonts. Give Google Sans its own weight so mixed-script titles stay bold.
+                if (Build.VERSION.SDK_INT >= 29 && (ClientFonts.useGoogleSans() || ClientFonts.selectedId().isEmpty())) {
+                    result = GoogleSansFallback.create(weight, italic);
+                }
+                if (result == null) {
+                    Paint paint = new Paint();
+                    Typeface source = flexBase();
+                    paint.setTypeface(Build.VERSION.SDK_INT >= 28 ? Typeface.create(source, weight, italic) : source);
+                    paint.setFontVariationSettings("'ROND' 100, 'wght' " + weight);
+                    result = paint.getTypeface();
+                }
                 roundedVariants.put(key, result);
                 roundedGenerations.put(result, ClientFonts.generation());
             }
             return result;
+        }
+    }
+
+    /** Isolated from the legacy path: custom fallback families require Android 10. */
+    private static final class GoogleSansFallback {
+        private static android.graphics.fonts.Font flexSource;
+        private static android.graphics.fonts.Font fallbackSource;
+
+        private static android.graphics.fonts.Font.Builder variantBuilder(android.graphics.fonts.Font source) {
+            // Both paths share the original direct buffer instead of copying the asset
+            // for every intermediate weight produced by a tab-selection animation.
+            return Build.VERSION.SDK_INT >= 31 ? new android.graphics.fonts.Font.Builder(source)
+                    : new android.graphics.fonts.Font.Builder(source.getBuffer());
+        }
+
+        static Typeface create(int weight, boolean italic) {
+            try {
+                android.content.res.AssetManager assets = org.telegram.messenger.ApplicationLoader.applicationContext.getAssets();
+                if (flexSource == null) {
+                    flexSource = new android.graphics.fonts.Font.Builder(assets, "fonts/GoogleSansFlex.ttf").build();
+                }
+                if (fallbackSource == null) {
+                    fallbackSource = new android.graphics.fonts.Font.Builder(assets, "fonts/GoogleSans.ttf").build();
+                }
+                int slant = italic ? android.graphics.fonts.FontStyle.FONT_SLANT_ITALIC
+                        : android.graphics.fonts.FontStyle.FONT_SLANT_UPRIGHT;
+                android.graphics.fonts.Font flex = variantBuilder(flexSource)
+                        .setWeight(weight).setSlant(slant)
+                        .setFontVariationSettings("'ROND' 100, 'wght' " + weight).build();
+                android.graphics.fonts.Font fallback = variantBuilder(fallbackSource)
+                        .setWeight(weight).setSlant(slant)
+                        .setFontVariationSettings("'wght' " + Math.max(400, Math.min(700, weight)) + ", 'opsz' 18, 'GRAD' 0").build();
+                return new Typeface.CustomFallbackBuilder(new android.graphics.fonts.FontFamily.Builder(flex).build())
+                        .addCustomFallback(new android.graphics.fonts.FontFamily.Builder(fallback).build())
+                        .setSystemFallback("sans-serif")
+                        .setStyle(new android.graphics.fonts.FontStyle(weight, slant)).build();
+            } catch (java.io.IOException | IllegalArgumentException error) {
+                FileLog.e(error);
+                return null;
+            }
         }
     }
 

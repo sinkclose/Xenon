@@ -381,10 +381,6 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
     private void applyRoundedFontWeight() {
         int weight = Math.round(500 + 300 * fontSelection);
         textView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(weight, false));
-        if (android.os.Build.VERSION.SDK_INT >= 26) {
-            textView.setFontVariationSettings("'ROND' 100, 'wght' " + weight);
-            zxc.iconic.xenon.helpers.TypefaceHelper.rememberRoundedTypeface(textView.getTypeface());
-        }
         invalidate();
     }
 
