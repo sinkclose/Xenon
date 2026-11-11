@@ -107,6 +107,11 @@ public class Switch extends View {
                     AndroidUtilities.dp(zxc.iconic.xenon.helpers.IosSwitchDynamics.VIEW_HEIGHT));
         } else {
             super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+            if (zxc.iconic.xenon.NekoConfig.material3Switches) {
+                // Alpha layers clip to the view bounds even when the parent doesn't.
+                // Reserve the full Material track height, including in legacy 20dp cells.
+                setMeasuredDimension(getMeasuredWidth(), Math.max(getMeasuredHeight(), AndroidUtilities.dp(32)));
+            }
         }
     }
 
