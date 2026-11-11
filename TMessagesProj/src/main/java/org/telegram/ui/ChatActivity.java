@@ -3013,16 +3013,16 @@ public class ChatActivity extends BaseFragment implements
             glassBackgroundSourceFrostedRenderNode.setUnderSource(glassWallpaperSource);
 
             glassBackgroundDrawableFactoryFrosted = new BlurredBackgroundDrawableViewFactory(glassBackgroundSourceFrostedRenderNode);
-            glassBackgroundDrawableFactoryFrosted.setLiquidGlassEffectAllowed(!NonIslandHelper.chatElements());
+            glassBackgroundDrawableFactoryFrosted.setLiquidGlassEffectAllowed(!NonIslandHelper.chatElements() && !NekoConfig.materialChatElements);
 
-            if (!NonIslandHelper.chatElements() && LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS)) {
+            if (!NonIslandHelper.chatElements() && !NekoConfig.materialChatElements && LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS)) {
                 glassBackgroundSourceRenderNode = new BlurredBackgroundSourceRenderNode(navbarContentSourceWallpaper);
                 glassBackgroundSourceRenderNode.setOnDrawablesRelativePositionChangeListener(this::invalidateMergedVisibleBlurredPositionsAndSourcesPositions);
                 glassBackgroundSourceRenderNode.setScrollableNoiseSuppressor(scrollableViewNoiseSuppressor, DownscaleScrollableNoiseSuppressor.DRAW_GLASS);
                 glassBackgroundSourceRenderNode.setUnderSource(glassWallpaperSource);
                 glassBackgroundSourceRenderNode.shareWallpaperWith(glassBackgroundSourceFrostedRenderNode);
                 glassBackgroundDrawableFactory = new BlurredBackgroundDrawableViewFactory(glassBackgroundSourceRenderNode);
-                glassBackgroundDrawableFactory.setLiquidGlassEffectAllowed(!NonIslandHelper.chatElements());
+                glassBackgroundDrawableFactory.setLiquidGlassEffectAllowed(!NonIslandHelper.chatElements() && !NekoConfig.materialChatElements);
             } else {
                 glassBackgroundSourceRenderNode = null;
                 glassBackgroundDrawableFactory = glassBackgroundDrawableFactoryFrosted;
@@ -3047,7 +3047,7 @@ public class ChatActivity extends BaseFragment implements
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && NekoConfig.blurredFadeViewEnabled()) {
             fadeBlurSource = new BlurredBackgroundSourceRenderNode(null);
             fadeBlurSource.setOnProgressiveBlurReadyListener(this::invalidateFadeBlur);
-            fadeBlurSource.setUnderSource(NekoConfig.blurredFadeDimming
+            fadeBlurSource.setUnderSource(isChatFadeDimmingEnabled()
                     ? fadeWallpaperSource : navbarContentSourceWallpaper);
             fadeBlurFactory = new BlurredBackgroundDrawableViewFactory(fadeBlurSource);
         } else {
@@ -4008,6 +4008,10 @@ if (feedIntegration != null) {
 
     private Runnable justForTest;
 
+    private boolean isChatFadeDimmingEnabled() {
+        return NekoConfig.blurredFadeDimming && !NekoConfig.materialChatElements;
+    }
+
     @Override
     public View createView(Context context) {
         Timer t = Timer.create("ChatActivity.createView");
@@ -4015,6 +4019,9 @@ if (feedIntegration != null) {
         blurredBackgroundColorProvider = new BlurredBackgroundColorProviderThemed(themeDelegate, Theme.key_chat_messagePanelBackground) {
             @Override
             public int getBackgroundColor() {
+                if (NekoConfig.materialChatElements) {
+                    return BlurredBackgroundProviderImpl.materialChatSurfaceColor(themeDelegate);
+                }
                 if (!BlurredBackgroundProviderImpl.checkBlurEnabled(currentAccount, themeDelegate)) {
                     return ColorUtils.setAlphaComponent(getThemedColor(Theme.key_chat_messagePanelBackground), 255);
                 }
@@ -4597,7 +4604,7 @@ if (feedIntegration != null) {
         });
 
         topPanelLayout = new ChatActivityTopPanelLayout(context);
-        topPanelLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
+        topPanelLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElementsEnabled());
         topPanelLayout.setOnAnimatedHeightChangedListener(() -> {
             invalidateChatListViewTopPadding();
             invalidateMessagesVisiblePart();
@@ -4610,7 +4617,7 @@ if (feedIntegration != null) {
         avatarContainer = new ChatAvatarContainer(context, this, currentEncryptedChat != null, themeDelegate) {
             @Override
             protected boolean onAvatarClick() {
-                if (NekoConfig.avatarPlacement == NekoConfig.AVATAR_PLACEMENT_RIGHT && !NonIslandHelper.chatElements() && headerItem != null) {
+                if (NekoConfig.getChatAvatarPlacement() == NekoConfig.AVATAR_PLACEMENT_RIGHT && !NonIslandHelper.chatElements() && headerItem != null) {
                     headerItem.toggleSubMenu();
                     return true;
                 }
@@ -4640,8 +4647,8 @@ if (feedIntegration != null) {
             }
         };
         avatarContainer.setGlassMode();
-        avatarContainer.setM3HeaderMode(NekoConfig.material3ChatHeaders);
-        avatarContainer.setBiggerAvatar(NekoConfig.biggerAvatar);
+        avatarContainer.setM3HeaderMode(NekoConfig.useCustomHeaderPill());
+        avatarContainer.setBiggerAvatar(NekoConfig.useBiggerChatAvatar());
         avatarContainer.allowShorterStatus = true;
         avatarContainer.premiumIconHiddable = true;
         avatarContainer.allowDrawStories = dialog_id < 0 && !isTopic;
@@ -4736,7 +4743,7 @@ if (feedIntegration != null) {
             searchItemVisible = false;
         }
 
-        if (chatMode == 0 && (threadMessageId == 0 || isTopic) && !UserObject.isReplyUser(currentUser) && !isReport() && !(NekoConfig.avatarPlacement == NekoConfig.AVATAR_PLACEMENT_RIGHT && !NonIslandHelper.chatElements())) {
+        if (chatMode == 0 && (threadMessageId == 0 || isTopic) && !UserObject.isReplyUser(currentUser) && !isReport() && !(NekoConfig.getChatAvatarPlacement() == NekoConfig.AVATAR_PLACEMENT_RIGHT && !NonIslandHelper.chatElements())) {
             TLRPC.UserFull userFull = null;
             if (currentUser != null) {
                 audioCallIconItem = menu.lazilyAddItem(call, R.drawable.call, themeDelegate);
@@ -5083,17 +5090,18 @@ if (feedIntegration != null) {
 
         contentView.setOccupyStatusBar(!inBubbleMode && !isInsideContainer && !inPreviewMode);
 
-actionBar.nonIsland = NonIslandHelper.chatElements();
-        actionBar.m3ChatHeader = NekoConfig.material3ChatHeaders && !NonIslandHelper.chatElements();
+        actionBar.nonIsland = NonIslandHelper.chatElements() || NekoConfig.materialChatElements;
+        actionBar.materialChatHeader = NekoConfig.materialChatElements;
+        actionBar.m3ChatHeader = NekoConfig.useCustomHeaderPill() && !NonIslandHelper.chatElements();
         final int avatarPlacement;
         if (NonIslandHelper.chatElements()) {
             avatarPlacement = NekoConfig.AVATAR_PLACEMENT_LEFT;
-        } else if (NekoConfig.centerChatHeader) {
-            avatarPlacement = NekoConfig.avatarPlacement;
+        } else if (NekoConfig.useCenteredChatHeader()) {
+            avatarPlacement = NekoConfig.getChatAvatarPlacement();
         } else {
-            avatarPlacement = NekoConfig.avatarPlacement == NekoConfig.AVATAR_PLACEMENT_CENTER ? NekoConfig.AVATAR_PLACEMENT_LEFT : NekoConfig.avatarPlacement;
+            avatarPlacement = NekoConfig.getChatAvatarPlacement() == NekoConfig.AVATAR_PLACEMENT_CENTER ? NekoConfig.AVATAR_PLACEMENT_LEFT : NekoConfig.getChatAvatarPlacement();
         }
-        final boolean centeredPill = NekoConfig.centerChatHeader && !NonIslandHelper.chatElements();
+        final boolean centeredPill = NekoConfig.useCenteredChatHeader() && !NonIslandHelper.chatElements();
         final boolean textOnlyPill = centeredPill && avatarPlacement != NekoConfig.AVATAR_PLACEMENT_CENTER;
         final boolean avatarRight = avatarPlacement == NekoConfig.AVATAR_PLACEMENT_RIGHT && !NonIslandHelper.chatElements() && avatarContainer.hasVisibleAvatar();
         avatarOnRight = avatarRight;
@@ -5128,7 +5136,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
                 if (iconView != null) {
                     iconView.setVisibility(View.INVISIBLE);
                 }
-                actionBar.avatarRightBigger = NekoConfig.biggerAvatar;
+                actionBar.avatarRightBigger = NekoConfig.useBiggerChatAvatar();
             } else {
                 // No header slot at the right (e.g. comments): hide the avatar
                 // instead of leaving it stuck half off-screen at the edge.
@@ -5142,7 +5150,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
         }
 
         chatInputViewsContainer = new ChatInputViewsContainer(context);
-        chatInputViewsContainer.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
+        chatInputViewsContainer.setLiquidTouchEnabled(NekoConfig.liquidChatElementsEnabled());
         chatInputViewsContainer.setClipChildren(false);
         chatInputViewsContainer.setWindowInsetsProvider(windowInsetsStateHolder);
         chatInputViewsContainer.setInputIslandBubbleDrawable(
@@ -8208,7 +8216,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
         fadeBlurStockApplied = false;
         if (fadeBlurFactory != null) {
             chatActivityFadeView.setup(fadeBlurFactory, dimWallpaperDrawableFactory);
-            chatActivityFadeView.setDim(NekoConfig.blurredFadeDimming ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
+            chatActivityFadeView.setDim(isChatFadeDimmingEnabled() ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
             chatActivityFadeView.setOpaqueFade(true);
             chatActivityFadeView.setFadeHeightTop(dp(48), false);
             chatActivityFadeView.setFadeHeightBottom(dp(48), false);
@@ -8408,7 +8416,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
         // contentView.addView(topButtonsLayout, LayoutHelper.createFrame(57, 300, Gravity.RIGHT | Gravity.TOP));
 
         sideControlsButtonsLayout = new ChatActivitySideControlsButtonsLayout(context, resourceProvider, blurredBackgroundColorProvider, glassBackgroundDrawableFactory);
-        sideControlsButtonsLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
+        sideControlsButtonsLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElementsEnabled());
         sideControlsButtonsLayout.setOnClickListener(this::onSideControlButtonOnClick);
         sideControlsButtonsLayout.setOnLongClickListener(this::onSideControlButtonOnLongClick);
         {
@@ -9385,7 +9393,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
         }
 
         actionsButtonsLayout = new ChatActivityActionsButtonsLayout(context, resourceProvider, blurredBackgroundColorProvider, glassBackgroundDrawableFactory);
-        actionsButtonsLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
+        actionsButtonsLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElementsEnabled());
         actionsButtonsLayout.setSelectButtonOnClickListener(v -> {
             ArrayList<Integer> ids = new ArrayList<>();
             for (int a = 1; a >= 0; a--) {
@@ -9692,7 +9700,7 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
             }
         };
         bottomChannelButtonsLayout.setVisibility(View.INVISIBLE);
-        bottomChannelButtonsLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
+        bottomChannelButtonsLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElementsEnabled());
         bottomChannelButtonsLayout.setClipChildren(false);
         bottomChannelButtonsLayout.setAccentColor(getThemedColor(Theme.key_featuredStickers_addButton));
         bottomChannelButtonsLayout.setButtonOnClickListener(ChatActivityChannelButtonsLayout.BUTTON_SEARCH, v -> {
@@ -10303,8 +10311,8 @@ actionBar.nonIsland = NonIslandHelper.chatElements();
         }
 
 final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawableFactory.create(topPanelLayout, BlurredBackgroundProviderImpl.topPanelChatActivity(themeDelegate));
-        topPanelLayoutBackground.setRadius(dp(NonIslandHelper.chatElements() ? 0 : 18));
-        topPanelLayoutBackground.setPadding(dp(NonIslandHelper.chatElements() ? 0 : 7));
+        topPanelLayoutBackground.setRadius(dp(NonIslandHelper.chatHeader() ? 0 : 18));
+        topPanelLayoutBackground.setPadding(dp(NonIslandHelper.chatHeader() ? 0 : 7));
         topPanelLayout.setBlurredBackground(topPanelLayoutBackground);
         checkUi_topPanelLayoutWidth();
 
@@ -13708,7 +13716,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
 
         if (topPanelLayout != null) {
-            topPanelLayout.setTranslationY(ty - dp(NonIslandHelper.chatElements() ? 0 : 5) - getTopicTabsSideSize(TopicsTabsView.Position.TOP) * getHashtagTabsShownT());
+            topPanelLayout.setTranslationY(ty - dp(NonIslandHelper.chatHeader() ? 0 : 5) - getTopicTabsSideSize(TopicsTabsView.Position.TOP) * getHashtagTabsShownT());
         }
     }
 
@@ -19039,7 +19047,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         private void drawHeaderGlassGroup(Canvas canvas) {
             boolean merged = false;
             if (Build.VERSION.SDK_INT >= 33 && canvas.isHardwareAccelerated() && !headerGlassGroupFailed
-                    && (NekoConfig.liquidChatElements || LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS))
+                    && (NekoConfig.liquidChatElementsEnabled() || LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS))
                     && !NonIslandHelper.chatElements() && !switchingFromTopics
                     && glassSourceCaptureDepth == 0 && getTag(BlurBehindDrawable.TAG_DRAWING_AS_BACKGROUND) == null
                     && actionBar != null && actionBar.getVisibility() == VISIBLE
@@ -19500,7 +19508,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
         @Override
         public boolean dispatchTouchEvent(MotionEvent ev) {
-            return liquidTouchDispatcher.dispatchTouchEvent(this, ev, NekoConfig.liquidChatElements,
+            return liquidTouchDispatcher.dispatchTouchEvent(this, ev, NekoConfig.liquidChatElementsEnabled(),
                     () -> dispatchChatTouchEvent(ev));
         }
 
@@ -19835,6 +19843,14 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 canvas.scale(s, s, getMeasuredWidth() / 2f, getMeasuredHeight() / 2f);
             }
             super.dispatchDraw(canvas);
+            if (NekoConfig.materialChatElements && actionBar != null && actionBar.getVisibility() == VISIBLE) {
+                int materialHeaderSave = canvas.save();
+                canvas.translate(actionBar.getX(), actionBar.getY());
+                actionBar.drawMaterialChatCorners(canvas, actionBar.getHeight()
+                        + getTopPanelHeightWithPadding(0)
+                        + getTopicTabsSideSize(TopicsTabsView.Position.TOP) * getHashtagTabsShownT());
+                canvas.restoreToCount(materialHeaderSave);
+            }
             //if (fragmentContextView != null && fragmentContextView.isCallStyle()) {
             //    float alpha = (blurredView != null && blurredView.getVisibility() == View.VISIBLE) ? 1f - blurredView.getAlpha() : 1f;
             //    if (alpha > 0) {
@@ -32271,12 +32287,12 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         syncFadeBlurEnabledState();
         if (fadeBlurSource != null && NekoConfig.blurredFadeViewEnabled()) startFadeBlurContinuousUpdates();
         invalidateFadeBlur();
-        if (actionBar != null) actionBar.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
-        if (chatInputViewsContainer != null) chatInputViewsContainer.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
-        if (sideControlsButtonsLayout != null) sideControlsButtonsLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
-        if (topPanelLayout != null) topPanelLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
-        if (actionsButtonsLayout != null) actionsButtonsLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
-        if (bottomChannelButtonsLayout != null) bottomChannelButtonsLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElements);
+        if (actionBar != null) actionBar.setLiquidTouchEnabled(NekoConfig.liquidChatElementsEnabled());
+        if (chatInputViewsContainer != null) chatInputViewsContainer.setLiquidTouchEnabled(NekoConfig.liquidChatElementsEnabled());
+        if (sideControlsButtonsLayout != null) sideControlsButtonsLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElementsEnabled());
+        if (topPanelLayout != null) topPanelLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElementsEnabled());
+        if (actionsButtonsLayout != null) actionsButtonsLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElementsEnabled());
+        if (bottomChannelButtonsLayout != null) bottomChannelButtonsLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElementsEnabled());
         zxc.iconic.xenon.plugins.PluginManager.setCurrentDialogId(dialog_id);
         checkShowBlur(false);
         activityResumeTime = System.currentTimeMillis();
@@ -39113,20 +39129,21 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     public void refreshFeedHeaderConfiguration(View avatarAnchor) {
         if (!isFeedSearch() || avatarContainer == null || actionBar == null) return;
         boolean nonIsland = NonIslandHelper.chatElements();
-        int placement = nonIsland ? NekoConfig.AVATAR_PLACEMENT_LEFT : NekoConfig.avatarPlacement;
-        if (!NekoConfig.centerChatHeader && placement == NekoConfig.AVATAR_PLACEMENT_CENTER) {
+        int placement = nonIsland ? NekoConfig.AVATAR_PLACEMENT_LEFT : NekoConfig.getChatAvatarPlacement();
+        if (!NekoConfig.useCenteredChatHeader() && placement == NekoConfig.AVATAR_PLACEMENT_CENTER) {
             placement = NekoConfig.AVATAR_PLACEMENT_LEFT;
         }
-        boolean centered = NekoConfig.centerChatHeader && !nonIsland;
+        boolean centered = NekoConfig.useCenteredChatHeader() && !nonIsland;
         boolean textOnly = centered && placement != NekoConfig.AVATAR_PLACEMENT_CENTER;
         avatarOnRight = placement == NekoConfig.AVATAR_PLACEMENT_RIGHT;
-        actionBar.nonIsland = nonIsland;
-        actionBar.m3ChatHeader = NekoConfig.material3ChatHeaders && !nonIsland;
+        actionBar.nonIsland = nonIsland || NekoConfig.materialChatElements;
+        actionBar.materialChatHeader = NekoConfig.materialChatElements;
+        actionBar.m3ChatHeader = NekoConfig.useCustomHeaderPill() && !nonIsland;
         actionBar.centerChatHeader = centered && placement == NekoConfig.AVATAR_PLACEMENT_CENTER;
         actionBar.textOnlyPill = textOnly;
-        actionBar.avatarRightBigger = avatarOnRight && NekoConfig.biggerAvatar;
-        avatarContainer.setM3HeaderMode(NekoConfig.material3ChatHeaders);
-        avatarContainer.setBiggerAvatar(NekoConfig.biggerAvatar);
+        actionBar.avatarRightBigger = avatarOnRight && NekoConfig.useBiggerChatAvatar();
+        avatarContainer.setM3HeaderMode(NekoConfig.useCustomHeaderPill());
+        avatarContainer.setBiggerAvatar(NekoConfig.useBiggerChatAvatar());
         avatarContainer.setFeedAvatar();
         avatarContainer.setAvatarPlacement(placement);
         avatarContainer.setTextOnlyPill(textOnly);
@@ -51079,7 +51096,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             * (1f - animatorSearchResultAsListVisibility.getFloatValue())
             * (1f - getHashtagTabsShownT());
 
-        if (NonIslandHelper.chatElements()) {
+        if (NonIslandHelper.chatHeader()) {
             topPanelLayout.setPadding((int) sideMenu, 0, 0, 0);
             return;
         }
@@ -51984,7 +52001,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
         if (enabled) {
             // Restore settings even when no new content capture is needed.
-            chatActivityFadeView.setDim(NekoConfig.blurredFadeDimming ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
+            chatActivityFadeView.setDim(isChatFadeDimmingEnabled() ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
         }
     }
 
@@ -52038,7 +52055,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
         // Capture the actual chat background separately, preserving patterns and
         // custom drawables that the wallpaper bitmap provider cannot reproduce.
-        if (NekoConfig.blurredFadeDimming && (fadeWallpaperDirty || fadeWallpaperWidth != fw || fadeWallpaperHeight != fh
+        if (isChatFadeDimmingEnabled() && (fadeWallpaperDirty || fadeWallpaperWidth != fw || fadeWallpaperHeight != fh
                 || fadeWallpaperSource.needUpdateDisplayList(fw, fh))) {
             Canvas wallpaperCanvas = fadeWallpaperSource.beginRecording(fw, fh);
             try {
@@ -52059,7 +52076,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
         // Messages and wallpaper particles pass through the blur effect in
         // dimming mode. The wallpaper itself remains outside that effect.
-        final BlurredBackgroundSource underSource = NekoConfig.blurredFadeDimming
+        final BlurredBackgroundSource underSource = isChatFadeDimmingEnabled()
                 ? fadeWallpaperSource : navbarContentSourceWallpaper;
         if (fadeBlurSource.underSource != underSource) {
             fadeBlurSource.setUnderSource(underSource);
@@ -52069,7 +52086,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
         Canvas c = fadeBlurSource.beginRecording(fw, fh);
         try {
-            if (!NekoConfig.blurredFadeDimming) {
+            if (!isChatFadeDimmingEnabled()) {
                 c.drawColor(wallpaperColor);
                 contentView.drawWallpaperForFade(c, true);
             } else {
@@ -52080,7 +52097,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             fadeBlurSource.endRecording();
         }
         chatActivityFadeView.setDimColor(wallpaperColor);
-        chatActivityFadeView.setDim(NekoConfig.blurredFadeDimming ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
+        chatActivityFadeView.setDim(isChatFadeDimmingEnabled() ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
         chatActivityFadeView.invalidate();
     }
 

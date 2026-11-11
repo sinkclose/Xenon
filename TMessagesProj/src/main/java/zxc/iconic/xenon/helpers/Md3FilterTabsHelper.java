@@ -8,6 +8,7 @@ import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.ui.ActionBar.Theme;
 
 import androidx.core.graphics.ColorUtils;
 
@@ -36,6 +37,13 @@ public class Md3FilterTabsHelper {
         int surface = ColorUtils.setAlphaComponent(backgroundColor, 255);
         return checked ? ColorUtils.compositeColors(activeColor, surface)
                 : ColorUtils.blendARGB(ColorUtils.compositeColors(inactiveColor, surface), surface, 0.78f);
+    }
+
+    public static int getChatSurfaceColor(Theme.ResourcesProvider resourcesProvider) {
+        return getContainerColor(false,
+                Theme.getColor(Theme.key_actionBarTabActiveText, resourcesProvider),
+                Theme.getColor(Theme.key_actionBarTabUnactiveText, resourcesProvider),
+                Theme.getColor(Theme.key_actionBarDefault, resourcesProvider));
     }
 
     public static int getContentColor(boolean checked, int activeColor, int inactiveColor, int backgroundColor) {

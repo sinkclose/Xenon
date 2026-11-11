@@ -41,7 +41,7 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout implements 
     }
 
     private boolean liquidTouchAllowed() {
-        return liquidTouch != null && !NonIslandHelper.chatElements();
+        return liquidTouch != null && !NonIslandHelper.chatHeader();
     }
 
     @Override
@@ -125,7 +125,7 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout implements 
     }
 
     private float cornerRadius(float width, float height) {
-        if (NonIslandHelper.chatElements()) return 0f;
+        if (NonIslandHelper.chatHeader()) return 0f;
         float maximum = Math.max(0f, Math.min(width, height) / 2f);
         float regular = Math.min(dp(18), maximum);
         for (int i = 0; i < getEntriesCount(); i++) {
@@ -143,7 +143,7 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout implements 
 
     private void checkBoundsAndClipping() {
         final float bgHeight = getMetadata().getTotalHeight();
-        final float bgAlpha = NonIslandHelper.chatElements() ? 1 : getMetadata().getTotalVisibility();
+        final float bgAlpha = NonIslandHelper.chatHeader() ? 1 : getMetadata().getTotalVisibility();
 
         clipRectF.set(getPaddingLeft(), getPaddingTop(), getMeasuredWidth() - getPaddingRight(), getPaddingTop() + bgHeight);
         if (liquidTouch != null) liquidTouch.setBounds(clipRectF.left, clipRectF.top, clipRectF.right, clipRectF.bottom);
@@ -155,7 +155,7 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout implements 
         if (backgroundDrawable != null) {
             backgroundDrawable.setAlpha((int) (bgAlpha * 255));
             backgroundDrawable.setBounds(getPaddingLeft() - dp(7), 0, getMeasuredWidth() - getPaddingRight() + dp(7), getPaddingTop() + getPaddingBottom() + (int) bgHeight);
-            if (!NonIslandHelper.chatElements()) {
+            if (!NonIslandHelper.chatHeader()) {
                 backgroundDrawable.setRadius(cornerRadius(backgroundDrawable.getBounds().width(), backgroundDrawable.getBounds().height()));
             }
         }
@@ -250,7 +250,9 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout implements 
             Theme.dividerPaint.setAlpha((int) (wasAlpha * alpha));
             final float offsetL = getPaddingLeft() + dp(16) * (1f - alpha);
             final float offsetR = getPaddingRight() + dp(16) * (1f - alpha);
-            canvas.drawLine(offsetL, top, getWidth() - offsetR, top, Theme.dividerPaint);
+            if (!zxc.iconic.xenon.NekoConfig.materialChatElements) {
+                canvas.drawLine(offsetL, top, getWidth() - offsetR, top, Theme.dividerPaint);
+            }
             Theme.dividerPaint.setAlpha(wasAlpha);
         }
 

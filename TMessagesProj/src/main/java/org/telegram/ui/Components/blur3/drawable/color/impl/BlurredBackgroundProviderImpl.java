@@ -249,6 +249,12 @@ public class BlurredBackgroundProviderImpl {
     }
 
     public static BlurredBackgroundProvider topPanelChatActivity(Theme.ResourcesProvider resourcesProvider) {
+        if (zxc.iconic.xenon.NekoConfig.materialChatElements) {
+            return new BlurredBackgroundProviderBuilder(resourcesProvider)
+                    .setBackgroundColor((r, isDark) -> materialChatSurfaceColor(r))
+                    .setStrokeColorTop(0, 0).setStrokeColorBottom(0, 0)
+                    .setShadowColor(0, 0).setStrokeWidth(0, 0).build();
+        }
         BlurredBackgroundProviderBuilder b = new BlurredBackgroundProviderBuilder(resourcesProvider)
                 .setBackgroundColor((r, isDark) -> {
                     if (!checkBlurEnabled(resourcesProvider)) {
@@ -266,6 +272,12 @@ public class BlurredBackgroundProviderImpl {
                 .setStrokeWidth(dpf2(0.5f), dpf2(0.5f));
         }
         return b.build();
+    }
+
+    public static int materialChatSurfaceColor(Theme.ResourcesProvider resourcesProvider) {
+        // A fixed Material surface over blur, independent of glass tint and dimming sliders.
+        return Theme.multAlpha(zxc.iconic.xenon.helpers.Md3FilterTabsHelper.getChatSurfaceColor(resourcesProvider),
+                SharedConfig.chatBlurEnabled() ? 0.90f : 1f);
     }
 
     public static BlurredBackgroundProvider chatTitlePill(Theme.ResourcesProvider resourcesProvider) {
