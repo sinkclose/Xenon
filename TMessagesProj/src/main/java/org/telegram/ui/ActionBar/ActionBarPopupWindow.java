@@ -78,6 +78,106 @@ public class ActionBarPopupWindow extends PopupWindow {
     private boolean pauseNotifications;
     private long outEmptyTime = -1;
     private boolean scaleOut;
+    private android.window.OnBackInvokedDispatcher predictiveBackDispatcher;
+    private zxc.iconic.xenon.helpers.PredictiveTabBack predictiveBackCallback;
+    private View predictiveBackView;
+    private final View.OnAttachStateChangeListener predictiveBackAttachment = new View.OnAttachStateChangeListener() {
+        @Override public void onViewAttachedToWindow(View v) {}
+        @Override public void onViewDetachedFromWindow(View v) { clearPredictiveBack(); }
+    };
+
+    private void installPredictiveBack() {
+        if (Build.VERSION.SDK_INT < 34) return;
+        clearPredictiveBack();
+        final View view = predictiveBackView = getContentView();
+        view.addOnAttachStateChangeListener(predictiveBackAttachment);
+        // PopupWindow installs its ordinary dismissal callback while attaching the window.
+        view.post(() -> {
+            if (predictiveBackView != view || !isShowing() || !view.isAttachedToWindow()) return;
+            predictiveBackDispatcher = view.findOnBackInvokedDispatcher();
+            if (predictiveBackDispatcher == null) return;
+            predictiveBackCallback = new zxc.iconic.xenon.helpers.PredictiveTabBack(
+                    new android.window.OnBackAnimationCallback() {
+                        @Override public void onBackInvoked() { dismiss(); }
+                    }, this::getPredictiveBackTarget);
+            predictiveBackDispatcher.registerOnBackInvokedCallback(
+                    android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, predictiveBackCallback);
+        });
+    }
+
+    private void clearPredictiveBack() {
+        if (Build.VERSION.SDK_INT < 34) return;
+        if (predictiveBackView != null) predictiveBackView.removeOnAttachStateChangeListener(predictiveBackAttachment);
+        predictiveBackView = null;
+        zxc.iconic.xenon.helpers.PredictiveTabBack callback = predictiveBackCallback;
+        predictiveBackCallback = null;
+        if (predictiveBackDispatcher != null && callback != null) {
+            predictiveBackDispatcher.unregisterOnBackInvokedCallback(callback);
+        }
+        predictiveBackDispatcher = null;
+        if (callback != null) callback.cancel();
+    }
+
+    private zxc.iconic.xenon.helpers.PredictiveTabBack.Target getPredictiveBackTarget() {
+        if (!isShowing() || isClosingAnimated || windowAnimatorSet != null) return null;
+        final View content = getContentView();
+        final IosPopupMorph morph = iosSurface;
+        final float alpha = content.getAlpha(), sx = content.getScaleX(), sy = content.getScaleY();
+        final float px = content.getPivotX(), py = content.getPivotY();
+        final View window = content.getRootView();
+        final WindowManager.LayoutParams params = window.getLayoutParams() instanceof WindowManager.LayoutParams
+                ? (WindowManager.LayoutParams) window.getLayoutParams() : null;
+        final float dim = params == null ? 0 : params.dimAmount;
+        return new zxc.iconic.xenon.helpers.PredictiveTabBack.Target() {
+            private boolean active;
+            @Override public boolean begin() {
+                active = true;
+                if (morph == null) {
+                    content.setPivotX(content.getWidth());
+                    content.setPivotY(content.getHeight());
+                }
+                return true;
+            }
+            @Override public void update(float progress) {
+                if (!active) return;
+                float visible = 1 - Math.max(0, Math.min(1, progress));
+                if (morph != null) morph.setPredictiveBackProgress(visible);
+                else {
+                    content.setAlpha(alpha * visible);
+                    content.setScaleX(sx * (.95f + .05f * visible));
+                    content.setScaleY(sy * (.95f + .05f * visible));
+                }
+                updateDim(visible);
+            }
+            private void updateDim(float visible) {
+                if (params == null || dim == 0 || !window.isAttachedToWindow()) return;
+                params.dimAmount = dim * visible;
+                try {
+                    ((WindowManager) window.getContext().getSystemService(Context.WINDOW_SERVICE)).updateViewLayout(window, params);
+                } catch (IllegalArgumentException ignored) {}
+            }
+            @Override public void end(boolean commit) {
+                if (!active) return;
+                active = false;
+                if (commit) {
+                    if (morph != null) dismiss(false);
+                    else {
+                        int style = getAnimationStyle();
+                        setAnimationStyle(0);
+                        try { dismiss(false); } finally { setAnimationStyle(style); }
+                    }
+                } else {
+                    if (morph != null) morph.setPredictiveBackProgress(1);
+                    updateDim(1);
+                }
+                content.setAlpha(alpha);
+                content.setScaleX(sx);
+                content.setScaleY(sy);
+                content.setPivotX(px);
+                content.setPivotY(py);
+            }
+        };
+    }
     private java.lang.ref.WeakReference<View> animationSource;
     private RectF animationSourceBounds;
     private View animationSurface;
@@ -225,6 +325,7 @@ public class ActionBarPopupWindow extends PopupWindow {
             }
         });
         windowAnimatorSet.start();
+        installPredictiveBack();
         return true;
     }
 
@@ -1143,6 +1244,7 @@ public class ActionBarPopupWindow extends PopupWindow {
             prepareNativeSurface(source);
             zxc.iconic.xenon.helpers.RoundedUiFonts.observePopup(getContentView());
         super.showAsDropDown(anchor, xoff, yoff);
+            installPredictiveBack();
             registerListener(anchor);
         } catch (Exception e) {
             FileLog.e(e);
@@ -1158,6 +1260,7 @@ public class ActionBarPopupWindow extends PopupWindow {
         prepareNativeSurface(source);
         zxc.iconic.xenon.helpers.RoundedUiFonts.observePopup(getContentView());
         super.showAsDropDown(anchor, xoff, yoff, gravity);
+        installPredictiveBack();
         registerListener(anchor);
     }
 
@@ -1242,6 +1345,7 @@ public class ActionBarPopupWindow extends PopupWindow {
         prepareNativeSurface(source);
         zxc.iconic.xenon.helpers.RoundedUiFonts.observePopup(getContentView());
         super.showAtLocation(parent, gravity, x, y);
+        installPredictiveBack();
         unregisterListener();
     }
 
@@ -1291,6 +1395,7 @@ public class ActionBarPopupWindow extends PopupWindow {
     }
 
     public void dismiss(boolean animated) {
+        clearPredictiveBack();
         if (iosSurface != null) {
             dismissIosSurface(animated);
             return;

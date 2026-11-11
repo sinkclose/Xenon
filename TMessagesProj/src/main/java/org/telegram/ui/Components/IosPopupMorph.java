@@ -169,6 +169,13 @@ public final class IosPopupMorph extends FrameLayout {
         return animateProgress(1, IosPopupMorphGeometry.OPEN_DURATION, null);
     }
 
+    public void setPredictiveBackProgress(float visible) {
+        if (released) return;
+        closing = false;
+        progress = Math.max(0, Math.min(1, visible));
+        invalidate();
+    }
+
     public AnimatorSet closing(Runnable onEnd) {
         closingOpacity = IosPopupMorphGeometry.surfaceOpacity(progress, false);
         closing = true;
