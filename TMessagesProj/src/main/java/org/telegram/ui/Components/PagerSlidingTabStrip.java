@@ -177,7 +177,10 @@ public class PagerSlidingTabStrip extends HorizontalScrollView {
     private void addTab(final int position, CharSequence text) {
         TextTab tab = new TextTab(getContext(), position);
         tab.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-        tab.setTypeface(AndroidUtilities.bold());
+        // Start with the face the rounded-font pass would settle on: re-creating tabs with a
+        // plain face lets per-layout font rewrites change text widths, and the strip's
+        // onSizeChanged then rebuilds the tabs again in an endless blink loop.
+        tab.setTypeface(zxc.iconic.xenon.helpers.RoundedUiFonts.forTextView(AndroidUtilities.bold()));
         tab.setTextColor(getGlassIconColor(0.6f));
         tab.setFocusable(true);
         tab.setGravity(Gravity.CENTER);
@@ -347,7 +350,10 @@ public class PagerSlidingTabStrip extends HorizontalScrollView {
     }
 
     public void onSizeChanged(int paramInt1, int paramInt2, int paramInt3, int paramInt4) {
-        if (!shouldExpand) {
+        // Tabs are WRAP_CONTENT and never depend on the strip's size; rebuilding them on
+        // every size change only feeds width-oscillation loops, so rebuild solely when the
+        // adapter count no longer matches the tabs that were already built.
+        if (!shouldExpand && tabsContainer.getChildCount() != tabCount) {
             post(PagerSlidingTabStrip.this::notifyDataSetChanged);
         }
     }

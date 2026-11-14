@@ -9212,7 +9212,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 final float avatarBottom = (float) Math.floor(endNameY) + (avatarContainer.getHeight() * avatarContainer.getScaleY() + dpf2(8)) * (openAnimationInProgress ? avatarAnimationProgress : diff);
                 nameY = avatarBottom + dp(1.3f) + dp(7) * diff + titleAnimationsYDiff * (1f - avatarAnimationProgress);
                 onlineY = avatarBottom + dp(24) + (float) Math.floor(11 * AndroidUtilities.density) * diff;
-                idY = avatarBottom + dp(32) + (float) Math.floor(22 * AndroidUtilities.density) * diff;
+                idY = avatarBottom + dp(32) + (float) Math.floor(26 * AndroidUtilities.density) * diff;
                 final float minimizedX = openAnimationInProgress ? (prevAvatarTranslation - dp(109) + dp(48)) : -dpf2(42 + 4);
 
                 if (showStatusButton != null) {
@@ -9240,7 +9240,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     final float onlinePadding = !hasFallbackPhoto && onlineView.getExactWidth() <= onlineMaxWidth - onlineView.getPaddingLeft() - onlineView.getPaddingRight() ? onlineView.getPaddingLeft() : 0;
                     float onlineX = viewportWidth / 2f - (params2.leftMargin + onlinePadding + Math.min(onlineView.getExactWidth(), onlineMaxWidth) * 0.5f);
                     FrameLayout.LayoutParams params3 = (FrameLayout.LayoutParams) idTextView.getLayoutParams();
-                    float idX = viewportWidth / 2f - (params3.leftMargin + Math.min(idTextView.getExactWidth(), params3.width) * 0.5f);
+                    float idX = viewportWidth / 2f - (params3.leftMargin + idTextView.getCurrentView().getPaddingLeft() + Math.min(idTextView.getExactWidth(), params3.width) * 0.5f);
 
                     if (a == 1) {
                         this.nameX = nameX;
@@ -9336,7 +9336,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             params = (FrameLayout.LayoutParams) onlineTextView[a].getLayoutParams();
             float onlineX = listView.getMeasuredWidth() / 2f - (params.leftMargin + (hasFallbackPhoto ? 0 : onlineTextView[a].getPaddingLeft()) + onlineTextView[a].getExactWidth() * 0.5f);
             params = (FrameLayout.LayoutParams) idTextView.getLayoutParams();
-            float idX = listView.getMeasuredWidth() / 2f - (params.leftMargin + idTextView.getExactWidth() * 0.5f);
+            float idX = listView.getMeasuredWidth() / 2f - (params.leftMargin + idTextView.getCurrentView().getPaddingLeft() + idTextView.getExactWidth() * 0.5f);
 
             if (a == 1) {
                 this.nameX = nameX;
@@ -9409,7 +9409,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         float avatarBottom = (float) Math.floor(endNameY) + (AndroidUtilities.dp(42) * scale + dpf2(8)) * diff;
         nameY = avatarBottom + AndroidUtilities.dp(1.3f) + AndroidUtilities.dp(7) * diff;
         onlineY = avatarBottom + AndroidUtilities.dp(24) + (float) Math.floor(11 * AndroidUtilities.density) * diff;
-        idY = avatarBottom + AndroidUtilities.dp(32) + (float) Math.floor(22 * AndroidUtilities.density) * diff;
+        idY = avatarBottom + AndroidUtilities.dp(32) + (float) Math.floor(26 * AndroidUtilities.density) * diff;
     }
 
     public RecyclerListView getListView() {

@@ -56,6 +56,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import zxc.iconic.xenon.helpers.TypefaceHelper;
+
 @SuppressLint("ViewConstructor")
 public class ProfileActionsView extends View {
 
@@ -238,6 +240,28 @@ public class ProfileActionsView extends View {
         return (w - betweenPadding * (activeCount - 1) - xpadding * 2f) / activeCount;
     }
 
+    // Icon and label geometry was tuned for the system font's line box. Scale the active
+    // font's layout height back to that reference so custom fonts (e.g. Google Sans,
+    // whose line box is ~7% taller than Roboto's) don't shift the contents vertically.
+    private float refTextLineBox = -1f;
+
+    private float normalizedTextHeight(Action action) {
+        float height = action.text.getHeight();
+        Paint.FontMetrics fm = action.text.paint.getFontMetrics();
+        float own = fm.bottom - fm.top;
+        if (own <= 0f) {
+            return height;
+        }
+        if (refTextLineBox <= 0f) {
+            Paint probe = new Paint();
+            probe.setTextSize(action.text.paint.getTextSize());
+            probe.setTypeface(TypefaceHelper.createSystemTypeface(500, false));
+            Paint.FontMetrics ref = probe.getFontMetrics();
+            refTextLineBox = ref.bottom - ref.top;
+        }
+        return height * (refTextLineBox / own);
+    }
+
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
         if (clipHeight >= 0f) {
@@ -396,7 +420,7 @@ public class ProfileActionsView extends View {
 
         action.text.setMaxWidth(action.rect.width() - dp(2));
         action.textScale = action.text.getLineCount() >= 3 ? 0.75f : action.text.getLineCount() >= 2 ? 0.85f : 1.0f;
-        final float drawableTop = Math.max(0, (targetHeight - action.text.getHeight() * action.textScale) / 3f + dpf2(1.33f));
+        final float drawableTop = Math.max(0, (targetHeight - normalizedTextHeight(action) * action.textScale) / 3f + dpf2(1.33f));
         action.setBounds(
             (int) (cx - drawableR),
             (int) (drawableTop),
@@ -444,9 +468,10 @@ public class ProfileActionsView extends View {
 
         updateBounds(action);
 
-        final float textY = action.bounds.bottom + action.bounds.top - action.text.getHeight() * action.textScale / 2.0f - dp(4.66f);
+        final float textH = normalizedTextHeight(action) * action.textScale;
+        final float textY = action.bounds.bottom + action.bounds.top - textH / 2.0f - dp(4.66f);
         canvas.save();
-        canvas.scale(action.textScale, action.textScale, cx, textY + action.text.getHeight() * action.textScale / 2.0f);
+        canvas.scale(action.textScale, action.textScale, cx, textY + textH / 2.0f);
         action.text.draw(canvas, cx - action.text.getWidth() / 2f, textY, textColor, alpha);
         canvas.restore();
 

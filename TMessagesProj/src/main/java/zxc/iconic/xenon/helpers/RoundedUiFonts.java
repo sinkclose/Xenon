@@ -83,6 +83,11 @@ public final class RoundedUiFonts {
         return TypefaceHelper.createRoundedTypeface(popup ? Math.max(500, weight) : weight, current != null && current.isItalic());
     }
 
+    /** The typeface apply() would leave on a TextView created with the given face. */
+    public static Typeface forTextView(Typeface current) {
+        return rounded(current, false);
+    }
+
     private static void apply(View view) {
         apply(view, popupRoots.containsKey(view));
     }
