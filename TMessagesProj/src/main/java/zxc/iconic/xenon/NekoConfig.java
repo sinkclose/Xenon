@@ -225,6 +225,7 @@ public class NekoConfig {
     public static int alternativeTransitionSpeed = DEFAULT_IOS_DURATION;
     public static String alternativeTransitionEase = DEFAULT_IOS_EASE;
     public static boolean material3Switches = false;
+    public static boolean material3MessageBubbles = false;
     public static boolean iosSwitches = false;
     public static boolean iosListItems = false;
     public static boolean m3SectionsStyle = false;
@@ -568,6 +569,7 @@ public class NekoConfig {
             alternativeTransitionEase = preferences.getString("alternativeTransitionEase", DEFAULT_IOS_EASE);
             iosSwitches = preferences.getBoolean("iosSwitches", false);
             material3Switches = preferences.getBoolean("material3Switches", false) && !iosSwitches;
+            material3MessageBubbles = preferences.getBoolean("material3MessageBubbles", false);
             iosListItems = preferences.getBoolean("iosListItems", false);
             materialListItemsInDialogs = preferences.getBoolean("materialListItemsInDialogs", false);
             m3SectionsStyle = preferences.getBoolean("m3SectionsStyle", false) && !iosListItems;
@@ -927,6 +929,12 @@ public class NekoConfig {
         SharedPreferences.Editor editor = preferences.edit();
         editor.putInt("fadeDuration", fadeDuration);
         editor.apply();
+    }
+
+    public static void toggleMaterial3MessageBubbles() {
+        material3MessageBubbles = !material3MessageBubbles;
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
+                .edit().putBoolean("material3MessageBubbles", material3MessageBubbles).apply();
     }
 
     public static void toggleMaterial3Switches() {

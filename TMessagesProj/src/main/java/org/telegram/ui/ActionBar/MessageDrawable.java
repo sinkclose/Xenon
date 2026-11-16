@@ -23,6 +23,8 @@ import androidx.core.graphics.ColorUtils;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.SharedConfig;
+
+import zxc.iconic.xenon.NekoConfig;
 import org.telegram.ui.Components.MotionBackgroundDrawable;
 import org.telegram.ui.Components.blur3.utils.NinePatchBuilder;
 
@@ -30,6 +32,17 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 public class MessageDrawable extends Drawable {
+
+    private boolean materialBubbleStyle = NekoConfig.material3MessageBubbles;
+    private final float[] materialRadii = new float[8];
+
+    private void checkBubbleStyle() {
+        if (materialBubbleStyle == NekoConfig.material3MessageBubbles) return;
+        materialBubbleStyle = NekoConfig.material3MessageBubbles;
+        for (int[] radii : currentBackgroundDrawableRadius) Arrays.fill(radii, -1);
+        Arrays.fill(currentShadowDrawableRadius, -1);
+        forceInvalidatePath = true;
+    }
 
     private Shader gradientShader;
     private int currentBackgroundHeight;
@@ -326,6 +339,7 @@ public class MessageDrawable extends Drawable {
     }
 
     public Drawable getBackgroundDrawable() {
+        checkBubbleStyle();
         int newRad;
         if (overrideRoundRadius != 0) {
             newRad = overrideRoundRadius;
@@ -446,6 +460,7 @@ public class MessageDrawable extends Drawable {
     }
 
     public Drawable getShadowDrawable() {
+        checkBubbleStyle();
         if (isCrossfadeBackground) {
             return null;
         }
@@ -558,6 +573,7 @@ public class MessageDrawable extends Drawable {
     }
 
     public void draw(Canvas canvas, Paint paintToUse) {
+        checkBubbleStyle();
         Rect bounds = getBounds();
         if (paintToUse == null && paint.getStyle() == Paint.Style.FILL && gradientShader == null && overrideRoundRadius == 0 && overrideRounding <= 0) {
             Drawable background = getBackgroundDrawable();
@@ -613,8 +629,9 @@ public class MessageDrawable extends Drawable {
             path = this.path;
             invalidatePath = true;
         }
-        if (invalidatePath || overrideRoundRadius != 0) {
+        if (invalidatePath || forceInvalidatePath || overrideRoundRadius != 0) {
             generatePath(path, bounds, padding, rad, smallRad, nearRad, top, drawFullBottom, drawFullTop, paintToUse != null);
+            forceInvalidatePath = false;
         }
 
         canvas.drawPath(path, p);
@@ -630,6 +647,7 @@ public class MessageDrawable extends Drawable {
     }
 
     public Path makePath(PathDrawParams pathDrawCacheParams) {
+        checkBubbleStyle();
         Rect bounds = getBounds();
         int padding = dp(2);
         int rad;
@@ -666,8 +684,9 @@ public class MessageDrawable extends Drawable {
             path = this.path;
             invalidatePath = true;
         }
-        if (invalidatePath || overrideRoundRadius != 0) {
+        if (invalidatePath || forceInvalidatePath || overrideRoundRadius != 0) {
             generatePath(path, bounds, padding, rad, smallRad, nearRad, top, drawFullBottom, drawFullTop, true);
+            forceInvalidatePath = false;
         }
         return path;
     }
@@ -677,6 +696,32 @@ public class MessageDrawable extends Drawable {
         int heightHalf = (bounds.height() - padding) >> 1;
         if (rad > heightHalf) {
             rad = heightHalf;
+        }
+        if (NekoConfig.material3MessageBubbles) {
+            // Keep the text inset and content positions; replace only the tail geometry.
+            float left = bounds.left + (isOut || currentType == TYPE_MEDIA ? padding : dp(8));
+            float right = bounds.right - (!isOut || currentType == TYPE_MEDIA ? padding : dp(8));
+            float bottom = drawFullBubble || customPaint || drawFullBottom
+                    ? bounds.bottom - padding : top - topY + currentBackgroundHeight;
+            float shapeTop = drawFullBubble || customPaint || drawFullTop
+                    ? bounds.top + padding : top - topY - dp(2);
+            float radius = Math.max(0, Math.min(rad, Math.min((right - left) / 2, (bottom - shapeTop) / 2)));
+            float small = Math.min(radius, nearRad);
+            Arrays.fill(materialRadii, radius);
+            if (isTopNear) {
+                int corner = isOut ? 2 : 0;
+                materialRadii[corner] = materialRadii[corner + 1] = small;
+            }
+            if (isBottomNear) {
+                int corner = isOut ? 4 : 6;
+                materialRadii[corner] = materialRadii[corner + 1] = small;
+            }
+            if (botButtonsBottom) {
+                materialRadii[4] = materialRadii[5] = materialRadii[6] = materialRadii[7] = small;
+            }
+            rect.set(left, shapeTop, right, bottom);
+            path.addRoundRect(rect, materialRadii, Path.Direction.CW);
+            return;
         }
         if (isOut) {
             // LEFT-BOTTOM <- RIGHT-BOTTOM
@@ -863,9 +908,11 @@ public class MessageDrawable extends Drawable {
         Rect lastRect = new Rect();
         boolean lastDrawFullTop;
         boolean lastDrawFullBottom;
+        boolean lastMaterialBubbleStyle;
 
         public boolean invalidatePath(Rect bounds, boolean drawFullBottom, boolean drawFullTop) {
-            boolean invalidate = lastRect.isEmpty() || lastRect.top != bounds.top || lastRect.bottom != bounds.bottom || lastRect.right != bounds.right || lastRect.left != bounds.left || lastDrawFullTop != drawFullTop || lastDrawFullBottom != drawFullBottom || !drawFullTop || !drawFullBottom;
+            boolean invalidate = lastMaterialBubbleStyle != NekoConfig.material3MessageBubbles || lastRect.isEmpty() || lastRect.top != bounds.top || lastRect.bottom != bounds.bottom || lastRect.right != bounds.right || lastRect.left != bounds.left || lastDrawFullTop != drawFullTop || lastDrawFullBottom != drawFullBottom || !drawFullTop || !drawFullBottom;
+            lastMaterialBubbleStyle = NekoConfig.material3MessageBubbles;
             lastDrawFullTop = drawFullTop;
             lastDrawFullBottom = drawFullBottom;
             lastRect.set(bounds);

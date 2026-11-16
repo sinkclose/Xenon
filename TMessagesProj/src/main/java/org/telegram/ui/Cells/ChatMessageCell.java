@@ -11146,7 +11146,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                         bl = nearRad;
                     }
                 }
-                if (!mediaBackground && !currentMessageObject.isOutOwner()) {
+                if (!NekoConfig.material3MessageBubbles && !mediaBackground && !currentMessageObject.isOutOwner()) {
                     bl = nearRad;
                 }
                 if (currentMessageObject.type == MessageObject.TYPE_GEO && (MessageObject.getMedia(currentMessageObject) instanceof TLRPC.TL_messageMediaVenue || !locationExpired && MessageObject.getMedia(currentMessageObject) instanceof TLRPC.TL_messageMediaGeoLive)) {
