@@ -182,7 +182,7 @@ public final class Material3PredictiveBack {
         }
     }
 
-    private static final class Callback implements OnBackAnimationCallback {
+    private static final class Callback implements OnBackAnimationCallback, PredictiveTabBack.InterruptibleFallback {
 
         private final Activity activity;
         private final ActionBarLayout layout;
@@ -252,6 +252,26 @@ public final class Material3PredictiveBack {
 
         @Override
         public void onBackStarted(BackEvent backEvent) {
+            finishPreviousAnimation();
+            invoked = false;
+            startTouchY = backEvent.getTouchY();
+            lastTouchY = startTouchY;
+            swipeEdge = backEvent.getSwipeEdge();
+            lastRawProgress = 0f;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                WindowInsets insets = activity.getWindow().getDecorView().getRootWindowInsets();
+                RoundedCorner rc = insets != null ? insets.getRoundedCorner(RoundedCorner.POSITION_TOP_LEFT) : null;
+                deviceCornerPx = rc != null ? rc.getRadius() : AndroidUtilities.dp(24);
+            } else {
+                deviceCornerPx = AndroidUtilities.dp(24);
+            }
+            // Run stock's heavy prep (attach previous fragment, relayout, onResume, HW layer) during the
+            // pre-LAZY_START invisible phase so the first visible frame is just a transform.
+            layout.onBackStarted(backEvent.getTouchX(), backEvent.getTouchY());
+        }
+
+        @Override
+        public void finishPreviousAnimation() {
             // A new gesture can arrive before the previous finish animation (or gesture) has settled.
             // Stock's onBackStarted bails out while predictiveInput is still set, so we must finalize the
             // previous one synchronously here — relying on the animator's end-callback is racy.
@@ -268,21 +288,6 @@ public final class Material3PredictiveBack {
                 // back as a cancel so nav doesn't lock up on the stale predictiveInput flag.
                 undoStockPrep();
             }
-            invoked = false;
-            startTouchY = backEvent.getTouchY();
-            lastTouchY = startTouchY;
-            swipeEdge = backEvent.getSwipeEdge();
-            lastRawProgress = 0f;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                WindowInsets insets = activity.getWindow().getDecorView().getRootWindowInsets();
-                RoundedCorner rc = insets != null ? insets.getRoundedCorner(RoundedCorner.POSITION_TOP_LEFT) : null;
-                deviceCornerPx = rc != null ? rc.getRadius() : AndroidUtilities.dp(24);
-            } else {
-                deviceCornerPx = AndroidUtilities.dp(24);
-            }
-            // Run stock's heavy prep (attach previous fragment, relayout, onResume, HW layer) during the
-            // pre-LAZY_START invisible phase so the first visible frame is just a transform.
-            layout.onBackStarted(backEvent.getTouchX(), backEvent.getTouchY());
         }
 
         @Override

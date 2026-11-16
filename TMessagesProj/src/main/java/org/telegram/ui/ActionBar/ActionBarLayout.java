@@ -1717,6 +1717,13 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
     private boolean predictiveBackHasProgress;
     private float predictiveBackY;
     private boolean predictiveBackLeft;
+    /** Finish a stock back settle before the next gesture selects its destination. */
+    public void finishBackAnimationForPredictiveBack() {
+        if (backAnimator != null) {
+            backAnimator.end();
+        }
+    }
+
     public boolean onBackStarted(float touchX, float touchY) {
         if (animationInProgress) {
             if (backAnimator != null) {

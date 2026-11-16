@@ -1433,6 +1433,16 @@ public class FilterTabsView extends FrameLayout {
         animatingIndicator = false;
     }
 
+    public void finishAnimatingIndicator() {
+        if (!animatingIndicator) return;
+        AndroidUtilities.cancelRunOnUIThread(animationRunnable);
+        animationTime = 1f;
+        setAnimationIdicatorProgress(1f);
+        animatingIndicator = false;
+        setEnabled(true);
+        if (delegate != null) delegate.onPageScrolled(1f);
+    }
+
     BlurredBackgroundDrawable blurredBackgroundDrawable;
 
     public void setBlurredBackground(BlurredBackgroundDrawable drawable) {

@@ -1040,6 +1040,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     }
 
     private zxc.iconic.xenon.helpers.PredictiveTabBack.Target getPredictiveTabBackTarget() {
+        if (actionBarLayout != null) actionBarLayout.finishBackAnimationForPredictiveBack();
         if (actionBarLayout == null || actionBarLayout.getFragmentStack().isEmpty() || switchingAccount
                 || visibleActionMode != null || !sheetFragmentsStack.isEmpty()
                 || actionBarLayout.isTransitionAnimationInProgress() || actionBarLayout.isSwipeInProgress()

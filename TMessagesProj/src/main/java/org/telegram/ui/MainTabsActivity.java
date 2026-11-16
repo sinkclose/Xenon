@@ -857,6 +857,9 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     }
 
     public zxc.iconic.xenon.helpers.PredictiveTabBack.Target getPredictiveTabBackTarget() {
+        if (viewPager != null && !viewPager.isTouch()) {
+            viewPager.finishTabTransitionForPredictiveBack();
+        }
         BaseFragment content = getCurrentVisibleFragment();
         if (viewPager == null || viewPager.isTouch() || viewPager.isManualScrolling() || hasShownSheet()
                 || visibleDialog != null && visibleDialog.isShowing() || content == null

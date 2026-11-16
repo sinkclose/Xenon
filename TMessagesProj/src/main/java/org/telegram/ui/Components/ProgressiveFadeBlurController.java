@@ -231,15 +231,22 @@ public class ProgressiveFadeBlurController {
     private int fadeViewRequestedVisibility = View.VISIBLE;
 
     private boolean uniformBlurAllowed;
+    private boolean dialogsBlurAllowed;
 
     /** Also use the existing fixed-radius fade when progressive blur is off. */
     public void setUniformBlurAllowed(boolean allowed) {
         uniformBlurAllowed = allowed;
     }
 
+    /** Dialogs may use the blurred fade without enabling the other-activities toggle. */
+    public void setDialogsBlurAllowed(boolean allowed) {
+        dialogsBlurAllowed = allowed;
+    }
+
     public boolean isEnabled() {
         return NekoConfig.progressiveFadeBlurOtherActivitiesEnabled()
-                || uniformBlurAllowed && NekoConfig.fadeViewOtherActivities() && NekoConfig.blurredFadeViewEnabled();
+                || (dialogsBlurAllowed || uniformBlurAllowed && NekoConfig.fadeViewOtherActivities())
+                && NekoConfig.blurredFadeViewEnabled();
     }
 
     // Applies the stock behavior when the master blur is off: loops stopped,

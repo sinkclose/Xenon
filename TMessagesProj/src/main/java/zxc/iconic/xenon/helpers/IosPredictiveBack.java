@@ -49,7 +49,7 @@ public final class IosPredictiveBack {
         return v < min ? min : Math.min(v, max);
     }
 
-    private static final class Callback implements OnBackAnimationCallback {
+    private static final class Callback implements OnBackAnimationCallback, PredictiveTabBack.InterruptibleFallback {
 
         private final ActionBarLayout layout;
         private final Runnable plainBack;
@@ -75,6 +75,13 @@ public final class IosPredictiveBack {
 
         @Override
         public void onBackStarted(BackEvent backEvent) {
+            finishPreviousAnimation();
+            invoked = false;
+            layout.onBackStarted(backEvent.getTouchX(), backEvent.getTouchY());
+        }
+
+        @Override
+        public void finishPreviousAnimation() {
             if (runningAnim != null) {
                 runningAnim.removeAllListeners();
                 runningAnim.cancel();
@@ -86,8 +93,6 @@ public final class IosPredictiveBack {
             } else if (layout.predictiveInput) {
                 undoStockPrep();
             }
-            invoked = false;
-            layout.onBackStarted(backEvent.getTouchX(), backEvent.getTouchY());
         }
 
         @Override

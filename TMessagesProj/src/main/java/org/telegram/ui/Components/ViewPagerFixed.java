@@ -233,6 +233,16 @@ public class ViewPagerFixed extends FrameLayout {
 
     private boolean predictiveBackActive;
 
+    /** Commit an in-flight tab switch before a new back gesture chooses its page. */
+    public void finishTabTransitionForPredictiveBack() {
+        if (manualScrolling != null) {
+            manualScrolling.end();
+        }
+        if (tabsAnimationInProgress && tabsAnimation != null) {
+            tabsAnimation.end();
+        }
+    }
+
     @Override protected void onDetachedFromWindow() {
         if (predictiveBackActive) endPredictiveBack(false);
         super.onDetachedFromWindow();

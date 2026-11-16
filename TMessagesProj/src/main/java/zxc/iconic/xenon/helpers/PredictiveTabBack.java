@@ -18,6 +18,11 @@ public final class PredictiveTabBack implements OnBackAnimationCallback {
         void end(boolean commit);
     }
 
+    /** Finalize a fragment transition before looking for the next tab destination. */
+    public interface InterruptibleFallback {
+        void finishPreviousAnimation();
+    }
+
     private final OnBackAnimationCallback fallback;
     private final Supplier<Target> destination;
     private Target target;
@@ -34,6 +39,9 @@ public final class PredictiveTabBack implements OnBackAnimationCallback {
 
     @Override public void onBackStarted(BackEvent event) {
         if (target != null) complete(settle != null && committing);
+        if (fallback instanceof InterruptibleFallback) {
+            ((InterruptibleFallback) fallback).finishPreviousAnimation();
+        }
         target = zxc.iconic.xenon.NekoConfig.predictiveBackIntensity > 0 ? destination.get() : null;
         progress = 0;
         if (target != null && !target.begin()) target = null;
