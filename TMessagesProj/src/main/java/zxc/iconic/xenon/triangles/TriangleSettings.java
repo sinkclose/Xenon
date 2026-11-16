@@ -43,7 +43,8 @@ public final class TriangleSettings {
         AUTO_COLOR("auto_color", R.string.TriangleAutoColor, true),
         GRADIENT("gradient", R.string.TriangleGradient, false),
         FADE("fade", R.string.TriangleFade, true),
-        SYNC_REFRESH("sync_refresh", R.string.TriangleSyncRefresh, true);
+        SYNC_REFRESH("sync_refresh", R.string.TriangleSyncRefresh, true),
+        MAIN_THEME_COLOR("main_theme_color", R.string.TriangleUseMainThemeColor, false);
 
         public final String key;
         public final int title;

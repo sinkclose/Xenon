@@ -126,6 +126,9 @@ public class NekoTriangleSettingsActivity extends BaseNekoSettingsActivity {
     @Override
     protected String getActionBarTitle() { return LocaleController.getString(R.string.TriangleBackground); }
 
+    @Override
+    protected boolean hasCustomSettingsBackground() { return true; }
+
     private void flag(ArrayList<UItem> items, TriangleSettings.Flag f) {
         items.add(UItem.asCheck(10 + f.ordinal(), LocaleController.getString(f.title))
                 .setChecked(settings.flag(f)).slug("triangles_" + f.key));
@@ -166,10 +169,13 @@ public class NekoTriangleSettingsActivity extends BaseNekoSettingsActivity {
         if (!settings.flag(SYNC_REFRESH)) slider(items, FPS);
         items.add(UItem.asShadow(LocaleController.getString(R.string.TriangleDirectionHint)));
         flag(items, CUSTOMIZE_COLOR);
+        flag(items, MAIN_THEME_COLOR);
         if (settings.flag(CUSTOMIZE_COLOR)) {
-            flag(items, AUTO_COLOR);
-            if (!settings.flag(AUTO_COLOR)) {
-                slider(items, HUE); slider(items, SATURATION); slider(items, BRIGHTNESS);
+            if (!settings.flag(MAIN_THEME_COLOR)) {
+                flag(items, AUTO_COLOR);
+                if (!settings.flag(AUTO_COLOR)) {
+                    slider(items, HUE); slider(items, SATURATION); slider(items, BRIGHTNESS);
+                }
             }
             flag(items, GRADIENT);
             if (settings.flag(GRADIENT)) { slider(items, GRADIENT_HUE); slider(items, GRADIENT_ANGLE); }
@@ -191,7 +197,7 @@ public class NekoTriangleSettingsActivity extends BaseNekoSettingsActivity {
             settings.toggle(flag);
             item.checked = settings.flag(flag);
             if (view instanceof TextCheckCell) ((TextCheckCell) view).setChecked(item.checked);
-            updateRows = flag == SYNC_REFRESH || flag == CUSTOMIZE_COLOR || flag == AUTO_COLOR || flag == GRADIENT || flag == FADE;
+            updateRows = flag == SYNC_REFRESH || flag == CUSTOMIZE_COLOR || flag == MAIN_THEME_COLOR || flag == AUTO_COLOR || flag == GRADIENT || flag == FADE;
         } else return;
         if (updateRows) listView.adapter.update(true);
         invalidateTriangleBackground();

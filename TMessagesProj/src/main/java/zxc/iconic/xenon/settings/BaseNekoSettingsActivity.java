@@ -510,6 +510,11 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
         return NekoConfig.materialActivityHeaders;
     }
 
+    /** Screens with a live preview own their background across header changes. */
+    protected boolean hasCustomSettingsBackground() {
+        return false;
+    }
+
     // Use Material's nested scrolling and title renderer. In particular, do not
     // derive collapse from accumulated RecyclerView dy or fade two titles to zero.
     protected void syncMaterialHeader() {
@@ -588,7 +593,7 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
                         LayoutHelper.WRAP_CONTENT, Gravity.TOP));
                 listView.setPadding(0, needActionBarPadding() ? ActionBar.getCurrentActionBarHeight() : AndroidUtilities.dp(12), 0, 0);
                 listView.setClipToPadding(false);
-                contentView.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundGray));
+                if (!hasCustomSettingsBackground()) contentView.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundGray));
                 actionBarContainer.setPadding(0, 0, 0, 0);
                 actionBar.backButtonImageView.setVisibility(View.VISIBLE);
                 actionBar.getTitlesContainer().setVisibility(View.VISIBLE);
@@ -624,12 +629,12 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
         int onSurface = getThemedColor(Theme.key_windowBackgroundWhiteBlackText);
         int buttonSurface = ColorUtils.blendARGB(surface, onSurface, 0.08f);
         int onButton = onSurface;
-        contentView.setBackgroundColor(surface);
+        if (!hasCustomSettingsBackground()) contentView.setBackgroundColor(surface);
         materialCoordinator = new CoordinatorLayout(materialContext);
         // The controls retain their status-bar inset; only the fade may extend above it.
         materialCoordinator.setClipChildren(false);
         materialCoordinator.setClipToPadding(false);
-        materialCoordinator.setBackgroundColor(surface);
+        materialCoordinator.setBackgroundColor(hasCustomSettingsBackground() ? Color.TRANSPARENT : surface);
         contentView.addView(materialCoordinator, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
         materialAppBar = new AppBarLayout(materialContext);
         materialAppBar.setBackgroundColor(surface);

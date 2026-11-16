@@ -10,6 +10,7 @@ import android.view.Choreographer;
 import android.view.View;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.ui.ChatBackgroundDrawable;
+import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.BackgroundGradientDrawable;
 import org.telegram.ui.Components.MotionBackgroundDrawable;
 import java.util.Random;
@@ -40,6 +41,7 @@ public final class TriangleWallpaperRenderer {
     private boolean framePosted;
     private final Choreographer.FrameCallback frameCallback = this::onAnimationFrame;
     private int paletteTop,paletteBottom;
+    private int lastThemeColor;
     /** Optional fixed surface palette for embedded effects such as replay Skip. */
     public void setGradientColors(int top,int bottom){if(paletteTop==top&&paletteBottom==bottom)return;paletteTop=top;paletteBottom=bottom;shaderRevision=-1;}
     private Shader shader;
@@ -134,7 +136,10 @@ public final class TriangleWallpaperRenderer {
         }
         count = target;
         boolean custom = settings.flag(CUSTOMIZE_COLOR);
-        boolean automatic = !custom || settings.flag(AUTO_COLOR);
+        boolean mainThemeColor = settings.flag(MAIN_THEME_COLOR);
+        boolean automatic = !mainThemeColor && (!custom || settings.flag(AUTO_COLOR));
+        // The theme's primary accent is independent of its wallpaper palette.
+        int themeColor = mainThemeColor ? Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4) : 0;
         Drawable source = wallpaper instanceof ChatBackgroundDrawable ? ((ChatBackgroundDrawable) wallpaper).getFullDrawable() : wallpaper;
         // Solid Monet/theme colours can mutate in place during a theme switch.
         // Reading their colour is cheap and must not wait for the photo-sampling interval.
@@ -145,11 +150,12 @@ public final class TriangleWallpaperRenderer {
             lastSample = now;
             lastFallbackColor = fallbackColor;
         }
-        if (shaderRevision != settings.revision || lastSampleColor != wallpaperColor) {
-            rebuildShader(automatic, custom);
+        if (shaderRevision != settings.revision || lastSampleColor != wallpaperColor || lastThemeColor != themeColor) {
+            rebuildShader(automatic, custom, mainThemeColor, themeColor);
             if(paletteTop!=0)shader=new LinearGradient(0,0,0,height,paletteTop,paletteBottom,Shader.TileMode.CLAMP);
             shaderRevision = settings.revision;
             lastSampleColor = wallpaperColor;
+            lastThemeColor = themeColor;
         }
         if (!snapshot) updateAnimation(host, active);
         float baseSize = settings.value(SIZE) * density;
@@ -233,9 +239,10 @@ public final class TriangleWallpaperRenderer {
                 settings.value(FADE_BOTTOM) / 100f, settings.value(FADE_POWER) / 100f);
     }
 
-    private void rebuildShader(boolean automatic, boolean custom) {
+    private void rebuildShader(boolean automatic, boolean custom, boolean mainThemeColor, int themeColor) {
         int first;
-        if (automatic) first = TriangleMath.automaticColor(wallpaperColor);
+        if (mainThemeColor) first = themeColor;
+        else if (automatic) first = TriangleMath.automaticColor(wallpaperColor);
         else first = Color.HSVToColor(new float[] { settings.value(HUE), settings.value(SATURATION) / 100f, settings.value(BRIGHTNESS) / 100f });
         int second = first;
         if (custom && settings.flag(GRADIENT)) {
