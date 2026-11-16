@@ -1768,33 +1768,40 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
             if (background == null || background == container) return;
             backdropBlur = new WindowBackdropBlur(container, background);
         } else {
-            // The content view is reliable even when the device reports native
-            // cross-window blur support but does not render it for this dialog.
-            backdropBlur = new WindowBackdropBlur(getWindow(), activity.findViewById(android.R.id.content), true);
+            // Prefer compositor blur for a separate sheet window. A view-level
+            // RenderEffect on the whole activity is only the system-disabled fallback.
+            backdropBlur = new WindowBackdropBlur(getWindow(), activity.findViewById(android.R.id.content));
         }
         float target = zxc.iconic.xenon.NekoConfig.disableBlurBs ? 0f
                 : zxc.iconic.xenon.NekoConfig.blurOverlayRadius * 4f;
-        backdropBlur.animateTo(target, zxc.iconic.xenon.NekoConfig.blurSmoothly
-                ? zxc.iconic.xenon.NekoConfig.blurAnimationDuration : 0, false);
-    }
-
-    private void cancelBlurRadiusAnimation() {
-        if (backdropBlur != null) backdropBlur.cancelAnimation();
-    }
-
-    private void dismissBackdropBlur() {
-        if (backdropBlur != null) {
-            backdropBlur.animateTo(0f, zxc.iconic.xenon.NekoConfig.blurSmoothly
-                    ? zxc.iconic.xenon.NekoConfig.blurAnimationDuration : 0, true);
-        }
+        backdropBlur.animateTo(target,
+                zxc.iconic.xenon.NekoConfig.blurSmoothly
+                        ? zxc.iconic.xenon.NekoConfig.blurAnimationDuration : 0, false);
     }
 
     @RequiresApi(api = Build.VERSION_CODES.S)
     public void applyBlurRadius(int radius) {
-        cancelBlurRadiusAnimation();
         if (backdropBlur != null) {
+            backdropBlur.cancelAnimation();
             backdropBlur.setRadius(zxc.iconic.xenon.NekoConfig.disableBlurBs ? 0f : radius * 4f);
         }
+    }
+
+    private void animateBackdropBlurOut(long duration) {
+        if (backdropBlur == null) return;
+        backdropBlur.animateTo(0f,
+                zxc.iconic.xenon.NekoConfig.blurSmoothly ? duration : 0, false);
+    }
+
+    private void setBackdropBlurProgress(float progress) {
+        if (backdropBlur == null) return;
+        // Window blur changes require a WindowManager update. Limit them during
+        // the interactive gesture while keeping both ends of the range exact.
+        float steps = Math.round(Math.max(0f, Math.min(1f, progress)) * 20f) / 20f;
+        float target = zxc.iconic.xenon.NekoConfig.disableBlurBs ? 0f
+                : zxc.iconic.xenon.NekoConfig.blurOverlayRadius * 4f;
+        float radius = target * (1f - steps);
+        if (backdropBlur.getRadius() != radius) backdropBlur.setRadius(radius);
     }
 
     @Override
@@ -2141,8 +2148,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
             return;
         }
         dismissed = true;
-        cancelBlurRadiusAnimation();
-        dismissBackdropBlur();
+        if (backdropBlur != null) backdropBlur.cancelAnimation();
         cancelSheetAnimation();
         currentSheetAnimationType = 2;
         currentSheetAnimation = new AnimatorSet();
@@ -2155,7 +2161,9 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
                 anim,
                 ObjectAnimator.ofInt(backDrawable, AnimationProperties.COLOR_DRAWABLE_ALPHA, 0)
         );
-        currentSheetAnimation.setDuration(cellType == Builder.CELL_TYPE_CALL ? 330 : 180);
+        long duration = cellType == Builder.CELL_TYPE_CALL ? 330 : 180;
+        currentSheetAnimation.setDuration(duration);
+        animateBackdropBlurOut(duration);
         currentSheetAnimation.setInterpolator(CubicBezierInterpolator.EASE_OUT);
         currentSheetAnimation.addListener(new AnimatorListenerAdapter() {
             @Override
@@ -2262,9 +2270,8 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
             return;
         }
         dismissed = true;
-        cancelBlurRadiusAnimation();
+        if (backdropBlur != null) backdropBlur.cancelAnimation();
         final boolean predictiveDismiss = predictiveBackDismissProgress >= 0f;
-        if (!predictiveDismiss) dismissBackdropBlur();
         if (onHideListener != null) {
             onHideListener.onDismiss(this);
         }
@@ -2272,6 +2279,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
         long duration = 0;
         onDismissAnimationStart();
         if (skipDismissAnimation) {
+            animateBackdropBlurOut(0);
             AndroidUtilities.runOnUIThread(() -> {
                 try {
                     dismissInternal();
@@ -2355,8 +2363,11 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
                         }
                     }
                 });
+                if (!predictiveDismiss) animateBackdropBlurOut(duration);
                 NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.stopAllHeavyOperations, 512);
                 currentSheetAnimation.start();
+            } else {
+                animateBackdropBlurOut(zxc.iconic.xenon.NekoConfig.blurAnimationDuration);
             }
         }
 
@@ -2442,7 +2453,6 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
         if (Build.VERSION.SDK_INT >= 34) {
             unregisterPredictiveBack();
         }
-        cancelBlurRadiusAnimation();
         if (backdropBlur != null) backdropBlur.release();
         backdropBlur = null;
         if (attachedFragment != null) {
@@ -2688,10 +2698,8 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
     public void setPredictiveBackProgress(float progress) {
         float p = Math.max(0f, Math.min(1f, progress));
         if (backdropBlur != null) {
-            cancelBlurRadiusAnimation();
-            float target = zxc.iconic.xenon.NekoConfig.disableBlurBs ? 0f
-                    : zxc.iconic.xenon.NekoConfig.blurOverlayRadius * 4f;
-            backdropBlur.setRadius(target * (1f - p));
+            backdropBlur.cancelAnimation();
+            setBackdropBlurProgress(p);
         }
         if (dimBehind) {
             backDrawable.setAlpha((int) (dimBehindAlpha * (1f - p)));

@@ -23,6 +23,7 @@ import java.util.function.Consumer;
 @RequiresApi(Build.VERSION_CODES.S)
 public final class WindowBackdropBlur implements View.OnAttachStateChangeListener {
     private static final WeakHashMap<View, Map<WindowBackdropBlur, Float>> FALLBACKS = new WeakHashMap<>();
+    private static final WeakHashMap<View, Integer> FALLBACK_LAYERS = new WeakHashMap<>();
     private final View foreground;
     private final View background;
     private final Window window;
@@ -69,6 +70,14 @@ public final class WindowBackdropBlur implements View.OnAttachStateChangeListene
         return radius;
     }
 
+    public boolean canUseNativeBlur() {
+        if (released || !foreground.isAttachedToWindow() || preferViewBlur || manager == null
+                || !manager.isCrossWindowBlurEnabled()) return false;
+        WindowManager.LayoutParams params = attributes();
+        return params != null && (background == null
+                || background.getWindowToken() != foreground.getWindowToken());
+    }
+
     public void setRadius(float radius) {
         if (released) return;
         this.radius = Math.max(0f, Math.min(150f, radius));
@@ -86,7 +95,8 @@ public final class WindowBackdropBlur implements View.OnAttachStateChangeListene
         ValueAnimator animation = ValueAnimator.ofFloat(radius, target);
         animator = animation;
         animation.setDuration(duration);
-        animation.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
+        animation.setInterpolator(target < radius
+                ? CubicBezierInterpolator.DEFAULT : CubicBezierInterpolator.EASE_OUT_QUINT);
         animation.addUpdateListener(a -> setRadius((float) a.getAnimatedValue()));
         animation.addListener(new AnimatorListenerAdapter() {
             @Override
@@ -127,8 +137,7 @@ public final class WindowBackdropBlur implements View.OnAttachStateChangeListene
     private void update() {
         if (released || !foreground.isAttachedToWindow()) return;
         WindowManager.LayoutParams params = attributes();
-        boolean nativeBlur = !preferViewBlur && manager != null && manager.isCrossWindowBlurEnabled()
-                && params != null && (background == null || background.getWindowToken() != foreground.getWindowToken());
+        boolean nativeBlur = canUseNativeBlur();
         if (nativeBlur && radius > 0f) {
             if (!nativeApplied) {
                 originalRadius = params.getBlurBehindRadius();
@@ -173,8 +182,18 @@ public final class WindowBackdropBlur implements View.OnAttachStateChangeListene
         for (float requested : owners.values()) maximum = Math.max(maximum, requested);
         // A weaker overlapping animation must not rebuild the stronger layer.
         if (maximum != previousMaximum) {
+            if (previousMaximum == 0f && maximum > 0f && background.getLayerType() != View.LAYER_TYPE_HARDWARE) {
+                FALLBACK_LAYERS.put(background, background.getLayerType());
+                background.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+            }
             background.setRenderEffect(maximum > 0f
                     ? RenderEffect.createBlurEffect(maximum, maximum, Shader.TileMode.CLAMP) : null);
+            if (maximum == 0f) {
+                Integer originalLayer = FALLBACK_LAYERS.remove(background);
+                if (originalLayer != null && background.getLayerType() == View.LAYER_TYPE_HARDWARE) {
+                    background.setLayerType(originalLayer, null);
+                }
+            }
         }
         if (owners.isEmpty()) FALLBACKS.remove(background);
     }

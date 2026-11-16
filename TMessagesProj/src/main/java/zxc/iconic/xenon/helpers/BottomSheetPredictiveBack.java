@@ -4,6 +4,7 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
 import android.os.Build;
 import android.view.View;
 import android.view.ViewGroup;
@@ -177,6 +178,9 @@ public final class BottomSheetPredictiveBack {
             ArrayList<Animator> animators = new ArrayList<>();
             animators.add(ObjectAnimator.ofFloat(view, View.SCALE_X, scaleX));
             animators.add(ObjectAnimator.ofFloat(view, View.SCALE_Y, scaleY));
+            ValueAnimator backdrop = ValueAnimator.ofFloat(lastProgress, 0f);
+            backdrop.addUpdateListener(a -> sheet.setPredictiveBackProgress((float) a.getAnimatedValue()));
+            animators.add(backdrop);
             for (ChildTransform child : children) {
                 animators.add(ObjectAnimator.ofFloat(child.view, View.SCALE_Y, child.scaleY));
             }
