@@ -867,6 +867,9 @@ public class ChatActivityEnterView extends FrameLayout implements
         send.height = dp(enabled ? 52 : DEFAULT_HEIGHT);
         sendButton.materialChatStyle = enabled;
         sendButton.getLayoutParams().height = dp(enabled ? 52 : DEFAULT_HEIGHT);
+        // The inline-bot close icon shares the send button's circular background.
+        cancelBotButton.getLayoutParams().width = dp(enabled ? 52 : DEFAULT_HEIGHT);
+        cancelBotButton.getLayoutParams().height = dp(enabled ? 52 : DEFAULT_HEIGHT);
         if (doneButton != null) {
             doneButton.materialChatStyle = enabled;
             doneButton.getLayoutParams().height = dp(enabled ? 52 : DEFAULT_HEIGHT);
