@@ -15,6 +15,8 @@ import androidx.core.graphics.ColorUtils;
 
 import com.google.android.material.color.MaterialColors;
 
+import zxc.iconic.xenon.NekoConfig;
+
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.ui.ActionBar.OKLCH;
@@ -93,15 +95,37 @@ public class MonetHelper {
     private static final OverlayChangeReceiver overlayChangeReceiver = new OverlayChangeReceiver();
     private static Context materialDarkContext;
 
-    /** Resolve semantic roles through Google's dynamic overlay, including Android 14+ system roles. */
-    private static int getDarkRoleColor(String token, boolean amoled) {
-        int alphaStart = token.indexOf('_');
-        String role = alphaStart < 0 ? token : token.substring(0, alphaStart);
-        int attribute = switch (role) {
-            case "monetDarkSurface" -> com.google.android.material.R.attr.colorSurface;
-            case "monetDarkSurfaceContainerLow" -> com.google.android.material.R.attr.colorSurfaceContainerLow;
-            case "monetDarkSurfaceContainer" -> com.google.android.material.R.attr.colorSurfaceContainer;
-            case "monetDarkSurfaceContainerHigh" -> com.google.android.material.R.attr.colorSurfaceContainerHigh;
+    public static void refreshPalette() {
+        materialDarkContext = null;
+        Theme.ThemeInfo light = Theme.getTheme("Monet Light");
+        Theme.ThemeInfo dark = Theme.getTheme("Monet Dark");
+        Theme.ThemeInfo amoled = Theme.getTheme("Monet AMOLED");
+        if (light != null) {
+            light.setPreviewBackgroundColor(getColor("n1_50"));
+            light.setPreviewInColor(getColor("a2_50"));
+            light.setPreviewOutColor(getColor("a1_600"));
+        }
+        for (Theme.ThemeInfo info : new Theme.ThemeInfo[]{dark, amoled}) {
+            if (info == null) continue;
+            info.setPreviewBackgroundColor(getColor("monetDarkSurface", info == amoled));
+            info.setPreviewInColor(getColor("monetDarkSurfaceContainerLow"));
+            info.setPreviewOutColor(getColor("monetDarkPrimaryContainer"));
+        }
+    }
+
+    private static int darkRoleAttribute(String role) {
+        // Settings-style surfaces: brighter cards, with the device's own pastel accents.
+        // Do not regenerate a high-chroma palette from an already generated accent swatch.
+        boolean brighter = NekoConfig.monetBrighter;
+        return switch (role) {
+            case "monetDarkSurface" -> brighter ? com.google.android.material.R.attr.colorSurfaceContainerLow
+                    : com.google.android.material.R.attr.colorSurface;
+            case "monetDarkSurfaceContainerLow" -> brighter ? com.google.android.material.R.attr.colorSurfaceContainerHigh
+                    : com.google.android.material.R.attr.colorSurfaceContainerLow;
+            case "monetDarkSurfaceContainer" -> brighter ? com.google.android.material.R.attr.colorSurfaceContainerHigh
+                    : com.google.android.material.R.attr.colorSurfaceContainer;
+            case "monetDarkSurfaceContainerHigh" -> brighter ? com.google.android.material.R.attr.colorSurfaceContainerHighest
+                    : com.google.android.material.R.attr.colorSurfaceContainerHigh;
             case "monetDarkSurfaceContainerHighest" -> com.google.android.material.R.attr.colorSurfaceContainerHighest;
             case "monetDarkOnSurface" -> com.google.android.material.R.attr.colorOnSurface;
             case "monetDarkOnSurfaceVariant" -> com.google.android.material.R.attr.colorOnSurfaceVariant;
@@ -116,6 +140,13 @@ public class MonetHelper {
             case "monetDarkError" -> androidx.appcompat.R.attr.colorError;
             default -> throw new IllegalArgumentException("Unknown Monet role: " + role);
         };
+    }
+
+    /** Resolve semantic roles through Google's dynamic overlay, including Android 14+ system roles. */
+    private static int getDarkRoleColor(String token, boolean amoled) {
+        int alphaStart = token.indexOf('_');
+        String role = alphaStart < 0 ? token : token.substring(0, alphaStart);
+        int attribute = darkRoleAttribute(role);
         if (materialDarkContext == null) {
             // Explicitly dark: Telegram's night theme can differ from the device's UI mode.
             materialDarkContext = new ContextThemeWrapper(ApplicationLoader.applicationContext,
@@ -177,7 +208,7 @@ public class MonetHelper {
         if (id == 0) {
             return 0;
         }
-        var color = context.getColor(id);
+        int color = context.getColor(id);
         if (alpha != -1) {
             color = ColorUtils.setAlphaComponent(color, alpha);
         }
@@ -200,7 +231,7 @@ public class MonetHelper {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (ACTION_OVERLAY_CHANGED.equals(intent.getAction())) {
-                materialDarkContext = null;
+                refreshPalette();
                 if (Theme.getActiveTheme().isMonet()) {
                     Theme.applyTheme(Theme.getActiveTheme(), Theme.isCurrentThemeNight());
                 }

@@ -826,6 +826,9 @@
     <string name="ExperimentalMediaPicker">Медиапикер V2</string>
     <string name="ExperimentalMediaPickerHint">Экспериментальная галерея: быстрый показ последних фото и адаптивная сетка. Без живого превью камеры — камера открывается только по нажатию. Применяется при следующем открытии вложений в чате.</string>
     <string name="UseGoogleSansAndFlex">Использовать Google Sans и Google Sans Flex</string>
+    <string name="MonetTheme">Тема Monet</string>
+    <string name="MonetThemeSystem">Системная</string>
+    <string name="MonetThemeBrighter">Светлее</string>
     <string name="Material3MessageBubbles">Пузыри сообщений</string>
 </resources>
 

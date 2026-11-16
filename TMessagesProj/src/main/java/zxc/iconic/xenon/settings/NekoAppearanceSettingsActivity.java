@@ -46,6 +46,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
     private final int selectFontRow = rowId++;
     private ClientFontPicker fontPicker;
     private final int material3Row = rowId++;
+    private final int monetThemeRow = rowId++;
     private final int material3MessageBubblesRow = rowId++;
     private boolean material3Expanded;
     private final int materialActivityHeadersRow = rowId++;
@@ -210,6 +211,10 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         items.add(UItem.asCheck(appBarShadowRow, LocaleController.getString(R.string.DisableAppBarShadow)).slug("appBarShadow").setChecked(NekoConfig.disableAppBarShadow));
         items.add(UItem.asCheck(formatTimeWithSecondsRow, LocaleController.getString(R.string.FormatWithSeconds)).slug("formatTimeWithSeconds").setChecked(NekoConfig.formatTimeWithSeconds));
         items.add(UItem.asCheck(disableNumberRoundingRow, LocaleController.getString(R.string.DisableNumberRounding), "4.8K -> 4777").slug("disableNumberRounding").setChecked(NekoConfig.disableNumberRounding));
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            items.add(TextSettingsCellFactory.of(monetThemeRow, LocaleController.getString(R.string.MonetTheme),
+                    LocaleController.getString(NekoConfig.monetBrighter ? R.string.MonetThemeBrighter : R.string.MonetThemeSystem)).slug("monetTheme"));
+        }
         items.add(UItem.asExpandableSwitch(material3Row, "Material Design 3", material3Count() + "/15")
                 .setChecked(material3Count() > 0).setCollapsed(!material3Expanded)
                 .setClickCallback(v -> setMaterial3Enabled(material3Count() == 0)).slug("material3"));
@@ -364,6 +369,22 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         var id = item.id;
         if (id == selectFontRow) {
             fontPicker().show();
+        } else if (id == monetThemeRow && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            ArrayList<String> options = new ArrayList<>();
+            options.add(LocaleController.getString(R.string.MonetThemeSystem));
+            options.add(LocaleController.getString(R.string.MonetThemeBrighter));
+            PopupHelper.show(options, LocaleController.getString(R.string.MonetTheme), NekoConfig.monetBrighter ? 1 : 0,
+                    getParentActivity(), view, i -> {
+                        if (NekoConfig.monetBrighter == (i == 1)) return;
+                        NekoConfig.setMonetBrighter(i == 1);
+                        zxc.iconic.xenon.helpers.MonetHelper.refreshPalette();
+                        if (Theme.getActiveTheme().isMonet()) {
+                            Theme.applyTheme(Theme.getActiveTheme(), false, Theme.isCurrentThemeNight());
+                            if (parentLayout != null) parentLayout.rebuildAllFragmentViews(true, true);
+                        } else {
+                            listView.adapter.update(true);
+                        }
+                    }, resourcesProvider);
         } else if (id == material3MessageBubblesRow) {
             NekoConfig.toggleMaterial3MessageBubbles();
             listView.adapter.update(true);
