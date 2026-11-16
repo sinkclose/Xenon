@@ -439,7 +439,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     }
                 }
                 if (view != null) {
-                    float offset = view.getTop() - listView.getPaddingTop();
+                    float offset = dialogsScrollAnchorTop(listView, view) - listView.getPaddingTop();
                     if (!hasStories) {
                         //  offset += tabsTranslation;
                     } else {
@@ -463,7 +463,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             listView.updateDialogsOnNextDraw = true;
             updating = false;
             listView.invalidate();
-            animateSmoothMoves();
         };
 
         @Override
@@ -523,6 +522,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             if (!NekoConfig.smoothlyMoveChats || dialogsAdapter.lastSmoothMoves.isEmpty()) {
                 return;
             }
+            // RecyclerView's item animator already animates notified moves.
+            if (listView.getItemAnimator() != null) {
+                dialogsAdapter.lastSmoothMoves.clear();
+                return;
+            }
             final ArrayList<int[]> moves = new ArrayList<>(dialogsAdapter.lastSmoothMoves);
             dialogsAdapter.lastSmoothMoves.clear();
             listView.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
@@ -568,22 +572,26 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             if (view == null || !(view instanceof DialogCell)) {
                 return;
             }
-            int offset = delta * view.getMeasuredHeight();
+            int offset = delta * listView.getLayoutManager().getDecoratedMeasuredHeight(view);
             if (offset == 0) {
                 return;
             }
+            view.animate().cancel();
             view.setTranslationY(offset);
             final View finalView = view;
             view.animate().translationY(0).setDuration(300).setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT)
+                    .setUpdateListener(animation -> listView.invalidate())
                     .setListener(new AnimatorListenerAdapter() {
                         @Override
                         public void onAnimationEnd(Animator animation) {
                             finalView.setTranslationY(0);
+                            listView.invalidate();
                         }
 
                         @Override
                         public void onAnimationCancel(Animator animation) {
                             finalView.setTranslationY(0);
+                            listView.invalidate();
                         }
                     })
                     .start();
@@ -645,6 +653,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         int titleRange = materialDialogsTitleRange();
         int combinedRange = titleRange + getMaxScrollYOffsetWithoutSearch();
         return Math.round(titleRange * Math.max(0f, Math.min(1f, distance / Math.max(1, combinedRange))));
+    }
+
+    private static int dialogsScrollAnchorTop(RecyclerListView list, View view) {
+        // scrollToPositionWithOffset expects the decorated edge. Using View.getTop()
+        // adds the section inset again on every measure or diff update.
+        return list.hasSections() && list.getLayoutManager() != null
+                ? list.getLayoutManager().getDecoratedTop(view) : view.getTop();
     }
 
     private int dialogsListScrollOffset() {
@@ -2049,7 +2064,31 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         public DialogsRecyclerView(Context context, ViewPage page) {
             super(context);
             parentPage = page;
+            if (NekoConfig.useMaterialDialogListItems()
+                    && page.dialogsType != DIALOGS_TYPE_ADD_USERS_TO
+                    && page.dialogsType != DIALOGS_TYPE_BOT_REQUEST_PEER) {
+                setSections(
+                        view -> view instanceof DialogCell
+                                && !(((DialogCell) view).isDialogFolder() && isMaterialArchiveHidden()),
+                        type -> type == DialogsAdapter.VIEW_TYPE_DIALOG
+                                || type == DialogsAdapter.VIEW_TYPE_DIALOG_COMMUNITY
+                                || type == DialogsAdapter.VIEW_TYPE_FORWARD_TO_STORIES_CELL,
+                        dp(12), dp(16), this::drawBackgroundRect, false);
+            }
             additionalClipBottom = dp(200);
+        }
+
+        private boolean isMaterialArchiveHidden() {
+            return parentPage.dialogsType == DIALOGS_TYPE_DEFAULT && hasHiddenArchive()
+                    && parentPage.archivePullViewState == ARCHIVE_ITEM_STATE_HIDDEN;
+        }
+
+        @Override
+        public boolean isSectionPosition(int position) {
+            // The hidden archive remains in the adapter for pull-to-reveal, but is not
+            // a neighbour of the first chat when determining connected-list corners.
+            if (hasSections() && position == 0 && isMaterialArchiveHidden()) return false;
+            return super.isSectionPosition(position);
         }
 
         public void prepareSelectorForAnimation() {
@@ -2326,6 +2365,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 }
                 invalidate();
             }
+            if (hasSections() && getItemAnimator() != null && getItemAnimator().isRunning()) {
+                // Section backgrounds and clip paths depend on each animated child's Y.
+                postInvalidateOnAnimation();
+            }
             if (slidingView != null && pacmanAnimation != null) {
                 pacmanAnimation.draw(canvas, slidingView.getTop() + slidingView.getMeasuredHeight() / 2);
             }
@@ -2345,7 +2388,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
 
         private boolean drawMovingViewsOverlayed() {
-            return getItemAnimator() != null && getItemAnimator().isRunning();
+            return !hasSections() && getItemAnimator() != null && getItemAnimator().isRunning();
         }
 
         @Override
@@ -2374,12 +2417,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             if (pos != RecyclerView.NO_POSITION && parentPage.itemTouchhelper.isIdle() && !parentPage.layoutManager.hasPendingScrollPosition() && parentPage.listView.getScrollState() != RecyclerView.SCROLL_STATE_DRAGGING) {
                 RecyclerView.ViewHolder holder = parentPage.listView.findViewHolderForAdapterPosition(pos);
                 if (holder != null) {
-                    int top = holder.itemView.getTop();
+                    int top = dialogsScrollAnchorTop(this, holder.itemView);
                     if (parentPage.dialogsType == DIALOGS_TYPE_DEFAULT && hasHiddenArchive() && parentPage.archivePullViewState == ARCHIVE_ITEM_STATE_HIDDEN) {
                         if (pos == 0) {
                             View firstDialog = parentPage.layoutManager.findViewByPosition(1);
-                            if (firstDialog != null) top = firstDialog.getTop();
-                            else top += holder.itemView.getMeasuredHeight();
+                            if (firstDialog != null) top = dialogsScrollAnchorTop(this, firstDialog);
+                            else top += hasSections() ? getLayoutManager().getDecoratedMeasuredHeight(holder.itemView) : holder.itemView.getMeasuredHeight();
                             pos = 1;
                         }
                     }
@@ -2409,6 +2452,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
             t += (int) (dp(36 + 14) * filterTabsVisibility);
             additionalPadding += (int) (dp(36 + 14) * filterTabsVisibility);
+
+            if (hasSections() && NekoConfig.useMaterialDialogListItems()) {
+                int foldersGap = (int) (dp(6) * filterTabsVisibility);
+                t += foldersGap;
+                additionalPadding += foldersGap;
+            }
 
             if (topPanelLayout != null) {
                 final int h = (int) topPanelLayout.getAnimatedHeightWithPadding(lerp((float) dp(14), dp(7), filterTabsVisibility));
@@ -2708,7 +2757,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     if (anchorView != null) {
                         DialogsAdapter adapter = (DialogsAdapter) animationSupportListView.getAdapter();
                         int p = adapter.findDialogPosition(anchorView.getDialogId());
-                        int offset = (int) (anchorView.getTop() - anchorListView.getPaddingTop() + scrollOffset);
+                        int offset = (int) (dialogsScrollAnchorTop(anchorListView, anchorView) - anchorListView.getPaddingTop() + scrollOffset);
                         if (p >= 0) {
                             boolean hasArchive = parentPage.dialogsType == DIALOGS_TYPE_DEFAULT && parentPage.archivePullViewState == ARCHIVE_ITEM_STATE_HIDDEN && hasHiddenArchive();
                             int fixedOffset = adapter.fixScrollGap(this, p, offset, hasArchive, hasStories, canShowFilterTabsView, opened);
@@ -2719,7 +2768,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                // if (!backward) {
                     DialogsAdapter adapter = (DialogsAdapter) getAdapter();
                     int p = adapter.findDialogPosition(anchorView.getDialogId());
-                    int offset = (int) (anchorView.getTop() - getPaddingTop());
+                    int offset = dialogsScrollAnchorTop(this, anchorView) - getPaddingTop();
                     if (backward && hasStories) {
                         offset += dp(DialogStoriesCell.HEIGHT_IN_DP);
                     }
@@ -5031,6 +5080,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
 
             viewPage.dialogsAdapter = new DialogsAdapter(this, context, viewPage.dialogsType, folderId, onlySelect, selectedDialogs, currentAccount, requestPeerType) {
+                @Override
+                protected void onListUpdated() {
+                    // Runs after both synchronous and background diff results are applied.
+                    viewPage.listView.updateDialogsOnNextDraw = true;
+                    viewPage.listView.invalidateItemDecorations();
+                    viewPage.listView.invalidate();
+                    viewPage.animateSmoothMoves();
+                }
+
                 @Override
                 public void notifyDataSetChanged() {
                     viewPage.lastItemsCount = getItemCount();

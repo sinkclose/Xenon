@@ -228,6 +228,7 @@ public class NekoConfig {
     public static boolean iosSwitches = false;
     public static boolean iosListItems = false;
     public static boolean m3SectionsStyle = false;
+    public static boolean materialListItemsInDialogs = false;
     public static boolean material3ChatHeaders = false;
     public static boolean chatHeadersCustomization = true;
     public static boolean materialChatElements = false;
@@ -568,6 +569,7 @@ public class NekoConfig {
             iosSwitches = preferences.getBoolean("iosSwitches", false);
             material3Switches = preferences.getBoolean("material3Switches", false) && !iosSwitches;
             iosListItems = preferences.getBoolean("iosListItems", false);
+            materialListItemsInDialogs = preferences.getBoolean("materialListItemsInDialogs", false);
             m3SectionsStyle = preferences.getBoolean("m3SectionsStyle", false) && !iosListItems;
             material3ChatHeaders = preferences.getBoolean("material3ChatHeaders", false);
             chatHeadersCustomization = preferences.getBoolean("chatHeadersCustomization", true);
@@ -1095,6 +1097,16 @@ public class NekoConfig {
         SharedPreferences.Editor editor = preferences.edit();
         editor.putInt("progressiveFadeBlurRefreshRate", progressiveFadeBlurRefreshRate);
         editor.apply();
+    }
+
+    public static boolean useMaterialDialogListItems() {
+        return m3SectionsStyle && materialListItemsInDialogs;
+    }
+
+    public static void toggleMaterialListItemsInDialogs() {
+        materialListItemsInDialogs = !materialListItemsInDialogs;
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
+                .edit().putBoolean("materialListItemsInDialogs", materialListItemsInDialogs).apply();
     }
 
     public static void toggleMaterialHeadersInDialogs() {

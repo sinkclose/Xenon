@@ -247,7 +247,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
 
     public int fixScrollGap(RecyclerListView animationSupportListView, int p, int offset, boolean hasHiddenArchive, boolean hasStories, boolean hasTabs, boolean oppened) {
 //        int itemsToEnd = getItemCount() - p;
-        int cellHeight = AndroidUtilities.dp(SharedConfig.useThreeLinesLayout ? 76 : 70);
+        int cellHeight = AndroidUtilities.dp(SharedConfig.useThreeLinesLayout ? 76 : 70) + (useMaterialDialogListItems() ? 2 * zxc.iconic.xenon.helpers.M3SectionsHelper.getGap() : 0);
 //        int bottom = offset + animationSupportListView.getPaddingTop() + itemsToEnd * cellHeight + itemsToEnd - 1;
         //fix height changed
         int top = offset + animationSupportListView.getPaddingTop() - p * cellHeight - p;
@@ -640,6 +640,10 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                 notifyItemRangeChanged(position, count, payload);
             }
         });
+        onListUpdated();
+    }
+
+    protected void onListUpdated() {
     }
 
     @Override
@@ -922,6 +926,9 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
 
     @Override
     public void onBindViewHolder(RecyclerView.ViewHolder holder, int i) {
+        if (holder.itemView instanceof DialogCell) {
+            ((DialogCell) holder.itemView).setMaterialListItem(useMaterialDialogListItems());
+        }
         switch (holder.getItemViewType()) {
             case VIEW_TYPE_FORWARD_TO_STORIES_CELL: {
                 TLRPC.Dialog nextDialog = (TLRPC.Dialog) getItem(i + 1);
@@ -1539,6 +1546,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                         } else {
                             dialogsHeight += cellHeight;
                         }
+                        dialogsHeight += getMaterialDialogItemGap(i);
                     } else  if (itemInternals.get(i).viewType == VIEW_TYPE_FLICKER) {
                         dialogsHeight += cellHeight;
                     }
@@ -1547,7 +1555,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                 if (onlineContacts != null) {
                     dialogsHeight += onlineContacts.size() * AndroidUtilities.dp(58) + (onlineContacts.size() - 1) + AndroidUtilities.dp(52);
                 }
-                int archiveHeight = (hasArchive ? cellHeight + 1 : 0);
+                int archiveHeight = (hasArchive ? cellHeight + 1 + getMaterialDialogItemGap(0) : 0);
                 if (dialogsHeight < height) {
                     height = height - dialogsHeight + archiveHeight - paddingBottom;
                     if (paddingTop != 0) {
@@ -1842,12 +1850,26 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
         }
     }
 
+    private boolean useMaterialDialogListItems() {
+        return zxc.iconic.xenon.NekoConfig.useMaterialDialogListItems()
+                && dialogsType != DialogsActivity.DIALOGS_TYPE_ADD_USERS_TO
+                && dialogsType != DialogsActivity.DIALOGS_TYPE_BOT_REQUEST_PEER;
+    }
+
+    // Match RecyclerListView.ListSectionsDecoration, including the outer list padding.
+    private int getMaterialDialogItemGap(int position) {
+        if (!useMaterialDialogListItems()) return 0;
+        int gap = zxc.iconic.xenon.helpers.M3SectionsHelper.getGap();
+        return (position == 0 ? AndroidUtilities.dp(4) : gap)
+                + (position == getItemCount() - 1 ? AndroidUtilities.dp(12) : gap);
+    }
+
     public int getItemHeight(int position) {
         if (itemInternals.get(position).viewType == VIEW_TYPE_DIALOG) {
             if (itemInternals.get(position).isForumCell && !collapsedView) {
-                return AndroidUtilities.dp(SharedConfig.useThreeLinesLayout ? 86 : 91) + 1;
+                return AndroidUtilities.dp(SharedConfig.useThreeLinesLayout ? 86 : 91) + 1 + getMaterialDialogItemGap(position);
             } else {
-                return AndroidUtilities.dp(SharedConfig.useThreeLinesLayout ? 76 : 70) + 1;
+                return AndroidUtilities.dp(SharedConfig.useThreeLinesLayout ? 76 : 70) + 1 + getMaterialDialogItemGap(position);
             }
         }
         return 0;

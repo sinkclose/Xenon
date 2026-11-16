@@ -50,6 +50,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
     private final int materialActivityHeadersRow = rowId++;
     private final int materialChatElementsRow = rowId++;
     private final int materialHeadersInDialogsRow = rowId++;
+    private final int materialListItemsInDialogsRow = rowId++;
     private final int ios26Row = rowId++;
     private final int iosLikeInputFieldRow = rowId++;
     private final int liquidChatElementsRow = rowId++;
@@ -208,7 +209,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         items.add(UItem.asCheck(appBarShadowRow, LocaleController.getString(R.string.DisableAppBarShadow)).slug("appBarShadow").setChecked(NekoConfig.disableAppBarShadow));
         items.add(UItem.asCheck(formatTimeWithSecondsRow, LocaleController.getString(R.string.FormatWithSeconds)).slug("formatTimeWithSeconds").setChecked(NekoConfig.formatTimeWithSeconds));
         items.add(UItem.asCheck(disableNumberRoundingRow, LocaleController.getString(R.string.DisableNumberRounding), "4.8K -> 4777").slug("disableNumberRounding").setChecked(NekoConfig.disableNumberRounding));
-        items.add(UItem.asExpandableSwitch(material3Row, "Material Design 3", material3Count() + "/12")
+        items.add(UItem.asExpandableSwitch(material3Row, "Material Design 3", material3Count() + "/14")
                 .setChecked(material3Count() > 0).setCollapsed(!material3Expanded)
                 .setClickCallback(v -> setMaterial3Enabled(material3Count() == 0)).slug("material3"));
         if (material3Expanded) {
@@ -222,6 +223,10 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         }
         items.add(UItem.asRoundCheckbox(material3SwitchesRow, LocaleController.getString(R.string.Switches)).setChecked(NekoConfig.material3Switches).slug("material3Switches"));
         items.add(UItem.asRoundCheckbox(m3SectionsStyleRow, LocaleController.getString(R.string.ListItems)).setChecked(NekoConfig.m3SectionsStyle).slug("m3SectionsStyle"));
+        if (NekoConfig.m3SectionsStyle) {
+            items.add(UItem.asRoundCheckbox(materialListItemsInDialogsRow, "List items for dialogs activity")
+                    .setChecked(NekoConfig.materialListItemsInDialogs).slug("materialListItemsInDialogs"));
+        }
         items.add(UItem.asRoundCheckbox(materialSlidersRow, LocaleController.getString(R.string.MaterialSliders)).setChecked(NekoConfig.materialSliders).slug("materialSliders"));
         items.add(UItem.asRoundCheckbox(material3BottomNavigationBarRow, LocaleController.getString(R.string.BottomNavigationBar)).setChecked(NekoConfig.material3BottomNavigationBar).slug("material3BottomNavigationBar"));
         items.add(UItem.asRoundCheckbox(md3FoldersRow, LocaleController.getString(R.string.Md3Folders)).setChecked(NekoConfig.md3Folders).slug("md3Folders"));
@@ -321,7 +326,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
     }
 
     private int material3Count() {
-        return (NekoConfig.materialChatElements ? 1 : 0) + (NekoConfig.wavySeekbar ? 1 : 0) + (NekoConfig.material3Switches ? 1 : 0) + (NekoConfig.m3SectionsStyle ? 1 : 0) + (NekoConfig.materialSliders ? 1 : 0) + (NekoConfig.material3BottomNavigationBar ? 1 : 0) + (NekoConfig.md3Folders ? 1 : 0) + (NekoConfig.wavyEnabled ? 1 : 0) + (NekoConfig.wavyProgressEnabled ? 1 : 0) + (NekoConfig.material3Dialogs ? 1 : 0) + (NekoConfig.material3Popups ? 1 : 0) + (NekoConfig.materialActivityHeaders ? 1 : 0);
+        return (NekoConfig.materialChatElements ? 1 : 0) + (NekoConfig.wavySeekbar ? 1 : 0) + (NekoConfig.material3Switches ? 1 : 0) + (NekoConfig.m3SectionsStyle ? 1 : 0) + (NekoConfig.materialSliders ? 1 : 0) + (NekoConfig.material3BottomNavigationBar ? 1 : 0) + (NekoConfig.md3Folders ? 1 : 0) + (NekoConfig.wavyEnabled ? 1 : 0) + (NekoConfig.wavyProgressEnabled ? 1 : 0) + (NekoConfig.material3Dialogs ? 1 : 0) + (NekoConfig.material3Popups ? 1 : 0) + (NekoConfig.materialActivityHeaders ? 1 : 0) + (NekoConfig.materialActivityHeaders && NekoConfig.materialHeadersInDialogs ? 1 : 0) + (NekoConfig.m3SectionsStyle && NekoConfig.materialListItemsInDialogs ? 1 : 0);
     }
 
     private void setMaterial3Enabled(boolean enabled) {
@@ -337,6 +342,8 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         if (NekoConfig.wavySeekbar != enabled) NekoConfig.toggleWavySeekbar();
         if (NekoConfig.material3Dialogs != enabled) NekoConfig.toggleMaterial3Dialogs();
         if (NekoConfig.material3Popups != enabled) NekoConfig.toggleMaterial3Popups();
+        if (NekoConfig.materialHeadersInDialogs != enabled) NekoConfig.toggleMaterialHeadersInDialogs();
+        if (NekoConfig.materialListItemsInDialogs != enabled) NekoConfig.toggleMaterialListItemsInDialogs();
         setMaterialActivityHeadersEnabled(enabled);
         refreshListStyle();
         showRestartBulletin();
@@ -362,6 +369,9 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
             NekoConfig.setMaterialChatElements(!NekoConfig.materialChatElements);
             listView.adapter.update(true);
             if (parentLayout != null) parentLayout.rebuildAllFragmentViews(false, false);
+        } else if (id == materialListItemsInDialogsRow) {
+            NekoConfig.toggleMaterialListItemsInDialogs();
+            refreshListStyle();
         } else if (id == materialHeadersInDialogsRow) {
             NekoConfig.toggleMaterialHeadersInDialogs();
             listView.adapter.update(true);
