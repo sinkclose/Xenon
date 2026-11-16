@@ -18690,6 +18690,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         animatingImageView.setAnimationProgress(predictiveBackProgress);
         animatingImageView.setAlpha(1f);
         clippingImageProgress = predictiveBackProgress;
+        updateBackgroundScale();
         backgroundDrawable.setAlpha((int) (predictiveBackBackgroundAlpha * (1f - predictiveBackProgress)));
         containerView.setAlpha(predictiveBackContainerAlpha * (1f - predictiveBackProgress));
         navigationBar.setAlpha(predictiveBackNavigationAlpha * (1f - predictiveBackProgress));
@@ -19125,6 +19126,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                         if (i == 0) {
                             animator.addUpdateListener(animation -> {
                                 clippingImageProgress = (float) animation.getAnimatedValue();
+                                if (continuingPredictiveBack) updateBackgroundScale();
                                 if (!continuingPredictiveBack || object != null && object.drawUnderChatUi) {
                                     invalidateBlur();
                                 }
@@ -20212,6 +20214,36 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         return !inBubbleMode;
     }
 
+    private void updateBackgroundScale() {
+        if (parentFragment == null || parentFragment.getFragmentView() == null) return;
+        float progress = Math.abs(translationY) / (getContainerViewHeight() / 2f);
+        if (clippingImageProgress != 0) {
+            progress = progress + (1f - progress) * clippingImageProgress;
+        }
+        float scale = 1f + (1f - Utilities.clamp(progress, 1, 0)) * ZOOM_SCALE;
+        if (!LiteMode.isEnabled(LiteMode.FLAG_CHAT_SCALE)) {
+            scale = 1f;
+        }
+        setParentHwLayerEnabled(Math.abs(scale - 1f) > 0.0001f);
+        View view = parentFragment.getFragmentView();
+        if (view.getScaleX() != scale || view.getScaleY() != scale) {
+            view.setPivotX(view.getWidth() / 2f);
+            view.setPivotY(view.getHeight() / 2f);
+            view.setScaleX(scale);
+            view.setScaleY(scale);
+        }
+
+        if (parentAlert != null) {
+            view = parentAlert.getContainer();
+            if (view.getScaleX() != scale || view.getScaleY() != scale) {
+                view.setPivotX(view.getWidth() / 2f);
+                view.setPivotY(view.getHeight() / 2f);
+                view.setScaleX(scale);
+                view.setScaleY(scale);
+            }
+        }
+    }
+
     @SuppressLint({"NewApi", "DrawAllocation"})
     private void onDraw(Canvas canvas) {
         // The transition image is a separate child of windowView. Avoid
@@ -20241,37 +20273,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                     containerView.invalidate();
                 }
             }
-            float progress = Math.abs(translationY) / (getContainerViewHeight() / 2f);
-            if (clippingImageProgress != 0) {
-                progress = progress + (1f - progress) * clippingImageProgress;
-            }
-            float scale = 1f + (1f - Utilities.clamp(progress, 1, 0)) * ZOOM_SCALE;
-            if (!LiteMode.isEnabled(LiteMode.FLAG_CHAT_SCALE)) {
-                scale = 1f;
-            }
-            setParentHwLayerEnabled(Math.abs(scale - 1f) > 0.0001f);
-            View view = parentFragment.getFragmentView();
-            /*if (AndroidUtilities.isTablet() && parentFragment.getParentActivity() instanceof LaunchActivity) {
-                LaunchActivity activity = (LaunchActivity) parentFragment.getParentActivity();
-                view = activity.getMainContainerFrameLayout();
-            }*/
-
-            if (view.getScaleX() != scale || view.getScaleY() != scale) {
-                view.setPivotX(view.getWidth() / 2f);
-                view.setPivotY(view.getHeight() / 2f);
-                view.setScaleX(scale);
-                view.setScaleY(scale);
-            }
-
-            if (parentAlert != null) {
-                view = parentAlert.getContainer();
-                if (view.getScaleX() != scale || view.getScaleY() != scale) {
-                    view.setPivotX(view.getWidth() / 2f);
-                    view.setPivotY(view.getHeight() / 2f);
-                    view.setScaleX(scale);
-                    view.setScaleY(scale);
-                }
-            }
+            updateBackgroundScale();
 
             if (animationInProgress == 1 || animationInProgress == 2 || animationInProgress == 3 || pipAnimationInProgress) {
                 containerView.invalidate();
