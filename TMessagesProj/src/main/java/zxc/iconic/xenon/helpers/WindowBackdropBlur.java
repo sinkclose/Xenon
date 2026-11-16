@@ -15,6 +15,7 @@ import androidx.annotation.RequiresApi;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.function.Consumer;
@@ -22,8 +23,20 @@ import java.util.function.Consumer;
 /** A blur owned by a foreground window, with no screen capture or refresh loop. */
 @RequiresApi(Build.VERSION_CODES.S)
 public final class WindowBackdropBlur implements View.OnAttachStateChangeListener {
-    private static final WeakHashMap<View, Map<WindowBackdropBlur, Float>> FALLBACKS = new WeakHashMap<>();
-    private static final WeakHashMap<View, Integer> FALLBACK_LAYERS = new WeakHashMap<>();
+    private static final class BackgroundBlur {
+        final Map<WindowBackdropBlur, Boolean> owners = new IdentityHashMap<>();
+        float maximum;
+    }
+
+    private static final WeakHashMap<View, BackgroundBlur> FALLBACKS = new WeakHashMap<>();
+    // Cache filter descriptions, never image buffers. Float keys preserve the
+    // exact requested radius, including fractional gesture/animation values.
+    private static final Map<Float, RenderEffect> EFFECTS = new LinkedHashMap<Float, RenderEffect>(64, .75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<Float, RenderEffect> eldest) {
+            return size() > 64;
+        }
+    };
     private final View foreground;
     private final View background;
     private final Window window;
@@ -43,6 +56,15 @@ public final class WindowBackdropBlur implements View.OnAttachStateChangeListene
     private boolean nativeApplied;
     private int originalRadius;
     private boolean originalFlag;
+    private boolean viewBlurOnly;
+    private float fallbackRadius;
+    private final Runnable syncAfterAttach = this::syncAfterAttach;
+
+    private void syncAfterAttach() {
+        if (released || !foreground.isAttachedToWindow()) return;
+        update();
+        if (nativeApplied) applyAttributes(attributes());
+    }
 
     public WindowBackdropBlur(Window window, View background) {
         this(window, background, false);
@@ -71,22 +93,25 @@ public final class WindowBackdropBlur implements View.OnAttachStateChangeListene
     }
 
     public boolean canUseNativeBlur() {
-        if (released || !foreground.isAttachedToWindow() || preferViewBlur || manager == null
+        if (released || !foreground.isAttachedToWindow() || viewBlurOnly || manager == null
                 || !manager.isCrossWindowBlurEnabled()) return false;
-        WindowManager.LayoutParams params = attributes();
+        WindowManager.LayoutParams params = currentAttributes();
         return params != null && (background == null
                 || background.getWindowToken() != foreground.getWindowToken());
     }
 
     public void setRadius(float radius) {
         if (released) return;
-        this.radius = Math.max(0f, Math.min(150f, radius));
+        float next = Math.max(0f, Math.min(150f, radius));
+        if (this.radius == next) return;
+        this.radius = next;
         update();
     }
 
     public void animateTo(float target, long duration, boolean releaseAfter) {
         cancelAnimation();
         if (released) return;
+        target = Math.max(0f, Math.min(150f, target));
         if (duration <= 0 || radius == target) {
             setRadius(target);
             if (releaseAfter) release();
@@ -118,10 +143,19 @@ public final class WindowBackdropBlur implements View.OnAttachStateChangeListene
         old.cancel();
     }
 
-    private WindowManager.LayoutParams attributes() {
-        if (window != null) return window.getAttributes();
-        return windowRoot != null && windowRoot.getLayoutParams() instanceof WindowManager.LayoutParams
+    private WindowManager.LayoutParams currentAttributes() {
+        return window != null ? window.getAttributes()
+                : windowRoot != null && windowRoot.getLayoutParams() instanceof WindowManager.LayoutParams
                 ? (WindowManager.LayoutParams) windowRoot.getLayoutParams() : null;
+    }
+
+    private WindowManager.LayoutParams attributes() {
+        WindowManager.LayoutParams current = currentAttributes();
+        if (current == null) return null;
+        // Do not mutate the live attributes before WindowManager receives them.
+        WindowManager.LayoutParams copy = new WindowManager.LayoutParams();
+        copy.copyFrom(current);
+        return copy;
     }
 
     private void applyAttributes(WindowManager.LayoutParams params) {
@@ -129,16 +163,29 @@ public final class WindowBackdropBlur implements View.OnAttachStateChangeListene
         // has already left WindowManager and must not be submitted again.
         if (window != null) {
             if (foreground.isAttachedToWindow()) window.setAttributes(params);
+            else window.getAttributes().copyFrom(params);
         } else if (windowRoot != null && windowRoot.isAttachedToWindow()) {
             manager.updateViewLayout(windowRoot, params);
+        } else if (windowRoot != null && windowRoot.getLayoutParams() instanceof WindowManager.LayoutParams) {
+            ((WindowManager.LayoutParams) windowRoot.getLayoutParams()).copyFrom(params);
+        }
+        // Updating layout attributes alone can leave a clean hardware-rendered
+        // window without a new buffer. Commit the blur with a foreground frame,
+        // rather than waiting for a system overlay to trigger one.
+        if (windowRoot != null && windowRoot.isAttachedToWindow()) {
+            windowRoot.invalidate();
         }
     }
 
     private void update() {
         if (released || !foreground.isAttachedToWindow()) return;
-        WindowManager.LayoutParams params = attributes();
+        if (viewBlurOnly) {
+            setFallback(radius);
+            return;
+        }
         boolean nativeBlur = canUseNativeBlur();
         if (nativeBlur && radius > 0f) {
+            WindowManager.LayoutParams params = attributes();
             if (!nativeApplied) {
                 originalRadius = params.getBlurBehindRadius();
                 originalFlag = (params.flags & WindowManager.LayoutParams.FLAG_BLUR_BEHIND) != 0;
@@ -167,41 +214,52 @@ public final class WindowBackdropBlur implements View.OnAttachStateChangeListene
     }
 
     private void setFallback(float value) {
-        if (background == null) return;
-        Map<WindowBackdropBlur, Float> owners = FALLBACKS.get(background);
-        if (owners == null) {
+        if (background == null || fallbackRadius == value) return;
+        BackgroundBlur state = FALLBACKS.get(background);
+        if (state == null) {
             if (value <= 0f) return;
-            owners = new IdentityHashMap<>();
-            FALLBACKS.put(background, owners);
+            state = new BackgroundBlur();
+            FALLBACKS.put(background, state);
         }
-        float previousMaximum = 0f;
-        for (float requested : owners.values()) previousMaximum = Math.max(previousMaximum, requested);
-        if (value > 0f) owners.put(this, value);
-        else if (owners.remove(this) == null) return;
-        float maximum = 0f;
-        for (float requested : owners.values()) maximum = Math.max(maximum, requested);
-        // A weaker overlapping animation must not rebuild the stronger layer.
-        if (maximum != previousMaximum) {
-            if (previousMaximum == 0f && maximum > 0f && background.getLayerType() != View.LAYER_TYPE_HARDWARE) {
-                FALLBACK_LAYERS.put(background, background.getLayerType());
-                background.setLayerType(View.LAYER_TYPE_HARDWARE, null);
-            }
-            background.setRenderEffect(maximum > 0f
-                    ? RenderEffect.createBlurEffect(maximum, maximum, Shader.TileMode.CLAMP) : null);
-            if (maximum == 0f) {
-                Integer originalLayer = FALLBACK_LAYERS.remove(background);
-                if (originalLayer != null && background.getLayerType() == View.LAYER_TYPE_HARDWARE) {
-                    background.setLayerType(originalLayer, null);
+        float previousRadius = fallbackRadius;
+        fallbackRadius = value;
+        if (value > 0f) {
+            if (previousRadius == 0f) state.owners.put(this, Boolean.TRUE);
+        } else {
+            state.owners.remove(this);
+        }
+        float maximum = state.maximum;
+        if (state.owners.isEmpty()) {
+            maximum = 0f;
+        } else if (value >= maximum || (value > 0f && state.owners.size() == 1)) {
+            maximum = value;
+        } else if (previousRadius == maximum) {
+            maximum = 0f;
+            for (WindowBackdropBlur owner : state.owners.keySet()) maximum = Math.max(maximum, owner.fallbackRadius);
+        }
+        // Only the strongest owner changes the GPU filter. HWUI automatically
+        // caches a RenderEffect node in a layer; setLayerType would also dirty
+        // the View's display list unnecessarily when entering/leaving blur.
+        if (maximum != state.maximum) {
+            state.maximum = maximum;
+            RenderEffect effect = null;
+            if (maximum > 0f) {
+                effect = EFFECTS.get(maximum);
+                if (effect == null) {
+                    effect = RenderEffect.createBlurEffect(maximum, maximum, Shader.TileMode.CLAMP);
+                    EFFECTS.put(maximum, effect);
                 }
             }
+            background.setRenderEffect(effect);
         }
-        if (owners.isEmpty()) FALLBACKS.remove(background);
+        if (state.owners.isEmpty()) FALLBACKS.remove(background);
     }
 
     public void release() {
         if (released) return;
         cancelAnimation();
         released = true;
+        foreground.removeCallbacks(syncAfterAttach);
         if (listening) manager.removeCrossWindowBlurEnabledListener(blurEnabledListener);
         listening = false;
         clearNative();
@@ -216,13 +274,20 @@ public final class WindowBackdropBlur implements View.OnAttachStateChangeListene
     public void onViewAttachedToWindow(View v) {
         if (released) return;
         windowRoot = foreground.getRootView();
-        observer = foreground.getViewTreeObserver();
-        observer.addOnPreDrawListener(attributesListener);
-        if (manager != null && !listening) {
+        viewBlurOnly = preferViewBlur || (background != null
+                && background.getWindowToken() == foreground.getWindowToken());
+        if (!viewBlurOnly) {
+            observer = foreground.getViewTreeObserver();
+            observer.addOnPreDrawListener(attributesListener);
+        }
+        if (!viewBlurOnly && manager != null && !listening) {
             listening = true;
             manager.addCrossWindowBlurEnabledListener(foreground.getContext().getMainExecutor(), blurEnabledListener);
         }
         update();
+        // Attachment happens inside the first traversal. Submit once more after
+        // it finishes, when the window's surface and initial attributes exist.
+        if (!viewBlurOnly) foreground.post(syncAfterAttach);
     }
 
     @Override

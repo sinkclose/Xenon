@@ -1768,9 +1768,11 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
             if (background == null || background == container) return;
             backdropBlur = new WindowBackdropBlur(container, background);
         } else {
-            // Prefer compositor blur for a separate sheet window. A view-level
-            // RenderEffect on the whole activity is only the system-disabled fallback.
-            backdropBlur = new WindowBackdropBlur(getWindow(), activity.findViewById(android.R.id.content));
+            // Blur our own content directly: some compositors accept blur-behind
+            // attributes but only display them after a system overlay appears.
+            // The sheet has its own window and stays outside this RenderEffect.
+            View background = activity.findViewById(android.R.id.content);
+            backdropBlur = new WindowBackdropBlur(getWindow(), background, background != null);
         }
         float target = zxc.iconic.xenon.NekoConfig.disableBlurBs ? 0f
                 : zxc.iconic.xenon.NekoConfig.blurOverlayRadius * 4f;
@@ -1795,12 +1797,10 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
 
     private void setBackdropBlurProgress(float progress) {
         if (backdropBlur == null) return;
-        // Window blur changes require a WindowManager update. Limit them during
-        // the interactive gesture while keeping both ends of the range exact.
-        float steps = Math.round(Math.max(0f, Math.min(1f, progress)) * 20f) / 20f;
+        float clampedProgress = Math.max(0f, Math.min(1f, progress));
         float target = zxc.iconic.xenon.NekoConfig.disableBlurBs ? 0f
                 : zxc.iconic.xenon.NekoConfig.blurOverlayRadius * 4f;
-        float radius = target * (1f - steps);
+        float radius = target * (1f - clampedProgress);
         if (backdropBlur.getRadius() != radius) backdropBlur.setRadius(radius);
     }
 
