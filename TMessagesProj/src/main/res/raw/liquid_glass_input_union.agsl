@@ -446,13 +446,20 @@ half4 main(float2 p) {
         float burn = smoothstep(-30.0 * scale, 30.0 * scale, upperDistance);
         rgb = max(half3(0.0), rgb - half3(burn * 0.098039));
         rgb = min(half3(1.0), rgb + half3((upperLight + lowerLight) * mix(0.156863, 0.101961, darkMode) * (ios27LightIntensity / 0.25)));
+        // Keep the old tint strength: blend it after the body and inner shadows.
+        // The optical rim is lit afterwards, so the tint cannot color it.
+        half4 body = half4(rgb * color.a, color.a);
+        half4 tint = half4(surfaceTint(s));
+        body = tint + body * (1.0 - tint.a);
+        rgb = body.a > 0.0001 ? body.rgb / body.a : half3(0.0);
         float white = clamp(exp(-inward * inward / 0.9) * ios27LightIntensity * vertical, 0.0, 0.9);
         float black = clamp((1.0 - smoothstep(0.25, 0.75, inward)) * mix(0.184314, 0.349020, darkMode), 0.0, 0.9);
         rgb = mix(rgb * half(1.0 - black), half3(1.0), half(white));
-        color = half4(rgb * color.a, color.a);
+        color = half4(rgb * body.a, body.a);
+    } else {
+        half4 tint = half4(surfaceTint(s));
+        color = tint + color * (1.0 - tint.a);
     }
-    half4 tint = half4(surfaceTint(s));
-    color = tint + color * (1.0 - tint.a);
     float touch = 0.0;
     if (touchActive > 0.5) {
         touch = connectedLight(p, s);

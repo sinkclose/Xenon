@@ -42,6 +42,9 @@ half4 main(float2 coord) {
     float2 h = size * 0.5;
     float r = radiusAt(p, cornerRadii);
     float sd = sdRoundedRect(p, h, r);
+    // The material and its tint fade at the outline. Keep this separate
+    // overlay fully inside that coverage, including antialiased edge pixels.
+    float inside = 1.0 - smoothstep(-1.5, -0.25, sd);
     float inward = max(-sd, 0.0) / max(pixelScale, 0.001);
     float2 n = gradSdRoundedRect(p, h, r);
     float directional = abs(dot(n, float2(sin(lightAngle), cos(lightAngle))));
@@ -58,5 +61,5 @@ half4 main(float2 coord) {
     float white = clamp(edge * lightIntensity * vertical, 0.0, 0.9);
     float black = clamp(rim * contour, 0.0, 0.9);
     float alpha = white + black * (1.0 - white);
-    return half4(half3(white), half(alpha)) * color;
+    return half4(half3(white), half(alpha)) * color * half(inside);
 }

@@ -375,18 +375,22 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
         canvas.save();
         canvas.translate(boundProps.boundsWithPadding.left, boundProps.boundsWithPadding.top);
         canvas.drawRenderNode(renderNode);
-        if (liquidGlassEffect != null && Build.VERSION.SDK_INT >= 33) {
-            canvas.translate(-liquidGlassSamplePadding, -liquidGlassSamplePadding);
-            liquidGlassEffect.drawHighlight(canvas, renderNode.getAlpha());
-        }
         canvas.restore();
         if (ios27 && liquidGlassEffect != null) {
-            // Tint the complete optical material, including its rim, as the union shader does.
+            // Tint only the glass body. The optical rim is drawn afterwards
+            // so it keeps its white/black light color.
             float strength = Math.max(0f, Math.min(1f,
                     zxc.iconic.xenon.NekoConfig.getGlassTintPercent() / 100f)) * .60f;
             paintMaterialTint.setColor(Theme.multAlpha(backgroundColor, strength * renderNode.getAlpha()));
             boundProps.draw(canvas, paintMaterialTint);
         }
+        canvas.save();
+        canvas.translate(boundProps.boundsWithPadding.left - liquidGlassSamplePadding,
+                boundProps.boundsWithPadding.top - liquidGlassSamplePadding);
+        if (liquidGlassEffect != null && Build.VERSION.SDK_INT >= 33) {
+            liquidGlassEffect.drawHighlight(canvas, renderNode.getAlpha());
+        }
+        canvas.restore();
     }
 
     public void invalidateDisplayList() {
