@@ -2037,6 +2037,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     private boolean predictiveBackFramePending;
     private float predictiveBackTouchY;
     private float predictiveBackDirection;
+    private float predictiveBackPreviewY;
     private int predictiveBackGeneration;
     private int predictiveBackBackgroundAlpha;
     private float predictiveBackContainerAlpha, predictiveBackNavigationAlpha;
@@ -18436,9 +18437,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                             float maxOffset = windowView.getHeight() * 0.08f * progress;
                             float offsetY = Math.max(-maxOffset, Math.min(maxOffset,
                                     (event.getTouchY() - predictiveBackTouchY) * 0.2f));
-                            animationValues[1][3] = animationValues[0][3]
-                                    + animatingImageView.getLayoutParams().height * animationValues[0][1] * 0.16f
-                                    + offsetY / progress;
+                            animationValues[1][3] = predictiveBackPreviewY + offsetY / progress;
                         }
                         setPredictiveBackProgress(progress);
                     }
@@ -18512,20 +18511,26 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         if (predictiveBackActive || !NekoConfig.predictiveBackAnimation || !isVisible || isInline
                 || parentActivity == null || placeProvider == null || animationInProgress != 0
                 || animationStartTime != 0 || currentEditMode != EDIT_MODE_NONE || switchingToMode >= 0
-                || sendPhotoType != 0 || isCaptionOpen() || visibleDialog != null
+                || (sendPhotoType != 0 && sendPhotoType != 2 && sendPhotoType != 5)
+                || isCaptionOpen() || visibleDialog != null
                 || qualityChooseView != null && qualityChooseView.getTag() != null
                 || textSelectionHelper != null && textSelectionHelper.isInSelectionMode()
                 || pipAnimationInProgress || switchingInlineMode || photoViewerWebView != null
                 || draggingDown || moving || zooming) {
             return;
         }
-        PlaceProviderObject object = readPredictiveBackTarget(0, 0, true);
+        // The destination is only needed when the gesture commits. Looking it up
+        // here can synchronously lay out the chat while the gesture is starting.
+        PlaceProviderObject object = null;
         predictiveBackBackgroundAlpha = backgroundDrawable.getAlpha();
         predictiveBackContainerAlpha = containerView.getAlpha();
         predictiveBackNavigationAlpha = navigationBar.getAlpha();
         predictiveBackSurfaceVisibility = videoSurfaceView == null ? View.INVISIBLE : videoSurfaceView.getVisibility();
         predictiveBackPlace = object;
         predictiveBackActive = true;
+        // Only the controls fade during the gesture; cache them as a layer.
+        // The moving photo is the separate animatingImageView sibling.
+        containerView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         predictiveBackFramePending = videoPlayer != null && (usedSurfaceView ? firstFrameRendered : textureUploaded);
         // Draw in the viewer window, including when the provider has its own transition view.
         predictiveBackViews = new ClippingImageView[] { animatingImageView };
@@ -18541,9 +18546,13 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         System.arraycopy(animationValues[0], 0, animationValues[1], 0, animationValues[0].length);
         animationValues[1][0] *= 0.68f;
         animationValues[1][1] *= 0.68f;
-        animationValues[1][2] += animatingImageView.getLayoutParams().width * animationValues[0][0] * 0.16f
-                + predictiveBackDirection * windowView.getWidth() * 0.12f;
-        animationValues[1][3] += animatingImageView.getLayoutParams().height * animationValues[0][1] * 0.16f;
+        // Shrink the zoom/pan offset with the photo. Otherwise a photo panned
+        // toward its left edge can move right as it shrinks.
+        animationValues[1][2] = (windowView.getWidth() - animatingImageView.getLayoutParams().width * animationValues[1][0]) / 2f
+                + translationX * 0.68f + predictiveBackDirection * windowView.getWidth() * 0.12f;
+        animationValues[1][3] = (windowView.getHeight() - animatingImageView.getLayoutParams().height * animationValues[1][1]) / 2f
+                + translationY * 0.68f;
+        predictiveBackPreviewY = animationValues[1][3];
         if (animatingImageView.getBitmap() == null && !predictiveBackFramePending) {
             resetPredictiveBack();
             return;
@@ -18684,8 +18693,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         backgroundDrawable.setAlpha((int) (predictiveBackBackgroundAlpha * (1f - predictiveBackProgress)));
         containerView.setAlpha(predictiveBackContainerAlpha * (1f - predictiveBackProgress));
         navigationBar.setAlpha(predictiveBackNavigationAlpha * (1f - predictiveBackProgress));
-        containerView.invalidate();
-        invalidateBlur();
+        // No glass geometry changes while scrubbing. Invalidating every attached
+        // blur surface on every back event causes severe frame drops.
     }
 
     private void resetPredictiveBack() {
@@ -18710,6 +18719,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         predictiveBackViews = null;
         predictiveBackCommitting = false;
         predictiveBackProgress = 0f;
+        containerView.setLayerType(View.LAYER_TYPE_NONE, null);
         clippingImageProgress = 0f;
         animatingImageView.setVisibility(View.GONE);
         animatingImageView.setImageBitmap(null);
@@ -19115,7 +19125,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                         if (i == 0) {
                             animator.addUpdateListener(animation -> {
                                 clippingImageProgress = (float) animation.getAnimatedValue();
-                                invalidateBlur();
+                                if (!continuingPredictiveBack || object != null && object.drawUnderChatUi) {
+                                    invalidateBlur();
+                                }
                             });
                         }
                         animators.add(animator);
@@ -20202,6 +20214,11 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
 
     @SuppressLint({"NewApi", "DrawAllocation"})
     private void onDraw(Canvas canvas) {
+        // The transition image is a separate child of windowView. Avoid
+        // recording the blur scene and rescaling the picker on every back frame.
+        if (predictiveBackActive && !predictiveBackFramePending) {
+            return;
+        }
         updateGifControls();
         Canvas realCanvas = canvas;
         if (BLUR_RENDERNODE()) {
