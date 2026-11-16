@@ -4,9 +4,12 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
 import android.util.TypedValue;
 
 import androidx.core.content.FileProvider;
+import androidx.annotation.NonNull;
 import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -31,6 +34,8 @@ import org.telegram.ui.Stories.recorder.ButtonWithCounterView;
 import org.telegram.ui.Components.UItem;
 import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.UniversalRecyclerView;
+import org.telegram.ui.Components.URLSpanNoUnderline;
+import org.telegram.messenger.browser.Browser;
 
 import java.io.File;
 import java.io.InputStream;
@@ -63,7 +68,17 @@ public class NekoPluginsActivity extends BaseNekoSettingsActivity {
         items.add(UItem.asHeader(LocaleController.getString(R.string.Plugins)));
         items.add(UItem.asCheck(enableRow, LocaleController.getString(R.string.PluginsEnable),
                 LocaleController.getString(R.string.PluginsEnableDesc)).setChecked(NekoConfig.pluginsEnabled));
-        items.add(UItem.asShadow(null));
+        SpannableStringBuilder pluginsLink = new SpannableStringBuilder(LocaleController.getString(R.string.PluginsGetChannel));
+        int linkStart = pluginsLink.toString().indexOf("@xenonplugins");
+        if (linkStart >= 0) {
+            pluginsLink.setSpan(new URLSpanNoUnderline("https://t.me/xenonplugins") {
+                @Override
+                public void onClick(@NonNull View widget) {
+                    Browser.openUrl(widget.getContext(), "https://t.me/xenonplugins");
+                }
+            }, linkStart, linkStart + "@xenonplugins".length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        items.add(UItem.asShadow(pluginsLink));
 
         items.add(UItem.asCheck(autoSafeModeRow, LocaleController.getString(R.string.PluginsAutoSafeMode),
                 LocaleController.getString(R.string.PluginsAutoSafeModeDesc))

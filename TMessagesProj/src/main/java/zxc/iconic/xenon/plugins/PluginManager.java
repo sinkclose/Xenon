@@ -25,6 +25,8 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import zxc.iconic.xenon.NekoConfig;
@@ -457,19 +459,23 @@ public class PluginManager {
         } else {
             Log.d(TAG, "installFrom: source already in plugins dir");
         }
-        // Enable in prefs regardless of engine state
-        getPrefs().edit().putBoolean("plugin_enabled_" + dest.getName(), true).apply();
         // Parse plugin_id from the file (needed for removeByPluginId even when engine is off)
         String newFileName = dest.getName();
         String[] loadMeta = parseMetadata(dest);
         String loadPluginId = (loadMeta != null && loadMeta.length > 2) ? loadMeta[2] : null;
         if (loadPluginId != null) {
+            migratePluginPreferences(loadPluginId, newFileName);
             removeByPluginId(loadPluginId, newFileName);
         }
-        // If engine disabled, don't load — plugin activates when engine is turned on
-        if (!isEnabled()) {
+        // A replacement keeps its previous enabled state, including false.
+        SharedPreferences prefs = getPrefs();
+        if (!prefs.contains("plugin_enabled_" + newFileName)) {
+            prefs.edit().putBoolean("plugin_enabled_" + newFileName, true).apply();
+        }
+        // Keep a previously disabled plugin disabled after replacing its file.
+        if (!isEnabled() || !prefs.getBoolean("plugin_enabled_" + newFileName, true)) {
             lastInstallEngineOff = true;
-            Log.d(TAG, "installFrom: engine disabled, postponing load");
+            Log.d(TAG, "installFrom: plugin loading deferred");
             return null;
         }
         LoadedPlugin plugin = loadFile(dest);
@@ -487,6 +493,48 @@ public class PluginManager {
 
     private void removeByPluginId(String pluginId) {
         removeByPluginId(pluginId, null);
+    }
+
+    private void migratePluginPreferences(String pluginId, String newFileName) {
+        File[] files = getPluginsDir().listFiles((dir, name) -> name.endsWith(PLUGIN_EXT) && !name.equals(newFileName));
+        if (files == null) return;
+        SharedPreferences prefs = getPrefs();
+        Map<String, ?> values = prefs.getAll();
+        SharedPreferences.Editor editor = prefs.edit();
+        boolean changed = false;
+        for (File file : files) {
+            String[] metadata = parseMetadata(file);
+            if (metadata == null || metadata.length < 3 || !pluginId.equals(metadata[2])) continue;
+            String oldName = file.getName();
+            String oldSettings = "settings:" + oldName.length() + ":" + oldName + ":";
+            String newSettings = "settings:" + newFileName.length() + ":" + newFileName + ":";
+            for (Map.Entry<String, ?> entry : values.entrySet()) {
+                String key = entry.getKey();
+                String target = null;
+                if (key.startsWith(oldSettings)) {
+                    target = newSettings + key.substring(oldSettings.length());
+                } else if (key.startsWith("plugin_scope_" + oldName + "_")) {
+                    target = "plugin_scope_" + newFileName + key.substring(("plugin_scope_" + oldName).length());
+                } else if (key.equals("plugin_enabled_" + oldName)) {
+                    target = "plugin_enabled_" + newFileName;
+                } else if (key.equals("plugin_permissions_v2_" + oldName)) {
+                    target = "plugin_permissions_v2_" + newFileName;
+                } else if (key.equals("plugin_settings_v3_" + oldName)) {
+                    target = "plugin_settings_v3_" + newFileName;
+                }
+                if (target == null || values.containsKey(target)) continue;
+                Object value = entry.getValue();
+                if (value instanceof Boolean) editor.putBoolean(target, (Boolean) value);
+                else if (value instanceof String) editor.putString(target, (String) value);
+                else if (value instanceof Integer) editor.putInt(target, (Integer) value);
+                else if (value instanceof Long) editor.putLong(target, (Long) value);
+                else if (value instanceof Float) editor.putFloat(target, (Float) value);
+                else if (value instanceof Set) editor.putStringSet(target, (Set<String>) value);
+                else continue;
+                changed = true;
+            }
+        }
+        if (changed) editor.commit();
     }
 
     private void removeByPluginId(String pluginId, String keepFileName) {
