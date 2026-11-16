@@ -1,0 +1,857 @@
+plugin_id = "ayu_history_probe"
+plugin_name = "Ayu History"
+plugin_description = "Browse deleted messages and edit history; format replies to deleted messages as blockquotes. Requires Java access and God Mode."
+plugin_author = "Xenon"
+plugin_version = "1.9"
+plugin_scopes = {"MESSAGING"}
+
+-- Persistent history archive. Does not cancel deletions or change Telegram's DB.
+-- Captures explicit message-ID deletions only, not dialog/cache clearing.
+-- Archive stores original DB TL blobs (including attachPath), not media files.
+-- Files: files/ayu_history_probe/<account>_<selfId>/<dialogId>/<messageId>.tl
+-- Deletion snapshots arrive from MessagesStorage; no SQL methods are hooked.
+
+local installed = false
+local last_error = ""
+local captured = 0
+local deletion_events, queried_rows = 0, 0
+local last_saved = "none"
+local pending_targets = {}
+local reinjected = 0
+local MessageObject, ChatActivity, LaunchActivity
+local decode
+local view_deleted
+local edited_versions = 0
+local formatted_replies = 0
+local Storage, UserConfig, Message, App, Log, Array, Class, JavaLong, DialogObject
+
+local function report(err)
+    last_error = tostring(err)
+    if Log then pcall(function() Log:e("AyuHistoryProbe", last_error) end) end
+end
+
+local function guarded(fn)
+    return function(...)
+        local ok, err = pcall(fn, ...)
+        if not ok then report(err) end
+        -- Always nil: a non-nil result would bypass the host method!
+        return nil
+    end
+end
+
+local function close(resource)
+    if resource then pcall(function() resource:close() end) end
+end
+
+local function integer_string(value)
+    -- LuaJ %d truncates to 32 bits; %.0f can use scientific notation.
+    return JavaLong:toString(value)
+end
+
+local function account_root(account)
+    local self_id = UserConfig:getInstance(account).clientUserId
+    local base = luajava.newInstance("java.io.File", App.applicationContext:getFilesDir(), "ayu_history_probe")
+    local owner = luajava.newInstance("java.io.File", base, integer_string(account) .. "_" .. integer_string(self_id))
+    return owner
+end
+
+local function root(account, dialog)
+    return luajava.newInstance("java.io.File", account_root(account), integer_string(dialog))
+end
+
+local function archive_key(account, dialog)
+    return integer_string(account) .. ":" .. integer_string(dialog)
+end
+
+local function redraw_deleted(chat)
+    local list = xenon.getPrivateField(chat, "chatListView")
+    if not list then return end
+    for i = 0, list:getChildCount() - 1 do
+        local cell = list:getChildAt(i)
+        -- Date/service cells do not expose getMessageObject in every build.
+        local ok, obj = pcall(function() return cell:getMessageObject() end)
+        if ok and obj and obj.messageOwner.ayuDeleted then
+            obj.deleted = false -- host uses this flag to suppress avatar drawing
+            local refreshed, failure = pcall(function()
+                -- Same-object binding otherwise keeps the cached time/layout.
+                -- Preserve all grouping flags, including lastInChatList.
+                local group = cell:getCurrentMessagesGroup()
+                local bottom, top = cell:isPinnedBottom(), cell:isPinnedTop()
+                local first, last = cell:isFirstInChat(), cell:isLastInChatList()
+                xenon.setPrivateField(cell, "currentMessageObject", nil)
+                cell:setMessageObject(obj, group, bottom, top, first, last)
+                cell:invalidate()
+            end)
+            if not refreshed then report(failure) end
+        end
+    end
+    chat:updateVisibleRows()
+    list:invalidate()
+end
+
+local function open_in_chat(account, dialog, mid)
+    if UserConfig.selectedAccount ~= account then xenon.toast("Select the original account"); return end
+    local fragment = LaunchActivity:getSafeLastFragment()
+    if not fragment then error("No active screen") end
+    pending_targets[archive_key(account, dialog)] = mid
+    fragment:presentFragment(ChatActivity:of(dialog, mid))
+end
+
+local function reinject(chat, args)
+    local data, account = args[3], args[2]
+    if not data or Array:getLength(data) < 15 then return end
+    if Array:get(data, 10) ~= xenon.getPrivateField(chat, "classGuid") then return end
+    if Array:get(data, 14) ~= 0 then return end -- regular history only
+    local dialog = Array:get(data, 0)
+    if dialog ~= chat:getDialogId() then return end
+    if xenon.getPrivateField(chat, "isTopic") == true then return end
+    local objects = Array:get(data, 2)
+    if not objects then return end
+    local seen, lo, hi = {}, nil, nil
+    local records = {}
+    for i = 0, objects:size() - 1 do
+        local obj = objects:get(i)
+        local id = obj:getId()
+        seen[id] = true
+        records[#records + 1] = obj
+        if id > 0 then lo = lo and math.min(lo, id) or id; hi = hi and math.max(hi, id) or id end
+    end
+    local target = pending_targets[archive_key(account, dialog)]
+    local files = root(account, dialog):listFiles()
+    if not files then return end
+    local candidates = {}
+    for i = 1, #files do
+        local file = files[i]
+        local id = tonumber(tostring(file:getName()):match("^(%d+)%.tl$"))
+        -- Synthetic diagnostics are never part of real history.
+        if id and id < 2147483500 then candidates[#candidates + 1] = {id = id, file = file} end
+    end
+    table.sort(candidates, function(a, b) return a.id > b.id end)
+    local load_type = Array:get(data, 8)
+    local added = 0
+    for i = 1, #candidates do
+        local entry = candidates[i]
+        local within = lo and entry.id >= lo and entry.id <= hi
+        local latest = load_type == 2 and (not lo or entry.id > hi)
+        if not seen[entry.id] and (entry.id == target or within or latest or (not lo and added < 30)) then
+            local ok, result = pcall(function()
+                local msg = decode(entry.file, account, dialog)
+                msg.ayuDeleted = true
+                msg.mentioned = false
+                msg.media_unread = false
+                local obj = luajava.newInstance("org.telegram.messenger.MessageObject", account, msg, true, true)
+                obj:setIsRead()
+                return obj
+            end)
+            if ok then records[#records + 1] = result; seen[entry.id] = true; added = added + 1
+            else report(result) end
+        elseif seen[entry.id] then
+            for j = 1, #records do
+                if records[j]:getId() == entry.id then records[j].messageOwner.ayuDeleted = true end
+            end
+        end
+        if added >= 80 then break end
+    end
+    if added > 0 then
+        table.sort(records, function(a, b)
+            if a.messageOwner.date ~= b.messageOwner.date then return a.messageOwner.date > b.messageOwner.date end
+            return a:getId() > b:getId()
+        end)
+        -- Replace the notification payload for this ChatActivity only: the
+        -- restore hook below restores it before other observers run.
+        local replacement = luajava.newInstance("java.util.ArrayList")
+        for i = 1, #records do replacement:add(records[i]) end
+        Array:set(data, 2, replacement)
+        reinjected = reinjected + added
+    end
+end
+
+decode = function(file, account, dialog)
+    local buffer
+    local ok, result = pcall(function()
+        local length = file:length()
+        if length <= 0 or length > 16 * 1024 * 1024 then error("Invalid TL file size") end
+        buffer = luajava.newInstance("org.telegram.tgnet.SerializedData", file)
+        local msg = Message:TLdeserialize(buffer, buffer:readInt32(true), true)
+        if not msg then error("TLdeserialize returned null") end
+        msg:readAttachPath(buffer, UserConfig:getInstance(account).clientUserId)
+        msg.dialog_id = dialog
+        return msg
+    end)
+    if buffer then pcall(function() buffer:cleanup() end) end
+    if not ok then error(result) end
+    return result
+end
+
+local function save(bytes, account, dialog, mid)
+    local directory = root(account, dialog)
+    if not directory:exists() and not directory:mkdirs() then error("Could not create the archive") end
+    local file = luajava.newInstance("java.io.File", directory, tostring(mid) .. ".tl")
+    if file:exists() then return end
+    local temporary = luajava.newInstance("java.io.File", directory, tostring(mid) .. ".tmp")
+    local output
+    local ok, err = pcall(function()
+        output = luajava.newInstance("java.io.FileOutputStream", temporary)
+        output:write(bytes)
+        output:getFD():sync()
+        output:close()
+        output = nil
+        -- Read back through Telegram's deserializer before accepting the file.
+        local msg = decode(temporary, account, dialog)
+        if msg.id ~= mid then error("Message ID does not match after reading the archive") end
+        if not temporary:renameTo(file) then
+            error("Could not finish writing: " .. tostring(temporary:getPath()) .. " -> " .. tostring(file:getPath()))
+        end
+        captured = captured + 1
+        last_saved = "account " .. integer_string(account) .. ", chat " .. integer_string(dialog) .. ", message " .. integer_string(mid)
+    end)
+    close(output)
+    if not ok then
+        pcall(function() temporary:delete() end)
+        error(err)
+    end
+end
+
+local function edit_root(account, dialog, mid)
+    local edits = luajava.newInstance("java.io.File", root(account, dialog), "edits")
+    return mid and luajava.newInstance("java.io.File", edits, tostring(mid)) or edits
+end
+
+local function save_edit(bytes, account, dialog, mid)
+    local digest = luajava.bindClass("java.security.MessageDigest"):getInstance("SHA-256"):digest(bytes)
+    local hash = {}
+    for i = 1, #digest do hash[i] = string.format("%02x", digest:byte(i)) end
+    local directory = edit_root(account, dialog, mid)
+    if not directory:exists() and not directory:mkdirs() then error("Could not create edit history") end
+    -- Content addressing deduplicates old/current snapshots repeated by database loads.
+    local suffix = table.concat(hash) .. ".tl"
+    local files = directory:listFiles()
+    if files then for i = 1, #files do
+        if tostring(files[i]:getName()):sub(-#suffix) == suffix then return end
+    end end
+    local sequence = 0
+    if files then for i = 1, #files do
+        sequence = math.max(sequence, tonumber(tostring(files[i]:getName()):match("^(%d+)_")) or 0)
+    end end
+    local prefix = integer_string(sequence + 1)
+    local filename = string.rep("0", math.max(0, 16 - #prefix)) .. prefix .. "_" .. suffix
+    local file = luajava.newInstance("java.io.File", directory, filename)
+    local temporary = luajava.newInstance("java.io.File", directory, filename .. ".tmp")
+    local output
+    local ok, failure = pcall(function()
+        output = luajava.newInstance("java.io.FileOutputStream", temporary)
+        output:write(bytes); output:getFD():sync(); output:close(); output = nil
+        local msg = decode(temporary, account, dialog)
+        if msg.id ~= mid then error("Edit history message ID does not match") end
+        if not temporary:renameTo(file) then error("Could not finish saving edit history") end
+        edited_versions = edited_versions + 1
+    end)
+    close(output)
+    if not ok then temporary:delete(); error(failure) end
+end
+
+local function show_message(file, account, dialog)
+    local msg = decode(file, account, dialog)
+    local text = tostring(msg.message or "")
+    local body = "Chat: " .. integer_string(dialog) .. "\nID: " .. tostring(msg.id)
+        .. "\nDate: " .. tostring(msg.date) .. "\nTL: " .. tostring(file:length()) .. " bytes"
+        .. "\nMedia: " .. (msg.media and "yes" or "none")
+        .. "\n\n" .. (text ~= "" and text or "[Message without text]")
+    local buttons = {"Close"}
+    if msg.id < 2147483500 then
+        buttons[1] = "Open in chat"
+        buttons.callback1 = guarded(function() open_in_chat(account, dialog, msg.id) end)
+    end
+    if text ~= "" then
+        buttons[2] = "Send text as a copy"
+        buttons.callback2 = guarded(function()
+            xenon.promptText("Where should the copy be sent?", "Recipient chat ID", function(value)
+                local ok, err = pcall(function()
+                    if UserConfig.selectedAccount ~= account then error("Select the original account first") end
+                    if not value:match("^%-?%d+$") or tonumber(value) == 0 then error("Invalid recipient ID") end
+                    xenon.sendMessage(text, tonumber(value))
+                end)
+                if not ok then report(err); xenon.toast(tostring(err)) end
+            end)
+        end)
+    end
+    xenon.createDialog("Deleted message · TL loaded", body, buttons)
+end
+
+local function browse_dialog(account, dialog)
+    if view_deleted and xenon.on then view_deleted(account, dialog); return end
+    local ok, err = pcall(function()
+        if not installed then error("Hooks not installed: " .. last_error) end
+        local directory = root(account, dialog)
+        local files = directory:listFiles()
+        local entries = {}
+        if files then
+            for i = 1, #files do
+                local file = files[i]
+                local id = tostring(file:getName()):match("^(%d+)%.tl$")
+                if id then entries[#entries + 1] = {id = tonumber(id), file = file} end
+            end
+        end
+        table.sort(entries, function(a, b) return a.id > b.id end)
+        if #entries == 0 then
+            xenon.createDialog("Archive is empty", "Account " .. integer_string(account) .. ", chat " .. integer_string(dialog)
+                .. "\nOpen all archived chats: the message may have been saved in another chat.", {"OK"})
+            return
+        end
+        local items = {}
+        for i = 1, math.min(#entries, 30) do
+            local entry = entries[i]
+            items[#items + 1] = {text = "Message #" .. tostring(entry.id), callback = guarded(function()
+                show_message(entry.file, account, dialog)
+            end)}
+        end
+        xenon.createBottomSheet("Chat " .. integer_string(dialog) .. ": " .. tostring(#entries) .. " · latest 30", items)
+    end)
+    if not ok then report(err); xenon.toast(tostring(err)) end
+end
+
+view_deleted = function(account, dialog, edit_mid)
+    if not xenon.openScreen then error("Update Xenon: the Lua openScreen API is required") end
+    local ids, directory = {}, edit_mid and edit_root(account, dialog, edit_mid) or root(account, dialog)
+    local files = directory:listFiles()
+    if files then
+        for i = 1, #files do
+            local name = tostring(files[i]:getName())
+            local id = edit_mid and name:match("^(%d+_[a-f0-9]+)%.tl$") or tonumber(name:match("^(%d+)%.tl$"))
+            if id and (edit_mid or id < 2147483500) then ids[#ids + 1] = id end
+        end
+    end
+    table.sort(ids)
+    xenon.openScreen({
+        title = edit_mid and "Edit history" or "View deleted",
+        subtitle = edit_mid and ("Message #" .. tostring(edit_mid) .. " · " .. tostring(#ids) .. " versions") or tostring(#ids),
+        account = account,
+        createView = function(context)
+            local ok, result = pcall(function()
+                local Theme = luajava.bindClass("org.telegram.ui.ActionBar.Theme")
+                local density = context:getResources():getDisplayMetrics().density
+                local function dp(v) return math.floor(v * density + 0.5) end
+                local function color(key, fallback)
+                    local good, value = pcall(function() return Theme:getColor(key) end)
+                    return good and value or fallback
+                end
+                local scroll = luajava.newInstance("android.widget.ScrollView", context)
+                scroll:setFillViewport(true)
+                scroll:setBackgroundColor(color(Theme.key_windowBackgroundGray, -16777216))
+                local column = luajava.newInstance("android.widget.LinearLayout", context)
+                column:setOrientation(1)
+                scroll:addView(column)
+                local function label(parent, value, size, tint)
+                    local view = luajava.newInstance("android.widget.TextView", context)
+                    view:setText(tostring(value))
+                    view:setTextSize(size)
+                    view:setTextColor(tint)
+                    parent:addView(view)
+                    return view
+                end
+                if #ids == 0 then
+                    local message = edit_mid and "No recorded versions of this message" or "No archived deleted messages in this chat"
+                    local empty = label(column, message, 15, color(Theme.key_windowBackgroundWhiteGrayText, -3355444))
+                    empty:setPadding(dp(16), dp(32), dp(16), dp(32))
+                end
+                for i = #ids, 1, -1 do
+                    local id = ids[i]
+                    local loaded, obj = pcall(function()
+                        local file = luajava.newInstance("java.io.File", directory, tostring(id) .. ".tl")
+                        local msg = decode(file, account, dialog)
+                        msg.ayuDeleted = not edit_mid
+                        return luajava.newInstance("org.telegram.messenger.MessageObject", account, msg, true, true)
+                    end)
+                    if loaded and obj then
+                        local card = luajava.newInstance("android.widget.LinearLayout", context)
+                        card:setOrientation(1)
+                        card:setPadding(dp(16), dp(12), dp(16), dp(12))
+                        card:setBackgroundColor(color(Theme.key_windowBackgroundWhite, -14606047))
+                        column:addView(card)
+                        local date = luajava.newInstance("java.util.Date", (edit_mid and math.max(obj.messageOwner.date, obj.messageOwner.edit_date) or obj.messageOwner.date) * 1000)
+                        local fmt = luajava.newInstance("java.text.SimpleDateFormat", "dd.MM.yyyy HH:mm:ss")
+                        label(card, fmt:format(date), 12, color(Theme.key_windowBackgroundWhiteGrayText, -3355444))
+                        local mc = luajava.bindClass("org.telegram.messenger.MessagesController"):getInstance(account)
+                        local sender, name = obj:getFromChatId(), ""
+                        if sender > 0 then
+                            local user = mc:getUser(sender)
+                            if user then name = tostring(user.first_name or "") .. " " .. tostring(user.last_name or "") end
+                        elseif sender < 0 then
+                            local group = mc:getChat(-sender)
+                            if group then name = tostring(group.title or "") end
+                        end
+                        if edit_mid then name = (obj.messageOwner.edit_date == 0 and "Original" or "Edited") .. (name ~= "" and " · " .. name or "") end
+                        if name ~= "" then label(card, name, 13, color(Theme.key_windowBackgroundWhiteBlueText, -10109697)) end
+                        local body = tostring(obj.messageOwner.message or "")
+                        if body == "" then
+                            if obj:isGif() then body = "GIF"
+                            elseif obj:isVideo() then body = "Video"
+                            elseif obj:isPhoto() then body = "Photo"
+                            elseif obj:isVoice() then body = "Voice message"
+                            elseif obj:isMusic() then body = "Audio"
+                            elseif obj:isSticker() or obj:isAnimatedSticker() then body = "Sticker"
+                            elseif obj:isDocument() then body = "Document"
+                            else body = "[Media / message without text]" end
+                        end
+                        label(card, body, 15, color(Theme.key_windowBackgroundWhiteBlackText, -1))
+                        local clickable, click_error = pcall(function()
+                            local listener = luajava.createProxy("android.view.View$OnClickListener", {
+                                onClick = function()
+                                    if obj:getId() >= 2147483500 then
+                                        xenon.createDialog("Local test version", tostring(obj.messageOwner.message), {"OK"})
+                                    else open_in_chat(account, dialog, obj:getId()) end
+                                end
+                            })
+                            card:setOnClickListener(listener)
+                        end)
+                        if not clickable then report(click_error) end
+                    else report(obj) end
+                end
+                return scroll
+            end)
+            if ok and result then return result end
+            report(result or "Archive screen did not return a view")
+            local fallback = luajava.newInstance("android.widget.TextView", context)
+            fallback:setText("Could not open the archive. Check plugin diagnostics.\n" .. last_error)
+            fallback:setTextColor(-1)
+            fallback:setBackgroundColor(-16777216)
+            fallback:setPadding(32, 32, 32, 32)
+            return fallback
+        end
+    })
+end
+local function browse_all()
+    local ok, err = pcall(function()
+        if not installed then error("Hooks not installed: " .. last_error) end
+        local account = UserConfig.selectedAccount
+        local folders = account_root(account):listFiles()
+        local chats = {}
+        if folders then
+            for i = 1, #folders do
+                local folder = folders[i]
+                local name = tostring(folder:getName())
+                if folder:isDirectory() and name:match("^%-?%d+$") then
+                    local files, count = folder:listFiles(), 0
+                    if files then
+                        for j = 1, #files do
+                            if tostring(files[j]:getName()):match("^%d+%.tl$") then count = count + 1 end
+                        end
+                    end
+                    if count > 0 then chats[#chats + 1] = {dialog = tonumber(name), count = count} end
+                end
+            end
+        end
+        table.sort(chats, function(a, b) return a.dialog < b.dialog end)
+        if #chats == 0 then
+            xenon.createDialog("Archive is empty", "No archived messages for account " .. integer_string(account)
+                .. ".\nCheck diagnostics: deletion events, database rows and the last saved chat.", {"OK"})
+            return
+        end
+        local items = {}
+        for i = 1, #chats do
+            local chat = chats[i]
+            items[#items + 1] = {text = "Chat " .. integer_string(chat.dialog) .. " · " .. tostring(chat.count),
+                callback = function() browse_dialog(account, chat.dialog) end}
+        end
+        xenon.createBottomSheet("All archived chats · account " .. integer_string(account), items)
+    end)
+    if not ok then report(err); xenon.toast(tostring(err)) end
+end
+
+local function browse()
+    local configured = xenon.getSetting("dialog_id", ""):match("^%s*(.-)%s*$")
+    if configured == "" then browse_all(); return end
+    if not configured:match("^%-?%d+$") then xenon.toast("Chat ID must be an integer"); return end
+    browse_dialog(UserConfig.selectedAccount, tonumber(configured))
+end
+
+local function remove_archive(file)
+    if not file:exists() then return 0 end
+    local count = 0
+    if file:isDirectory() then
+        local children = file:listFiles()
+        if children then for i = 1, #children do count = count + remove_archive(children[i]) end end
+    else count = 1 end
+    if not file:delete() then error("Could not delete " .. tostring(file:getPath())) end
+    return count
+end
+
+local function clear_archive(all_accounts)
+    local buttons = {"Delete", "Cancel"}
+    buttons.callback1 = function()
+        local ok, result = pcall(function()
+            local directory = all_accounts
+                and luajava.newInstance("java.io.File", App.applicationContext:getFilesDir(), "ayu_history_probe")
+                or account_root(UserConfig.selectedAccount)
+            return remove_archive(directory)
+        end)
+        if ok then xenon.toast("Deleted " .. tostring(result) .. " archived files")
+        else report(result); xenon.toast(tostring(result)) end
+    end
+    xenon.createDialog("Clear history", all_accounts
+        and "Permanently delete all archived messages and edit history for every account?"
+        or "Permanently delete archived messages and edit history for this account?", buttons)
+end
+
+local function self_test()
+    local serialized
+    local ok, err = pcall(function()
+        local account = UserConfig.selectedAccount
+        local dialog = UserConfig:getInstance(account).clientUserId
+        local peer = luajava.newInstance("org.telegram.tgnet.TLRPC$TL_peerUser")
+        peer.user_id = dialog
+        local msg = luajava.newInstance("org.telegram.tgnet.TLRPC$TL_message")
+        msg.id = 2147483600
+        msg.peer_id = peer
+        msg.date = 0
+        msg.message = "Ayu History Probe: local TL test. This message was not sent to Telegram."
+        serialized = luajava.newInstance("org.telegram.tgnet.SerializedData")
+        msg:serializeToStream(serialized)
+        save(serialized:toByteArray(), account, dialog, msg.id)
+        local file = luajava.newInstance("java.io.File", root(account, dialog), tostring(msg.id) .. ".tl")
+        show_message(file, account, dialog)
+    end)
+    if serialized then pcall(function() serialized:cleanup() end) end
+    if not ok then report(err); xenon.toast(tostring(err)) end
+end
+
+local function edit_test()
+    local buffers = {}
+    local ok, failure = pcall(function()
+        local account = UserConfig.selectedAccount
+        local dialog = UserConfig:getInstance(account).clientUserId
+        local peer = luajava.newInstance("org.telegram.tgnet.TLRPC$TL_peerUser")
+        peer.user_id = dialog
+        local msg = luajava.newInstance("org.telegram.tgnet.TLRPC$TL_message")
+        msg.id = 2147483599; msg.peer_id = peer; msg.date = 1700000000
+        local snapshots = {}
+        for i = 1, 2 do
+            msg.message = i == 1 and "Local edit test: original text. Never sent to Telegram." or "Local edit test: updated text. Never sent to Telegram."
+            msg.edit_date = i == 1 and 0 or 1700000001
+            if i == 2 then msg.flags = msg.flags + 32768 end -- TL message edit_date flag
+            local buffer = luajava.newInstance("org.telegram.tgnet.SerializedData", msg:getObjectSize())
+            buffers[#buffers + 1] = buffer
+            msg:serializeToStream(buffer); snapshots[i] = buffer:toByteArray()
+        end
+        -- Exercise the same client-to-Lua event bridge as actual database edits.
+        luajava.bindClass("zxc.iconic.xenon.plugins.PluginManager"):getInstance():emitMessageEdit(account, dialog, msg.id, snapshots[1], snapshots[2])
+        xenon.setTimeout(0.3, function() view_deleted(account, dialog, msg.id) end)
+    end)
+    for _, buffer in ipairs(buffers) do pcall(function() buffer:cleanup() end) end
+    if not ok then report(failure); xenon.toast(tostring(failure)) end
+end
+
+plugin_settings = {
+    {type = "button", key = "set_dialog", name = "Set chat filter", action = function()
+        xenon.promptText("Chat ID to view", "Leave empty to view all archived chats", function(value)
+            value = value:match("^%s*(.-)%s*$")
+            if value ~= "" and not value:match("^%-?%d+$") then xenon.toast("Chat ID must be an integer"); return end
+            xenon.setSetting("dialog_id", value)
+            xenon.toast("Chat filter saved")
+        end)
+    end},
+    {type = "button", key = "browse", name = "View deleted", action = browse},
+    {type = "button", key = "diagnostics", name = "Diagnostics", action = function()
+        xenon.createDialog("Ayu History Probe", "Hooks installed: " .. tostring(installed)
+            .. "\nSaved this session: " .. tostring(captured)
+            .. "\nDeletion events: " .. tostring(deletion_events)
+            .. "\nDatabase rows found: " .. tostring(queried_rows)
+            .. "\nRestored in chat: " .. tostring(reinjected)
+            .. "\nEdit versions saved this session: " .. tostring(edited_versions)
+            .. "\nDeleted replies formatted this session: " .. tostring(formatted_replies)
+            .. "\nLast saved: " .. last_saved
+            .. "\nSelected account: " .. (UserConfig and JavaLong and integer_string(UserConfig.selectedAccount) or "unavailable")
+            .. "\nLast error: " .. (last_error ~= "" and last_error or "none")
+            .. "\n\nTL objects are saved. Media files are not copied separately."
+            .. "\nEdits are recorded from now on, including chats that are not open.", {"OK"})
+    end},
+    {type = "button", key = "browse_all", name = "All archived chats", action = browse_all},
+    {type = "button", key = "self_test", name = "Test TL locally (no sending)", action = self_test},
+    {type = "button", key = "edit_test", name = "Test edit history locally (no sending)", action = edit_test},
+    {type = "button", key = "clear_account", name = "Clear this account's archive", action = function() clear_archive(false) end},
+    {type = "button", key = "clear_all", name = "Clear all archived data", action = function() clear_archive(true) end}
+}
+
+local ok, err = pcall(function()
+    if not luajava then error("Enable God Mode and reload the plugin") end
+    Storage = luajava.bindClass("org.telegram.messenger.MessagesStorage")
+    UserConfig = luajava.bindClass("org.telegram.messenger.UserConfig")
+    Message = luajava.bindClass("org.telegram.tgnet.TLRPC$Message")
+    App = luajava.bindClass("org.telegram.messenger.ApplicationLoader")
+    Log = luajava.bindClass("android.util.Log")
+    Array = luajava.bindClass("java.lang.reflect.Array")
+    Class = luajava.bindClass("java.lang.Class")
+    JavaLong = luajava.bindClass("java.lang.Long")
+    DialogObject = luajava.bindClass("org.telegram.messenger.DialogObject")
+    ChatActivity = luajava.bindClass("org.telegram.ui.ChatActivity")
+    LaunchActivity = luajava.bindClass("org.telegram.ui.LaunchActivity")
+    -- Android can advertise ARM app support through Houdini while ART itself
+    -- remains x86. Pine's ARM trampolines cannot hook that runtime safely.
+    local has_arch, host_arch = pcall(function()
+        local Build = luajava.bindClass("android.os.Build")
+        return tostring(Array:get(Build.SUPPORTED_ABIS, 0))
+    end)
+    if has_arch and host_arch:match("^x86") then
+        error("Pine does not support ART " .. host_arch .. " (WSA). Hooks disabled; the local archive is available.")
+    end
+    if not xenon.supportsMessageDeletionEvents or not xenon.supportsMessageDeletionEvents() then
+        error("Update Xenon: this plugin requires MessagesStorage deletion events; SQL hooks are disabled.")
+    end
+    xenon.on("onMessageDeleted", guarded(function(ctx)
+        deletion_events = deletion_events + 1
+        queried_rows = queried_rows + 1
+        save(ctx.tl, ctx.account, ctx.peer, ctx.messageId)
+    end))
+    local contexts = luajava.newInstance("java.lang.ThreadLocal")
+    local ui_hook = xenon.hookMethod("org.telegram.ui.ChatActivity", "didReceivedNotification_messagesDidLoad", {
+        before = guarded(function(chat, args)
+            local stack = contexts:get()
+            if not stack then stack = luajava.newInstance("java.util.ArrayDeque"); contexts:set(stack) end
+            local frame = Array:newInstance(Class:forName("java.lang.Object"), 2)
+            local data = args[3]
+            if data and Array:getLength(data) >= 15 then
+                Array:set(frame, 0, data)
+                Array:set(frame, 1, Array:get(data, 2))
+            end
+            stack:push(frame)
+            reinject(chat, args)
+        end),
+        after = guarded(function()
+            local stack = contexts:get()
+            if stack and not stack:isEmpty() then
+                local frame = stack:pop()
+                local data = Array:get(frame, 0)
+                if data then Array:set(data, 2, Array:get(frame, 1)) end
+            end
+        end)
+    })
+    if not ui_hook then error("Chat history hook was not installed") end
+    local notifications = luajava.bindClass("org.telegram.messenger.NotificationCenter")
+    local deletion_contexts = luajava.newInstance("java.lang.ThreadLocal")
+    local deletion_hook = xenon.hookMethod("org.telegram.ui.ChatActivity", "didReceivedNotification3", {
+        before = guarded(function(chat, args)
+            local stack = deletion_contexts:get()
+            if not stack then stack = luajava.newInstance("java.util.ArrayDeque"); deletion_contexts:set(stack) end
+            local frame = Array:newInstance(Class:forName("java.lang.Object"), 2)
+            stack:push(frame)
+            local data, account = args[3], args[2]
+            if args[1] ~= notifications.messagesDeleted or not data or Array:getLength(data) < 3 then return end
+            if Array:get(data, 2) == true or xenon.getPrivateField(chat, "isTopic") == true then return end
+            if xenon.getPrivateField(chat, "chatMode") ~= 0 then return end
+            if account ~= xenon.getPrivateField(chat, "currentAccount") then return end
+            local dialog = chat:getDialogId()
+            if DialogObject:isEncryptedDialog(dialog) then return end
+            local ids = Array:get(data, 0)
+            local dictionary = Array:get(xenon.getPrivateField(chat, "messagesDict"), 0)
+            -- Copy in Java: round-tripping Integer IDs through Lua would add
+            -- Double values to this erased ArrayList and crash the host cast.
+            local replacement = luajava.newInstance("java.util.ArrayList", ids)
+            local iterator = replacement:iterator()
+            local changed = false
+            for i = 0, ids:size() - 1 do
+                iterator:next()
+                local id = ids:get(i)
+                local obj = dictionary:get(id)
+                local peer = obj and obj.messageOwner.peer_id
+                if obj and id > 0 and peer and (peer.channel_id or 0) == Array:get(data, 1) then
+                    local serialized
+                    local saved, failure = pcall(function()
+                        local existing = luajava.newInstance("java.io.File", root(account, dialog), tostring(id) .. ".tl")
+                        if existing:exists() then return end
+                        serialized = luajava.newInstance("org.telegram.tgnet.SerializedData")
+                        obj.messageOwner:serializeToStream(serialized)
+                        save(serialized:toByteArray(), account, dialog, id)
+                    end)
+                    if serialized then serialized:cleanup() end
+                    if saved then
+                        obj.messageOwner.ayuDeleted = true
+                        obj.deleted = false
+                        obj:setIsRead()
+                        iterator:remove()
+                        changed = true
+                    else report(failure) end
+                end
+            end
+            if changed then
+                Array:set(frame, 0, data)
+                Array:set(frame, 1, ids)
+                Array:set(data, 0, replacement)
+            end
+        end),
+        after = guarded(function(chat)
+            local stack = deletion_contexts:get()
+            if stack and not stack:isEmpty() then
+                local frame = stack:pop()
+                local data = Array:get(frame, 0)
+                if data then
+                    Array:set(data, 0, Array:get(frame, 1))
+                    redraw_deleted(chat)
+                end
+            end
+        end)
+    })
+    if not deletion_hook then error("Chat deletion hook was not installed") end
+    local send_hook = xenon.hookMethod("org.telegram.ui.Components.ChatActivityEnterView", "sendMessageInternal", {
+        before = guarded(function(enter)
+            local obj = xenon.getPrivateField(enter, "replyingMessageObject")
+            if not obj or not obj.messageOwner or not obj.messageOwner.ayuDeleted then return end
+            local chat = xenon.getPrivateField(enter, "parentFragment")
+            if not chat or chat:getDialogId() ~= obj:getDialogId() then return end
+            local original = tostring(enter:getFieldText() or "")
+            if original:match("^%s*$") then return end
+            local account = xenon.getPrivateField(chat, "currentAccount") or UserConfig.selectedAccount
+            local sender = obj:getFromChatId()
+            local mc = luajava.bindClass("org.telegram.messenger.MessagesController"):getInstance(account)
+            local name = "Deleted message"
+            if sender > 0 then
+                local user = mc:getUser(sender)
+                if user then
+                    if user.username and tostring(user.username) ~= "" then
+                        name = "@" .. tostring(user.username)
+                    else
+                        name = tostring(user.first_name or "")
+                        if user.last_name and tostring(user.last_name) ~= "" then
+                            name = name .. " " .. tostring(user.last_name)
+                        end
+                    end
+                    if name:match("^%s*$") then name = "Deleted message" end
+                end
+            elseif sender < 0 then
+                local group = mc:getChat(-sender)
+                if group then name = tostring(group.title or name) end
+            end
+            local body = tostring(obj.messageOwner.message or "")
+            if body == "" then
+                if obj:isGif() then body = "GIF"
+                elseif obj:isVideo() then body = "Video"
+                elseif obj:isPhoto() then body = "Photo"
+                elseif obj:isVoice() then body = "Voice message"
+                elseif obj:isMusic() then body = "Audio"
+                elseif obj:isSticker() or obj:isAnimatedSticker() then body = "Sticker"
+                elseif obj:isDocument() then body = "Document"
+                else body = "Deleted message" end
+            end
+            -- LuaJ coerces java.lang.String into a Lua string, which has no
+            -- :length() method. Use Android CharSequences for UTF-16 offsets.
+            local name_length = luajava.newInstance("android.text.SpannableStringBuilder", name):length()
+            local quote_length = luajava.newInstance("android.text.SpannableStringBuilder", name .. "\n" .. body):length()
+            local draft = luajava.newInstance("android.text.SpannableStringBuilder", name .. "\n" .. body .. "\n\n" .. original)
+            local QuoteSpan = luajava.bindClass("org.telegram.ui.Components.QuoteSpan")
+            if sender > 0 then
+                local mention = luajava.newInstance("org.telegram.ui.Components.URLSpanUserMention", integer_string(sender), 3)
+                draft:setSpan(mention, 0, name_length, 33)
+            end
+            -- Remove the invalid server reply before the native send pipeline
+            -- reads the composer. The blockquote and mention remain real entities.
+            xenon.setPrivateField(enter, "replyingMessageObject", nil)
+            xenon.setPrivateField(enter, "replyingQuote", nil)
+            xenon.setPrivateField(chat, "replyingMessageObject", nil)
+            xenon.setPrivateField(chat, "replyingQuote", nil)
+            enter:setFieldText(draft)
+            local editor = xenon.getPrivateField(enter, "messageEditText")
+            if not editor then error("Message editor is unavailable") end
+            -- setFieldText normalizes spans. Install the edit-mode quote on the
+            -- actual Editable that processSendingText reads for entities.
+            QuoteSpan:putQuoteToEditable(editor:getText(), 0, quote_length, false)
+            formatted_replies = formatted_replies + 1
+        end)
+    })
+    if not send_hook then error("Deleted reply send hook was not installed") end
+    local photo_hook = xenon.hookMethod("org.telegram.ui.Cells.ChatMessageCell", "updateButtonState", {
+        before = guarded(function(cell)
+            local obj = cell:getMessageObject()
+            if obj and obj.messageOwner.ayuDeleted and obj.type == 1 then
+                -- A full photo can still be in ImageReceiver's memory cache
+                -- after its on-disk cache was removed. Thumbnails do not count.
+                local image = cell:getPhotoImage()
+                if image and image:hasNotThumb() then obj.mediaExists = true end
+            end
+        end)
+    })
+    if not photo_hook then error("Photo state hook was not installed") end
+    local menu_contexts = luajava.newInstance("java.lang.ThreadLocal")
+    local EDIT_HISTORY_OPTION = 910001
+    local function edit_target(chat, obj)
+        if not obj or not obj.messageOwner then return nil end
+        local account = xenon.getPrivateField(chat, "currentAccount")
+        local dialog, mid = obj:getDialogId(), obj:getRealId()
+        if account == nil or mid <= 0 or DialogObject:isEncryptedDialog(dialog)
+            or chat:getChatMode() == ChatActivity.MODE_SCHEDULED then return nil end
+        local files = edit_root(account, dialog, mid):listFiles()
+        local recorded = false
+        if files then for i = 1, #files do
+            if tostring(files[i]:getName()):match("^%d+_[a-f0-9]+%.tl$") then recorded = true; break end
+        end end
+        if not recorded and (obj.messageOwner.edit_date or 0) <= 0 then return nil end
+        return account, dialog, mid
+    end
+    local hidden = {}
+    for _, name in ipairs({"OPTION_EDIT", "OPTION_PIN", "OPTION_UNPIN", "OPTION_DELETE",
+        "OPTION_REPORT_CHAT", "OPTION_FACT_CHECK", "OPTION_EDIT_PRICE", "OPTION_RETRY",
+        "OPTION_FORWARD", "OPTION_FORWARD_NOQUOTE", "OPTION_FORWARD_NOCAPTION"}) do
+        local value = xenon.getPrivateField(ChatActivity, name)
+        if value then hidden[value] = true end
+    end
+    local menu_hook = xenon.hookMethod("org.telegram.ui.ChatActivity", "fillMessageMenu", {
+        before = guarded(function(chat, args)
+            local stack = menu_contexts:get()
+            if not stack then stack = luajava.newInstance("java.util.ArrayDeque"); menu_contexts:set(stack) end
+            local frame = Array:newInstance(Class:forName("java.lang.Object"), 5)
+            stack:push(frame)
+            local obj = xenon.getPrivateField(chat, "selectedObject") or args[1]
+            for i = 0, 2 do Array:set(frame, i, args[i + 2]) end
+            Array:set(frame, 3, chat)
+            Array:set(frame, 4, obj)
+        end),
+        after = guarded(function()
+            local stack = menu_contexts:get()
+            if not stack or stack:isEmpty() then return end
+            local frame = stack:pop()
+            local options = Array:get(frame, 2)
+            if not options then return end
+            local obj = Array:get(frame, 4)
+            for i = options:size() - 1, 0, -1 do
+                if obj and obj.messageOwner.ayuDeleted and hidden[options:get(i)] then
+                    for j = 0, 2 do
+                        local list = Array:get(frame, j)
+                        if list and i < list:size() then list:subList(i, i + 1):clear() end
+                    end
+                end
+            end
+            if edit_target(Array:get(frame, 3), obj) ~= nil then
+                local resources = luajava.bindClass("org.telegram.messenger.R$drawable")
+                -- Preserve Java Integer element types; Lua numbers otherwise
+                -- become Double in erased ArrayLists and crash menu consumers.
+                Array:get(frame, 0):add(luajava.newInstance("java.lang.Integer", resources.msg_edit))
+                Array:get(frame, 1):add("View edited")
+                options:add(luajava.newInstance("java.lang.Integer", EDIT_HISTORY_OPTION))
+            end
+        end)
+    })
+    if not menu_hook then error("Message menu hook was not installed") end
+    local edit_click_hook = xenon.hookMethod("org.telegram.ui.ChatActivity", "processSelectedOption", {
+        before = function(chat, args)
+            if args[1] ~= EDIT_HISTORY_OPTION then return nil end
+            local success, failure = pcall(function()
+                local account, dialog, mid = edit_target(chat, xenon.getPrivateField(chat, "selectedObject"))
+                chat:closeMenu()
+                if account ~= nil then view_deleted(account, dialog, mid) end
+            end)
+            if not success then report(failure); xenon.toast(tostring(failure)) end
+            return true
+        end
+    })
+    if not edit_click_hook then error("Edit history click hook was not installed") end
+    if xenon.on then
+        xenon.on("onMessageEdited", guarded(function(ctx)
+            save_edit(ctx.previousTl, ctx.account, ctx.peer, ctx.messageId)
+            save_edit(ctx.currentTl, ctx.account, ctx.peer, ctx.messageId)
+        end))
+        xenon.on("onChatMenuBuild", function() return {{text = "View deleted", icon = "msg_view_file"}} end)
+        xenon.on("onChatMenuItemClick", guarded(function(ctx)
+            if ctx.item == 0 then view_deleted(UserConfig.selectedAccount, ctx.peer) end
+        end))
+    end
+    installed = true
+end)
+if not ok then report(err) end
