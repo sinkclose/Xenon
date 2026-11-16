@@ -3,6 +3,7 @@
     <external-path name="media" path="."/>
     <files-path name="logs" path="/logs/"/>
     <files-path name="cache" path="/cache/"/>
+    <cache-path name="app_cache" path="."/>
     <files-path name="xenonplugins" path="/xenonplugins/"/>
     <root-path name="external_files" path="/storage/" />
 </paths>
