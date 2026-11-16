@@ -2455,6 +2455,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
             if (hasSections() && NekoConfig.useMaterialDialogListItems()) {
                 int foldersGap = (int) (dp(6) * filterTabsVisibility);
+                // With a hidden archive, the first visible chat is at position 1 and
+                // receives the inner section gap instead of the outer 4dp inset.
+                if (parentPage.dialogsType == DIALOGS_TYPE_DEFAULT && hasHiddenArchive()) {
+                    foldersGap += Math.max(0, dp(4) - zxc.iconic.xenon.helpers.M3SectionsHelper.getGap());
+                }
                 t += foldersGap;
                 additionalPadding += foldersGap;
             }
