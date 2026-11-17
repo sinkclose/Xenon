@@ -34,6 +34,7 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
     private final Paint paintStrokeBottom = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private boolean renderNodeInvalidated;
+    private boolean requestedClipToOutline = true;
     private float recordedBlurOpacity = Float.NaN;
     private PrismGlassPipeline prismPipeline;
     private boolean prismPipelineActive;
@@ -41,6 +42,20 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
     int liquidGlassSamplePadding;
     private int requestedLiquidGlassSamplePadding;
     private int ios27MaterialRevision = -1;
+    private org.telegram.ui.Components.blur3.GlasmioGlassRenderer glasmio;
+    private final float[] glasmioPress = new float[8];
+
+    @Override
+    public void setGlasmioPress(float progress, float dissipation, float x, float y,
+                               float left, float top, float right, float bottom) {
+        if (Build.VERSION.SDK_INT >= 36) return;
+        if (glasmioPress[0] == progress && glasmioPress[1] == dissipation && glasmioPress[2] == x
+                && glasmioPress[3] == y && glasmioPress[4] == left && glasmioPress[5] == top
+                && glasmioPress[6] == right && glasmioPress[7] == bottom) return;
+        glasmioPress[0] = progress; glasmioPress[1] = dissipation; glasmioPress[2] = x; glasmioPress[3] = y;
+        glasmioPress[4] = left; glasmioPress[5] = top; glasmioPress[6] = right; glasmioPress[7] = bottom;
+        renderNodeInvalidated = true;
+    }
 
     /** Extra backdrop pixels for lenses whose refraction can cross the opposite edge. */
     public void setLiquidGlassSamplePadding(int padding) {
@@ -51,7 +66,9 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
     private void syncLiquidGlassSamplePadding() {
         int padding = Math.max(requestedLiquidGlassSamplePadding,
                 usesIos27Glass()
-                        ? dp(zxc.iconic.xenon.NekoConfig.getIos27GlassSamplePaddingDp()) : 0);
+                        ? dp(zxc.iconic.xenon.NekoConfig.getIos27GlassSamplePaddingDp(
+                                Math.min(boundProps.boundsWithPadding.width(), boundProps.boundsWithPadding.height())
+                                        / AndroidUtilities.density)) : 0);
         if (liquidGlassSamplePadding == padding) return;
         liquidGlassSamplePadding = padding;
         onBoundPropsChanged();
@@ -81,7 +98,8 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
 
     @Override
     public BlurredBackgroundDrawable setClipToOutline(boolean clipToOutline) {
-        renderNode.setClipToOutline(clipToOutline);
+        requestedClipToOutline = clipToOutline;
+        renderNode.setClipToOutline(requestedClipToOutline);
         return super.setClipToOutline(clipToOutline);
     }
 
@@ -93,7 +111,8 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
     boolean isFixedIos26Lens() { return fixedIos26Lens; }
 
     boolean usesIos27Glass() {
-        return !fixedIos26Lens && liquidGlassEffectAllowed && zxc.iconic.xenon.NekoConfig.ios27LiquidGlass;
+        return !fixedIos26Lens && liquidGlassEffectAllowed && zxc.iconic.xenon.NekoConfig.ios27LiquidGlass
+                && org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS);
     }
 
     @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
@@ -136,6 +155,25 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
     @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
     private void ensureLiquidGlassEffect() {
         syncLiquidGlassSamplePadding();
+        if (usesIos27Glass()) {
+            renderNode.setClipToOutline(false);
+            renderNode.setClipToBounds(false);
+            liquidGlassEffect = null;
+            renderNodeFill.setRenderEffect(null);
+            if (glasmio == null) glasmio = new org.telegram.ui.Components.blur3.GlasmioGlassRenderer();
+            if (ios27MaterialRevision != zxc.iconic.xenon.NekoConfig.getIos27GlassRevision()) {
+                ios27MaterialRevision = zxc.iconic.xenon.NekoConfig.getIos27GlassRevision();
+                updateColors();
+                renderNodeInvalidated = true;
+            }
+            return;
+        }
+        if (glasmio != null) {
+            glasmio.release(); glasmio = null;
+            renderNodeInvalidated = true;
+        }
+        renderNode.setClipToOutline(requestedClipToOutline);
+        renderNode.setClipToBounds(true);
         if (usesIos27Glass()
                 && ios27MaterialRevision != zxc.iconic.xenon.NekoConfig.getIos27GlassRevision()) {
             ios27MaterialRevision = zxc.iconic.xenon.NekoConfig.getIos27GlassRevision();
@@ -193,7 +231,8 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
 
     @Override
     public boolean hasDisplayList() {
-        return renderNode.hasDisplayList() && renderNodeFill.hasDisplayList();
+        return renderNode.hasDisplayList() && renderNodeFill.hasDisplayList()
+                && (glasmio == null || glasmio.hasDisplayList());
     }
 
     @Override
@@ -205,7 +244,7 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
         if (Build.VERSION.SDK_INT >= 33) {
             ensureLiquidGlassEffect();
         }
-        if (Build.VERSION.SDK_INT >= 33 && (retainSurfaceDisplayList
+        if (Build.VERSION.SDK_INT >= 33 && !usesIos27Glass() && (retainSurfaceDisplayList
                 || liquidGlassEffect != null && zxc.iconic.xenon.NekoConfig.isPrismGlassEnabled())) {
             // Explicit calls (including GlassEngine captures) must refresh source commands.
             updatePrismDisplayList(true);
@@ -235,7 +274,8 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
                 backgroundColor
             );
         }
-        source.drawWithBlurOpacity(c, sL, sT, sR, sB, blurAlphaFactor());
+        if (usesIos27Glass()) source.drawUnblurred(c, sL, sT, sR, sB);
+        else source.drawWithBlurOpacity(c, sL, sT, sR, sB, blurAlphaFactor());
         recordedBlurOpacity = blurAlphaFactor();
         c.restore();
         renderNodeFill.endRecording();
@@ -245,7 +285,16 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
         if (!usesIos27Glass() && Color.alpha(backgroundColor) == 255) {
             c.drawColor(backgroundColor);
         } else {
-            c.drawRenderNode(renderNodeFill);
+            if (usesIos27Glass() && glasmio != null) {
+                glasmio.setTint(backgroundColor);
+                float dx = padding - boundProps.boundsWithPadding.left;
+                float dy = padding - boundProps.boundsWithPadding.top;
+                glasmio.setPress(glasmioPress[0], glasmioPress[1], glasmioPress[2] + dx, glasmioPress[3] + dy,
+                        glasmioPress[4] + dx, glasmioPress[5] + dy, glasmioPress[6] + dx, glasmioPress[7] + dy);
+                c.drawRenderNode(glasmio.update(renderNodeFill, padding, padding,
+                        boundProps.boundsWithPadding.width(), boundProps.boundsWithPadding.height(),
+                        boundProps.shaderRadii[0], boundProps.shaderRadii[2], boundProps.shaderRadii[4], boundProps.shaderRadii[6]));
+            } else c.drawRenderNode(renderNodeFill);
             // Three cases for the tint overlay layered on top of the
             // (refracted/blurred) source:
             //
@@ -341,7 +390,7 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
         if (Build.VERSION.SDK_INT >= 33) {
             ensureLiquidGlassEffect();
         }
-        final boolean retainedPipeline = Build.VERSION.SDK_INT >= 33 && (retainSurfaceDisplayList
+        final boolean retainedPipeline = Build.VERSION.SDK_INT >= 33 && !usesIos27Glass() && (retainSurfaceDisplayList
                 || liquidGlassEffect != null && zxc.iconic.xenon.NekoConfig.isPrismGlassEnabled());
         if (prismPipelineActive != retainedPipeline) {
             prismPipelineActive = retainedPipeline;
@@ -364,7 +413,7 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
         renderNodeInvalidated = false;
 
         final boolean ios27 = usesIos27Glass();
-        int color = ios27 ? Theme.multAlpha(Theme.isCurrentThemeDark() ? 0x0a000000 : 0x05000000, renderNode.getAlpha())
+        int color = ios27 ? 0
                 : Theme.multAlpha(shadowColor, renderNode.getAlpha() * shadowAlpha);
         if (Color.alpha(color) != 0) {
             paintShadow.setShadowLayer(ios27 ? AndroidUtilities.dpf2(15f) : shadowLayerRadius,
@@ -376,14 +425,6 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
         canvas.translate(boundProps.boundsWithPadding.left, boundProps.boundsWithPadding.top);
         canvas.drawRenderNode(renderNode);
         canvas.restore();
-        if (ios27 && liquidGlassEffect != null) {
-            // Tint only the glass body. The optical rim is drawn afterwards
-            // so it keeps its white/black light color.
-            float strength = Math.max(0f, Math.min(1f,
-                    zxc.iconic.xenon.NekoConfig.getGlassTintPercent() / 100f)) * .60f;
-            paintMaterialTint.setColor(Theme.multAlpha(backgroundColor, strength * renderNode.getAlpha()));
-            boundProps.draw(canvas, paintMaterialTint);
-        }
         canvas.save();
         canvas.translate(boundProps.boundsWithPadding.left - liquidGlassSamplePadding,
                 boundProps.boundsWithPadding.top - liquidGlassSamplePadding);

@@ -13,6 +13,8 @@ public final class IosSwitchDynamics {
     private final Spring scaleY = new Spring(.7f, 250f);
     private final Spring velocity = new Spring(.5f, 300f);
     private boolean held, releasePending;
+    private float liftedSeconds;
+    private static boolean glasmio() { return zxc.iconic.xenon.NekoConfig.ios27LiquidGlass; }
 
     public IosSwitchDynamics(float initialValue) {
         snapTo(initialValue);
@@ -23,7 +25,7 @@ public final class IosSwitchDynamics {
     }
 
     public static float dragFraction(float initial, float deltaPixels, float density, boolean rtl) {
-        return clamp(initial + (rtl ? -deltaPixels : deltaPixels) / (TRAVEL * density), 0f, 1f);
+        return clamp(initial + (rtl ? -deltaPixels : deltaPixels) / ((glasmio() ? 22f : TRAVEL) * density), 0f, 1f);
     }
 
     // AndroidLiquidGlass scales the track backdrop before the thumb layer transform.
@@ -45,15 +47,24 @@ public final class IosSwitchDynamics {
     }
 
     public void press() {
+        if (!held && !releasePending) liftedSeconds = 0f;
         held = true;
         releasePending = false;
+        if (glasmio()) {
+            press.damping = scaleX.damping = scaleY.damping = .625f;
+            press.stiffness = scaleX.stiffness = scaleY.stiffness = 541.54208f;
+        } else {
+            press.damping = 1f; press.stiffness = 1000f;
+            scaleX.damping = .6f; scaleY.damping = .7f;
+            scaleX.stiffness = scaleY.stiffness = 250f;
+        }
         press.target = 1f;
         scaleX.target = scaleY.target = 1.5f;
     }
 
     public void animateTo(float value, boolean simulatePress) {
         position.target = clamp(value, 0f, 1f);
-        if (simulatePress) {
+        if (simulatePress && !glasmio()) {
             press();
             release();
         }
@@ -65,11 +76,16 @@ public final class IosSwitchDynamics {
     }
 
     public void advance(float seconds) {
+        if (held || releasePending) liftedSeconds += seconds;
         position.advance(seconds);
         velocity.target = position.velocity;
         velocity.advance(seconds);
-        if (releasePending && !held && Math.abs(position.value - position.target) < .025f) {
+        if (releasePending && !held && (glasmio() ? liftedSeconds >= .220f : Math.abs(position.value - position.target) < .025f)) {
             releasePending = false;
+            if (glasmio()) {
+                press.damping = scaleX.damping = scaleY.damping = .7f;
+                press.stiffness = scaleX.stiffness = scaleY.stiffness = 157.91367f;
+            }
             press.target = 0f;
             scaleX.target = scaleY.target = 1f;
         }
@@ -80,14 +96,16 @@ public final class IosSwitchDynamics {
 
     public float fraction() { return clamp(position.value, 0f, 1f); }
     public float target() { return position.target; }
-    public float pressProgress() { return clamp(press.value, 0f, 1f); }
+    public float pressProgress() { return glasmio() ? press.value : clamp(press.value, 0f, 1f); }
     public float thumbScaleX() { return thumbScaleX(50f); }
     public float thumbScaleX(float velocityDivisor) {
-        return scaleX.value / (1f - clamp(velocity.value / velocityDivisor * .75f, -.2f, .2f));
+        float scale = glasmio() ? 1f + (58f / 37f - 1f) * press.value : scaleX.value;
+        return scale / (1f - clamp(velocity.value / velocityDivisor * .75f, -.2f, .2f));
     }
     public float thumbScaleY() { return thumbScaleY(50f); }
     public float thumbScaleY(float velocityDivisor) {
-        return scaleY.value * (1f - clamp(velocity.value / velocityDivisor * .25f, -.2f, .2f));
+        float scale = glasmio() ? 1f + (38.333333f / 24f - 1f) * press.value : scaleY.value;
+        return scale * (1f - clamp(velocity.value / velocityDivisor * .25f, -.2f, .2f));
     }
     public boolean isRunning() {
         return releasePending || !position.settled() || !press.settled()
@@ -95,7 +113,7 @@ public final class IosSwitchDynamics {
     }
 
     private static final class Spring {
-        final float damping, stiffness;
+        float damping, stiffness;
         float value, velocity, target;
         Spring(float damping, float stiffness) { this.damping = damping; this.stiffness = stiffness; }
         void snap(float target) { this.target = value = target; velocity = 0f; }

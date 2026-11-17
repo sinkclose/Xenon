@@ -37,6 +37,10 @@ public final class LiquidTouchEffect {
     private SpringAnimation press;
     private SpringAnimation returnX;
     private SpringAnimation returnY;
+    private SpringAnimation glowAnimation, dissipationAnimation;
+    private float glowProgress, dissipationProgress;
+    private boolean glowReleased = true;
+    private org.telegram.ui.Components.blur3.GlasmioPressEffect nativeGlow;
     private float dragStrength = 1f;
     private float pressStrength = 1f;
     private float pressDamping = .5f, pressStiffness = 300f;
@@ -59,6 +63,8 @@ public final class LiquidTouchEffect {
         press.getSpring().setDampingRatio(pressDamping).setStiffness(pressStiffness);
         returnX = spring(value -> offsetX = value);
         returnY = spring(value -> offsetY = value);
+        glowAnimation = spring(value -> glowProgress = value);
+        dissipationAnimation = spring(value -> dissipationProgress = value);
     }
 
     /** Changes drag deformation without changing press enlargement. */
@@ -175,6 +181,14 @@ public final class LiquidTouchEffect {
         press.cancel();
         press.setStartValue(progress).setStartVelocity(0f);
         press.animateToFinalPosition(1f);
+        if (zxc.iconic.xenon.NekoConfig.ios27LiquidGlass) {
+            glowReleased = false;
+            glowAnimation.getSpring().setDampingRatio(1f).setStiffness(3947.8418f);
+            glowAnimation.animateToFinalPosition(1f);
+            dissipationAnimation.cancel();
+            dissipationProgress = 0f;
+            dissipationAnimation.setStartValue(0f);
+        }
         // Prime the spring's clock during ACTION_DOWN, before child controls handle it.
         // This only publishes the current size: no time advances and no scale jump.
         // The first scheduled frame can then integrate elapsed time instead of spending
@@ -192,6 +206,17 @@ public final class LiquidTouchEffect {
         releasePending = false;
         minimumPressDuration = 0;
         press.animateToFinalPosition(0f);
+        finishGlowRelease();
+    }
+
+    private void finishGlowRelease() {
+        if (zxc.iconic.xenon.NekoConfig.ios27LiquidGlass && !glowReleased) {
+            glowReleased = true;
+            glowAnimation.getSpring().setDampingRatio(1f).setStiffness(157.91367f);
+            glowAnimation.animateToFinalPosition(0f);
+            dissipationAnimation.getSpring().setDampingRatio(1f).setStiffness(157.91367f);
+            dissipationAnimation.animateToFinalPosition(1f);
+        }
     }
 
     private void release() {
@@ -204,6 +229,9 @@ public final class LiquidTouchEffect {
             return;
         }
         pointerId = -1;
+        // The original deformation can hold a quick tap; the retained Glasmio glow
+        // still starts dissipating at pointer-up, independently of that hold.
+        finishGlowRelease();
         long remaining = completeTap ? minimumPressDuration - (SystemClock.uptimeMillis() - pressStartedAt) : 0;
         if (remaining > 0) {
             releasePending = true;
@@ -238,6 +266,14 @@ public final class LiquidTouchEffect {
     /** origin is the drawable's origin in the effect's coordinates (negative for a parent drawable). */
     public static boolean updateBackground(BlurredBackgroundDrawable drawable, LiquidTouchEffect effect, float originX, float originY) {
         if (drawable == null) return false;
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            if (effect != null && zxc.iconic.xenon.NekoConfig.ios27LiquidGlass) {
+                drawable.setGlasmioPress(effect.glowProgress, effect.dissipationProgress,
+                        effect.downX + effect.offsetX - originX, effect.downY + effect.offsetY - originY,
+                        effect.bounds.left - originX, effect.bounds.top - originY,
+                        effect.bounds.right - originX, effect.bounds.bottom - originY);
+            } else drawable.setGlasmioPress(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
+        }
         if (effect == null) return drawable.setSourceTransform(1f, 1f, 0f, 0f);
         effect.updateTransform();
         return drawable.setSourceTransform(effect.scaleX, effect.scaleY,
@@ -274,6 +310,16 @@ public final class LiquidTouchEffect {
         values[offset + 3] = bounds.isEmpty() ? 0f : Math.max(0f, Math.min(1f, progress));
     }
 
+    public void writeGlasmioGlow(float[] values, int offset, float originX, float originY) {
+        updateTransform();
+        float x = Math.max(bounds.left, Math.min(bounds.right, downX + offsetX));
+        float y = Math.max(bounds.top, Math.min(bounds.bottom, downY + offsetY));
+        values[offset] = x * scaleX + translationX - originX;
+        values[offset + 1] = y * scaleY + translationY - originY;
+        values[offset + 2] = Math.max(0f, Math.min(1f, glowProgress));
+        values[offset + 3] = Math.max(0f, Math.min(1f, dissipationProgress));
+    }
+
     /** Apply a parent-coordinate effect while drawing inside one of its children. */
     public int beginInChild(Canvas canvas, float childX, float childY) {
         int save = canvas.save();
@@ -297,6 +343,20 @@ public final class LiquidTouchEffect {
     }
 
     public void drawHighlight(Canvas canvas, float cornerRadius, float inset) {
+        if (zxc.iconic.xenon.NekoConfig.ios27LiquidGlass) {
+            if (!org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS)) return;
+            if (android.os.Build.VERSION.SDK_INT >= 36 && glowProgress > 0f) {
+                if (nativeGlow == null) nativeGlow = new org.telegram.ui.Components.blur3.GlasmioPressEffect();
+                glowBounds.set(bounds.left + inset, bounds.top + inset, bounds.right - inset, bounds.bottom - inset);
+                if (glowBounds.isEmpty()) return;
+                glowClip.rewind();
+                glowClip.addRoundRect(glowBounds, cornerRadius, cornerRadius, Path.Direction.CW);
+                int save = canvas.save(); canvas.clipPath(glowClip);
+                nativeGlow.draw(canvas, glowBounds, downX + offsetX, downY + offsetY, glowProgress, dissipationProgress);
+                canvas.restoreToCount(save);
+            }
+            return;
+        }
         if (bounds.isEmpty() || progress <= 0f) return;
         glowBounds.set(bounds.left + inset, bounds.top + inset, bounds.right - inset, bounds.bottom - inset);
         if (glowBounds.isEmpty()) return;
@@ -340,10 +400,14 @@ public final class LiquidTouchEffect {
             returnX.cancel();
             returnY.cancel();
             press.setStartValue(0f);
+            glowAnimation.cancel(); dissipationAnimation.cancel();
+            glowAnimation.setStartValue(0f); dissipationAnimation.setStartValue(0f);
         }
-        boolean changed = progress != 0f || offsetX != 0f || offsetY != 0f;
+        boolean changed = progress != 0f || offsetX != 0f || offsetY != 0f || glowProgress != 0f;
         pointerId = -1;
         progress = offsetX = offsetY = 0f;
+        glowProgress = dissipationProgress = 0f;
+        glowReleased = true;
         if (changed) invalidateHost();
     }
 }

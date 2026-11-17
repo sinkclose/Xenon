@@ -879,6 +879,36 @@ public class MainTabsLayout extends AnimatedLinearLayout {
         setSkipDrawSelector(false);
     }
 
+    private void refreshGlassFrame() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
+        Drawable background = getBackground();
+        if (background instanceof BlurredBackgroundDrawableRenderNode) {
+            ((BlurredBackgroundDrawableRenderNode) background).invalidateDisplayList();
+        }
+        if (liquidLens instanceof BlurredBackgroundDrawableRenderNode) {
+            ((BlurredBackgroundDrawableRenderNode) liquidLens).invalidateDisplayList();
+        }
+        if (liquidBackdrop != null) {
+            liquidBackdrop.getSource().dispatchOnDrawablesRelativePositionChange();
+        }
+        invalidate();
+    }
+
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        refreshGlassFrame();
+    }
+
+    @Override protected void onWindowVisibilityChanged(int visibility) {
+        super.onWindowVisibilityChanged(visibility);
+        if (visibility == View.VISIBLE) refreshGlassFrame();
+    }
+
+    @Override protected void onVisibilityChanged(View changedView, int visibility) {
+        super.onVisibilityChanged(changedView, visibility);
+        if (visibility == View.VISIBLE) refreshGlassFrame();
+    }
+
     @Override protected void onDetachedFromWindow() {
         resetLiquidGesture();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && liquidForegroundNode != null) {

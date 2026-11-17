@@ -306,9 +306,9 @@ public class NekoConfig {
     public static int liquidGlassThickness = 11;
     public static boolean useAdvancedLiquidGlass = false;
     public static boolean ios27LiquidGlass = false;
-    public static int ios27GlassBlur = 6;
+    public static int ios27GlassBlur = 5;
     public static float ios27GlassRefraction = .7f;
-    public static float ios27GlassDispersion = .2f;
+    public static float ios27GlassDispersion = 0f;
     public static int ios27GlassAlpha = 100;
     public static int ios27GlassTintPercent = 0;
     public static boolean ios27GlassTintBlackWhite = false;
@@ -536,9 +536,27 @@ public class NekoConfig {
             liquidGlassThickness = preferences.getInt("liquidGlassThickness", 11);
             useAdvancedLiquidGlass = preferences.getBoolean("useAdvancedLiquidGlass", false);
             ios27LiquidGlass = preferences.getBoolean("ios27LiquidGlass", false);
-            ios27GlassBlur = Math.max(0, Math.min(40, preferences.getInt("ios27GlassBlur", 6)));
+            if (preferences.getInt("ios27GlasmioRecipeVersion", 0) < 1) {
+                // Replace the previous fitted recipe once; subsequent custom settings persist.
+                preferences.edit().putInt("ios27GlasmioRecipeVersion", 1)
+                        .putInt("ios27GlassBlur", 5).putFloat("ios27GlassRefraction", .7f)
+                        .putFloat("ios27GlassDispersion", 0f).putInt("ios27GlassAlpha", 100)
+                        .putInt("ios27GlassTintPercent", 0).putBoolean("ios27GlassTintBlackWhite", false)
+                        .putInt("ios27GlassGlareMode", GLASS_GLARE_FULL).putFloat("ios27GlassGlare", 1f)
+                        .putFloat("ios27GlassGlareAngle", 0f).putFloat("ios27GlassLightIntensity", .25f).apply();
+            }
+            if (preferences.getInt("ios27NativeBlurCalibrationVersion", 0) < 1) {
+                android.content.SharedPreferences.Editor calibration = preferences.edit()
+                        .putInt("ios27NativeBlurCalibrationVersion", 1);
+                if (preferences.getInt("ios27GlassBlurScaleVersion", 0) >= 1
+                        && preferences.getInt("ios27GlassBlur", 5) == 20) calibration.putInt("ios27GlassBlur", 5);
+                if (preferences.getInt("ios27FastGlassDefaultsVersion", 0) >= 1
+                        && preferences.getInt("ios27GlassAlpha", 100) == 50) calibration.putInt("ios27GlassAlpha", 100);
+                calibration.apply();
+            }
+            ios27GlassBlur = Math.max(0, Math.min(40, preferences.getInt("ios27GlassBlur", 5)));
             ios27GlassRefraction = Math.max(0f, Math.min(2f, preferences.getFloat("ios27GlassRefraction", .7f)));
-            ios27GlassDispersion = Math.max(0f, Math.min(1f, preferences.getFloat("ios27GlassDispersion", .2f)));
+            ios27GlassDispersion = Math.max(0f, Math.min(1f, preferences.getFloat("ios27GlassDispersion", 0f)));
             ios27GlassAlpha = Math.max(0, Math.min(100, preferences.getInt("ios27GlassAlpha", 100)));
             ios27GlassTintPercent = Math.max(0, Math.min(100, preferences.getInt("ios27GlassTintPercent", 0)));
             ios27GlassTintBlackWhite = preferences.getBoolean("ios27GlassTintBlackWhite", false);
@@ -2115,12 +2133,23 @@ public class NekoConfig {
     public static float getGlassGlare() { return ios27LiquidGlass ? ios27GlassGlare : advancedGlassGlare; }
     public static float getGlassGlareAngle() { return ios27LiquidGlass ? ios27GlassGlareAngle : advancedGlassGlareAngle; }
     public static int getIos27GlassRevision() { return ios27GlassRevision; }
+    public static float getIos27GlassBlurRadiusDp() { return ios27GlassBlur; }
     public static float getIos27GlassLightIntensity() {
         return ios27GlassGlareMode == GLASS_GLARE_DISABLE ? 0f : ios27GlassLightIntensity;
     }
     public static int getIos27GlassSamplePaddingDp() {
-        return Math.max(40, (int) Math.ceil(27.58f * ios27GlassRefraction / .7f
-                * (1f + ios27GlassDispersion) + 4f));
+        return getIos27GlassSamplePaddingDp(60f);
+    }
+    public static int getIos27GlassSamplePaddingDp(float minimumDimensionDp) {
+        float extent = Math.max(1f, minimumDimensionDp);
+        float ray = Math.max(Math.min(extent * .5f, 60f), Math.max(16f, extent * .25f));
+        float captureScale = Math.max(.25f, Math.min(.5f, 50f / extent));
+        float blurSupport = org.telegram.ui.Components.blur3.GlasmioBlurProfile.sigmaPixels(
+                getIos27GlassBlurRadiusDp() * 1.6f, AndroidUtilities.density, captureScale)
+                / AndroidUtilities.density * 3f;
+        // Bound capture memory for extreme user radii; the Gaussian clamps beyond the capture.
+        return Math.max(20, (int) Math.ceil(ray * ios27GlassRefraction / .7f
+                + Math.min(128f, blurSupport) + 2f));
     }
 
     /** Save only the iOS 27 namespace. Manual/legacy glass values stay independent. */
@@ -2166,8 +2195,8 @@ public class NekoConfig {
         ios27GlassLightIntensity = Math.max(0f, Math.min(1f, value)); saveIos27GlassSettings();
     }
     public static void resetIos27GlassToDefaults() {
-        ios27GlassBlur = 6;
-        ios27GlassRefraction = .7f; ios27GlassDispersion = .2f;
+        ios27GlassBlur = 5;
+        ios27GlassRefraction = .7f; ios27GlassDispersion = 0f;
         ios27GlassAlpha = 100; ios27GlassTintPercent = 0; ios27GlassTintBlackWhite = false;
         ios27GlassGlareMode = GLASS_GLARE_FULL; ios27GlassGlare = 1f;
         ios27GlassGlareAngle = 0f; ios27GlassLightIntensity = .25f;
@@ -2214,7 +2243,7 @@ public class NekoConfig {
 
     /** Glass source blur in dp, shared by full-size and downscaled renderers. */
     public static float getGlassBlurRadiusDp() {
-        return ios27LiquidGlass ? ios27GlassBlur : Math.max(0, Math.min(100, blurStrength)) / 3.75f;
+        return ios27LiquidGlass ? getIos27GlassBlurRadiusDp() : Math.max(0, Math.min(100, blurStrength)) / 3.75f;
     }
 
     public static void setIos27GlassBlur(int value) {

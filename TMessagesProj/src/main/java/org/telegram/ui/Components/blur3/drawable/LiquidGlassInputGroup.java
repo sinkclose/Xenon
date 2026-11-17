@@ -34,6 +34,8 @@ public final class LiquidGlassInputGroup {
     private final float[] glows = new float[32];
     private final float[] links = new float[64];
     private final float[] merges = new float[64];
+    private org.telegram.ui.Components.blur3.GlasmioGlassRenderer glasmio;
+    private final float[] glasmioGlows = new float[32];
 
     public LiquidGlassInputGroup() {
         this(8);
@@ -58,6 +60,7 @@ public final class LiquidGlassInputGroup {
     public void release() {
         node.setRenderEffect(null);
         node.discardDisplayList();
+        if (glasmio != null) glasmio.release();
     }
 
     public void draw(Canvas canvas, BlurredBackgroundDrawable[] members, RectF[] bounds, float[] alpha,
@@ -84,7 +87,13 @@ public final class LiquidGlassInputGroup {
         BlurredBackgroundDrawable center = members[sourceIndex];
         Arrays.fill(opacity, 0f);
         Arrays.fill(glows, 0f);
+        Arrays.fill(glasmioGlows, 0f);
         boolean refractive = SharedConfig.chatBlurEnabled() && LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
+        boolean useGlasmio = NekoConfig.ios27LiquidGlass && refractive;
+        if (!useGlasmio && glasmio != null) {
+            glasmio.release();
+            glasmio = null;
+        }
         float left = bounds[sourceIndex].left, top = bounds[sourceIndex].top;
         float right = bounds[sourceIndex].right, bottom = bounds[sourceIndex].bottom;
         for (int i = 0; i < members.length; i++) {
@@ -92,7 +101,8 @@ public final class LiquidGlassInputGroup {
             left = Math.min(left, bounds[i].left); top = Math.min(top, bounds[i].top);
             right = Math.max(right, bounds[i].right); bottom = Math.max(bottom, bounds[i].bottom);
         }
-        int margin = AndroidUtilities.dp(NekoConfig.ios27LiquidGlass ? NekoConfig.getIos27GlassSamplePaddingDp() : 12);
+        int margin = AndroidUtilities.dp(useGlasmio ? NekoConfig.getIos27GlassSamplePaddingDp(
+                Math.min(right - left, bottom - top) / AndroidUtilities.density) : 12);
         int x = (int) Math.floor(left) - margin, y = (int) Math.floor(top) - margin;
         int width = (int) Math.ceil(right) - x + margin, height = (int) Math.ceil(bottom) - y + margin;
         if (width <= 0 || height <= 0) return;
@@ -136,6 +146,30 @@ public final class LiquidGlassInputGroup {
                     x - (origins == null ? 0f : origins[i * 2]), y - (origins == null ? 0f : origins[i * 2 + 1]));
             else glows[j + 3] = 0f;
             touchActive |= glows[j + 3] > 0f;
+            if (NekoConfig.ios27LiquidGlass && effects != null && effects[i] != null) {
+                effects[i].writeGlasmioGlow(glasmioGlows, j,
+                        x - (origins == null ? 0f : origins[i * 2]), y - (origins == null ? 0f : origins[i * 2 + 1]));
+            }
+        }
+        if (useGlasmio) {
+            if (glasmio == null) glasmio = new org.telegram.ui.Components.blur3.GlasmioGlassRenderer(shapeCount);
+            glasmio.setUnion(shapes, shapeScales, cornerRadii, opacity, merges, glasmioGlows, colors);
+            BlurredBackgroundSource backdrop = center.getSource();
+            backdrop.prepareToDraw();
+            node.setRenderEffect(null);
+            node.setPosition(0, 0, width, height);
+            Canvas raw = node.beginRecording();
+            float sx = center.sourceOffsetX - (sourceOrigins == null ? 0f : sourceOrigins[sourceIndex * 2]);
+            float sy = center.sourceOffsetY - (sourceOrigins == null ? 0f : sourceOrigins[sourceIndex * 2 + 1]);
+            raw.translate(-x - sx, -y - sy);
+            backdrop.drawUnblurred(raw, x + sx, y + sy, x + width + sx, y + height + sy);
+            node.endRecording();
+            int save = canvas.save();
+            canvas.translate(x, y);
+            canvas.drawRenderNode(glasmio.update(node, 0f, 0f, right - left, bottom - top,
+                    0f, 0f, 0f, 0f));
+            canvas.restoreToCount(save);
+            return;
         }
         shader.setFloatUniform("shapes", shapes);
         shader.setFloatUniform("shapeScales", shapeScales);

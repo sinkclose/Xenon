@@ -1,0 +1,117 @@
+// Adapted from NEORUAA/Glasmio, revision 1a0652509071c36fedb35300abdfd12316cc3c54.
+// SPDX-License-Identifier: Apache-2.0
+
+float glassExtendedSrgbEncodeChannel(float value) {
+    float magnitude = abs(value);
+    float encoded = magnitude <= 0.0031308
+        ? 12.92 * magnitude
+        : 1.055 * pow(magnitude, 1.0 / 2.4) - 0.055;
+    return sign(value) * encoded;
+}
+float glassExtendedSrgbDecodeChannel(float value) {
+    float magnitude = abs(value);
+    float decoded = magnitude <= 0.04045
+        ? magnitude / 12.92
+        : pow((magnitude + 0.055) / 1.055, 2.4);
+    return sign(value) * decoded;
+}
+float3 glassLinearToNativeGamma(float3 value) {
+    return float3(glassExtendedSrgbEncodeChannel(value.r),
+        glassExtendedSrgbEncodeChannel(value.g), glassExtendedSrgbEncodeChannel(value.b));
+}
+float3 glassNativeGammaToLinear(float3 value) {
+    return float3(glassExtendedSrgbDecodeChannel(value.r),
+        glassExtendedSrgbDecodeChannel(value.g), glassExtendedSrgbDecodeChannel(value.b));
+}
+float3 glassWorkingToNativeGamma(float3 straightWorkingRgb) {
+    return glassLinearToNativeGamma(toLinearSrgb(straightWorkingRgb));
+}
+float3 glassNativeGammaToWorking(float3 straightNativeRgb) {
+    return fromLinearSrgb(glassNativeGammaToLinear(straightNativeRgb));
+}
+float4 glassWorkingToNativeGammaPremul(float4 value) {
+    return float4(glassWorkingToNativeGamma(value.rgb / max(value.a, .000001)) * value.a, value.a);
+}
+float4 glassNativeGammaToWorkingPremul(float4 value) {
+    return float4(glassNativeGammaToWorking(value.rgb / max(value.a, .000001)) * value.a, value.a);
+}
+
+float4 nativeVibrantColorMatrixApply(float4 mask, float4 sampledBackdrop,
+    float4 row0, float4 row1, float4 row2, float4 row3, float4 bias, float2 clampParameters) {
+    float4 inputColor = float4(sampledBackdrop.rgb / max(sampledBackdrop.a, 0.000001), sampledBackdrop.a);
+    float4 transformed = float4(dot(row0, inputColor), dot(row1, inputColor),
+        dot(row2, inputColor), dot(row3, inputColor)) + bias;
+    float matrixAlpha = clamp(transformed.a, 0.0, 1.0);
+    float4 result = float4(transformed.rgb * matrixAlpha, matrixAlpha) * mask.a;
+    if (clampParameters.x > 0.0) {
+        float3 straight = result.rgb / max(result.a, 0.000001);
+        if (clampParameters.y > 0.0) {
+            float maximum = max(max(straight.r, straight.g), straight.b);
+            if (maximum > clampParameters.x) straight *= clampParameters.x / maximum;
+        } else {
+            straight = clamp(straight, float3(-0.75), float3(clampParameters.x));
+        }
+        result.rgb = straight * result.a;
+    }
+    return result;
+}
+float4 nativeVibrantColorMatrixApplyOver(float4 mask, float4 sampledBackdrop, float4 destination,
+    float4 row0, float4 row1, float4 row2, float4 row3, float4 bias, float2 clampParameters) {
+    float4 source = nativeVibrantColorMatrixApply(mask, sampledBackdrop,
+        row0, row1, row2, row3, bias, clampParameters);
+    return source + destination * (1.0 - source.a);
+}
+
+half4 nativeApplyPressGlow(half4 target, float bigOpacity, float littleOpacity, float gain) {
+    float4 result = float4(target);
+    result = nativeVibrantColorMatrixApplyOver(float4(0.0, 0.0, 0.0, bigOpacity), result, result,
+        float4(1.1575000286, -0.1430999935, -0.0143999998, 0.0),
+        float4(-0.0425000004, 1.0569999218, -0.0144999996, 0.0),
+        float4(-0.0425999984, -0.1429999918, 1.1855999231, 0.0),
+        float4(0.0, 0.0, 0.0, 1.0), float4(.0499999970, .0499999970, .0499999970, 0.0), float2(0.0, 0.0));
+    result = nativeVibrantColorMatrixApplyOver(float4(0.0, 0.0, 0.0, littleOpacity), result, result,
+        float4(float3(1.3937, -0.3577, -0.0360) * gain, 0.0),
+        float4(float3(-0.1063, 1.1424, -0.0361) * gain, 0.0),
+        float4(float3(-0.1064, -0.3575, 1.4639) * gain, 0.0),
+        float4(0.0, 0.0, 0.0, 1.0), float4(0.0), float2(0.0, 0.0));
+    return half4(result);
+}
+
+uniform float2 pressCenter;
+uniform float2 pressRadius;
+uniform float2 pressOpacity;
+uniform float pressDodgeGain;
+uniform float4 pressBounds;
+float nativePressBigMask(float2 p) {
+    float2 halfSize = max((pressBounds.zw - pressBounds.xy) * .5, float2(.001));
+    float radius = min(halfSize.x, halfSize.y);
+    float2 q = abs(p - (pressBounds.xy + pressBounds.zw) * .5) - halfSize + radius;
+    float distance = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+    return clamp(.5 - distance, 0.0, 1.0);
+}
+float nativePressShadow(float2 p) {
+    float normalizedDistance = length((p - pressCenter) / max(pressRadius, float2(0.0001)));
+    float x = min(normalizedDistance, 5.0);
+    float z = x * x;
+    // Collect the original eight-point Gauss-Legendre quadrature's fixed degree-eight
+    // Bessel expansion into powers of x squared, preserving its nodes and truncation.
+    float integral = 3.32834397e-16;
+    integral = integral * z + 9.64113704e-14;
+    integral = integral * z + 2.17530282e-11;
+    integral = integral * z + 3.68878572e-9;
+    integral = integral * z + 4.48217776e-7;
+    integral = integral * z + 0.0000364921361;
+    integral = integral * z + 0.00179845968;
+    integral = integral * z + 0.0451020040;
+    integral = integral * z + 0.393469334;
+    return clamp(exp(-0.5 * z) * integral, 0.0, 1.0);
+}
+half4 nativePressGlow(half4 target, float2 p) {
+    return nativeApplyPressGlow(target, pressOpacity.x * nativePressBigMask(p), pressOpacity.y * nativePressShadow(p), pressDodgeGain);
+}
+
+uniform shader content;
+half4 main(float2 p) {
+    half4 target = half4(glassWorkingToNativeGammaPremul(float4(content.eval(p))));
+    return half4(glassNativeGammaToWorkingPremul(float4(nativePressGlow(target, p))));
+}
