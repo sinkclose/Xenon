@@ -72,6 +72,8 @@ public class MessageContainsEmojiButton extends FrameLayout implements Notificat
 
     public MessageContainsEmojiButton(int currentAccount, Context context, Theme.ResourcesProvider resourcesProvider, @NonNull ArrayList<TLRPC.InputStickerSet> inputStickerSets, int type) {
         super(context);
+        // The iOS menu removes the selector background, but the label is still drawn here.
+        setWillNotDraw(false);
 
         this.currentAccount = currentAccount;
         this.type = type;
