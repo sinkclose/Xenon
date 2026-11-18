@@ -297,6 +297,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         if (navigationButtonsOwned == owned) return;
         navigationButtonsOwned = owned;
         invalidate();
+        if (liquidAvatar != null) liquidAvatar.invalidate();
         if (menu != null) {
             menu.invalidate();
             menu.requestLayout();
@@ -318,10 +319,21 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     }
 
     public boolean isChatNavigationAvatar(View action) {
-        return liquidAvatar != null && liquidAvatar.getParent() == this && liquidAvatar.isLiquidAvatarOnMenu()
-                && liquidAvatar.getVisibility() == VISIBLE && liquidAvatar.hasVisibleAvatar()
+        return liquidAvatar != null && liquidAvatar.getParent() == this && liquidAvatar.isRightAvatarPopupAnchor(action)
                 && action instanceof ActionBarMenuItem && ((ActionBarMenuItem) action).getIconView() != null
                 && ((ActionBarMenuItem) action).getIconView().getVisibility() == INVISIBLE;
+    }
+
+    public boolean ownsChatNavigationAvatar(View action) {
+        return navigationButtonsOwned && action != null && action.isShown()
+                && action.getWidth() > 0 && action.getAlpha() > 0f && isChatNavigationAvatar(action);
+    }
+
+    /** The right-hand avatar is painted over the menu action; use its actual button as the popup origin. */
+    public View getChatNavigationPopupAnchor(View action) {
+        if (liquidAvatar == null || !liquidAvatar.isRightAvatarPopupAnchor(action)) return action;
+        liquidAvatar.prepareAvatarPopupAnchor();
+        return liquidAvatar.getAvatarImageView();
     }
 
     private boolean isChatNavigationTitleChild(View child) {
@@ -378,6 +390,9 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         drawingNavigationButton = true;
         try {
             action.draw(canvas);
+            if (!doNotDrawChild && ownsChatNavigationAvatar(action)) {
+                liquidAvatar.drawNavigationAvatar(canvas, action.getWidth() / 2f, action.getHeight() / 2f);
+            }
             if (action == navigationButtonOverlayAnchor && hasNavigationButtonOverlay()) {
                 View overlay = navigationButtonOverlay;
                 int save = canvas.saveLayerAlpha(0, 0, action.getWidth(), action.getHeight(), Math.round(255 * overlay.getAlpha()));

@@ -491,6 +491,13 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         canvas.restore();
     }
 
+    public boolean isRightAvatarPopupAnchor(View action) {
+        return avatarPlacement == zxc.iconic.xenon.NekoConfig.AVATAR_PLACEMENT_RIGHT
+                && rightAnchorView == action && getVisibility() == VISIBLE && hasVisibleAvatar();
+    }
+
+    public void prepareAvatarPopupAnchor() { syncRightAvatarPosition(); }
+
     private void syncRightAvatarPosition() {
         if (avatarPlacement != zxc.iconic.xenon.NekoConfig.AVATAR_PLACEMENT_RIGHT
                 || avatarImageView == null || avatarImageView.getVisibility() != VISIBLE) return;
@@ -528,12 +535,37 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         return Math.max(0f, Math.min(1f, 1f - Math.max(actionBar.getSearchFactor(), actionBar.getActionModeFactor())));
     }
 
+    public void drawNavigationAvatar(Canvas canvas, float centerX, float centerY) {
+        final int save = canvas.save();
+        canvas.translate(centerX - avatarImageView.getX() - avatarImageView.getWidth() / 2f,
+                centerY - avatarImageView.getY() - avatarImageView.getHeight() / 2f);
+        final long drawingTime = getDrawingTime();
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            if (isAvatarChild(child) && child.getVisibility() == VISIBLE) {
+                drawHeaderChild(canvas, child, drawingTime, true);
+            }
+        }
+        canvas.restoreToCount(save);
+    }
+
+    private boolean isAvatarChild(View child) {
+        return child == avatarImageView || child == communityItem || child == timeItem
+                || child == starBgItem || child == starFgItem;
+    }
+
     @Override
     protected boolean drawChild(@NonNull Canvas canvas, View child, long drawingTime) {
-        final boolean avatarChild = child == avatarImageView || child == communityItem || child == timeItem || child == starBgItem || child == starFgItem;
-        final boolean unbounceAvatarChild = avatarChild && isAvatarSeparateFromPill();
+        if (isAvatarChild(child) && actionBar != null && actionBar.ownsChatNavigationAvatar(rightAnchorView)) {
+            return true;
+        }
+        return drawHeaderChild(canvas, child, drawingTime, false);
+    }
+
+    private boolean drawHeaderChild(Canvas canvas, View child, long drawingTime, boolean navigationAvatar) {
+        final boolean unbounceAvatarChild = !navigationAvatar && isAvatarChild(child) && isAvatarSeparateFromPill();
         int liquidSave = -1;
-        if (liquidTouchAllowed()) {
+        if (!navigationAvatar && liquidTouchAllowed()) {
             if (unbounceAvatarChild) {
                 liquidSave = isLiquidAvatarOnMenu() && liquidMenuEffect != null
                         ? liquidMenuEffect.beginInChild(canvas, getX(), getY()) : liquidDetachedAvatar.begin(canvas);
@@ -556,7 +588,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         // ChatActivity fades this entire container. Applying the same factor
         // inside child display lists doubles the fade and can retain a stale
         // dimmed layer when only the container's RenderNode alpha changes.
-        final float searchFade = getHeaderContentAlpha();
+        final float searchFade = navigationAvatar ? 1f : getHeaderContentAlpha();
         final boolean fadeChild = searchFade < 1f;
         if (fadeChild) {
             canvas.saveLayerAlpha(child.getX(), child.getY(), child.getX() + child.getWidth(), child.getY() + child.getHeight(), (int) (255 * searchFade));
@@ -693,6 +725,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         scrimPopupWindow[0].setInputMethodMode(ActionBarPopupWindow.INPUT_METHOD_NOT_NEEDED);
         scrimPopupWindow[0].getContentView().setFocusableInTouchMode(true);
         if (zxc.iconic.xenon.NekoConfig.iosPopups) {
+            prepareAvatarPopupAnchor();
             int[] avatar = new int[2];
             int[] root = new int[2];
             avatarImageView.getLocationOnScreen(avatar);

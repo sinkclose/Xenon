@@ -1964,7 +1964,12 @@ public class ActionBarMenuItem extends FrameLayout {
             popupLayout.scrollToTop();
         }
         View fromView = showSubMenuFrom == null ? this : showSubMenuFrom;
-        if (show) popupWindow.setAnimationSource(fromView);
+        if (show) {
+            View animationSource = fromView;
+            if (zxc.iconic.xenon.NekoConfig.iosPopups && parentMenu != null && parentMenu.parentActionBar != null)
+                animationSource = parentMenu.parentActionBar.getChatNavigationPopupAnchor(fromView);
+            popupWindow.setAnimationSource(animationSource);
+        }
         if (parentMenu != null) {
             View parent = parentMenu.parentActionBar;
             if (subMenuOpenSide == 0) {

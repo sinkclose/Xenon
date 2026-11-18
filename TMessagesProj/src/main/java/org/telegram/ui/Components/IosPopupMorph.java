@@ -103,18 +103,21 @@ public final class IosPopupMorph extends FrameLayout {
         menuHeight = content.getMeasuredHeight();
         targetScreenX = x;
         targetScreenY = y;
+        boolean avatarButton = anchor instanceof BackupImageView
+                && anchor.getParent() instanceof ChatAvatarContainer;
+        if (avatarButton) ((ChatAvatarContainer) anchor.getParent()).prepareAvatarPopupAnchor();
         int[] point = new int[2];
         anchor.getLocationOnScreen(point);
         source.set(point[0], point[1], point[0] + anchor.getWidth(), point[1] + anchor.getHeight());
         if (sourceBounds != null) {
             source.set(messageSourceCircle(sourceBounds));
-        } else if (anchor instanceof BackupImageView) {
+        } else if (anchor instanceof BackupImageView && !avatarButton) {
             android.graphics.RectF image = ((BackupImageView) anchor).getImageReceiver().getDrawRegion();
             if (image != null && !image.isEmpty()) {
                 source.set(point[0]+image.left, point[1]+image.top, point[0]+image.right, point[1]+image.bottom);
             }
         }
-        if (sourceBounds == null && !(anchor instanceof BackupImageView)) {
+        if (sourceBounds == null && (!(anchor instanceof BackupImageView) || avatarButton)) {
             android.graphics.Matrix matrix = new android.graphics.Matrix();
             anchor.transformMatrixToGlobal(matrix);
             float visualHeight = anchor instanceof AnimatedTextView

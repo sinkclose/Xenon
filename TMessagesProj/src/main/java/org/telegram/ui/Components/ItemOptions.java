@@ -1517,6 +1517,7 @@ public class ItemOptions {
         actionBarPopupWindow.setScaleOut(scaleOut);
         View morphAnchor = scrimView;
         if (zxc.iconic.xenon.NekoConfig.iosPopups && scrimView instanceof ChatAvatarContainer) {
+            ((ChatAvatarContainer) scrimView).prepareAvatarPopupAnchor();
             View avatar = ((ChatAvatarContainer) scrimView).getAvatarImageView();
             if (avatar != null && avatar.isShown() && avatar.getWidth() > 0) morphAnchor = avatar;
         }
