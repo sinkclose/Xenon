@@ -214,6 +214,10 @@ public abstract class BlurredBackgroundDrawable extends Drawable {
     protected BlurredBackgroundColorProvider colorProvider;
     protected int shadowColor, backgroundColor, strokeColorTop, strokeColorBottom;
 
+    public BlurredBackgroundColorProvider getColorProvider() {
+        return colorProvider;
+    }
+
     public BlurredBackgroundDrawable setColorProvider(BlurredBackgroundColorProvider colorProvider) {
         this.colorProvider = colorProvider;
         updateColors();

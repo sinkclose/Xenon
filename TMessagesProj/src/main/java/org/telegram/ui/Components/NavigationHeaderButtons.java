@@ -71,11 +71,13 @@ public final class NavigationHeaderButtons {
         final RenderNode pixels = new RenderNode("NavigationChatTitle");
         final RenderNode surface = new RenderNode("NavigationChatTitleSurface");
         final Matrix barTransform = new Matrix();
+        final float[] transformValues = new float[9];
         final RectF titleBounds = new RectF();
         final HeaderButtonSpring visibility = new HeaderButtonSpring(0);
         final HeaderButtonPulse pulse = new HeaderButtonPulse();
         float x, y, lastBlur = -1;
         boolean initialized;
+        BlurredBackgroundDrawable glass;
 
         ChatTitle(ActionBar bar) { this.bar = bar; }
 
@@ -94,15 +96,8 @@ public final class NavigationHeaderButtons {
             x = layoutCoordinate(bar, true);
             y = layoutCoordinate(bar, false);
             barTransform.set(bar.getMatrix());
+            bar.getChatNavigationTitleBounds(titleBounds);
             int pad = AndroidUtilities.dp(32);
-            surface.setPosition(-pad, -pad, bar.getWidth() + pad, bar.getHeight() + pad);
-            Canvas background = surface.beginRecording();
-            try {
-                background.translate(pad, pad);
-                bar.drawChatNavigationTitleSurface(background);
-            } finally {
-                surface.endRecording();
-            }
             pixels.setPosition(-pad, -pad, bar.getWidth() + pad, bar.getHeight() + pad);
             Canvas canvas = pixels.beginRecording();
             try {
@@ -111,7 +106,6 @@ public final class NavigationHeaderButtons {
             } finally {
                 pixels.endRecording();
             }
-            bar.getChatNavigationTitleBounds(titleBounds);
         }
 
         void draw(Canvas canvas) {
@@ -131,8 +125,24 @@ public final class NavigationHeaderButtons {
             float centerX = titleBounds.centerX(), centerY = titleBounds.centerY();
             float shellScaleX = animate ? scale * pulse.scale(titleBounds.width(), AndroidUtilities.dp(16), true) : 1f;
             float shellScaleY = animate ? scale * pulse.scale(titleBounds.height(), AndroidUtilities.dp(16), false) : 1f;
+            float glassScaleX = 1f + .85f * (shellScaleX - 1f);
+            float glassScaleY = 1f + .85f * (shellScaleY - 1f);
             int glassSave = canvas.save();
-            canvas.scale(1f + .85f * (shellScaleX - 1f), 1f + .85f * (shellScaleY - 1f), centerX, centerY);
+            canvas.scale(glassScaleX, glassScaleY, centerX, centerY);
+            if (glass == null) glass = bar.createChatNavigationTitleSurface(factory);
+            barTransform.getValues(transformValues);
+            float barScaleX = transformValues[Matrix.MSCALE_X], barScaleY = transformValues[Matrix.MSCALE_Y];
+            float sourceX = x + transformValues[Matrix.MTRANS_X] + barScaleX * (1f - glassScaleX) * centerX;
+            float sourceY = y + transformValues[Matrix.MTRANS_Y] + barScaleY * (1f - glassScaleY) * centerY;
+            surface.setPosition(pixels.getLeft(), pixels.getTop(), pixels.getRight(), pixels.getBottom());
+            Canvas background = surface.beginRecording();
+            try {
+                background.translate(-surface.getLeft(), -surface.getTop());
+                bar.drawChatNavigationTitleSurface(background, SharedConfig.chatBlurEnabled() ? glass : null, titleBounds,
+                        barScaleX * glassScaleX, barScaleY * glassScaleY, sourceX, sourceY);
+            } finally {
+                surface.endRecording();
+            }
             canvas.drawRenderNode(surface);
             canvas.restoreToCount(glassSave);
             float foregroundScale = HeaderButtonGroupMotion.foregroundScale(visibility.value, animate);
@@ -536,16 +546,17 @@ public final class NavigationHeaderButtons {
         boolean moving = groups[0].advance(frameDelta) | groups[1].advance(frameDelta);
         boolean present = false;
         for (int i = 0; i < 2; i++) { groups[i].geometry(i); present |= surfaceAlpha[i] > .001f; }
+        if (SharedConfig.chatBlurEnabled() && (present && !nativeChatControls || !chatTitles.isEmpty())) {
+            Canvas backdrop = source.beginRecording(host.getWidth(), host.getHeight());
+            try {
+                backdrop.drawColor(Theme.getColor(Theme.key_windowBackgroundGray));
+                // The same display list includes both pages' current clipping, transforms and alpha.
+                backdrop.drawRenderNode(content);
+            } finally { source.endRecording(); }
+            if (LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS)) source.setGlassBlur(AndroidUtilities.dp(8));
+            else source.setPlainBlur(AndroidUtilities.dpf2(NekoConfig.blurStrength * 4f / 3f));
+        }
         if (present && !nativeChatControls) {
-            if (SharedConfig.chatBlurEnabled()) {
-                Canvas backdrop = source.beginRecording(host.getWidth(), host.getHeight());
-                try {
-                    backdrop.drawColor(Theme.getColor(Theme.key_windowBackgroundGray));
-                    backdrop.drawRenderNode(content);
-                } finally { source.endRecording(); }
-                if (LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS)) source.setGlassBlur(AndroidUtilities.dp(8));
-                else source.setPlainBlur(AndroidUtilities.dpf2(NekoConfig.blurStrength * 4f / 3f));
-            }
             if (SharedConfig.chatBlurEnabled() && Build.VERSION.SDK_INT >= 33 && NekoConfig.liquidChatElements) {
                 if (union == null) { union = new LiquidGlassInputGroup(2); union.setPairMergeDistance(0, 1, AndroidUtilities.dp(12)); }
                 // Group presence is opacity, never a shrinking mask (unlike composer controls).
@@ -566,9 +577,12 @@ public final class NavigationHeaderButtons {
                 } else {
                     int save = destination.save();
                     Group group = groups[i];
-                    destination.translate(group.x + (animate ? group.motion.kick.value : 0), group.y);
-                    destination.scale(group.sx, group.sy, group.motion.width.value / 2, AndroidUtilities.dp(22));
-                    destination.translate(-group.x, -group.y);
+                    float centerX = group.x + group.motion.width.value / 2f, centerY = group.y + AndroidUtilities.dp(22);
+                    float kick = animate ? group.motion.kick.value : 0f;
+                    destination.translate(kick, 0);
+                    destination.scale(group.sx, group.sy, centerX, centerY);
+                    group.surface.setSourceTransform(group.sx, group.sy,
+                            kick + (1f - group.sx) * centerX, (1f - group.sy) * centerY);
                     group.surface.setAlpha(Math.round(255 * surfaceAlpha[i]));
                     group.surface.updateDisplayList();
                     group.surface.draw(destination);

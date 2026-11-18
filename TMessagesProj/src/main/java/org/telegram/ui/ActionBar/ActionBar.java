@@ -76,6 +76,7 @@ import org.telegram.ui.Components.SizeNotifierFrameLayout;
 import org.telegram.ui.Components.SnowflakesEffect;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
+import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawableRenderNode;
 import org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundColorProvider;
 import org.telegram.ui.MainTabsLayout;
 
@@ -346,12 +347,35 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     }
 
     public void getChatNavigationTitleBounds(RectF bounds) {
+        prepareLiquidGlassSurfaces();
         bounds.set(liquidGlassLeft, liquidGlassTop, liquidGlassRight, liquidGlassBottom);
     }
 
-    public void drawChatNavigationTitleSurface(Canvas canvas) {
-        prepareLiquidGlassSurfaces();
-        if (!nonIsland) drawTitleSurface(canvas);
+    public BlurredBackgroundDrawable createChatNavigationTitleSurface(BlurredBackgroundDrawableViewFactory factory) {
+        if (glassDrawable == null || nonIsland) return null;
+        BlurredBackgroundDrawable surface = factory.create(null, glassDrawable.getColorProvider())
+                .setRadius(dp(23)).setPadding(dp(6));
+        if (Build.VERSION.SDK_INT >= 33 && surface instanceof BlurredBackgroundDrawableRenderNode) {
+            ((BlurredBackgroundDrawableRenderNode) surface).setLiquidGlassEffectAllowed();
+        }
+        return surface;
+    }
+
+    public void drawChatNavigationTitleSurface(Canvas canvas, BlurredBackgroundDrawable surface, RectF bounds,
+                                               float scaleX, float scaleY, float translationX, float translationY) {
+        if (nonIsland) return;
+        if (surface == null) {
+            drawTitleSurface(canvas);
+            return;
+        }
+        final int radius = dp(23);
+        surface.setBounds((int) bounds.left, (int) bounds.top, (int) bounds.right, (int) bounds.bottom);
+        if (glassModeIsForum) {
+            final float leftRadius = lerp(dp(18.33f), radius, searchFieldVisibleAlpha);
+            surface.setRadius(leftRadius, radius, radius, leftRadius);
+        }
+        surface.updateColors();
+        drawTitleSurface(canvas, surface, scaleX, scaleY, translationX, translationY);
     }
 
     public void drawChatNavigationTitle(Canvas canvas) {
@@ -3155,17 +3179,23 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     }
 
     private void drawTitleSurface(Canvas canvas) {
-        if (materialActivityHeader || externalHeaderFade || glassDrawable == null || glassOnlyBack || !drawGlassTitle || m3ChatHeader) {
+        drawTitleSurface(canvas, glassDrawable, 1f, 1f, 0f, 0f);
+    }
+
+    private void drawTitleSurface(Canvas canvas, BlurredBackgroundDrawable surface,
+                                  float scaleX, float scaleY, float translationX, float translationY) {
+        if (materialActivityHeader || externalHeaderFade || surface == null || glassOnlyBack || !drawGlassTitle || m3ChatHeader) {
             return;
         }
-        glassDrawable.setAlpha(chatAvatarContainer != null && !nonIsland
+        surface.setAlpha(chatAvatarContainer != null && !nonIsland
                 ? (int) (255 * (1f - searchFactor)) : 255);
         int save = beginLiquid(canvas, liquidTitle);
-        LiquidTouchEffect.updateBackground(glassDrawable, liquidTitleTouchAllowed() ? liquidTitle : null, 0f, 0f);
-        glassDrawable.draw(canvas);
+        LiquidTouchEffect.updateBackground(surface, liquidTitleTouchAllowed() ? liquidTitle : null, 0f, 0f,
+                scaleX, scaleY, translationX, translationY);
+        surface.draw(canvas);
         if (liquidTitleTouchAllowed()) {
             int glowSave = canvas.save();
-            canvas.clipPath(glassDrawable.getPath());
+            canvas.clipPath(surface.getPath());
             liquidTitle.drawHighlight(canvas, dp(23), dp(6));
             canvas.restoreToCount(glowSave);
         }

@@ -265,6 +265,11 @@ public final class LiquidTouchEffect {
 
     /** origin is the drawable's origin in the effect's coordinates (negative for a parent drawable). */
     public static boolean updateBackground(BlurredBackgroundDrawable drawable, LiquidTouchEffect effect, float originX, float originY) {
+        return updateBackground(drawable, effect, originX, originY, 1f, 1f, 0f, 0f);
+    }
+
+    public static boolean updateBackground(BlurredBackgroundDrawable drawable, LiquidTouchEffect effect, float originX, float originY,
+                                           float scaleX, float scaleY, float translationX, float translationY) {
         if (drawable == null) return false;
         if (android.os.Build.VERSION.SDK_INT >= 33) {
             if (effect != null && zxc.iconic.xenon.NekoConfig.ios27LiquidGlass) {
@@ -274,11 +279,11 @@ public final class LiquidTouchEffect {
                         effect.bounds.right - originX, effect.bounds.bottom - originY);
             } else drawable.setGlasmioPress(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
         }
-        if (effect == null) return drawable.setSourceTransform(1f, 1f, 0f, 0f);
+        if (effect == null) return drawable.setSourceTransform(scaleX, scaleY, translationX, translationY);
         effect.updateTransform();
-        return drawable.setSourceTransform(effect.scaleX, effect.scaleY,
-                effect.translationX + (effect.scaleX - 1f) * originX,
-                effect.translationY + (effect.scaleY - 1f) * originY);
+        return drawable.setSourceTransform(scaleX * effect.scaleX, scaleY * effect.scaleY,
+                translationX + scaleX * (effect.translationX + (effect.scaleX - 1f) * originX),
+                translationY + scaleY * (effect.translationY + (effect.scaleY - 1f) * originY));
     }
 
     /** Returns a save count to restore, or -1 when the layer is at rest. */
