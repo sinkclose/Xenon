@@ -17,6 +17,45 @@ public class DialogsActivityTopBubblesFadeView extends View {
     private final Matrix matrix = new Matrix();
     private Shader shader;
     private int lastColor;
+    private boolean ios27SeparatorVisible = true;
+    private final org.telegram.ui.Components.AnimatedFloat ios27DividerAlpha = new org.telegram.ui.Components.AnimatedFloat(
+            0f, this, 0, 260, new org.telegram.ui.Components.CubicBezierInterpolator(.42, 0, .58, 1));
+    private View ios27SeparatorSource;
+    private int ios27SeparatorFirstPosition;
+    private final android.view.ViewTreeObserver.OnPreDrawListener ios27DividerObserver = () -> {
+        updateIos27Divider();
+        return true;
+    };
+
+    public void setIos27SeparatorSource(View source, int firstPosition) {
+        if (ios27SeparatorSource == source && ios27SeparatorFirstPosition == firstPosition) return;
+        ios27SeparatorSource = source;
+        ios27SeparatorFirstPosition = firstPosition;
+        setIos27SeparatorVisible(false);
+        updateIos27Divider();
+    }
+
+    private void updateIos27Divider() {
+        if (zxc.iconic.xenon.NekoConfig.ios27DimmingEnabled() && ios27SeparatorSource != null && getVisibility() == VISIBLE) {
+            setIos27SeparatorVisible(HeaderSurfaceDivider.isScrolled(ios27SeparatorSource, ios27SeparatorFirstPosition, ios27SeparatorVisible));
+        }
+    }
+
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        getViewTreeObserver().addOnPreDrawListener(ios27DividerObserver);
+    }
+
+    @Override protected void onDetachedFromWindow() {
+        if (getViewTreeObserver().isAlive()) getViewTreeObserver().removeOnPreDrawListener(ios27DividerObserver);
+        super.onDetachedFromWindow();
+    }
+
+    public void setIos27SeparatorVisible(boolean visible) {
+        if (ios27SeparatorVisible == visible) return;
+        ios27SeparatorVisible = visible;
+        invalidate();
+    }
 
     public DialogsActivityTopBubblesFadeView(Context context) {
         super(context);
@@ -58,6 +97,21 @@ public class DialogsActivityTopBubblesFadeView extends View {
 
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
-        canvas.drawRect(0, 0, getMeasuredWidth(), fadeStart + fadeHeight, paint);
+        updateIos27Divider();
+        float dividerAlpha = ios27DividerAlpha.set(zxc.iconic.xenon.NekoConfig.ios27DimmingEnabled() && ios27SeparatorVisible ? 1f : 0f);
+        if (zxc.iconic.xenon.NekoConfig.ios27DimmingEnabled()) {
+            paint.setShader(null);
+            paint.setColor(ColorUtils.setAlphaComponent(org.telegram.ui.ActionBar.Theme.getColor(
+                    org.telegram.ui.ActionBar.Theme.key_windowBackgroundGray), 191));
+            canvas.drawRect(0, 0, getMeasuredWidth(), fadeStart + fadeHeight, paint);
+            if (dividerAlpha > 0f) {
+                paint.setColor(HeaderSurfaceDivider.color(org.telegram.ui.ActionBar.Theme.getColor(org.telegram.ui.ActionBar.Theme.key_windowBackgroundGray), org.telegram.ui.ActionBar.Theme.getColor(org.telegram.ui.ActionBar.Theme.key_divider)));
+                paint.setAlpha(Math.round(255 * dividerAlpha));
+                canvas.drawRect(0, fadeStart + fadeHeight - Math.max(1, getResources().getDisplayMetrics().density * .75f),
+                        getMeasuredWidth(), fadeStart + fadeHeight, paint);
+                paint.setAlpha(255);
+            }
+            paint.setShader(shader);
+        } else canvas.drawRect(0, 0, getMeasuredWidth(), fadeStart + fadeHeight, paint);
     }
 }

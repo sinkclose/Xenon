@@ -44,6 +44,8 @@ import zxc.iconic.xenon.helpers.NonIslandHelper;
 public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
 
     private boolean advancedSettings;
+    private final int ios27DimmingRow = rowId++;
+    private final int ios27DimmingInChatRow = rowId++;
     private final int customizationRow = rowId++;
 
     private final int removeHeaderPillRow = rowId++;
@@ -130,6 +132,14 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
                 LocaleController.getString(R.string.ProgressiveFadeBlurOtherActivities),
                 LocaleController.getString(R.string.ProgressiveFadeBlurOtherActivitiesInfo))
                 .setChecked(NekoConfig.progressiveFadeBlurOtherActivities).slug("progressiveFadeBlurOtherActivities"));
+        if (NekoConfig.fadeViewOtherActivities()) {
+            items.add(UItem.asCheck(ios27DimmingRow, "iOS 27 dimming")
+                    .setChecked(NekoConfig.ios27Dimming).slug("ios27Dimming"));
+            if (NekoConfig.ios27Dimming) {
+                items.add(UItem.asCheck(ios27DimmingInChatRow, "Apply in chat activity")
+                        .setChecked(NekoConfig.ios27DimmingInChat).slug("ios27DimmingInChat"));
+            }
+        }
         if (NekoConfig.blurredFadeView) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 items.add(UItem.asCheck(progressiveFadeBlurRow, LocaleController.getString(R.string.ProgressiveFadeBlur)).setChecked(NekoConfig.progressiveFadeBlur).slug("progressiveFadeBlur"));
@@ -224,7 +234,14 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
     @Override
     protected void onItemClick(UItem item, View view, int position, float x, float y) {
         var id = item.id;
-        if (id == customizationRow) {
+        if (id == ios27DimmingRow) {
+            NekoConfig.setIos27Dimming(!NekoConfig.ios27Dimming);
+            listView.adapter.update(true);
+            if (parentLayout != null) parentLayout.rebuildAllFragmentViews(false, false);
+        } else if (id == ios27DimmingInChatRow) {
+            NekoConfig.setIos27DimmingInChat(!NekoConfig.ios27DimmingInChat);
+            listView.adapter.update(true);
+        } else if (id == customizationRow) {
             NekoConfig.setChatHeadersCustomization(!NekoConfig.chatHeadersCustomization);
             listView.adapter.update(true);
             updatePreview();
@@ -283,6 +300,7 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
             notifyItemChanged(blurredFadeBlurAmountRow);
         } else if (id == progressiveFadeBlurOtherActivitiesRow) {
             NekoConfig.toggleProgressiveFadeBlurOtherActivities();
+            listView.adapter.update(true);
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(NekoConfig.progressiveFadeBlurOtherActivities);
             }

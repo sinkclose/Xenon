@@ -22,6 +22,63 @@ public class ChatActivityFadeView extends View implements Theme.Colorable {
     private Drawable fadeDrawableBottom;
     private int fadeZoneTop, fadeZoneBottom;
     private int topOffset;
+    private boolean ios27Dimming;
+    private boolean ios27SeparatorVisible = true;
+    private final org.telegram.ui.Components.AnimatedFloat ios27DividerAlpha = new org.telegram.ui.Components.AnimatedFloat(
+            0f, this, 0, 260, new org.telegram.ui.Components.CubicBezierInterpolator(.42, 0, .58, 1));
+    private int ios27Bottom, ios27Color;
+    private View ios27SeparatorSource;
+    private int ios27SeparatorFirstPosition = androidx.recyclerview.widget.RecyclerView.NO_POSITION;
+    private final android.view.ViewTreeObserver.OnPreDrawListener ios27DividerObserver = () -> {
+        updateIos27Divider();
+        return true;
+    };
+    private void updateIos27Divider() {
+        if (ios27Dimming && ios27SeparatorSource != null && getVisibility() == VISIBLE) {
+            setIos27SeparatorVisible(org.telegram.ui.Components.HeaderSurfaceDivider.isScrolled(
+                    ios27SeparatorSource, ios27SeparatorFirstPosition, ios27SeparatorVisible));
+        }
+    }
+
+    public void setIos27SeparatorSource(View source) {
+        setIos27SeparatorSource(source, androidx.recyclerview.widget.RecyclerView.NO_POSITION);
+    }
+
+    public void setIos27SeparatorSource(View source, int firstPosition) {
+        if (ios27SeparatorSource == source && ios27SeparatorFirstPosition == firstPosition) return;
+        ios27SeparatorSource = source;
+        ios27SeparatorFirstPosition = firstPosition;
+        setIos27SeparatorVisible(false);
+        updateIos27Divider();
+    }
+
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        getViewTreeObserver().addOnPreDrawListener(ios27DividerObserver);
+    }
+
+    @Override protected void onDetachedFromWindow() {
+        if (getViewTreeObserver().isAlive()) getViewTreeObserver().removeOnPreDrawListener(ios27DividerObserver);
+        super.onDetachedFromWindow();
+    }
+
+    private final android.graphics.Paint ios27Paint = new android.graphics.Paint();
+
+    public void setIos27Dimming(boolean enabled, int bottom, int color) {
+        bottom = Math.max(0, bottom);
+        if (ios27Dimming == enabled && ios27Bottom == bottom && ios27Color == color) return;
+        ios27Dimming = enabled;
+        ios27Bottom = bottom;
+        ios27Color = color;
+        checkBounds();
+        invalidate();
+    }
+
+    public void setIos27SeparatorVisible(boolean visible) {
+        if (ios27SeparatorVisible == visible) return;
+        ios27SeparatorVisible = visible;
+        invalidate();
+    }
 
     public ChatActivityFadeView(Context context) {
         super(context);
@@ -58,6 +115,7 @@ public class ChatActivityFadeView extends View implements Theme.Colorable {
     public void setup(BlurredBackgroundDrawableViewFactory factory, BlurredBackgroundDrawableViewFactory dimFactory, BlurredBackgroundColorProvider colorProvider) {
         fadeDrawableTop = createEdgeDrawable(factory, dimFactory, colorProvider, true);
         fadeDrawableBottom = createEdgeDrawable(factory, dimFactory, colorProvider, false);
+        checkBounds();
     }
 
     private Drawable createEdgeDrawable(BlurredBackgroundDrawableViewFactory factory, BlurredBackgroundDrawableViewFactory dimFactory, BlurredBackgroundColorProvider colorProvider, boolean top) {
@@ -165,7 +223,11 @@ public class ChatActivityFadeView extends View implements Theme.Colorable {
     }
     
     private void checkBounds() {
-        fadeDrawableTop.setBounds(0, topOffset, getMeasuredWidth(), Math.max(topOffset, fadeZoneTop));
+        if (fadeDrawableTop == null || fadeDrawableBottom == null) return;
+        if (fadeDrawableTop instanceof BlurredBackgroundWithFadeDrawable) {
+            ((BlurredBackgroundWithFadeDrawable) fadeDrawableTop).setHardEdge(ios27Dimming);
+        }
+        fadeDrawableTop.setBounds(0, topOffset, getMeasuredWidth(), Math.max(topOffset, ios27Dimming ? ios27Bottom : fadeZoneTop));
         fadeDrawableBottom.setBounds(0, getMeasuredHeight() - fadeZoneBottom, getMeasuredWidth(), getMeasuredHeight());
     }
 
@@ -201,7 +263,20 @@ public class ChatActivityFadeView extends View implements Theme.Colorable {
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
         super.onDraw(canvas);
+        updateIos27Divider();
+        float dividerAlpha = ios27DividerAlpha.set(ios27Dimming && ios27SeparatorVisible ? 1f : 0f);
         fadeDrawableTop.draw(canvas);
+        if (ios27Dimming && ios27Bottom > topOffset) {
+            ios27Paint.setColor((ios27Color & 0x00ffffff) | 0xbf000000);
+            canvas.drawRect(0, topOffset, getWidth(), ios27Bottom, ios27Paint);
+            if (dividerAlpha > 0f) {
+                ios27Paint.setColor(org.telegram.ui.Components.HeaderSurfaceDivider.color(ios27Color, Theme.getColor(Theme.key_divider)));
+                ios27Paint.setAlpha(Math.round(255 * dividerAlpha));
+                canvas.drawRect(0, ios27Bottom - Math.max(1, getResources().getDisplayMetrics().density * 0.75f),
+                        getWidth(), ios27Bottom, ios27Paint);
+                ios27Paint.setAlpha(255);
+            }
+        }
         fadeDrawableBottom.draw(canvas);
     }
 

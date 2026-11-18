@@ -158,7 +158,15 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
                 if (materialHeaderEnabled() && materialHeaderSearching != isSearchFieldVisible()) {
                     updateMaterialHeader();
                 }
-                final boolean fadeBlurActive = progressiveFadeController != null && progressiveFadeController.isEnabled();
+                final boolean fadeBlurActive = fadeViewEnabled() && progressiveBlurEnabled()
+                        && progressiveFadeController != null && progressiveFadeController.isEnabled();
+                if (progressiveFadeController != null && !materialHeaderEnabled()) {
+                    progressiveFadeController.setFadeViewVisibility(fadeBlurActive ? View.VISIBLE : View.GONE);
+                    if (!fadeBlurActive) progressiveFadeController.stopContinuousUpdates();
+                    progressiveFadeController.setIos27Dimming(NekoConfig.ios27DimmingEnabled(), actionBarContainer.getHeight(),
+                            getThemedColor(Theme.key_windowBackgroundGray));
+                    progressiveFadeController.setIos27SeparatorSource(listView);
+                }
                 final int fadeZone = Math.max(listView.getPaddingTop(), actionBarContainer.getHeight());
                 if (materialHeaderEnabled()) {
                     updateMaterialFade();
@@ -332,19 +340,24 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
 
         updateActionBarVisible(true, false);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && progressiveBlurEnabled() && fadeViewEnabled()) {
-            progressiveFadeController = new ProgressiveFadeBlurController(contentView, listView, contentView.indexOfChild(actionBarBackground), () -> getThemedColor(Theme.key_windowBackgroundGray));
-            progressiveFadeController.setUniformBlurAllowed(true);
-            progressiveFadeController.setFadeZoneTop(listView.getPaddingTop());
-            progressiveFadeController.setContentCapture(contentView, iBlur3Capture);
-            progressiveFadeController.setOpaqueFade(true);
-            progressiveFadeController.setFadeHeightTop(AndroidUtilities.dp(32), false);
-        }
+        ensureProgressiveFadeController();
 
         syncMaterialHeader();
         contentView.setClipChildren(false);
         contentView.setClipToPadding(false);
         return fragmentView = contentView;
+    }
+
+    private void ensureProgressiveFadeController() {
+        if (progressiveFadeController != null || listView == null || contentView == null
+                || Build.VERSION.SDK_INT < Build.VERSION_CODES.S || !progressiveBlurEnabled() || !fadeViewEnabled()) return;
+        progressiveFadeController = new ProgressiveFadeBlurController(contentView, listView, contentView.indexOfChild(actionBarBackground),
+                () -> getThemedColor(Theme.key_windowBackgroundGray));
+        progressiveFadeController.setUniformBlurAllowed(true);
+        progressiveFadeController.setFadeZoneTop(listView.getPaddingTop());
+        progressiveFadeController.setContentCapture(contentView, iBlur3Capture);
+        progressiveFadeController.setOpaqueFade(true);
+        progressiveFadeController.setFadeHeightTop(AndroidUtilities.dp(32), false);
     }
 
     protected void createSearchItem(ActionBarMenu menu, ActionBarMenuItem.ActionBarMenuItemSearchListener searchListener) {
@@ -383,7 +396,7 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
             return;
         }
         final boolean visible;
-        if (isSearchFieldVisible()) {
+        if (NekoConfig.ios27DimmingEnabled() || isSearchFieldVisible()) {
             visible = true;
         } else if (listView.getChildCount() > 0) {
             var firstChild = listView.getChildAt(0);
@@ -485,6 +498,7 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
     @Override
     public void onResume() {
         super.onResume();
+        ensureProgressiveFadeController();
         if (getActionBar() != null) {
             getActionBar().setPlainBackCircle(NekoConfig.fadeViewOtherActivities());
         }
@@ -507,7 +521,7 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
     private int materialFontGeneration = -1;
 
     protected boolean materialHeaderEnabled() {
-        return NekoConfig.materialActivityHeaders;
+        return NekoConfig.materialActivityHeaders && !NekoConfig.ios27DimmingEnabled();
     }
 
     /** Screens with a live preview own their background across header changes. */
@@ -925,6 +939,9 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
         // mask across the header; its lower edge stays above the first item.
         final int plainZone = fadeZone;
         // A color-source fade has no separate dim layer; tint strength is its alpha.
+        plainTopFadeView.setIos27Dimming(NekoConfig.ios27DimmingEnabled(), actionBarContainer.getHeight(),
+                getThemedColor(Theme.key_windowBackgroundGray));
+        plainTopFadeView.setIos27SeparatorSource(listView);
         plainTopFadeView.setFadeTopAlpha(NekoConfig.blurredFadeDimming ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
         plainTopFadeView.setAlpha(1f);
         plainTopFadeView.setFadeZoneTop(plainZone);

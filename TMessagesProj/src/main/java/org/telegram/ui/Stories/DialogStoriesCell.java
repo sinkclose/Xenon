@@ -2265,6 +2265,7 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
     }
 
     private boolean externalHeaderTitle;
+    private float navigationTitleAlpha = 1f;
     private float externalHeaderLeadingInset;
 
     public int getExternalHeaderLeadingInset() {
@@ -2286,6 +2287,12 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
         checkUi_titleVisibility();
     }
 
+    public void setNavigationTitleAlpha(float alpha) {
+        if (navigationTitleAlpha == alpha) return;
+        navigationTitleAlpha = alpha;
+        checkUi_titleVisibility();
+    }
+
     private void checkUi_titleVisibility() {
         final float progress = externalHeaderTitle ? 0f : MathUtils.clamp(Math.min(collapsedProgress, collapsedProgress2), 0, 1);
         final float titleVisibility = animatorHasTitleText.getFloatValue();
@@ -2294,19 +2301,19 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
         final float logoAlpha = logoVisibility * progress;
 
         if (titleView != null) {
-            titleView.setAlpha(titleAlpha);
+            titleView.setAlpha(titleAlpha * navigationTitleAlpha);
             titleView.setVisibility(titleAlpha > 0 ? VISIBLE : GONE);
         }
         if (telegramLogoView != null) {
-            telegramLogoView.setAlpha(logoAlpha);
+            telegramLogoView.setAlpha(logoAlpha * navigationTitleAlpha);
             telegramLogoView.setVisibility(logoAlpha > 0 ? VISIBLE : GONE);
         }
         if (emojiStatusView != null) {
-            emojiStatusView.setAlpha(logoAlpha);
+            emojiStatusView.setAlpha(logoAlpha * navigationTitleAlpha);
             emojiStatusView.setVisibility(logoAlpha > 0 ? VISIBLE : GONE);
         }
         if (subtitleOverlayContainer != null) {
-            subtitleOverlayContainer.setAlpha(progress);
+            subtitleOverlayContainer.setAlpha(progress * navigationTitleAlpha);
             subtitleOverlayContainer.setVisibility(progress > 0 ? VISIBLE : GONE);
         }
     }

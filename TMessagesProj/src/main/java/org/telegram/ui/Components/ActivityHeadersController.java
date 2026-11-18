@@ -58,7 +58,7 @@ public final class ActivityHeadersController {
 
     private void finishCollapse() {
         settlePosted = false;
-        if (paused || overlay.getParent() == null || !atContentEnd || !NekoConfig.materialActivityHeaders
+        if (paused || overlay.getParent() == null || !atContentEnd || !NekoConfig.materialActivityHeaders || NekoConfig.ios27DimmingEnabled()
                 || bar.isSearchFieldVisible() || bar.isActionModeShowed()) return;
         int remaining = AndroidUtilities.dp(88) - Math.round(distance());
         if (remaining <= 0 || remaining >= AndroidUtilities.dp(88)) return;
@@ -144,7 +144,7 @@ public final class ActivityHeadersController {
         titleParams.topMargin = statusInset();
         overlay.addView(title, titleParams);
         overlay.addView(bar, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP));
-        bar.setMaterialActivityHeader(NekoConfig.materialActivityHeaders);
+        bar.setMaterialActivityHeader(NekoConfig.materialActivityHeaders && !NekoConfig.ios27DimmingEnabled());
         bar.setBackgroundColor(Color.TRANSPARENT);
         bar.setCastShadows(false);
         ((ViewGroup) scrolling).setClipToPadding(false);
@@ -248,7 +248,7 @@ public final class ActivityHeadersController {
 
     private boolean update() {
         if (paused) return true;
-        boolean material = NekoConfig.materialActivityHeaders;
+        boolean material = NekoConfig.materialActivityHeaders && !NekoConfig.ios27DimmingEnabled();
         boolean normal = !bar.isSearchFieldVisible() && !bar.isActionModeShowed();
         boolean fade = NekoConfig.fadeViewOtherActivities() && normal;
         int compact = material ? AndroidUtilities.dp(64) : ActionBar.getCurrentActionBarHeight();
@@ -319,9 +319,13 @@ public final class ActivityHeadersController {
         int edge = headerBottom + Math.round(AndroidUtilities.dp(12) * Math.min(1f, distance() / AndroidUtilities.dp(48)));
         boolean useBlur = fade && blur != null && blur.isEnabled();
         plain.setVisibility(fade && !useBlur ? View.VISIBLE : View.GONE);
+        plain.setIos27Dimming(NekoConfig.ios27DimmingEnabled(), statusInset() + compact, color);
+        plain.setIos27SeparatorSource(scrolling);
         plain.setFadeZoneTop(edge);
         plain.setFadeTopAlpha(NekoConfig.blurredFadeDimming ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
         if (blur != null) {
+            blur.setIos27Dimming(NekoConfig.ios27DimmingEnabled(), statusInset() + compact, color);
+            blur.setIos27SeparatorSource(scrolling);
             blur.setFadeViewVisibility(useBlur ? View.VISIBLE : View.GONE);
             if (useBlur) {
                 blur.setProgressiveBlurZoneTop(headerBottom + AndroidUtilities.dp(31));

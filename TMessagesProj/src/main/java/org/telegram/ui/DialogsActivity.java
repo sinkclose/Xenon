@@ -683,7 +683,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     private boolean dialogsMaterialHeaderEnabled() {
-        return NekoConfig.materialActivityHeaders && NekoConfig.materialHeadersInDialogs && !onlySelect;
+        return NekoConfig.materialActivityHeaders && NekoConfig.materialHeadersInDialogs
+                && !NekoConfig.ios27DimmingEnabled() && !onlySelect;
+    }
+
+    private int ios27DialogsFirstPosition() {
+        ViewPage page = viewPages[0];
+        return page.dialogsType == DIALOGS_TYPE_DEFAULT && hasHiddenArchive()
+                && page.archivePullViewState == ARCHIVE_ITEM_STATE_HIDDEN ? 1 : 0;
     }
 
     private int materialDialogsLeadingInset() {
@@ -735,7 +742,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
         if (materialDialogsTitle != null) {
             materialDialogsTitle.setVisibility(showTitle ? View.VISIBLE : View.GONE);
-            materialDialogsTitle.setAlpha(titleVisibility);
+            materialDialogsTitle.setAlpha(titleVisibility * navigationTitleAlpha);
             materialDialogsTitle.setTranslationY(statusBarHeight);
             if (showTitle) materialDialogsTitle.update(actionBar.getTitle(), materialDialogsTitleFraction(), NekoConfig.centerTitle,
                     dialogsFadeEnabled(), getThemedColor(Theme.key_windowBackgroundGray),
@@ -761,8 +768,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 && progressiveFadeController == null && viewPages != null && viewPages[0] != null) {
             progressiveFadeController = new ProgressiveFadeBlurController(contentView, viewPages[0],
                     contentView.indexOfChild(searchTabsAndFiltersLayout), () -> getThemedColor(Theme.key_windowBackgroundGray));
+            progressiveFadeController.setContentCapture(contentView, contentView::captureProgressiveBlur);
             progressiveFadeController.setFlipped(false);
-            progressiveFadeController.setUpdateAtScreenRefreshRate(true);
+            progressiveFadeController.setCaptureOnDraw();
         }
         if (progressiveFadeController != null) {
             progressiveFadeController.setDialogsBlurAllowed(true);
@@ -780,8 +788,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
         }
         if (dialogsTopDimOverlay != null) {
-            dialogsTopDimOverlay.setVisibility(fade && NekoConfig.blurredFadeDimming
-                    && NekoConfig.blurredFadeDimStrength > 0 ? View.VISIBLE : View.GONE);
+            dialogsTopDimOverlay.setVisibility(fade && (NekoConfig.ios27DimmingEnabled() ? !blur
+                    : NekoConfig.blurredFadeDimming && NekoConfig.blurredFadeDimStrength > 0) ? View.VISIBLE : View.GONE);
         }
     }
 
@@ -1154,6 +1162,17 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
         private Rect blurBounds = new Rect();
 
+        private void captureProgressiveBlur(Canvas canvas, RectF bounds) {
+            final int save = canvas.save();
+            canvas.clipRect(bounds);
+            for (ViewPage page : viewPages) {
+                if (page != null && page.getVisibility() == VISIBLE && page.getAlpha() > 0f) {
+                    drawChild(canvas, page, getDrawingTime());
+                }
+            }
+            canvas.restoreToCount(save);
+        }
+
         @Override
         protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
             if (child == blurredView) {
@@ -1380,7 +1399,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             updateContextViewPosition();
             updateStoriesViewAlpha(storiesAlpha);
             syncDialogsMaterialHeader();
-            if (progressiveFadeController != null) {
+            if (progressiveFadeController != null && canvas.isHardwareAccelerated()
+                    && !org.telegram.ui.Components.IosPopupMorph.isCapturingBackdrop()) {
                 if (!progressiveFadeController.isEnabled()) {
                     // Master blur went off: hide the blurred fade and its dim overlay.
                     progressiveFadeController.syncState();
@@ -1393,6 +1413,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 progressiveFadeController.setProgressiveBlurZoneTop(dialogsMaterialHeaderEnabled() ? fadeZone : -1);
                 final int visibleFadeZone = dialogsMaterialHeaderEnabled()
                         ? Math.max(actionBar.getBottom(), listClipTop) + dp(12) : fadeZone;
+                progressiveFadeController.setIos27Dimming(NekoConfig.ios27DimmingEnabled(), top + actionBar.getHeight(),
+                        getThemedColor(Theme.key_windowBackgroundGray));
+                progressiveFadeController.setIos27SeparatorSource(viewPages[0].listView, ios27DialogsFirstPosition());
                 progressiveFadeController.setFadeZoneTop(visibleFadeZone);
                 View currentPage = viewPages[0];
                 View extraPage = viewPages.length > 1 && viewPages[1].getVisibility() == View.VISIBLE ? viewPages[1] : null;
@@ -1411,7 +1434,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         ? Math.max(actionBar.getBottom(), listClipTop) + dp(12)
                         : Math.max(top + actionBar.getHeight() + getInlineSearchHeight() + dp(SEARCH_TABS_HEIGHT),
                                 listClipTop + dp(48));
-                dialogsTopDimOverlay.setPosition(0, fadeZone);
+                dialogsTopDimOverlay.setPosition(0, NekoConfig.ios27DimmingEnabled() ? top + actionBar.getHeight() : fadeZone);
+                dialogsTopDimOverlay.setIos27SeparatorSource(viewPages[0].listView, ios27DialogsFirstPosition());
                 dialogsTopDimOverlay.setColor(NekoConfig.blurredFadeDimming
                         ? Theme.multAlpha(getThemedColor(Theme.key_windowBackgroundGray),
                                 NekoConfig.blurredFadeDimStrength / 100f) : 0);
@@ -1966,6 +1990,26 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         return -lerp(dp(4), getInlineSearchHeight(), animatorSearchVisible.getFloatValue());
     }
 
+    private float navigationTitleAlpha = 1f;
+    private float dialogsTitleAlpha = 1f;
+
+    public void setNavigationTitleAlpha(float alpha) {
+        if (navigationTitleAlpha == alpha) return;
+        navigationTitleAlpha = alpha;
+        applyNavigationTitleAlpha();
+        if (dialogStoriesCell != null) dialogStoriesCell.setNavigationTitleAlpha(alpha);
+        if (materialDialogsTitle != null) materialDialogsTitle.setAlpha(materialDialogsTitleVisibility() * alpha);
+    }
+
+    private void applyNavigationTitleAlpha() {
+        if (actionBar == null) return;
+        float alpha = dialogsTitleAlpha * navigationTitleAlpha;
+        View titles = actionBar.getTitlesContainer();
+        View subtitleOverlay = actionBar.getAdditionalSubTitleOverlayContainer();
+        if (titles != null) titles.setAlpha(alpha);
+        if (subtitleOverlay != null) subtitleOverlay.setAlpha(alpha);
+    }
+
     private void updateStoriesViewAlpha(float alpha) {
         final float factorSearch = Utilities.clamp(searchAnimationProgress * 2, 1f, 0f);
         dialogStoriesCell.setAlpha((1f - progressToActionMode) * alpha * progressToDialogStoriesCell * (1f - factorSearch));
@@ -2014,26 +2058,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             actionBar.getAdditionalSubTitleOverlayContainer().setPivotY(-dp(30));
             actionBar.getAdditionalSubTitleOverlayContainer().setScaleY(s);
             actionBar.getAdditionalSubTitleOverlayContainer().setScaleX(s);
-
-            final float titleAlpha = containersAlpha * (1f - progressToActionMode);
-            actionBar.getTitlesContainer().setAlpha(titleAlpha);
-            actionBar.getTitlesContainer().setVisibility(titleAlpha > 0 ? View.VISIBLE : View.INVISIBLE);
-            actionBar.getAdditionalSubTitleOverlayContainer().setAlpha(titleAlpha);
-            actionBar.getAdditionalSubTitleOverlayContainer().setVisibility(titleAlpha > 0 ? View.VISIBLE : View.INVISIBLE);
         } else {
             actionBar.getTitlesContainer().setScaleY(1f);
             actionBar.getTitlesContainer().setScaleX(1f);
-
-
             actionBar.getAdditionalSubTitleOverlayContainer().setScaleY(1f);
             actionBar.getAdditionalSubTitleOverlayContainer().setScaleX(1f);
-
-            final float titleAlpha = 1f - progressToActionMode;
-            actionBar.getTitlesContainer().setAlpha(titleAlpha);
-            actionBar.getTitlesContainer().setVisibility(titleAlpha > 0 ? View.VISIBLE : View.INVISIBLE);
-            actionBar.getAdditionalSubTitleOverlayContainer().setAlpha(titleAlpha);
-            actionBar.getAdditionalSubTitleOverlayContainer().setVisibility(titleAlpha > 0 ? View.VISIBLE : View.INVISIBLE);
         }
+        dialogsTitleAlpha = containersAlpha * (1f - progressToActionMode);
+        applyNavigationTitleAlpha();
+        actionBar.getTitlesContainer().setVisibility(dialogsTitleAlpha > 0 ? View.VISIBLE : View.INVISIBLE);
+        actionBar.getAdditionalSubTitleOverlayContainer().setVisibility(dialogsTitleAlpha > 0 ? View.VISIBLE : View.INVISIBLE);
     }
 
     public static float viewOffset = 0.0f;
@@ -4960,6 +4994,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     if (contentView != null) {
                         contentView.updateBlurContent();
                     }
+                    if (progressiveFadeController != null) progressiveFadeController.requestCapture();
                     viewPage.dialogsItemAnimator.onListScroll(-dy);
                     int firstVisiblePosition = -1;
                     int lastVisiblePosition = -1;
@@ -5832,6 +5867,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
         };
         dialogStoriesCell.setActionBar(actionBar);
+        dialogStoriesCell.setNavigationTitleAlpha(navigationTitleAlpha);
         dialogStoriesCell.setMenuItemsOffset(isArchive() ? dp(68) : dpf2(16.66f));
         dialogStoriesCell.allowGlobalUpdates = false;
         dialogStoriesCell.setVisibility(View.GONE);
@@ -5849,6 +5885,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         //}
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && NekoConfig.blurredFadeViewEnabled()) {
             progressiveFadeController = new ProgressiveFadeBlurController(contentView, viewPages[0], contentView.indexOfChild(searchTabsAndFiltersLayout), () -> getThemedColor(Theme.key_windowBackgroundGray));
+            progressiveFadeController.setContentCapture(contentView, contentView::captureProgressiveBlur);
             progressiveFadeController.setDialogsBlurAllowed(true);
             progressiveFadeController.setUniformBlurAllowed(dialogsMaterialHeaderEnabled());
             progressiveFadeController.setDimEnabled(false);
@@ -5856,7 +5893,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             // under the folders. Normal orientation fades out smoothly like the
             // bottom fade and like settings lists do.
             progressiveFadeController.setFlipped(false);
-            progressiveFadeController.setUpdateAtScreenRefreshRate(true);
+            progressiveFadeController.setCaptureOnDraw();
             progressiveFadeController.startContinuousUpdates();
         }
         if (!onlySelect) {
@@ -13492,6 +13529,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
         slideFragmentLite = SharedConfig.getDevicePerformanceClass() <= SharedConfig.PERFORMANCE_CLASS_AVERAGE || !LiteMode.isEnabled(LiteMode.FLAG_CHAT_SCALE);
         slideFragmentProgress = progress;
+        if (progressiveFadeController != null) progressiveFadeController.requestCapture();
         if (fragmentView != null) {
             fragmentView.invalidate();
         }

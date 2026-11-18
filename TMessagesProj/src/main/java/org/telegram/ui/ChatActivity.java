@@ -51014,6 +51014,10 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     private void checkUi_topFade() {
+        chatActivityFadeView.setIos27Dimming(NekoConfig.ios27DimmingEnabled() && NekoConfig.ios27DimmingInChat
+                        && !NonIslandHelper.chatElements(), actionBar.getMeasuredHeight(),
+                getThemedColor(Theme.key_windowBackgroundGray));
+        chatActivityFadeView.setIos27SeparatorSource(chatListView);
         if (NonIslandHelper.chatElements()) {
             chatActivityFadeView.setFadeZoneTop(0);
             return;

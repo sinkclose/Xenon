@@ -129,6 +129,9 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable {
     private final Paint colorStaticPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private int colorStaticLast;
     private boolean ignoreFastWay;
+    private boolean hardEdge;
+
+    public void setHardEdge(boolean enabled) { hardEdge = enabled; }
 
     public void setIgnoreFastWay(boolean ignoreFastWay) {
         this.ignoreFastWay = ignoreFastWay;
@@ -142,6 +145,15 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable {
         }
 
         BlurredBackgroundSource source = drawable.getUnwrappedSource();
+        if (hardEdge) {
+            if (!(source instanceof BlurredBackgroundSourceColor)) {
+                int save = canvas.saveLayerAlpha(bounds.left, bounds.top, bounds.right, bounds.bottom, alpha);
+                canvas.clipRect(bounds);
+                drawable.draw(canvas);
+                canvas.restoreToCount(save);
+            }
+            return;
+        }
         if (!ignoreFastWay && source instanceof BlurredBackgroundSourceColor) {
             // fast way - just draw gradient
 

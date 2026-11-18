@@ -77,7 +77,7 @@ public class ProgressiveFadeBlurController {
     private boolean dimEnabled = true;
     private boolean flipped;
     private boolean continuousUpdating;
-    private boolean updateAtScreenRefreshRate;
+    private boolean captureOnDraw;
     private boolean lastCaptureHadEdgeEffects;
     private long lastCaptureSettings = Long.MIN_VALUE;
     private final ViewTreeObserver.OnPreDrawListener drawCountListener = new ViewTreeObserver.OnPreDrawListener() {
@@ -94,8 +94,11 @@ public class ProgressiveFadeBlurController {
                 if (contentDirty || captureTransform() != lastCaptureTransform
                         || hasActiveEdgeEffects() || lastCaptureHadEdgeEffects) {
                     capturePending = true;
-                    scheduleUpdate(1);
+                    if (!captureOnDraw) scheduleUpdate(1);
                 }
+                // A list can redraw independently of its parent. Refresh the
+                // source in this traversal, before the fade samples it.
+                if (captureOnDraw && capturePending) invalidate();
             }
             return true;
         }
@@ -114,6 +117,10 @@ public class ProgressiveFadeBlurController {
     };
 
     private void scheduleUpdate(long delay) {
+        if (captureOnDraw) {
+            fadeView.postInvalidateOnAnimation();
+            return;
+        }
         if (!updatePending) {
             updatePending = true;
             fadeView.postDelayed(updateRunnable, Math.max(1, delay));
@@ -189,6 +196,28 @@ public class ProgressiveFadeBlurController {
         // below the drawable bounds (flipped geometry), making dim invisible.
     }
 
+    private boolean ios27Dimming;
+    private int ios27Bottom;
+
+    public void setIos27Dimming(boolean enabled, int bottom, int color) {
+        if (ios27Dimming != enabled || ios27Bottom != bottom) capturePending = true;
+        ios27Dimming = enabled;
+        ios27Bottom = bottom;
+        fadeView.setIos27Dimming(enabled, bottom, color);
+    }
+
+    public void setIos27SeparatorVisible(boolean visible) {
+        fadeView.setIos27SeparatorVisible(visible);
+    }
+
+    public void setIos27SeparatorSource(View source) {
+        fadeView.setIos27SeparatorSource(source);
+    }
+
+    public void setIos27SeparatorSource(View source, int firstPosition) {
+        fadeView.setIos27SeparatorSource(source, firstPosition);
+    }
+
     private int progressiveBlurZoneTop = -1;
 
     /** Keep the blur profile independent of the visible fade's edge. */
@@ -202,6 +231,7 @@ public class ProgressiveFadeBlurController {
     private float progressiveTopFraction(int height) {
         int zone = progressiveBlurZoneTop >= 0 ? progressiveBlurZoneTop : fadeZoneTop;
         int originalTransition = AndroidUtilities.dp(48);
+        if (ios27Dimming) zone = ios27Bottom + originalTransition;
         return zone > originalTransition
                 ? Math.min(1f, (zone - originalTransition) / (float) height) : 1f;
     }
@@ -281,8 +311,17 @@ public class ProgressiveFadeBlurController {
         }
     }
 
-    public void setUpdateAtScreenRefreshRate(boolean updateAtScreenRefreshRate) {
-        this.updateAtScreenRefreshRate = updateAtScreenRefreshRate;
+    public void setCaptureOnDraw() {
+        if (captureOnDraw) return;
+        captureOnDraw = true;
+        fadeView.removeCallbacks(updateRunnable);
+        updatePending = false;
+        requestCapture();
+        if (fadeView.isAttachedToWindow()) scheduleUpdate(1);
+    }
+
+    public void requestCapture() {
+        capturePending = true;
     }
 
     public void startContinuousUpdates() {
@@ -331,6 +370,8 @@ public class ProgressiveFadeBlurController {
         hash = hash * 31 + fadeZoneTop;
         hash = hash * 31 + fadeZoneBottom;
         hash = hash * 31 + progressiveBlurZoneTop;
+        hash = hash * 31 + (ios27Dimming ? 1 : 0);
+        hash = hash * 31 + ios27Bottom;
         hash = hash * 31 + topOffset;
         hash = hash * 31 + (flipped ? 1 : 0);
         hash = hash * 31 + System.identityHashCode(backgroundCapture);
@@ -368,11 +409,9 @@ public class ProgressiveFadeBlurController {
             return;
         }
         final long now = SystemClock.uptimeMillis();
-        final long interval = Math.max(1, updateAtScreenRefreshRate
-                ? (long) Math.ceil(AndroidUtilities.screenRefreshTime)
-                : (long) Math.ceil(1000.0 / Math.max(15, NekoConfig.progressiveFadeBlurRefreshRate)));
+        final long interval = Math.max(1, (long) Math.ceil(1000.0 / Math.max(15, NekoConfig.progressiveFadeBlurRefreshRate)));
         final long remaining = interval - (now - lastUpdateTime);
-        if (remaining > 0) {
+        if (!captureOnDraw && remaining > 0) {
             // Coalesce requests, but always capture the final scroll/animation
             // state even if no further draw follows the rate-limited request.
             capturePending = true;

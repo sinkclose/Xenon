@@ -152,6 +152,8 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
         topView.addView(subtitleView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 168 - 12, 0, 0));
 
         var fragmentView = super.createView(context);
+        actionBar.setExternalHeaderTitleVisible(false);
+        actionBarBackground.setVisibility(View.GONE);
         listView.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
                 if (osuLogo != null) osuLogo.updateAnimationVisibility();
@@ -326,8 +328,13 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
     }
 
     @Override
+    protected boolean materialHeaderEnabled() {
+        return false;
+    }
+
+    @Override
     protected boolean needActionBarPadding() {
-        return NekoConfig.materialActivityHeaders;
+        return materialHeaderEnabled();
     }
 
     @Override
@@ -335,8 +342,7 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
         return false;
     }
 
-    // The original logo layout keeps its stock background. Material mode is
-    // handled by the shared collapsing header and its independent fade host.
+    // The main page keeps its logo/content header and no toolbar surface.
     @Override
     protected boolean fadeViewEnabled() {
         return false;

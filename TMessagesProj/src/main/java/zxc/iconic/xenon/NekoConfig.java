@@ -255,6 +255,8 @@ public class NekoConfig {
     public static int progressiveFadeBlurRefreshRate = 120;
     public static boolean materialActivityHeaders = false;
     public static boolean materialHeadersInDialogs = false;
+    public static boolean ios27Dimming = false;
+    public static boolean ios27DimmingInChat = false;
     public static boolean progressiveFadeBlurOtherActivities = false;
     public static final int AVATAR_PLACEMENT_LEFT = 0;
     public static final int AVATAR_PLACEMENT_CENTER = 1;
@@ -613,6 +615,8 @@ public class NekoConfig {
             progressiveFadeBlurRefreshRate = preferences.getInt("progressiveFadeBlurRefreshRate", 120);
             materialActivityHeaders = preferences.getBoolean("materialActivityHeaders", false);
             materialHeadersInDialogs = preferences.getBoolean("materialHeadersInDialogs", false);
+            ios27Dimming = preferences.getBoolean("ios27Dimming", false);
+            ios27DimmingInChat = preferences.getBoolean("ios27DimmingInChat", false);
             progressiveFadeBlurOtherActivities = preferences.getBoolean("progressiveFadeBlurOtherActivities", false);
             openAnimationStyle = preferences.getInt("openAnimationStyle", ANIMATION_STYLE_DEFAULT);
             closeAnimationStyle = preferences.getInt("closeAnimationStyle", ANIMATION_STYLE_DEFAULT);
@@ -1183,6 +1187,22 @@ public class NekoConfig {
     // Raw toggle state: fade view in other activities, without the progressive
     // blur requirement. When the progressive path is off, callers show the
     // same fade as a plain (non-blurred) gradient instead.
+    public static boolean ios27DimmingEnabled() {
+        return ios27Dimming && fadeViewOtherActivities();
+    }
+
+    public static void setIos27Dimming(boolean enabled) {
+        ios27Dimming = enabled;
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
+                .edit().putBoolean("ios27Dimming", enabled).apply();
+    }
+
+    public static void setIos27DimmingInChat(boolean enabled) {
+        ios27DimmingInChat = enabled;
+        ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
+                .edit().putBoolean("ios27DimmingInChat", enabled).apply();
+    }
+
     public static boolean fadeViewOtherActivities() {
         return progressiveFadeBlurOtherActivities;
     }
