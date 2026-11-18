@@ -38,6 +38,8 @@ class GlasmioPopupRenderer {
     private final float[] sampleTransform = {1, 1, 0, 0};
     private float backdropScale = 1;
     private long backdropCapturedAt;
+    private View capturedHost;
+    private long capturedVersion = Long.MIN_VALUE;
     private float sampledBlur = Float.NaN, rowsBlur = Float.NaN;
     private final RectF requiredViewport = new RectF();
 
@@ -52,18 +54,25 @@ class GlasmioPopupRenderer {
 
     boolean captureBackdrop(View host, int[] windowLocation, boolean embedded) {
         if(captureDepth>0) return false;
-        if (!org.telegram.messenger.SharedConfig.chatBlurEnabled()) return true;
+        if (!org.telegram.messenger.SharedConfig.chatBlurEnabled()
+                && !org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS)) return true;
         host.getLocationOnScreen(location);
         offsetX=location[0]-windowLocation[0]; offsetY=location[1]-windowLocation[1];
         backdropScale = embedded ? .5f : 1f;
         int width = Math.max(1, (int) Math.ceil(host.getWidth() * backdropScale));
         int height = Math.max(1, (int) Math.ceil(host.getHeight() * backdropScale));
         long now = System.nanoTime();
+        long version = host instanceof IosPopupMorph.Backdrop
+                ? ((IosPopupMorph.Backdrop) host).popupBackdropVersion() : -1;
+        if (backdrop.hasDisplayList() && backdrop.getWidth() == width && backdrop.getHeight() == height
+                && capturedHost == host && version >= 0 && capturedVersion == version) return true;
         // Backdrop capture traverses the entire host. Keep it independent of the
         // 60/120 Hz geometry animation, including menus in their own window.
         if (backdrop.hasDisplayList() && backdrop.getWidth() == width
                 && backdrop.getHeight() == height && now - backdropCapturedAt < 33_000_000L) return false;
         backdropCapturedAt = now;
+        capturedHost = host;
+        capturedVersion = version;
         backdrop.setPosition(0, 0, width, height);
         Canvas c = backdrop.beginRecording();
         captureDepth++;
@@ -98,7 +107,7 @@ class GlasmioPopupRenderer {
                 w=Math.max(1,(int)Math.ceil(viewport.right)-left),h=Math.max(1,(int)Math.ceil(viewport.bottom)-top);
         field.update(f,left,top);
         boolean blurEnabled = org.telegram.messenger.SharedConfig.chatBlurEnabled();
-        boolean glassEnabled = blurEnabled && org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS);
+        boolean glassEnabled = org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS);
         boolean ios27 = glassEnabled && NekoConfig.ios27LiquidGlass && !material27Failed;
         int sampleX = offsetX - left, sampleY = offsetY - top;
         Canvas c;

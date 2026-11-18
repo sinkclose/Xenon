@@ -15,6 +15,7 @@ import androidx.annotation.RequiresApi;
 public final class PopupPreviewBackdrop extends View {
     private static final float SCALE = .25f;
     private final RenderNode snapshot = new RenderNode("MessagePreviewBackdrop");
+    private final PopupBackdropTexture texture = new PopupBackdropTexture();
     private boolean released;
     private float targetAlpha;
 
@@ -26,6 +27,7 @@ public final class PopupPreviewBackdrop extends View {
         source.getLocationOnScreen(sourcePosition);
         foreground.getLocationOnScreen(foregroundPosition);
         snapshot.setPosition(0, 0, width, height);
+        snapshot.setUseCompositingLayer(true, null);
         snapshot.setRenderEffect(RenderEffect.createBlurEffect(radius * SCALE, radius * SCALE, Shader.TileMode.CLAMP));
         Canvas recording = snapshot.beginRecording(width, height);
         int foregroundVisibility = foreground.getVisibility();
@@ -47,7 +49,10 @@ public final class PopupPreviewBackdrop extends View {
         }
         // Alpha animation reuses this recording; it never blurs the activity's live surface.
         setAlpha(0f);
+        texture.capture(snapshot, width, height, this::invalidate);
     }
+
+    public long backdropVersion() { return 1L + texture.generation(); }
 
     public void fadeTo(float alpha, long duration) {
         if (released || targetAlpha == alpha) return;
@@ -65,7 +70,7 @@ public final class PopupPreviewBackdrop extends View {
         if (released || !canvas.isHardwareAccelerated()) return;
         int saved = canvas.save();
         canvas.scale(1f / SCALE, 1f / SCALE);
-        canvas.drawRenderNode(snapshot);
+        if (!texture.draw(canvas)) canvas.drawRenderNode(snapshot);
         canvas.restoreToCount(saved);
     }
 
@@ -74,6 +79,7 @@ public final class PopupPreviewBackdrop extends View {
         released = true;
         animate().cancel();
         setAlpha(0f);
+        texture.release();
         snapshot.discardDisplayList();
         snapshot.setRenderEffect(null);
     }

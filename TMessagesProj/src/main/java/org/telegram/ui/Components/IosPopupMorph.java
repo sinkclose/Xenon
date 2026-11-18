@@ -27,6 +27,8 @@ import java.util.Map;
 public final class IosPopupMorph extends FrameLayout {
     public interface Backdrop {
         void drawPopupBackdrop(Canvas canvas);
+        /** -1 for a live scene; a stable version lets frozen preview captures be reused. */
+        default long popupBackdropVersion() { return -1; }
     }
 
     public final View content;

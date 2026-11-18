@@ -480,6 +480,17 @@ public class MessagePopupPreviewLayout extends FrameLayout implements IosPopupMo
     }
 
     @Override
+    public long popupBackdropVersion() {
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            if (child instanceof PopupPreviewBackdrop)
+                return ((long) System.identityHashCode(child) << 32 & Long.MAX_VALUE)
+                        | ((PopupPreviewBackdrop) child).backdropVersion();
+        }
+        return -1;
+    }
+
+    @Override
     public void drawPopupBackdrop(Canvas canvas) {
         // Draw the frozen scene directly. Re-entering the decor can capture cached
         // foreground display lists and recurse into another active glass recorder.
@@ -491,7 +502,19 @@ public class MessagePopupPreviewLayout extends FrameLayout implements IosPopupMo
                 hasBackdrop = true;
             }
         }
-        if (!hasBackdrop) getRootView().draw(canvas);
+        if (!hasBackdrop) {
+            // The preview is attached beside activity content. Sampling decor can
+            // retain our own cached glass display lists, even with a draw guard.
+            View scene = getRootView().findViewById(android.R.id.content);
+            if (scene != null && scene != this) {
+                getLocationOnScreen(location);
+                scene.getLocationOnScreen(targetLocation);
+                int saved = canvas.save();
+                canvas.translate(targetLocation[0] - location[0], targetLocation[1] - location[1]);
+                scene.draw(canvas);
+                canvas.restoreToCount(saved);
+            }
+        }
     }
 
     @Override

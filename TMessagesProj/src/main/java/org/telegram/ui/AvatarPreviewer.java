@@ -605,6 +605,7 @@ public class AvatarPreviewer {
             if (zxc.iconic.xenon.NekoConfig.iosPopups) {
                 menu.setAlpha(1f);
                 menu.enableIosMessageSurface(this, new android.graphics.RectF());
+                menu.setIosMessageBackdrop(blurView);
             }
             setShowing(true);
         }
