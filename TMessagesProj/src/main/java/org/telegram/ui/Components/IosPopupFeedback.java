@@ -57,8 +57,7 @@ final class IosPopupFeedback {
         }
         invalidate.run();
     }
-    void draw(Canvas canvas,float centerX,float centerY,float scaleX,float scaleY) {
-        int save=canvas.save(); canvas.scale(scaleX,scaleY); canvas.translate(-centerX,-centerY);
+    void draw(Canvas canvas, float visibleWidth) {
         for(java.util.Map.Entry<View,Row> entry:rows.entrySet()) {
             float p=Math.max(0,Math.min(1,entry.getValue().press));
             if(p<=0) continue;
@@ -66,13 +65,14 @@ final class IosPopupFeedback {
             if (view == root || view.getHeight() > AndroidUtilities.dp(96)) continue;
             view.getDrawingRect(rect);
             if(root instanceof ViewGroup && view!=root) ((ViewGroup)root).offsetDescendantRectToMyCoords(view,rect);
-            // Rows can measure narrower than their menu (e.g. a submenu arrow).
-            // Keep the capsule's two insets equal in surface coordinates.
-            pill.set(rect.left,rect.top,Math.max(rect.left,root.getWidth()-rect.left),rect.bottom);
+            // Swipe-back reserves space for wider pages. The highlight belongs
+            // to the visible panel and must also fit inside the current row.
+            float right = Math.min(rect.right, visibleWidth - rect.left);
+            if (right <= rect.left) continue;
+            pill.set(rect.left, rect.top, right, rect.bottom);
             paint.setAlpha(Math.round(255*.15f*p));
             canvas.drawRoundRect(pill,pill.height()/2,pill.height()/2,paint);
         }
-        canvas.restoreToCount(save);
     }
     void release() { for(Row row:rows.values()) row.spring.cancel(); rows.clear(); selected=null; active=false; }
 }

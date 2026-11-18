@@ -99,8 +99,8 @@ final class IosPopupInteraction {
     float pivotX() { return pivotX; }
     float pivotY() { return pivotY; }
 
-    void drawFeedback(Canvas canvas, float centerX, float centerY, float scaleX, float scaleY) {
-        if (feedback != null) feedback.draw(canvas, centerX, centerY, scaleX, scaleY);
+    void drawFeedback(Canvas canvas, float visibleWidth) {
+        if (feedback != null) feedback.draw(canvas, visibleWidth);
     }
 
     boolean touch(MotionEvent event, float x, float y, boolean forwarded) {

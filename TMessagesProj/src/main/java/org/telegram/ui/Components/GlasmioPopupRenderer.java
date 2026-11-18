@@ -217,8 +217,8 @@ class GlasmioPopupRenderer {
         rows.setPosition(0,0,content.getWidth(),content.getHeight());
         rows.setClipToBounds(false);
         c=rows.beginRecording();
+        interaction.drawFeedback(c, target.width());
         IosPopupMorph.drawMenuContent(content,c);
-        interaction.drawFeedback(c,0,0,1,1);
         rows.endRecording(); rows.setAlpha(f.separate?1:f.contentProgress);
         float contentBlur = blurEnabled ? f.contentBlur : 0;
         if (rowsBlur != contentBlur) {
