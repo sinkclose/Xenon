@@ -109,7 +109,6 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
 
     private boolean limitCount;
 
-    private boolean hasDescription;
     private float loadT;
     private float lastY;
     private Float fromY;
@@ -1287,7 +1286,6 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
         private final int VIEW_TYPE_PADDING = 0;
         private final int VIEW_TYPE_EMOJI = 1;
         private final int VIEW_TYPE_HEADER = 2;
-        private final int VIEW_TYPE_TEXT = 3;
         private final int VIEW_TYPE_SEPARATOR = 4;
 
         @Override
@@ -1305,8 +1303,6 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
                 view = new EmojiImageView(getContext());
             } else if (viewType == VIEW_TYPE_HEADER) {
                 view = new EmojiPackHeader(getContext(), customEmojiPacks.data.length <= 1);
-            } else if (viewType == VIEW_TYPE_TEXT) {
-                view = new TextView(getContext());
             } else if (viewType == VIEW_TYPE_SEPARATOR) {
                 view = new SeparatorView(getContext());
             }
@@ -1317,17 +1313,7 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
         public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
             position--;
             switch (holder.getItemViewType()) {
-                case VIEW_TYPE_TEXT:
-                    TextView textView = (TextView) holder.itemView;
-                    textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
-                    textView.setTextColor(getThemedColor(Theme.key_chat_emojiPanelTrendingDescription));
-                    textView.setText(AndroidUtilities.replaceTags(LocaleController.getString(R.string.PremiumPreviewEmojiPack)));
-                    textView.setPadding(AndroidUtilities.dp(14), 0, AndroidUtilities.dp(30), AndroidUtilities.dp(14));
-                    break;
                 case VIEW_TYPE_EMOJI:
-                    if (hasDescription) {
-                        position--;
-                    }
                     EmojiImageView view = (EmojiImageView) holder.itemView;
                     EmojiView.CustomEmoji customEmoji = null;
                     for (int i = 0, j = 0; i < customEmojiPacks.data.length; ++i) {
@@ -1359,9 +1345,6 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
                     }
                     break;
                 case VIEW_TYPE_HEADER:
-                    if (hasDescription && position > 0) {
-                        position--;
-                    }
                     int i = 0;
                     for (int j = 0; i < customEmojiPacks.data.length; ++i) {
                         int sz = customEmojiPacks.data[i].size();
@@ -1396,13 +1379,6 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
                 return VIEW_TYPE_PADDING;
             }
             position--;
-            if (hasDescription) {
-                if (position == 1) {
-                    return VIEW_TYPE_TEXT;
-                } else if (position > 0) {
-                    position--;
-                }
-            }
             for (int i = 0, j = 0; i < customEmojiPacks.data.length; ++i) {
                 if (position == j) {
                     return VIEW_TYPE_HEADER;
@@ -1422,9 +1398,6 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
 
         public int getSetHeaderPosition(int setIndex) {
             int position = 1;
-            if (hasDescription) {
-                position++;
-            }
             for (int i = 0; i < customEmojiPacks.data.length; ++i) {
                 if (i == setIndex) {
                     return position;
@@ -1440,9 +1413,6 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
 
         public int getSetEndPosition(int setIndex) {
             int position = 1;
-            if (hasDescription) {
-                position++;
-            }
             for (int i = 0; i < customEmojiPacks.data.length; ++i) {
                 int count = customEmojiPacks.data[i].size();
                 if (customEmojiPacks.data.length > 1) {
@@ -1458,8 +1428,7 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
 
         @Override
         public int getItemCount() {
-            hasDescription = !UserConfig.getInstance(currentAccount).isPremium() && customEmojiPacks.stickerSets != null && customEmojiPacks.stickerSets.size() == 1 && MessageObject.isPremiumEmojiPack(customEmojiPacks.stickerSets.get(0));
-            return 1 + (hasDescription ? 1 : 0) + customEmojiPacks.getItemsCount() + Math.max(0, customEmojiPacks.data.length - 1);
+            return 1 + customEmojiPacks.getItemsCount() + Math.max(0, customEmojiPacks.data.length - 1);
         }
     }
 
