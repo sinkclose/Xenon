@@ -34163,6 +34163,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
             ActionBarPopupWindow.ActionBarPopupWindowLayout popupLayout = new ActionBarPopupWindow.ActionBarPopupWindowLayout(getParentActivity(), R.drawable.popup_fixed_alert4, themeDelegate, flags);
             popupLayout.setMinimumWidth(AndroidUtilities.dp(200));
+            popupLayout.setFitItems(true);
             Rect backgroundPaddings = new Rect();
             Drawable shadowDrawable = getParentActivity().getResources().getDrawable(R.drawable.popup_fixed_alert4).mutate();
             shadowDrawable.getPadding(backgroundPaddings);
@@ -34189,6 +34190,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
                 if (isReactionsViewAvailable) {
                     ReactedHeaderView reactedView = new ReactedHeaderView(contentView.getContext(), currentAccount, primaryMessage, dialog_id);
+                    reactedView.setTag(R.id.fit_width_tag, true);
 
                     boolean hasReactionsFromOtherUsers = false;
                     int count = 0;
@@ -34519,6 +34521,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 if (showMessageSeen) {
                     messageSeenView = new MessageSeenView(contentView.getContext(), currentAccount, message, currentChat);
                     FrameLayout messageSeenLayout = new FrameLayout(contentView.getContext());
+                    messageSeenLayout.setTag(R.id.fit_width_tag, true);
                     messageSeenLayout.addView(messageSeenView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
                     MessageSeenView finalMessageSeenView = messageSeenView;
 
@@ -35531,7 +35534,6 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             scrimPopupWindow.setInputMethodMode(ActionBarPopupWindow.INPUT_METHOD_NOT_NEEDED);
             scrimPopupWindow.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
             scrimPopupWindow.getContentView().setFocusableInTouchMode(true);
-            popupLayout.setFitItems(true);
 
             ItemOptions.setGapBackgroundColor(popupLayout, Theme.multAlpha(getThemedColor(Theme.key_actionBarDefaultSubmenuItem), 0.06f));
 

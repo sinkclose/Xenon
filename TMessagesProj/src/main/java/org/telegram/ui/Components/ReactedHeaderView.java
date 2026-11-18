@@ -46,7 +46,6 @@ public class ReactedHeaderView extends FrameLayout {
     private List<UserSeen> users = new ArrayList<>();
     private long dialogId;
     private MessageObject message;
-    private int fixedWidth;
 
     private boolean isLoaded;
 
@@ -249,9 +248,6 @@ public class ReactedHeaderView extends FrameLayout {
                         str = String.format(LocaleController.getPluralString("Reacted", n), countStr);
                     }
 
-                    if (getMeasuredWidth() > 0) {
-                        fixedWidth = getMeasuredWidth();
-                    }
                     titleView.setText(str);
                     boolean showIcon = true;
                     if (message.messageOwner.reactions != null && message.messageOwner.reactions.results.size() == 1 && !list.reactions.isEmpty()) {
@@ -349,9 +345,6 @@ public class ReactedHeaderView extends FrameLayout {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        if (fixedWidth > 0) {
-            widthMeasureSpec = MeasureSpec.makeMeasureSpec(fixedWidth, MeasureSpec.EXACTLY);
-        }
         if (flickerLoadingView.getVisibility() == View.VISIBLE) {
             // Idk what is happening here, but this class is a clone of MessageSeenView, so this might help with something?
             ignoreLayout = true;

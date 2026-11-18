@@ -226,10 +226,6 @@ public class MessageSeenView extends FrameLayout {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        View parent = (View) getParent();
-        if (parent != null && parent.getWidth() > 0) {
-            widthMeasureSpec = MeasureSpec.makeMeasureSpec(parent.getWidth(), MeasureSpec.EXACTLY);
-        }
         ignoreLayout = true;
         boolean measureFlicker = flickerLoadingView.getVisibility() == View.VISIBLE;
         titleView.setVisibility(View.GONE);
@@ -242,7 +238,7 @@ public class MessageSeenView extends FrameLayout {
             flickerLoadingView.setVisibility(View.VISIBLE);
         }
         titleView.setVisibility(View.VISIBLE);
-        titleView.getLayoutParams().width = getMeasuredWidth() - AndroidUtilities.dp(40);
+        titleView.getLayoutParams().width = Math.max(0, getMeasuredWidth() - AndroidUtilities.dp(40));
         ignoreLayout = false;
 
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
