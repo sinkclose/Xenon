@@ -348,20 +348,25 @@ public final class IosPopupMorph extends FrameLayout {
         return interaction.touch(event, x, y, true);
     }
 
+    private static void setMenuTarget(RectF target, View surface, float x, float y) {
+        float surfaceWidth = surface.getWidth();
+        float surfaceHeight = surface.getHeight();
+        if (surface instanceof ActionBarPopupWindow.ActionBarPopupWindowLayout) {
+            // The swipe-back container also measures hidden submenu pages.
+            ActionBarPopupWindow.ActionBarPopupWindowLayout layout = (ActionBarPopupWindow.ActionBarPopupWindowLayout) surface;
+            surfaceWidth *= layout.getBackScaleX();
+            surfaceHeight *= layout.getBackScaleY();
+        }
+        target.set(x, y, x + surfaceWidth, y + surfaceHeight);
+    }
+
     @Override protected void dispatchDraw(Canvas canvas) {
         if (released || target.isEmpty() || Build.VERSION.SDK_INT >= 33 && GlasmioPopupRenderer.isCapturing()) return;
         if (menuSurface != content) super.dispatchDraw(canvas);
         getLocationOnScreen(windowLocation);
         menuSurface.getLocationOnScreen(surfaceLocation);
         float surfaceX=surfaceLocation[0]-windowLocation[0], surfaceY=surfaceLocation[1]-windowLocation[1];
-        float surfaceWidth = menuSurface.getWidth();
-        float surfaceHeight = menuSurface.getHeight();
-        if (menuSurface instanceof ActionBarPopupWindow.ActionBarPopupWindowLayout) {
-            ActionBarPopupWindow.ActionBarPopupWindowLayout layout = (ActionBarPopupWindow.ActionBarPopupWindowLayout) menuSurface;
-            surfaceWidth *= layout.getBackScaleX();
-            surfaceHeight *= layout.getBackScaleY();
-        }
-        target.set(surfaceX, surfaceY, surfaceX + surfaceWidth, surfaceY + surfaceHeight);
+        setMenuTarget(target, menuSurface, surfaceX, surfaceY);
         RectF localSource=new RectF(source);
         localSource.offset(-windowLocation[0],-windowLocation[1]);
         if (!motion.initialized) {
@@ -540,7 +545,7 @@ public final class IosPopupMorph extends FrameLayout {
         public void draw(Canvas canvas) {
             if(released || Build.VERSION.SDK_INT>=33 && GlasmioPopupRenderer.isCapturing() || content.getWidth()==0 || content.getHeight()==0) return;
             content.getLocationOnScreen(location);
-            target.set(0,0,content.getWidth(),content.getHeight());
+            setMenuTarget(target, content, 0, 0);
             long now=System.nanoTime();
             if(!motion.initialized) {
                 // Preview menus use Glasmio's compact scale/fade, without a source lobe.

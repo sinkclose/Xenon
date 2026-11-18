@@ -348,6 +348,10 @@ public class MessagePrivateSeenView extends FrameLayout {
         View parent = (View) getParent();
         int width = MeasureSpec.getSize(widthMeasureSpec);
         int widthMode = MeasureSpec.getMode(widthMeasureSpec);
+        if (zxc.iconic.xenon.NekoConfig.iosPopups && widthMode == MeasureSpec.EXACTLY) {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+            return;
+        }
 
         if (minWidth < 0) {
             minWidth = 0;
@@ -369,11 +373,14 @@ public class MessagePrivateSeenView extends FrameLayout {
             }
         }
 
-        if (parent != null && parent.getWidth() > 0) {
+        if (!zxc.iconic.xenon.NekoConfig.iosPopups && parent != null && parent.getWidth() > 0) {
             width = parent.getWidth();
             widthMode = MeasureSpec.EXACTLY;
         }
-        if (width < minWidth || widthMode == MeasureSpec.AT_MOST) {
+        if (zxc.iconic.xenon.NekoConfig.iosPopups && widthMode == MeasureSpec.AT_MOST) {
+            width = Math.min(width, (int) Math.ceil(minWidth));
+            widthMode = MeasureSpec.EXACTLY;
+        } else if (width < minWidth || widthMode == MeasureSpec.AT_MOST) {
             width = (int) minWidth;
             widthMode = MeasureSpec.EXACTLY;
         }

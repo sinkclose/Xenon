@@ -498,6 +498,8 @@ public class ActionBarPopupWindow extends PopupWindow {
         private final IdentityHashMap<View, Drawable> materialRowBackgrounds = new IdentityHashMap<>();
 
         private boolean fitItems;
+        private boolean keepMainMenuWidth;
+        private int mainMenuWidth;
         private final Theme.ResourcesProvider resourcesProvider;
         private View topView;
         protected ActionBarPopupWindow window;
@@ -572,6 +574,11 @@ public class ActionBarPopupWindow extends PopupWindow {
             linearLayout = new LinearLayout(context) {
                 @Override
                 protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                    if (mainMenuWidth > 0) {
+                        int available = MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.UNSPECIFIED
+                                ? mainMenuWidth : MeasureSpec.getSize(widthMeasureSpec);
+                        widthMeasureSpec = MeasureSpec.makeMeasureSpec(Math.min(mainMenuWidth, available), MeasureSpec.EXACTLY);
+                    }
                     if (fitItems) {
                         int maxWidth = 0;
                         int fixWidth = 0;
@@ -1076,13 +1083,26 @@ public class ActionBarPopupWindow extends PopupWindow {
                 IosPopupMorph.prepareRows(this);
                 // Measure from the actual rows, including icon/text/check padding.
                 // Keep every action as wide as the resulting glass surface.
-                linearLayout.getLayoutParams().width = LayoutHelper.MATCH_PARENT;
+                linearLayout.getLayoutParams().width = mainMenuWidth > 0 ? LayoutHelper.WRAP_CONTENT : LayoutHelper.MATCH_PARENT;
             }
             refreshPanelStyle();
             updateRadialSelectors();
             super.onMeasure(widthMeasureSpec, heightMeasureSpec);
             if (swipeBackLayout != null) {
                 swipeBackLayout.invalidateTransforms(!startAnimationPending);
+            }
+        }
+
+        public void keepMainMenuWidth() {
+            keepMainMenuWidth = true;
+        }
+
+        @Override
+        protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+            super.onLayout(changed, left, top, right, bottom);
+            if (keepMainMenuWidth && mainMenuWidth == 0) {
+                // Reactions and read receipts can update after the opening target is set.
+                mainMenuWidth = linearLayout.getMeasuredWidth();
             }
         }
 

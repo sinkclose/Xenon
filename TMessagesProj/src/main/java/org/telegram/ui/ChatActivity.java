@@ -34165,6 +34165,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             ActionBarPopupWindow.ActionBarPopupWindowLayout popupLayout = new ActionBarPopupWindow.ActionBarPopupWindowLayout(getParentActivity(), R.drawable.popup_fixed_alert4, themeDelegate, flags);
             popupLayout.setMinimumWidth(AndroidUtilities.dp(200));
             popupLayout.setFitItems(true);
+            if (NekoConfig.iosPopups) popupLayout.keepMainMenuWidth();
             Rect backgroundPaddings = new Rect();
             Drawable shadowDrawable = getParentActivity().getResources().getDrawable(R.drawable.popup_fixed_alert4).mutate();
             shadowDrawable.getPadding(backgroundPaddings);
