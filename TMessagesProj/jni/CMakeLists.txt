@@ -197,11 +197,14 @@ add_library(${NATIVE_LIB} SHARED
         TgNetWrapper.cpp
         ffmpeg_jni.cc
         fast-edge.cpp
+        glasmio_menu_sdf.cpp
         genann.c
         secureid_ocr.cpp
         tde2e/bridge.cpp
         tests.cpp
 )
+
+set_source_files_properties(glasmio_menu_sdf.cpp PROPERTIES COMPILE_OPTIONS "-O3;-fno-fast-math")
 
 # Compile JNI directly into the shared library so archive extraction cannot drop its exports.
 set(PRISMA_BRIDGE_SOURCES
