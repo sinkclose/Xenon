@@ -90,7 +90,8 @@ public class LiquidGlassEffect {
         ios27 = !localIos26 && zxc.iconic.xenon.NekoConfig.ios27LiquidGlass;
         prism = !localIos26 && zxc.iconic.xenon.NekoConfig.isPrismGlassEnabled();
         advanced = customOptics || fixedRefraction || zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled();
-        refractionEnabled = customOptics || org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS);
+        refractionEnabled = org.telegram.messenger.SharedConfig.chatBlurEnabled()
+                && org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS);
         // Refraction (the liquid-glass distortion) only runs when liquid glass is on.
         // The highlight (glare) is always created so it can be drawn over the frosted blur too.
         node.setRenderEffect(null);
@@ -120,7 +121,7 @@ public class LiquidGlassEffect {
                 changed = true;
             }
         }
-        if (highlightShader == null) {
+        if (refractionEnabled && highlightShader == null) {
             highlightShader = localIos26 ? GlassShaderCache.acquireIos26Highlight(onShadersReady)
                     : GlassShaderCache.acquireHighlight(onShadersReady);
             changed |= highlightShader != null;
@@ -148,8 +149,9 @@ public class LiquidGlassEffect {
     public boolean isConfigurationCurrent() {
         return (localIos26 || ios27 == zxc.iconic.xenon.NekoConfig.ios27LiquidGlass)
                 && prism == (!localIos26 && zxc.iconic.xenon.NekoConfig.isPrismGlassEnabled())
-                && (customOptics || advanced == (fixedRefraction || zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled())
-                    && refractionEnabled == org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS));
+                && (customOptics || advanced == (fixedRefraction || zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled()))
+                && refractionEnabled == (org.telegram.messenger.SharedConfig.chatBlurEnabled()
+                    && org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS));
     }
 
     public void update(
@@ -327,7 +329,9 @@ public class LiquidGlassEffect {
      * stroke costs almost nothing per frame on hardware-accelerated canvases.
      */
     public void drawHighlight(Canvas canvas, float parentAlpha) {
-        if (highlightShader == null || !highlightGeometryInitialized) return;
+        if (!refractionEnabled || !org.telegram.messenger.SharedConfig.chatBlurEnabled()
+                || !org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS)
+                || highlightShader == null || !highlightGeometryInitialized) return;
         // Disable mode: shader glare strength is 0, so the highlight is skipped.
         if (!localIos26 && !ios27 && zxc.iconic.xenon.NekoConfig.advancedGlassGlare <= 0f) return;
 

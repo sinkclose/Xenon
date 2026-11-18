@@ -60,11 +60,13 @@ public class DownscaleScrollableNoiseSuppressor {
     public static final int DRAW_FROSTED_GLASS_NO_SATURATION = -4;
 
     public void draw(Canvas canvas, int index) {
+        if (index == DRAW_GLASS && !LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS)) index = DRAW_FROSTED_GLASS;
         if (!canvas.isHardwareAccelerated()) {
             throw new IllegalStateException();
         }
 
-        if (org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode.isUnblurredCanvas(canvas)) {
+        if (!org.telegram.messenger.SharedConfig.chatBlurEnabled()
+                || org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode.isUnblurredCanvas(canvas)) {
             drawInline(canvas, index);
             return;
         }
@@ -83,7 +85,9 @@ public class DownscaleScrollableNoiseSuppressor {
     }
 
     public void drawInline(Canvas canvas, int index) {
-        final boolean unblurred = org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode.isUnblurredCanvas(canvas);
+        if (index == DRAW_GLASS && !LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS)) index = DRAW_FROSTED_GLASS;
+        final boolean unblurred = !org.telegram.messenger.SharedConfig.chatBlurEnabled()
+                || org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode.isUnblurredCanvas(canvas);
         final int a;
         if (!isLiquidGlassEnabled && simpleMode) {
             a = 0;

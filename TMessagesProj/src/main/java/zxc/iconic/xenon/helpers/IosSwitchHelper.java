@@ -120,7 +120,7 @@ public final class IosSwitchHelper {
             canvas.drawRoundRect(thumb.left, thumb.top + scale, thumb.right, thumb.bottom + scale,
                     thumb.height() / 2f, thumb.height() / 2f, paint);
         }
-        boolean glassEnabled = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
+        boolean glassEnabled = org.telegram.messenger.SharedConfig.chatBlurEnabled() && LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
         if (!glassEnabled && glass != null) {
             glass.release();
             glass = null;

@@ -314,6 +314,13 @@ uniform float lensMaterialProgress;
 uniform float lensMaterialOpacity;
 uniform float lensFullyResting;
 uniform float lensHighlight;
+uniform float lensSettingsAngle;
+uniform float lensSettingsSpread;
+uniform float lensSettingsSolid;
+uniform float lensSettingsBlurOpacity;
+uniform float lensSettingsRefraction;
+uniform float lensSettingsDispersion;
+uniform float4 lensSettingsTint;
 uniform float lensHasContent;
 uniform float lensHasBlur;
 uniform float lensBelowAmount;
@@ -348,7 +355,7 @@ float nativeControlCoverage(float3 field) {
     return nativeGlassShapeCoverage(float3(field.x / lensScale, field.yz), 1.0);
 }
 
-float4 nativeControlNatural(float2 p, bool blurred) {
+float4 nativeControlRawNatural(float2 p, bool blurred) {
     if (!blurred || lensHasBlur < .5) return nativeAtlasBilinear(lensOrigin + p, 0);
     // Keep the captured .25 transform, including odd extents. Do not stretch the
     // rounded quarter-sized texture to the padded full source's width or height.
@@ -356,9 +363,19 @@ float4 nativeControlNatural(float2 p, bool blurred) {
     float2 pixel = clamp((lensOrigin + p) * lensBlurScale - .5, float2(0.0), rect.zw - 1.0);
     float2 index = floor(pixel);
     float2 t = pixel - index;
-    return mix(mix(nativeAtlasTexel(index, rect), nativeAtlasTexel(index + float2(1.0, 0.0), rect), t.x),
+    float4 frosted = mix(mix(nativeAtlasTexel(index, rect), nativeAtlasTexel(index + float2(1.0, 0.0), rect), t.x),
         mix(nativeAtlasTexel(index + float2(0.0, 1.0), rect), nativeAtlasTexel(index + 1.0, rect), t.x), t.y);
+    return mix(nativeAtlasBilinear(lensOrigin + p, 0), frosted, lensSettingsBlurOpacity);
 }
+float4 nativeControlNatural(float2 p, bool blurred) {
+    float4 sample = nativeControlRawNatural(p, blurred);
+    if (lensSettingsDispersion <= 0.0) return sample;
+    float2 spread = glassField(p, 0.0).yz * lensSettingsDispersion;
+    sample.r = nativeControlRawNatural(p + spread, blurred).r;
+    sample.b = nativeControlRawNatural(p - spread, blurred).b;
+    return sample;
+}
+
 float4 nativeControlMap(float3 field, float height) {
     return nativeControlDisplacementMapForRaster(float4(field, 1.0), max(height, .000001), 1.0,
         0.0, 0.0, float2(1.0, 0.0), lensScale);
@@ -508,7 +525,7 @@ half4 main(float2 coordinate) {
     float4 actual = nativeControlAfterBackground(p, f, background, original);
 
     float4 foreground = nativeControlSmallForeground(actual, float4(f, 1.0),
-        float4(-size.y / 5.0, 0.0, 1.0, 0.0), lensScale);
+        float4(-size.y / 5.0 * lensSettingsRefraction, 0.0, 1.0, 0.0), lensScale);
 
     actual = nativeControlOver(nativeControlIdentityCapture(foreground, actual), actual);
     float coverage = nativeControlCoverage(f);
@@ -522,12 +539,14 @@ half4 main(float2 coordinate) {
     float4 result = float4(actual.rgb - source.rgb * (1.0 - alpha), alpha);
     float3 fieldFull = float3(f.x / lensScale, f.yz);
     float mask = nativeCasdfHighlightCoverage(fieldFull.x, fieldFull.yz,
-        lensDensity / lensScale, 0.0, .75) * lensHighlight;
+        lensDensity / lensScale, lensSettingsAngle, .75 * lensSettingsSpread) * lensHighlight;
+    if (lensSettingsSolid > .5) mask = (1.0 - smoothstep(0.0, 1.5 * lensDensity * lensSettingsSpread, abs(fieldFull.x))) * coverage * lensHighlight;
     if (mask > 0.0) result = nativeControlOver(nativeVibrantColorMatrix(float4(0.0, 0.0, 0.0, mask), actual), result);
     if (lensSliderShadow > 0.0) {
         float d = glassField(p - float2(0.0, lensDensity), 0.0).x;
         float shadow = nativeGaussianTail(d / (5.0 * lensDensity)) * lensSliderShadow;
         result = nativeControlOver(result, float4(0.0, 0.0, 0.0, shadow));
     }
+    result.rgb = result.rgb * (1.0 - lensSettingsTint.a * coverage) + lensSettingsTint.rgb * coverage;
     return half4(nativeAtlasEncodeRelative(result, source));
 }

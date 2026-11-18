@@ -273,9 +273,12 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
     private void syncWallpaperEffect() {
         // Mirror the glass-content blur from DownscaleScrollableNoiseSuppressor
         // so wallpaper and messages share one softness (the Blur slider).
-        final boolean advanced = zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled();
-        final float full = org.telegram.messenger.AndroidUtilities.dpf2(
-                zxc.iconic.xenon.NekoConfig.getGlassBlurRadiusDp());
+        final boolean advanced = org.telegram.messenger.SharedConfig.chatBlurEnabled()
+                && org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS)
+                && zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled();
+        final float full = org.telegram.messenger.SharedConfig.chatBlurEnabled()
+                ? org.telegram.messenger.AndroidUtilities.dpf2(advanced ? zxc.iconic.xenon.NekoConfig.getGlassBlurRadiusDp()
+                        : zxc.iconic.xenon.NekoConfig.blurStrength * 4f / 3f) : 0f;
         final float radius = org.telegram.ui.Components.blur3.DownscaleScrollableNoiseSuppressor.downscaleRadius(full, 2);
         if (radius == wallpaperEffectRadius && advanced == wallpaperEffectSaturated) {
             return;
@@ -327,7 +330,9 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
         if (underSource == null) {
             return;
         }
-        if (!isUnblurredCanvas(canvas) && zxc.iconic.xenon.NekoConfig.getGlassBlurRadiusDp() > 0
+        if (!isUnblurredCanvas(canvas) && org.telegram.messenger.SharedConfig.chatBlurEnabled()
+                && (org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS)
+                        ? zxc.iconic.xenon.NekoConfig.getGlassBlurRadiusDp() : zxc.iconic.xenon.NekoConfig.blurStrength) > 0
                 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && wallpaperParentW > 0 && wallpaperParentH > 0) {
             syncWallpaperEffect();
             recordWallpaperIfNeeded();
@@ -394,7 +399,13 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
 
     @RequiresApi(api = Build.VERSION_CODES.S)
     private void syncGlassBlur() {
-        if (zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled()) {
+        if (!org.telegram.messenger.SharedConfig.chatBlurEnabled()) {
+            setBlur(0f);
+            return;
+        }
+        if (org.telegram.messenger.SharedConfig.chatBlurEnabled()
+                && org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS)
+                && zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled()) {
             setBlur(org.telegram.messenger.AndroidUtilities.dpf2(
                     zxc.iconic.xenon.NekoConfig.getGlassBlurRadiusDp()));
         } else {
@@ -499,9 +510,9 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && scrollableNoiseSuppressor != null) {
             scrollableNoiseSuppressor.drawInline(canvas, scrollableNoiseSuppressorIndex);
-        } else if (isUnblurredCanvas(canvas) && renderNodeWithHash != null) {
+        } else if ((!org.telegram.messenger.SharedConfig.chatBlurEnabled() || isUnblurredCanvas(canvas)) && renderNodeWithHash != null) {
             renderNodeWithHash.drawUnfiltered(canvas);
-        } else if (isUnblurredCanvas(canvas) && rawNode.hasDisplayList()) {
+        } else if ((!org.telegram.messenger.SharedConfig.chatBlurEnabled() || isUnblurredCanvas(canvas)) && rawNode.hasDisplayList()) {
             canvas.save();
             canvas.scale(renderNode.getScaleX(), renderNode.getScaleY());
             canvas.drawRenderNode(rawNode);

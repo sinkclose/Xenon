@@ -107,17 +107,25 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
     private boolean liquidGlassEffectAllowed;
     private boolean fixedRefraction;
     private boolean fixedIos26Lens;
+    private boolean followGlassStyleLens;
 
     boolean isFixedIos26Lens() { return fixedIos26Lens; }
 
     boolean usesIos27Glass() {
-        return !fixedIos26Lens && liquidGlassEffectAllowed && zxc.iconic.xenon.NekoConfig.ios27LiquidGlass
+        return (!fixedIos26Lens || followGlassStyleLens) && liquidGlassEffectAllowed && org.telegram.messenger.SharedConfig.chatBlurEnabled() && zxc.iconic.xenon.NekoConfig.ios27LiquidGlass
                 && org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS);
     }
 
     @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
     public void setFixedIos26Lens() {
         fixedIos26Lens = true;
+        setLiquidGlassEffectAllowed(true);
+    }
+
+    @RequiresApi(33)
+    public void setFollowGlassStyleLens() {
+        fixedIos26Lens = true;
+        followGlassStyleLens = true;
         setLiquidGlassEffectAllowed(true);
     }
     private Runnable effectReadyListener;
@@ -170,6 +178,7 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
         }
         if (glasmio != null) {
             glasmio.release(); glasmio = null;
+            updateColors();
             renderNodeInvalidated = true;
         }
         renderNode.setClipToOutline(requestedClipToOutline);
@@ -183,6 +192,7 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
         }
         if (liquidGlassEffectAllowed && getAlpha() > 0
                 && (liquidGlassEffect == null || !liquidGlassEffect.isConfigurationCurrent())) {
+            updateColors();
             liquidGlassEffect = fixedIos26Lens
                     ? LiquidGlassEffect.forIos26Lens(renderNodeFill, .50f, .65f, onShadersReady)
                     : new LiquidGlassEffect(renderNodeFill, fixedRefraction, onShadersReady);
@@ -286,7 +296,8 @@ public class BlurredBackgroundDrawableRenderNode extends BlurredBackgroundDrawab
             c.drawColor(backgroundColor);
         } else {
             if (usesIos27Glass() && glasmio != null) {
-                glasmio.setTint(backgroundColor);
+                glasmio.setClearControlLens(followGlassStyleLens);
+                glasmio.setTint(followGlassStyleLens ? 0 : backgroundColor);
                 float dx = padding - boundProps.boundsWithPadding.left;
                 float dy = padding - boundProps.boundsWithPadding.top;
                 glasmio.setPress(glasmioPress[0], glasmioPress[1], glasmioPress[2] + dx, glasmioPress[3] + dy,

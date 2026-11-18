@@ -439,7 +439,9 @@ public abstract class BlurredBackgroundDrawable extends Drawable {
         float[] radii, float strokeWidth, boolean isTop,
         Paint paint
     ) {
-        if (zxc.iconic.xenon.NekoConfig.disableGlassGlare) return;
+        if (zxc.iconic.xenon.NekoConfig.disableGlassGlare
+                || !org.telegram.messenger.SharedConfig.chatBlurEnabled()
+                || !org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS)) return;
         if (!NekoConfig.strokeOnViews) return;
 
         final boolean radiiAreSame = isTop ?
@@ -542,7 +544,9 @@ public abstract class BlurredBackgroundDrawable extends Drawable {
 
     public static void drawStroke(Canvas canvas, float left, float top, float right, float bottom,
                                      float radii, float strokeWidth, boolean isTop, Paint paint) {
-        if (zxc.iconic.xenon.NekoConfig.disableGlassGlare) return;
+        if (zxc.iconic.xenon.NekoConfig.disableGlassGlare
+                || !org.telegram.messenger.SharedConfig.chatBlurEnabled()
+                || !org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS)) return;
         if (!NekoConfig.strokeOnViews) return;
         final float strokeHalf = strokeWidth / 2f;
         canvas.save();
@@ -691,7 +695,9 @@ public abstract class BlurredBackgroundDrawable extends Drawable {
             return;
         }
 
-        final NinePatchDrawable ninePatchDrawable = checkNinePatchDrawable(fillColor, !zxc.iconic.xenon.NekoConfig.disableGlassGlare);
+        final NinePatchDrawable ninePatchDrawable = checkNinePatchDrawable(fillColor, !zxc.iconic.xenon.NekoConfig.disableGlassGlare
+                && org.telegram.messenger.SharedConfig.chatBlurEnabled()
+                && org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS));
         ninePatchDrawable.setBounds(
             boundProps.boundsWithPadding.left - ninePatchDrawablePadding.left,
             boundProps.boundsWithPadding.top - ninePatchDrawablePadding.top,
@@ -747,7 +753,9 @@ public abstract class BlurredBackgroundDrawable extends Drawable {
     }
 
     private void drawStrokeInternalIfNeeded(Canvas canvas) {
-        if (zxc.iconic.xenon.NekoConfig.disableGlassGlare) return;
+        if (zxc.iconic.xenon.NekoConfig.disableGlassGlare
+                || !org.telegram.messenger.SharedConfig.chatBlurEnabled()
+                || !org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS)) return;
         if (!NekoConfig.strokeOnViews) return;
         final int strokeColorTop = Theme.multAlpha(this.strokeColorTop, alpha / 255f);
         final int strokeColorBottom = Theme.multAlpha(this.strokeColorBottom, alpha / 255f);

@@ -5,9 +5,14 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.graphics.ColorFilter;
+import android.graphics.PixelFormat;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.ViewConfiguration;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
@@ -26,11 +31,28 @@ public final class IosSliderView extends View {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF track = new RectF(), fill = new RectF(), thumb = new RectF();
     private IosGlassThumb glass;
+    private GlasmioSwitchLens nativeLens;
     private float value, minimum, buffered, downX, downY, downValue;
     private boolean dragging, touchedThumb, framePosted;
     private int pointer = -1;
     private long lastFrame;
     private final Runnable frame = this::advanceFrame;
+    private ViewGroup overlayHost;
+    private final int[] sliderLocation = new int[2], overlayLocation = new int[2];
+    private final Drawable liftedThumb = new Drawable() {
+        @Override public void draw(Canvas canvas) {
+            if (overlayHost == null) return;
+            getLocationInWindow(sliderLocation);
+            overlayHost.getLocationInWindow(overlayLocation);
+            int save = canvas.save();
+            canvas.translate(sliderLocation[0] - overlayLocation[0], sliderLocation[1] - overlayLocation[1]);
+            drawThumb(canvas);
+            canvas.restoreToCount(save);
+        }
+        @Override public void setAlpha(int alpha) {}
+        @Override public void setColorFilter(ColorFilter filter) {}
+        @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
+    };
 
     public IosSliderView(Context context, Theme.ResourcesProvider resourcesProvider, Listener listener) {
         super(context);
@@ -64,12 +86,15 @@ public final class IosSliderView extends View {
         removeCallbacks(frame);
         framePosted = false;
         motion.snapTo(value);
+        removeThumbOverlay();
         if (glass != null) glass.release();
         glass = null;
+        if (nativeLens != null) { nativeLens.release(); nativeLens = null; }
     }
     @Override protected void onDetachedFromWindow() { release(); super.onDetachedFromWindow(); }
     private void requestFrame() {
         invalidate();
+        if (overlayHost != null) overlayHost.invalidate();
         if (!framePosted && isAttachedToWindow()) {
             framePosted = true;
             lastFrame = System.nanoTime();
@@ -81,6 +106,7 @@ public final class IosSliderView extends View {
         motion.advance(Math.min(.064f, (now - lastFrame) / 1_000_000_000f));
         lastFrame = now;
         invalidate();
+        if (overlayHost != null) overlayHost.invalidate();
         if (motion.isRunning()) postOnAnimation(frame); else framePosted = false;
     }
     private void change(float next, boolean stop) {
@@ -158,24 +184,72 @@ public final class IosSliderView extends View {
                     rtl ? track.right : track.left + width * buffered, track.bottom, 3f * density, 3f * density, paint);
         }
         paint.setColor(accent); canvas.drawRoundRect(fill, 3f * density, 3f * density, paint);
+        updateThumbOverlay();
+        if (overlayHost == null) drawThumb(canvas);
+    }
+
+    private void removeThumbOverlay() {
+        if (overlayHost == null) return;
+        ViewGroup previous = overlayHost;
+        overlayHost = null;
+        previous.getOverlay().remove(liftedThumb);
+        previous.invalidate();
+    }
+
+    private void updateThumbOverlay() {
+        if (pointer == -1 && !motion.isRunning()) { removeThumbOverlay(); return; }
+        if (overlayHost != null) return;
+        for (ViewParent parent = getParent(); parent != null; parent = parent.getParent()) {
+            if (parent instanceof org.telegram.ui.Components.RecyclerListView) {
+                overlayHost = (ViewGroup) parent;
+                liftedThumb.setBounds(0, 0, overlayHost.getWidth(), overlayHost.getHeight());
+                overlayHost.getOverlay().add(liftedThumb);
+                break;
+            }
+        }
+    }
+
+    public static int restingThumbAlpha(float press) {
+        return Math.round(255f * IosSwitchDynamics.clamp(1f - press, 0f, 1f));
+    }
+
+    private void drawThumb(Canvas canvas) {
+        float density = AndroidUtilities.density, inset = 16f * density;
+        float cy = getHeight() / 2f, width = Math.max(1f, getWidth() - 2f * inset);
+        float p = motion.fraction(), press = motion.pressProgress();
+        boolean rtl = LocaleController.isRTL, dark = Theme.isCurrentThemeDark();
+        int accent = Theme.getColor(Theme.key_player_progress, resourcesProvider);
+        int off = dark ? 0x5C787880 : 0x33787878;
         float cx = thumbCenter(inset, width, p, rtl, density);
         float halfW = 20f * density * motion.thumbScaleX(10f), halfH = 12f * density * motion.thumbScaleY(10f);
         thumb.set(cx - halfW, cy - halfH, cx + halfW, cy + halfH);
         paint.setColor(0x0D000000);
         canvas.drawRoundRect(thumb.left, thumb.top + density, thumb.right, thumb.bottom + density, halfH, halfH, paint);
-        boolean glassEnabled = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
+        boolean glassEnabled = org.telegram.messenger.SharedConfig.chatBlurEnabled() && LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
+        if (!glassEnabled && nativeLens != null) {
+            nativeLens.release();
+            nativeLens = null;
+        }
         if (!glassEnabled && glass != null) {
             glass.release();
             glass = null;
         }
         boolean drawGlass = glassEnabled && press > .001f && Build.VERSION.SDK_INT >= 33 && canvas.isHardwareAccelerated();
+        if (drawGlass && zxc.iconic.xenon.NekoConfig.ios27LiquidGlass) {
+            if (nativeLens == null) nativeLens = new GlasmioSwitchLens(true);
+            nativeLens.draw(canvas, thumb, press, accent, resourcesProvider, recording -> {
+                paint.setColor(off); recording.drawRoundRect(track, 3f * density, 3f * density, paint);
+                paint.setColor(accent); recording.drawRoundRect(fill, 3f * density, 3f * density, paint);
+            });
+            return;
+        }
         if (drawGlass) {
             if (glass == null) glass = new IosGlassThumb(this, resourcesProvider);
             glass.draw(canvas, thumb, press, 2f / 3f + press / 3f, press, resourcesProvider, recording -> {
                 paint.setColor(off); recording.drawRoundRect(track, 3f * density, 3f * density, paint);
                 paint.setColor(accent); recording.drawRoundRect(fill, 3f * density, 3f * density, paint);
             });
-            paint.setColor(Color.WHITE); paint.setAlpha(Math.round(255f * (1f - press)));
+            paint.setColor(Color.WHITE); paint.setAlpha(restingThumbAlpha(press));
         } else paint.setColor(Color.WHITE);
         canvas.drawRoundRect(thumb, halfH, halfH, paint);
         paint.setAlpha(255);

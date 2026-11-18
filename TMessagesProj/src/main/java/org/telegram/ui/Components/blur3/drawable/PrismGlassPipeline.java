@@ -58,9 +58,9 @@ final class PrismGlassPipeline {
         final int width = bounds.width(), height = bounds.height();
         final int padding = drawable.liquidGlassSamplePadding;
         final boolean advanced = !drawable.isFixedIos26Lens() && NekoConfig.isAdvancedGlassEnabled()
-                && LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
+                && org.telegram.messenger.SharedConfig.chatBlurEnabled() && LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
         final boolean useIos27 = drawable.usesIos27Glass();
-        final boolean refractionEnabled = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
+        final boolean refractionEnabled = org.telegram.messenger.SharedConfig.chatBlurEnabled() && LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
         final boolean hasEffect = effect != null && effect.hasRefractionShader();
 
         final boolean mappingChanged = !initialized || left != bounds.left || top != bounds.top

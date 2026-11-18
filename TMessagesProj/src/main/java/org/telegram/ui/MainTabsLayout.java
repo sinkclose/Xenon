@@ -411,8 +411,9 @@ public class MainTabsLayout extends AnimatedLinearLayout {
                 }
             };
             BlurredBackgroundDrawableRenderNode lens = new BlurredBackgroundDrawableRenderNode(combined);
+            lens.setColorProvider(org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl.topPanel(resourcesProvider));
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                lens.setFixedIos26Lens(); // Local optics; independent of the global glass style.
+                lens.setFollowGlassStyleLens();
                 lens.setRetainSurfaceDisplayList(true);
             }
             lens.setThickness(dp(10));
@@ -430,8 +431,9 @@ public class MainTabsLayout extends AnimatedLinearLayout {
         canvas.translate(-ox, -oy);
         liquidBackdrop.getSource().draw(canvas, l + ox, t + oy, r + ox, b + oy);
         canvas.restore();
-        // Sample the screen behind the bar. Capturing the dark panel here hides
-        // that backdrop and makes the refracting capsule look like a flat fill.
+        // Refract the bar's composed material and icons, not a sharp hole into
+        // the chat list. The clear lens keeps its own face neutral.
+        drawLiquidBarBackground(canvas);
         drawLiquidForegroundFrame(canvas);
     }
 
@@ -513,7 +515,7 @@ public class MainTabsLayout extends AnimatedLinearLayout {
         super.dispatchDraw(canvas);
         canvas.restore();
         final boolean glassEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-                && canvas.isHardwareAccelerated() && liquidLens != null
+                && canvas.isHardwareAccelerated() && liquidLens != null && org.telegram.messenger.SharedConfig.chatBlurEnabled()
                 && org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS);
         if (glassEnabled) {
             // Capture the live icons once; refraction and the sharp crossfade
@@ -532,11 +534,15 @@ public class MainTabsLayout extends AnimatedLinearLayout {
                 ((BlurredBackgroundDrawableRenderNode) liquidLens).invalidateDisplayList();
             }
             liquidLens.draw(canvas);
+            if (!liquidLens.hasDisplayList()) {
+                liquidBackdrop.getSource().dispatchOnDrawablesRelativePositionChange();
+                postInvalidateOnAnimation();
+            }
         }
         selectorPaint.setColor(Color.BLACK);
         selectorPaint.setAlpha(Math.round(255f * 0.03f * progress));
         canvas.drawRoundRect(liquidBounds, radius, radius, selectorPaint);
-        if (glassEnabled && progress > 0.001f && width > 0 && height > 0) {
+        if (glassEnabled && !zxc.iconic.xenon.NekoConfig.ios27LiquidGlass && progress > 0.001f && width > 0 && height > 0) {
             liquidLightMatrix.setScale(height * 1.5f, height * 1.5f);
             liquidLightMatrix.postTranslate(x, cy);
             liquidSpotlight.setLocalMatrix(liquidLightMatrix);
@@ -596,10 +602,18 @@ public class MainTabsLayout extends AnimatedLinearLayout {
     private void updateLiquidLensBounds(float radius) {
         liquidLens.setBounds(Math.round(liquidBounds.left), Math.round(liquidBounds.top),
                 Math.round(liquidBounds.right), Math.round(liquidBounds.bottom));
+        // The factory-registered drawable owns the source capture region. Keep
+        // it in sync with the expanded lens, even though only liquidLens draws.
+        if (liquidBackdrop != null && liquidBackdrop != liquidLens) {
+            liquidBackdrop.setBounds(Math.round(liquidBounds.left), Math.round(liquidBounds.top),
+                    Math.round(liquidBounds.right), Math.round(liquidBounds.bottom));
+        }
         if (lastLiquidLensRadius != radius) {
             liquidLens.setRadius(radius);
+            if (liquidBackdrop != null) liquidBackdrop.setRadius(radius);
             lastLiquidLensRadius = radius;
         }
+        if (liquidBackdrop != null && !liquidBackdrop.hasDisplayList()) liquidBackdrop.updateDisplayList();
     }
 
     @androidx.annotation.RequiresApi(Build.VERSION_CODES.Q)
@@ -854,6 +868,12 @@ public class MainTabsLayout extends AnimatedLinearLayout {
         view.setPivotY(view.getHeight() / 2f);
     }
 
+    /** The popup now owns MOVE/UP, including outside this panel's bounds. */
+    public void releaseLiquidPressForPopup() {
+        resetLiquidGesture();
+        invalidate();
+    }
+
     private void resetLiquidGesture() {
         cancellingLiquidTouch = true;
         try {
@@ -892,6 +912,17 @@ public class MainTabsLayout extends AnimatedLinearLayout {
             liquidBackdrop.getSource().dispatchOnDrawablesRelativePositionChange();
         }
         invalidate();
+    }
+
+    @Override public void onWindowFocusChanged(boolean hasWindowFocus) {
+        super.onWindowFocusChanged(hasWindowFocus);
+        if (hasWindowFocus) refreshGlassFrame();
+    }
+
+    @Override protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
+        super.onSizeChanged(width, height, oldWidth, oldHeight);
+        lastLiquidLensRadius = Float.NaN;
+        refreshGlassFrame();
     }
 
     @Override protected void onAttachedToWindow() {

@@ -16,16 +16,25 @@ import java.util.Arrays;
  * Two cached Gaussian planes approximate native mip widths; AGSL retains native face composition.
  */
 @RequiresApi(33)
-public final class GlasmioGlassRenderer {
+public class GlasmioGlassRenderer {
     private final RenderNode atlas = new RenderNode("GlasmioMaterial");
     private final GlasmioBlurPlanes planes = new GlasmioBlurPlanes();
     private int previousPlanesGeneration = -1;
-    private final RuntimeShader material;
+    protected final RuntimeShader material;
     private final boolean unionRenderer;
+    private boolean clearControlLens;
+
+    /** Local bottom-bar optics, independent of the global material/refraction sliders. */
+    public void setClearControlLens(boolean enabled) {
+        if (clearControlLens == enabled) return;
+        clearControlLens = enabled;
+        materialDirty = true;
+    }
     private GlasmioPressEffect pressEffect;
     private final android.graphics.RectF pressBounds = new android.graphics.RectF();
     private float pressX, pressY, pressProgress, dissipation;
-    private boolean materialDirty = true, pressDirty = true;
+    protected boolean materialDirty = true;
+    private boolean pressDirty = true;
     private final float[][] unionState = new float[7][];
     private int previousTintColor;
     private float previousTintAlpha = Float.NaN;
@@ -37,8 +46,11 @@ public final class GlasmioGlassRenderer {
 
     public GlasmioGlassRenderer() { this(0); }
     public GlasmioGlassRenderer(int shapeCount) {
+        this(shapeCount,shapeCount == 0 ? R.raw.glasmio_fast_material : R.raw.glasmio_fast_union);
+    }
+    protected GlasmioGlassRenderer(int shapeCount,int shaderResource) {
         unionRenderer = shapeCount > 0;
-        material = new RuntimeShader(AndroidUtilities.readRes(shapeCount == 0 ? R.raw.glasmio_fast_material : R.raw.glasmio_fast_union)
+        material = new RuntimeShader(AndroidUtilities.readRes(shaderResource)
                 .replace("const int SHAPE_COUNT = 8;", "const int SHAPE_COUNT = " + shapeCount + ";"));
     }
 
@@ -99,18 +111,19 @@ public final class GlasmioGlassRenderer {
         boolean dark = Theme.isCurrentThemeDark();
         float extent = Math.max(1f, Math.min(width, height) / density);
         float captureScale = Math.max(.25f, Math.min(.5f, 50f / extent));
-        float radius = NekoConfig.getIos27GlassBlurRadiusDp();
+        float radius = clearControlLens ? 0f : NekoConfig.getIos27GlassBlurRadiusDp();
         float mainRadius = radius * density * captureScale;
         float fillRadius = mainRadius * 1.6f;
         RenderNode packed = planes.update(source,
                 GlasmioBlurProfile.sigmaPixels(radius, density, captureScale),
                 GlasmioBlurProfile.sigmaPixels(radius * 1.6f, density, captureScale),
-                NekoConfig.getGlassAlphaPercent() > 0);
+                !clearControlLens);
         geometry[0]=left; geometry[1]=top; geometry[2]=width; geometry[3]=height;
         geometry[4]=rLT; geometry[5]=rRT; geometry[6]=rRB; geometry[7]=rLB;
         geometry[8]=density; geometry[9]=dark ? 1f : 0f;
         geometry[10]=source.getWidth(); geometry[11]=source.getHeight();
         geometry[12]=NekoConfig.ios27GlassBlur; geometry[13]=NekoConfig.ios27GlassRefraction;
+        geometry[14]=clearControlLens ? 1f : 0f;
         boolean geometryChanged = !Arrays.equals(geometry, previousGeometry)
                 || previousRevision != NekoConfig.getIos27GlassRevision();
         boolean topologyChanged = !hasDisplayList() || previousSource != source
@@ -132,7 +145,7 @@ public final class GlasmioGlassRenderer {
             material.setFloatUniform("size",width,height);
             material.setFloatUniform("cornerRadii",rLT,rRT,rRB,rLB);
             material.setFloatUniform("glassOrigin",left,top);
-            if (!unionRenderer) material.setFloatUniform("visibleBounds",left,top,left+width,top+height);
+            if (!unionRenderer) configureVisibleBounds(left,top,left+width,top+height);
             material.setFloatUniform("inputSize",(float)source.getWidth(),(float)source.getHeight());
             material.setFloatUniform("outputSize",(float)source.getWidth(),(float)source.getHeight());
             material.setFloatUniform("textureScale",1f);
@@ -145,22 +158,29 @@ public final class GlasmioGlassRenderer {
             material.setFloatUniform("planeVariance",GlasmioBlurProfile.variance(GlasmioBlurProfile.lod(mainRadius)),
                     GlasmioBlurProfile.variance(GlasmioBlurProfile.lod(fillRadius)));
             material.setFloatUniform("nativeAtlasRadii",mainRadius,fillRadius);
-            material.setFloatUniform("recipeOpacity",NekoConfig.getGlassAlphaPercent()/100f);
-            material.setFloatUniform("nativeAtlasFillWeights",dark?.9f:0f,dark?0f:.9f,.5f);
+            int blurPercent = NekoConfig.getGlassAlphaPercent();
+            material.setFloatUniform("recipeOpacity", clearControlLens || blurPercent == 0 ? -1f : blurPercent / 100f);
+            material.setFloatUniform("chromaticDispersion", (clearControlLens ? .65f : NekoConfig.getGlassDispersion()) * 6f * density);
+            material.setFloatUniform("lightSpread", NekoConfig.ios27GlassGlare);
+            material.setFloatUniform("solidGlare", NekoConfig.ios27GlassGlareMode == NekoConfig.GLASS_GLARE_SOLID ? 1f : 0f);
+            material.setFloatUniform("nativeAtlasFillWeights",clearControlLens ? 0f : dark?.9f:0f,
+                    clearControlLens ? 0f : dark?0f:.9f,clearControlLens ? 0f : .5f);
             float sizeProgress=Math.max(0f,Math.min(1f,(extent-64f)/96f));
             material.setFloatUniform("nativeAtlasBlurParameters",-extent*.5f,.8f*sizeProgress,.4f*sizeProgress);
-            material.setFloatUniform("shadowProfile",4f+20f*sizeProgress,.04f+.56f*sizeProgress);
-            float refraction=NekoConfig.ios27GlassRefraction/.7f;
+            material.setFloatUniform("shadowProfile",clearControlLens ? 0f : 4f+20f*sizeProgress,
+                    clearControlLens ? 0f : .04f+.56f*sizeProgress);
+            float refraction=(clearControlLens ? .5f : NekoConfig.ios27GlassRefraction)/.7f;
             material.setFloatUniform("nativeAtlasLensParameters",
-                    1f/Math.max(.001f,Math.min(extent*.25f,20f)*density),
-                    -Math.min(extent*.5f,60f)*density*refraction,
+                    1f/Math.max(.001f,(clearControlLens ? 8f : Math.min(extent*.25f,20f))*density),
+                    clearControlLens ? -16f*density : -Math.min(extent*.5f,60f)*density*refraction,
                     1f/Math.max(.001f,Math.max(16f,extent*.2f)*density),
                     Math.max(16f,extent*.25f)*density*refraction);
-            material.setFloatUniform("nativeAtlasOuterOpacity",.6f);
+            material.setFloatUniform("nativeAtlasOuterOpacity",clearControlLens ? 0f : .6f);
             material.setFloatUniform("materialOpacity",1f);
-            material.setFloatUniform("face",dark?1.3f:1.2f,dark?.125f:.4f,dark?1.125f:1.03f,1f);
-            material.setFloatUniform("faceFill",1f,1f,1f,dark?0f:.2f);
-            material.setFloatUniform("luminanceRollOff",dark?(extent>128f?.65f:.4f):0f);
+            material.setFloatUniform("face",clearControlLens ? 1f : dark?1.3f:1.2f,
+                    clearControlLens ? 0f : dark?.125f:.4f,clearControlLens ? 1f : dark?1.125f:1.03f,1f);
+            material.setFloatUniform("faceFill",1f,1f,1f,clearControlLens ? 0f : dark?0f:.2f);
+            material.setFloatUniform("luminanceRollOff",clearControlLens ? 0f : dark?(extent>128f?.65f:.4f):0f);
             material.setFloatUniform("fillCount",0f);
             material.setFloatUniform("edgeOpacity",NekoConfig.getIos27GlassLightIntensity()/.25f);
             material.setFloatUniform("topHighlight",NekoConfig.getIos27GlassLightIntensity()/.25f);
@@ -177,6 +197,10 @@ public final class GlasmioGlassRenderer {
         atlas.setRenderEffect(completed);
         materialDirty=pressDirty=false;
         return atlas;
+    }
+
+    protected void configureVisibleBounds(float left,float top,float right,float bottom) {
+        material.setFloatUniform("visibleBounds",left,top,right,bottom);
     }
 
     public static void configureVibrancy(RuntimeShader shader) {

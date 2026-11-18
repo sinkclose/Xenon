@@ -63,6 +63,8 @@ public final class LiquidGlassInputGroup {
         if (glasmio != null) glasmio.release();
     }
 
+    private boolean materialModeKnown, previousGlassEnabled;
+
     public void draw(Canvas canvas, BlurredBackgroundDrawable[] members, RectF[] bounds, float[] alpha,
                      LiquidTouchEffect[] effects) {
         draw(canvas, members, bounds, alpha, effects, null);
@@ -76,6 +78,12 @@ public final class LiquidGlassInputGroup {
 
     public void draw(Canvas canvas, BlurredBackgroundDrawable[] members, RectF[] bounds, float[] alpha,
                      LiquidTouchEffect[] effects, float[] origins, float[] sourceOrigins) {
+        draw(canvas, members, bounds, alpha, effects, origins, sourceOrigins, true);
+    }
+
+    /** Persistent navigation shells fade at full geometry; composer members shrink into their union. */
+    public void draw(Canvas canvas, BlurredBackgroundDrawable[] members, RectF[] bounds, float[] alpha,
+                     LiquidTouchEffect[] effects, float[] origins, float[] sourceOrigins, boolean shrinkWithVisibility) {
         if (members.length > shapeCount) throw new IllegalArgumentException("Glass group exceeds shader slots");
         if (NekoConfig.ios27LiquidGlass && ios27MaterialRevision != NekoConfig.getIos27GlassRevision()) {
             ios27MaterialRevision = NekoConfig.getIos27GlassRevision();
@@ -90,6 +98,11 @@ public final class LiquidGlassInputGroup {
         Arrays.fill(glasmioGlows, 0f);
         boolean refractive = SharedConfig.chatBlurEnabled() && LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
         boolean useGlasmio = NekoConfig.ios27LiquidGlass && refractive;
+        if (!materialModeKnown || previousGlassEnabled != refractive) {
+            materialModeKnown = true;
+            previousGlassEnabled = refractive;
+            for (BlurredBackgroundDrawable member : members) if (member != null) member.updateColors();
+        }
         if (!useGlasmio && glasmio != null) {
             glasmio.release();
             glasmio = null;
@@ -114,9 +127,10 @@ public final class LiquidGlassInputGroup {
             int j = i * 4;
             // A disappearing recording button shrinks out of the union instead of leaving a bridge.
             float visibility = Math.max(0f, Math.min(1f, alpha[i]));
+            float shapeVisibility = shrinkWithVisibility ? visibility : 1f;
             shapes[j] = b.centerX() - x; shapes[j + 1] = b.centerY() - y;
-            shapes[j + 2] = b.width() * .5f * visibility;
-            shapes[j + 3] = b.height() * .5f * visibility;
+            shapes[j + 2] = b.width() * .5f * shapeVisibility;
+            shapes[j + 3] = b.height() * .5f * shapeVisibility;
             org.telegram.ui.Components.blur3.Ios27GlassMaterial.lens(
                     shapes[j + 2] * 2f, shapes[j + 3] * 2f, AndroidUtilities.density, lensParams, j);
             lensParams[j] *= NekoConfig.ios27GlassRefraction / .7f;
@@ -125,10 +139,10 @@ public final class LiquidGlassInputGroup {
             // Preserve the affine shape: a stretched circle is an ellipse, not a capsule.
             shapeScales[i * 2] = b.width() / Math.max(1, members[i].getPaddedBounds().width()) / Math.max(.001f, scale);
             shapeScales[i * 2 + 1] = b.height() / Math.max(1, members[i].getPaddedBounds().height()) / Math.max(.001f, scale);
-            radii[i] = Math.min(members[i].boundProps.radii[0] * scale * visibility,
+            radii[i] = Math.min(members[i].boundProps.radii[0] * scale * shapeVisibility,
                     Math.min(shapes[j + 2], shapes[j + 3]));
             for (int corner = 0; corner < 4; corner++) {
-                cornerRadii[j + corner] = Math.min(members[i].boundProps.radii[corner * 2] * scale * visibility,
+                cornerRadii[j + corner] = Math.min(members[i].boundProps.radii[corner * 2] * scale * shapeVisibility,
                         Math.min(shapes[j + 2], shapes[j + 3]));
             }
             opacity[i] = visibility * members[i].getAlpha() / 255f;
@@ -189,10 +203,10 @@ public final class LiquidGlassInputGroup {
             }
             propagateLight(links, members.length);
         }
-        shader.setFloatUniform("touchActive", touchActive ? 1f : 0f);
+        shader.setFloatUniform("touchActive", refractive && touchActive ? 1f : 0f);
         shader.setFloatUniform("links", links);
         shader.setFloatUniform("glows", glows);
-        shader.setFloatUniform("ios27", NekoConfig.ios27LiquidGlass ? 1f : 0f);
+        shader.setFloatUniform("ios27", useGlasmio ? 1f : 0f);
         shader.setFloatUniform("ios27LightIntensity", NekoConfig.getIos27GlassLightIntensity());
         shader.setFloatUniform("ios27LightFalloff", NekoConfig.ios27GlassGlare);
         shader.setFloatUniform("ios27SolidGlare", NekoConfig.ios27GlassGlareMode == NekoConfig.GLASS_GLARE_SOLID ? 1f : 0f);
@@ -207,7 +221,7 @@ public final class LiquidGlassInputGroup {
         shader.setFloatUniform("index", Math.max(1.001f, center.boundProps.liquidIndex));
         shader.setFloatUniform("dispersion", Math.max(0f, Math.min(1f, NekoConfig.getGlassDispersion())));
         shader.setFloatUniform("angle", (float) Math.toRadians(NekoConfig.getGlassGlareAngle()));
-        shader.setFloatUniform("glare", Math.max(0f, NekoConfig.getGlassGlare()));
+        shader.setFloatUniform("glare", refractive ? Math.max(0f, NekoConfig.getGlassGlare()) : 0f);
         // Backdrop blur opacity is resolved before the union refracts the image.
         shader.setFloatUniform("glassAlpha", 1f);
         shader.setColorUniform("shadow", NekoConfig.ios27LiquidGlass

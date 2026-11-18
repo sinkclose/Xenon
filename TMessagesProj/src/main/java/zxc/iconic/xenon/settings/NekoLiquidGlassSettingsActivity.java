@@ -288,12 +288,13 @@ public class NekoLiquidGlassSettingsActivity extends BaseNekoSettingsActivity {
     private void addIos27Slider(ArrayList<UItem> items, int id, int title,
             int min, int max, float value, float scale,
             java.util.function.Consumer<Float> setter, String slug) {
-        items.add(SeekbarCellFactory.of(id,
-                new SeekbarConfig(LocaleController.getString(title), String.valueOf(min), String.valueOf(max),
+        SeekbarConfig config = new SeekbarConfig(LocaleController.getString(title), id == ios27GlassAlphaRow ? "iOS" : String.valueOf(min), String.valueOf(max),
                         min, max, progress -> {
                             setter.accept(progress / scale);
                             invalidatePreview();
-                        }), Math.round(value * scale)).slug(slug));
+                        });
+        if (id == ios27GlassAlphaRow) config.valueFormatter = percent -> percent == 0 ? "iOS" : percent + "%";
+        items.add(SeekbarCellFactory.of(id, config, Math.round(value * scale)).slug(slug));
     }
 
     private void fillIos27Items(ArrayList<UItem> items) {
