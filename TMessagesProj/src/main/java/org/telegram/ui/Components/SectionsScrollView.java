@@ -38,6 +38,7 @@ public class SectionsScrollView extends ScrollView {
     private float[] sectionRadiusTop, sectionRadiusBottom;
 
     public static boolean isSectionView(View view) {
+        if (zxc.iconic.xenon.helpers.IosListItemsHelper.isEnabled() && view.getClass() == View.class) return false;
         return !Objects.equals(view.getTag(), RecyclerListView.TAG_NOT_SECTION) && !(
             ((M3SectionsHelper.isEnabled() || zxc.iconic.xenon.helpers.IosListItemsHelper.isEnabled()) && view instanceof HeaderCell) ||
             view instanceof TextInfoPrivacyCell ||
@@ -126,7 +127,9 @@ public class SectionsScrollView extends ScrollView {
         for (int i = 0; i < layout.getChildCount(); ++i) {
             final View child = layout.getChildAt(i);
             if (child.getVisibility() != View.VISIBLE) continue;
-            if (child instanceof LinearLayout && ((LinearLayout) child).getOrientation() == LinearLayout.VERTICAL && x + child.getX() <= contentView.getPaddingLeft() && x + child.getX() + child.getWidth() >= contentView.getWidth() - contentView.getPaddingRight()) {
+            if (child instanceof LinearLayout && ((LinearLayout) child).getOrientation() == LinearLayout.VERTICAL
+                    && (child instanceof SectionsLinearLayout || x + child.getX() <= contentView.getPaddingLeft()
+                    && x + child.getX() + child.getWidth() >= contentView.getWidth() - contentView.getPaddingRight())) {
                 gatherChildren((LinearLayout) child, x + child.getX(), y + child.getY());
             } else {
                 children.add(child);
@@ -201,9 +204,20 @@ public class SectionsScrollView extends ScrollView {
             fromTopMargin = ((MarginLayoutParams) fromLp).topMargin;
         }
         if (to.getParent() != contentView && toLp instanceof MarginLayoutParams) {
-            toBottomMargin = ((MarginLayoutParams) toLp).topMargin;
+            toBottomMargin = ((MarginLayoutParams) toLp).bottomMargin;
         }
 
+        if (zxc.iconic.xenon.helpers.IosListItemsHelper.isEnabled()) {
+            // Insets on an editor are card padding, not a new, narrower card.
+            // Use actual section bounds: viewport clipping must not invent rounded
+            // corners halfway through a scrolled card or include fillViewport space.
+            AndroidUtilities.rectTmp.set(contentView.getX() + contentView.getPaddingLeft(),
+                    getChildY(from) - fromTopMargin,
+                    contentView.getX() + contentView.getWidth() - contentView.getPaddingRight(),
+                    getChildY(to) + to.getHeight() + toBottomMargin);
+            RecyclerListView.drawBackgroundRect(canvas, AndroidUtilities.rectTmp, sectionRadius, sectionRadius, from.getAlpha(), resourcesProvider);
+            return;
+        }
         AndroidUtilities.rectTmp.set(
             contentView.getX() + getChildX(from),
             Math.max(getScrollY() - dp(16), contentView.getY() + getChildY(from) - fromTopMargin),
@@ -239,6 +253,17 @@ public class SectionsScrollView extends ScrollView {
                     : new float[]{prev ? 0 : sectionRadius, next ? 0 : sectionRadius};
             AndroidUtilities.rectTmp.set(child.getX(), child.getY(),
                 child.getX() + child.getWidth(), child.getY() + child.getHeight());
+            if (!M3SectionsHelper.isEnabled()) {
+                // The editable description has horizontal margins. Clipping its
+                // own narrow bounds cuts letters/links at the rounded corners.
+                float parentX = child.getParent() instanceof View ? getChildX((View) child.getParent()) : 0;
+                MarginLayoutParams lp = child.getLayoutParams() instanceof MarginLayoutParams
+                        ? (MarginLayoutParams) child.getLayoutParams() : null;
+                AndroidUtilities.rectTmp.set(contentView.getX() + contentView.getPaddingLeft() - parentX,
+                        child.getY() - (!prev && lp != null ? lp.topMargin : 0),
+                        contentView.getX() + contentView.getWidth() - contentView.getPaddingRight() - parentX,
+                        child.getY() + child.getHeight() + (!next && lp != null ? lp.bottomMargin : 0));
+            }
             clipPath.rewind();
             clipPath.addRoundRect(AndroidUtilities.rectTmp, new float[] {
                 radii[0], radii[0], radii[0], radii[0], radii[1], radii[1], radii[1], radii[1]

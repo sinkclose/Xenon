@@ -676,6 +676,9 @@ public class ChatEditActivity extends BaseFragment implements ImageUpdater.Image
         linearLayout1.addView(avatarContainer, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
         FrameLayout frameLayout = new FrameLayout(context);
+        if (zxc.iconic.xenon.helpers.IosListItemsHelper.isEnabled()) {
+            frameLayout.setTag(org.telegram.ui.Components.RecyclerListView.TAG_NOT_SECTION);
+        }
         avatarContainer.addView(frameLayout, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
         avatarImage = new BackupImageView(context) {
