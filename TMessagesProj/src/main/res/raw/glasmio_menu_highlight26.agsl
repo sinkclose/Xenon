@@ -1,0 +1,114 @@
+// Glasmio LiquidMenuPortalShader, Apache-2.0, 1a0652509071c36fedb35300abdfd12316cc3c54
+
+uniform shader content;
+uniform float2 contentOrigin;
+uniform float4 drawingBounds;
+uniform float2 center;
+uniform float2 halfSize;
+uniform float2 menuRadii;
+uniform float secondaryEnabled;
+uniform float2 secondaryCenter;
+uniform float2 secondaryHalfSize;
+uniform float2 secondaryRadii;
+uniform float smoothing;
+uniform float height;
+uniform float amount;
+// Adapted from NEORUAA/Glasmio, revision 1a0652509071c36fedb35300abdfd12316cc3c54.
+// SPDX-License-Identifier: Apache-2.0
+
+float2 nativeGlassSafeNormal(float2 v) {
+    return v / max(length(v), 0.000001);
+}
+float3 nativeGlassRoundedField(float2 point, float2 halfExtent, float2 radii, float normalMix) {
+    if (min(abs(radii.x), abs(radii.y)) <= 0.000001) {
+        float2 edge = abs(point) - halfExtent;
+        float2 signs = float2(point.x < 0.0 ? -1.0 : 1.0, point.y < 0.0 ? -1.0 : 1.0);
+        float2 normal = signs * (edge.x > edge.y ? float2(1.0, 0.0) : float2(0.0, 1.0));
+        float2 oval = nativeGlassSafeNormal(float2(point.x, point.y * halfExtent.x / max(halfExtent.y, 0.000001)));
+        return float3(max(edge.x, edge.y), nativeGlassSafeNormal(mix(normal, oval, normalMix)));
+    }
+    float2 r = max(abs(radii), float2(0.001));
+    float radius = min(r.x, r.y);
+    float2 inverseAxis = radius / r;
+    float2 local = point * inverseAxis;
+    float2 extent = halfExtent * inverseAxis;
+    float expandedRadius = radius * 1.5286649465560913;
+    float2 curvature = clamp(2.8915570351735034 -
+        1.4457785175867517 * (extent * 2.0) / expandedRadius, 0.0, 1.0);
+    float baseRadius = mix(expandedRadius, radius, max(curvature.x, curvature.y));
+    float2 edge = abs(local) - extent;
+    float2 circle = edge + baseRadius;
+    float interior = min(max(circle.x, circle.y), 0.0);
+    float2 z = max((edge + expandedRadius) / expandedRadius, 0.0);
+    float largest = max(z.x, z.y);
+    float t = largest > 0.0 ? clamp(min(z.x, z.y) / largest, 0.0, 1.0) : 0.0;
+    float d = length(z);
+    float polynomial = ((((-0.926054 * t + 3.15601) * t - 3.64122) * t +
+        1.26803) * t + 0.268531) * t * t;
+    float raw = d + 1.0 - 1.0 / (1.0 - polynomial * clamp(d, 0.0, 1.0));
+    float alternate = 0.3458344340324402 +
+        0.6541655659675598 * length(max(1.5286649465560913 * z - 0.528665, 0.0));
+    float weight = clamp((z.y > z.x ? 1.0 : -1.0) * (t - 1.0) + 0.5, 0.0, 1.0);
+    float corrected = mix(mix(raw, alternate, curvature.x), mix(raw, alternate, curvature.y), weight);
+    float distance = interior + expandedRadius * float(half(corrected - 1.0));
+    float2 positiveNormal = nativeGlassSafeNormal(max(circle, 0.0));
+    if (positiveNormal.x + positiveNormal.y <= 0.0)
+        positiveNormal = circle.x > circle.y ? float2(1.0, 0.0) : float2(0.0, 1.0);
+    float2 normal = positiveNormal * float2(local.x < 0.0 ? -1.0 : 1.0, local.y < 0.0 ? -1.0 : 1.0);
+    float2 oval = nativeGlassSafeNormal(float2(local.x, local.y * extent.x / max(extent.y, 0.000001)));
+    normal = nativeGlassSafeNormal(mix(normal, oval, normalMix));
+    // The native field transforms this normalized gradient without a second normalization.
+    return float3(distance, normal * inverseAxis);
+}
+
+
+uniform shader smoothedField;
+uniform float smoothedFieldEnabled;
+uniform float2 fieldCoordinateScale;
+uniform float2 fieldCoordinateOffset;
+uniform float fieldDistanceScale;
+uniform float2 fieldGradientScale;
+uniform float2 fieldExtent;
+// QuartzCore supercircle_sdf_sampler (24A434, 0x1c39c8dd0).
+// Oversized radii are intentional during overrounding; the native builder's
+// curvature terms handle them before the two fields are combined.
+float3 roundedFieldGradient(float2 point, float2 origin, float2 extent, float2 radii) {
+    return nativeGlassRoundedField(point - origin, extent, radii, 0.5);
+}
+float3 liquidAnalyticFieldGradient(float2 point) {
+    float3 a = roundedFieldGradient(point, center, halfSize, menuRadii);
+    if (secondaryEnabled < 0.5) return a;
+    float3 b = roundedFieldGradient(point, secondaryCenter, secondaryHalfSize, secondaryRadii);
+    // QuartzCore SDFUnion, iOS 24A434, 0x1c39e27d0: only opposing
+    // unit gradients widen the polynomial union between the two skins.
+    float k = smoothing * clamp(0.5 - 0.5 * dot(a.yz, b.yz), 0.0, 1.0);
+    if (k <= 0.000001) return a.x < b.x ? a : b;
+    float h = clamp(0.5 + 0.5 * (a.x - b.x) / k, 0.0, 1.0);
+    return float3(mix(a.x, b.x, h) - k * h * (1.0 - h), mix(a.yz, b.yz, h));
+}
+float3 liquidFieldGradient(float2 point) {
+    if (smoothedFieldEnabled > 0.5) {
+        float2 pixel = point * fieldCoordinateScale + fieldCoordinateOffset;
+        // The Gaussian grid covers a narrow skin band. Clamping its exterior distance
+        // would extend the native key strip across the remaining consumer rectangle.
+        if (pixel.x >= 0.5 && pixel.y >= 0.5 &&
+            pixel.x <= fieldExtent.x - 0.5 && pixel.y <= fieldExtent.y - 0.5) {
+            float3 field = smoothedField.eval(pixel).rgb;
+            return field * float3(fieldDistanceScale, fieldGradientScale);
+        }
+    }
+    return liquidAnalyticFieldGradient(point);
+}
+
+
+uniform float lightAngle;
+uniform float lightFalloff;
+uniform float pixelScale;
+half4 main(float2 coord) {
+    float3 field=liquidFieldGradient(coord);
+    float2 normal=float2(cos(lightAngle),sin(lightAngle));
+    float intensity=pow(abs(dot(field.yz,normal)),lightFalloff);
+    // LiquidGlassEffect's 2 * .35dp stroke, clipped to the glass interior.
+    float stroke=clamp(.35*pixelScale-abs(field.x)+.5,0.0,1.0)*clamp(.5-field.x,0.0,1.0);
+    return half4(1.0)*half(intensity*stroke);
+}

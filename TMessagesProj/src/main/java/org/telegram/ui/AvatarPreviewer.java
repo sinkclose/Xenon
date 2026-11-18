@@ -140,7 +140,8 @@ public class AvatarPreviewer {
             );
 
             params.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
-            params.flags |= WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
+            params.flags |= WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
+                    | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
                     | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                     | WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR
                     | WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS
@@ -450,6 +451,10 @@ public class AvatarPreviewer {
                     super.onLayout(changed, left, top, right, bottom);
                 }
             };
+            setClipChildren(false);
+            setClipToPadding(false);
+            container.setClipChildren(false);
+            container.setClipToPadding(false);
             addView(container, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
             avatarView = new AvatarView(context, resourcesProvider);
@@ -597,7 +602,18 @@ public class AvatarPreviewer {
                 });
             }
 
+            if (zxc.iconic.xenon.NekoConfig.iosPopups) {
+                menu.setAlpha(1f);
+                menu.enableIosMessageSurface(this, new android.graphics.RectF());
+            }
             setShowing(true);
+        }
+
+        @Override
+        protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
+            // A glass capture includes the blurred preview scene but excludes its foreground.
+            if (org.telegram.ui.Components.IosPopupMorph.isCapturingBackdrop() && child == container) return true;
+            return super.drawChild(canvas, child, drawingTime);
         }
 
         private void setShowing(boolean showing) {
@@ -606,6 +622,8 @@ public class AvatarPreviewer {
             }
 
             this.showing = showing;
+            boolean iosMenu = zxc.iconic.xenon.NekoConfig.iosPopups;
+            if (iosMenu && !showing) menu.closeIosMessageSurface();
 
             ValueAnimator foregroundAnimator = ValueAnimator.ofFloat(0f, 1f);
             foregroundAnimator.setInterpolator(showing ? openInterpolator : CubicBezierInterpolator.EASE_OUT_QUINT);
@@ -616,6 +634,17 @@ public class AvatarPreviewer {
                 }
                 float clampedValue = MathUtils.clamp(value, 0f, 1f);
 
+                if (iosMenu) {
+                    // Let the menu's own reference spring animate once, without
+                    // a second scale/translation applied by the avatar container.
+                    container.setScaleX(1f);
+                    container.setScaleY(1f);
+                    container.setAlpha(1f);
+                    avatarView.setAlpha(clampedValue);
+                    avatarView.setScaleX(0.7f + 0.3f * value);
+                    avatarView.setScaleY(0.7f + 0.3f * value);
+                    return;
+                }
                 container.setScaleX(0.7f + 0.3f * value);
                 container.setScaleY(0.7f + 0.3f * value);
                 container.setAlpha(clampedValue);
@@ -639,7 +668,7 @@ public class AvatarPreviewer {
                 openAnimator.cancel();
             }
             openAnimator = new AnimatorSet();
-            openAnimator.setDuration(showing ? 190 : 150);
+            openAnimator.setDuration(iosMenu ? (showing ? 360 : 380) : (showing ? 190 : 150));
             openAnimator.playTogether(foregroundAnimator, blurAnimator);
             openAnimator.addListener(new AnimatorListenerAdapter() {
                 @Override

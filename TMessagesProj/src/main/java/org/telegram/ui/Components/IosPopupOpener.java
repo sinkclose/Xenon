@@ -43,7 +43,10 @@ public final class IosPopupOpener {
         return click;
     }
 
-    public static void install(View button) { listener(button, null); }
+    public static void install(View button) {
+        // RecyclerListView owns row clicks; a child long-click listener steals later taps.
+        if (button != null && button.hasOnClickListeners()) listener(button, null);
+    }
 
     private static void registerDrag(View button, BooleanSupplier enabled) {
         Window window = findWindow(button);

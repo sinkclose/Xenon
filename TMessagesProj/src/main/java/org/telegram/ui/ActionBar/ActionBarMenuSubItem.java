@@ -48,7 +48,7 @@ public class ActionBarMenuSubItem extends FrameLayout {
     private int selectorColor;
 
     int selectorRad = 12;
-    private boolean iosPopupStyle;
+    private boolean iosPopupStyle = zxc.iconic.xenon.NekoConfig.iosPopups;
     private org.telegram.ui.Components.MaterialPopupRowDrawable materialPopupBackground;
     private boolean materialPopupStyle = zxc.iconic.xenon.NekoConfig.material3Popups;
     private boolean customItemHeight;
@@ -56,12 +56,15 @@ public class ActionBarMenuSubItem extends FrameLayout {
     public void setIosPopupStyle(boolean enabled) {
         if (iosPopupStyle == enabled) return;
         iosPopupStyle = enabled;
+        if (!customItemHeight) itemHeight = enabled ? 44 : materialPopupStyle ? 56 : 48;
+        textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, enabled ? 17 : 16);
+        requestLayout();
         updateBackground();
     }
     boolean top;
     boolean bottom;
 
-    private int itemHeight = zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48;
+    private int itemHeight = zxc.iconic.xenon.NekoConfig.iosPopups ? 44 : zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 48;
     protected final Theme.ResourcesProvider resourcesProvider;
     public Runnable openSwipeBackLayout;
 
@@ -144,6 +147,22 @@ public class ActionBarMenuSubItem extends FrameLayout {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        if (iosPopupStyle) {
+            setPadding(dp(12), 0, dp(12), 0);
+            textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 17);
+            boolean hasIcon = imageView.getVisibility() == VISIBLE && imageView.getDrawable() != null;
+            int start = hasIcon ? dp(40) : 0;
+            int end = 0;
+            if (checkView != null && checkView.getVisibility() == VISIBLE) {
+                if (checkViewLeft != LocaleController.isRTL) start = dp(40);
+                else end = dp(28);
+            }
+            textView.setPadding(LocaleController.isRTL ? end : start, 0, LocaleController.isRTL ? start : end, 0);
+            if (rightIcon != null) rightIcon.setBackground(null);
+            FrameLayout.LayoutParams iconParams=(FrameLayout.LayoutParams)imageView.getLayoutParams();
+            iconParams.width=dp(28); iconParams.height=dp(32);
+            imageView.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        }
         super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(dp(itemHeight), View.MeasureSpec.EXACTLY));
         if (expandIfMultiline && textView.getLayout().getLineCount() > 1) {
             super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(dp(itemHeight + 8), View.MeasureSpec.EXACTLY));
@@ -479,7 +498,7 @@ public class ActionBarMenuSubItem extends FrameLayout {
         boolean material = zxc.iconic.xenon.NekoConfig.material3Popups;
         if (materialPopupStyle == material) return;
         materialPopupStyle = material;
-        if (!customItemHeight) itemHeight = material ? 56 : 48;
+        if (!customItemHeight) itemHeight = iosPopupStyle ? 44 : material ? 56 : 48;
         updateBackground();
         requestLayout();
     }

@@ -119,9 +119,8 @@ public class ActionBarPopupWindow extends PopupWindow {
     }
 
     private zxc.iconic.xenon.helpers.PredictiveTabBack.Target getPredictiveBackTarget() {
-        if (!isShowing() || isClosingAnimated || windowAnimatorSet != null) return null;
+        if (!isShowing() || isClosingAnimated || windowAnimatorSet != null || iosSurface != null) return null;
         final View content = getContentView();
-        final IosPopupMorph morph = iosSurface;
         final float alpha = content.getAlpha(), sx = content.getScaleX(), sy = content.getScaleY();
         final float px = content.getPivotX(), py = content.getPivotY();
         final View window = content.getRootView();
@@ -132,21 +131,16 @@ public class ActionBarPopupWindow extends PopupWindow {
             private boolean active;
             @Override public boolean begin() {
                 active = true;
-                if (morph == null) {
-                    content.setPivotX(content.getWidth());
-                    content.setPivotY(content.getHeight());
-                }
+                content.setPivotX(content.getWidth());
+                content.setPivotY(content.getHeight());
                 return true;
             }
             @Override public void update(float progress) {
                 if (!active) return;
                 float visible = 1 - Math.max(0, Math.min(1, progress));
-                if (morph != null) morph.setPredictiveBackProgress(visible);
-                else {
-                    content.setAlpha(alpha * visible);
-                    content.setScaleX(sx * (.95f + .05f * visible));
-                    content.setScaleY(sy * (.95f + .05f * visible));
-                }
+                content.setAlpha(alpha * visible);
+                content.setScaleX(sx * (.95f + .05f * visible));
+                content.setScaleY(sy * (.95f + .05f * visible));
                 updateDim(visible);
             }
             private void updateDim(float visible) {
@@ -160,14 +154,10 @@ public class ActionBarPopupWindow extends PopupWindow {
                 if (!active) return;
                 active = false;
                 if (commit) {
-                    if (morph != null) dismiss(false);
-                    else {
-                        int style = getAnimationStyle();
-                        setAnimationStyle(0);
-                        try { dismiss(false); } finally { setAnimationStyle(style); }
-                    }
+                    int style = getAnimationStyle();
+                    setAnimationStyle(0);
+                    try { dismiss(false); } finally { setAnimationStyle(style); }
                 } else {
-                    if (morph != null) morph.setPredictiveBackProgress(1);
                     updateDim(1);
                 }
                 content.setAlpha(alpha);
@@ -210,7 +200,7 @@ public class ActionBarPopupWindow extends PopupWindow {
 
     private boolean useIosMorph(View source) {
         return zxc.iconic.xenon.NekoConfig.iosPopups && source != null && source.isAttachedToWindow()
-                && (animationSourceBounds != null || IosPopupMorph.canAnimate(source));
+                && !(super.getContentView() instanceof org.telegram.ui.Components.MessagePopupPreviewLayout);
     }
 
     /** Continue the gesture owned by the source button after its popup window opens. */
@@ -273,6 +263,12 @@ public class ActionBarPopupWindow extends PopupWindow {
 
     private void measureIosContent(View source) {
         View content = getContentView();
+        IosPopupMorph.prepareRows(content);
+        if (content instanceof ActionBarPopupWindowLayout) {
+            content.measure(View.MeasureSpec.makeMeasureSpec(Math.max(1,source.getRootView().getWidth()-dp(24)),View.MeasureSpec.AT_MOST),
+                    View.MeasureSpec.makeMeasureSpec(Math.max(1,source.getRootView().getHeight()-dp(24)),View.MeasureSpec.AT_MOST));
+            return;
+        }
         if (content.getMeasuredWidth() == 0 || content.getMeasuredHeight() == 0) {
             View root = source.getRootView();
             content.measure(View.MeasureSpec.makeMeasureSpec(Math.max(1, root.getWidth() - dp(24)), View.MeasureSpec.AT_MOST),
@@ -312,19 +308,20 @@ public class ActionBarPopupWindow extends PopupWindow {
             super.showAtLocation(parent, Gravity.TOP | Gravity.LEFT,
                     Build.VERSION.SDK_INT >= 29 ? point[0] : 0,
                     Build.VERSION.SDK_INT >= 29 ? point[1] : 0);
-            windowAnimatorSet = iosSurface.opening();
+            View decor = iosSurface.getRootView();
+            if (decor.getLayoutParams() instanceof WindowManager.LayoutParams) {
+                WindowManager.LayoutParams params = (WindowManager.LayoutParams) decor.getLayoutParams();
+                WindowManager manager = (WindowManager) decor.getContext().getSystemService(Context.WINDOW_SERVICE);
+                AndroidUtilities.setPreferredMaxRefreshRate(manager, decor, params);
+            }
+            if (Build.VERSION.SDK_INT >= 35) decor.setRequestedFrameRate(AndroidUtilities.screenMaxRefreshRate);
+            iosSurface.open();
         } catch (RuntimeException | OutOfMemoryError e) {
             FileLog.e(e);
             if (isShowing()) super.dismiss();
             restoreIosContent();
             return false;
         }
-        windowAnimatorSet.addListener(new AnimatorListenerAdapter() {
-            @Override public void onAnimationEnd(Animator animation) {
-                if (windowAnimatorSet == animation) windowAnimatorSet = null;
-            }
-        });
-        windowAnimatorSet.start();
         installPredictiveBack();
         return true;
     }
@@ -345,6 +342,10 @@ public class ActionBarPopupWindow extends PopupWindow {
         }
     }
 
+    public boolean hasIosPopupSurface() {
+        return iosSurface != null;
+    }
+
     private void dismissIosSurface(boolean animated) {
         if (isClosingAnimated && animated) return;
         if (windowAnimatorSet != null) {
@@ -361,11 +362,10 @@ public class ActionBarPopupWindow extends PopupWindow {
                 if (pauseNotifications) notificationsLocker.unlock();
             }
         };
-        if (animated && animationEnabled) {
+        if (animated) {
             isClosingAnimated = true;
-            windowAnimatorSet = iosSurface.closing(finish);
             if (pauseNotifications) notificationsLocker.lock();
-            windowAnimatorSet.start();
+            iosSurface.close(finish);
         } else finish.run();
     }
 
@@ -431,6 +431,10 @@ public class ActionBarPopupWindow extends PopupWindow {
 
         public void setIosSurfaceRecording(boolean recording) { iosSurfaceRecording = recording; }
 
+        public boolean isIosMessageSurfaceClosed() {
+            return iosEmbeddedSurface == null || iosEmbeddedSurface.isClosed();
+        }
+
         public void closeIosMessageSurface() {
             if (iosEmbeddedSurface != null) iosEmbeddedSurface.close();
         }
@@ -447,6 +451,14 @@ public class ActionBarPopupWindow extends PopupWindow {
             if (iosEmbeddedSurface != null) iosEmbeddedSurface.release();
             iosEmbeddedSurface = new IosPopupMorph.Embedded(this, sourceView, screenBounds,
                     getThemedColor(Theme.key_actionBarDefaultSubmenuBackground));
+        }
+
+        public void setIosMessageBackdrop(View backdrop) {
+            if (iosEmbeddedSurface != null) iosEmbeddedSurface.setBackdropHost(backdrop);
+        }
+
+        public boolean hasIosMessageSurface() {
+            return iosEmbeddedSurface != null;
         }
 
         @Override public void draw(Canvas canvas) {
@@ -515,7 +527,7 @@ public class ActionBarPopupWindow extends PopupWindow {
 
             if (resId != 0) {
                 backgroundDrawable = getResources().getDrawable(resId).mutate();
-                setPadding(dp(8), dp(8), dp(8), dp(8));
+                setPadding(dp(zxc.iconic.xenon.NekoConfig.iosPopups ? 10 : 8), dp(zxc.iconic.xenon.NekoConfig.iosPopups ? 10 : 8), dp(zxc.iconic.xenon.NekoConfig.iosPopups ? 10 : 8), dp(zxc.iconic.xenon.NekoConfig.iosPopups ? 10 : 8));
             }
             if (backgroundDrawable != null) {
                 backgroundDrawable.getPadding(bgPaddings);
@@ -1060,6 +1072,12 @@ public class ActionBarPopupWindow extends PopupWindow {
 
         @Override
         protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            if (zxc.iconic.xenon.NekoConfig.iosPopups) {
+                IosPopupMorph.prepareRows(this);
+                // Measure from the actual rows, including icon/text/check padding.
+                // Keep every action as wide as the resulting glass surface.
+                linearLayout.getLayoutParams().width = LayoutHelper.MATCH_PARENT;
+            }
             refreshPanelStyle();
             updateRadialSelectors();
             super.onMeasure(widthMeasureSpec, heightMeasureSpec);
@@ -1517,6 +1535,14 @@ public class ActionBarPopupWindow extends PopupWindow {
 
         public void setColor(int color) {
             setBackgroundColor(color);
+        }
+
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            if (zxc.iconic.xenon.NekoConfig.iosPopups) {
+                heightMeasureSpec = View.MeasureSpec.makeMeasureSpec(dp(3), View.MeasureSpec.EXACTLY);
+            }
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         }
 
         @Override

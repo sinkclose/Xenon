@@ -25,7 +25,7 @@ import android.widget.OverScroller;
 import org.telegram.ui.Cells.TextSelectionHelper;
 
 /** A message and its menu in one viewport, rendered in the popup window above the chat blur. */
-public class MessagePopupPreviewLayout extends FrameLayout {
+public class MessagePopupPreviewLayout extends FrameLayout implements IosPopupMorph.Backdrop {
     public interface Source {
         boolean getBounds(RectF bounds);
         boolean contains(float screenX, float screenY);
@@ -71,6 +71,7 @@ public class MessagePopupPreviewLayout extends FrameLayout {
         this.preferredY = preferredY;
         this.dismiss = dismiss;
         setClipChildren(false);
+        setClipToPadding(false);
         scroll = new ScrollView(context) {
             private final OverScroller flingScroller = new OverScroller(context);
             private int lastFlingY;
@@ -210,7 +211,15 @@ public class MessagePopupPreviewLayout extends FrameLayout {
         scroll.setOverScrollMode(OVER_SCROLL_NEVER);
         scroll.setClipToPadding(false);
         scroll.setClipChildren(false);
-        column = new LinearLayout(context);
+        column = new LinearLayout(context) {
+            @Override
+            protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
+                // Layout/touch stay in the scroller; draw iOS glass at window level,
+                // so ScrollView's viewport cannot slice the animated surface.
+                return child == MessagePopupPreviewLayout.this.menu && zxc.iconic.xenon.NekoConfig.iosPopups
+                        || super.drawChild(canvas, child, drawingTime);
+            }
+        };
         column.setClipChildren(false);
         column.setClipToPadding(false);
         column.setOrientation(LinearLayout.VERTICAL);
@@ -384,8 +393,8 @@ public class MessagePopupPreviewLayout extends FrameLayout {
         if (menuAnimator != null) { menuAnimator.cancel(); menuAnimator = null; }
         if (!ios && target == 1) menuAnimator = org.telegram.ui.ActionBar.ActionBarPopupWindow.startMenuAnimation(menu);
         if (ios && target == 0) IosPopupMorph.closeEmbedded(menu);
-        animator.setDuration(ios ? (target == 0 ? IosPopupMorphGeometry.CLOSE_DURATION : IosPopupMorphGeometry.OPEN_DURATION) : 320);
-        animator.setInterpolator(new PathInterpolator(.22f, 0f, .18f, 1f));
+        animator.setDuration(500);
+        animator.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
         animator.addUpdateListener(animation -> {
             progress = (float) animation.getAnimatedValue();
             if (ios || target == 0) menu.setAlpha(ios ? 1f : progress);
@@ -395,10 +404,18 @@ public class MessagePopupPreviewLayout extends FrameLayout {
             @Override
             public void onAnimationEnd(Animator animation) {
                 animator = null;
-                if (done != null) done.run();
+                if (done != null) {
+                    if (ios && target == 0) finishAfterMenuCollapse(done);
+                    else done.run();
+                }
             }
         });
         animator.start();
+    }
+
+    private void finishAfterMenuCollapse(Runnable done) {
+        if (IosPopupMorph.embeddedClosed(menu) || !isAttachedToWindow()) done.run();
+        else postOnAnimation(() -> finishAfterMenuCollapse(done));
     }
 
     private void scrollToOpeningPosition() {
@@ -463,7 +480,30 @@ public class MessagePopupPreviewLayout extends FrameLayout {
     }
 
     @Override
+    public void drawPopupBackdrop(Canvas canvas) {
+        // Draw the frozen scene directly. Re-entering the decor can capture cached
+        // foreground display lists and recurse into another active glass recorder.
+        boolean hasBackdrop = false;
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            if (child instanceof PopupPreviewBackdrop) {
+                child.draw(canvas);
+                hasBackdrop = true;
+            }
+        }
+        if (!hasBackdrop) getRootView().draw(canvas);
+    }
+
+    @Override
     protected void dispatchDraw(Canvas canvas) {
+        if (IosPopupMorph.isCapturingBackdrop()) {
+            // Capture only the blurred scene, never the glass or lifted message.
+            for (int i = 0; i < getChildCount(); i++) {
+                View child = getChildAt(i);
+                if (child instanceof PopupPreviewBackdrop) super.drawChild(canvas, child, getDrawingTime());
+            }
+            return;
+        }
         if (opening && !closing) {
             opening = false;
             scrollToOpeningPosition();
@@ -483,6 +523,7 @@ public class MessagePopupPreviewLayout extends FrameLayout {
                 canvas.drawPicture(transitionMessage);
                 canvas.restoreToCount(saved);
             }
+            drawMenuOverlay(canvas);
             return;
         }
         getLocationOnScreen(location);
@@ -513,16 +554,29 @@ public class MessagePopupPreviewLayout extends FrameLayout {
         canvas.translate(x - sourceBounds.left, y - sourceBounds.top);
         source.draw(canvas);
         canvas.restoreToCount(saved);
+        drawMenuOverlay(canvas);
         if (selectionOverlay != null && selectionOverlay.getVisibility() == VISIBLE) {
             super.drawChild(canvas, selectionOverlay, getDrawingTime());
         }
-        // Resolve both the live chat position and the scroll destination on every frame.
-        postInvalidateOnAnimation();
+        // Track the source while moving. A settled modal can use normal view invalidation.
+        if (animator != null || Math.abs(sourceY - sourceBounds.top) > .25f) postInvalidateOnAnimation();
         int top = Math.max(0, Math.round(viewport.top - location[1]));
         int bottom = Math.min(getHeight(), Math.round(viewport.bottom - location[1]));
         if (scroll.getTop() != top || scroll.getHeight() != Math.max(1, bottom - top)
                 || placeholder.getHeight() != Math.round(sourceBounds.height())) {
             requestLayout();
+        }
+    }
+
+    private void drawMenuOverlay(Canvas canvas) {
+        if (zxc.iconic.xenon.NekoConfig.iosPopups && menu.getVisibility() == VISIBLE) {
+            getLocationOnScreen(location);
+            menu.getLocationOnScreen(targetLocation);
+            int savedMenu = canvas.save();
+            canvas.translate(targetLocation[0] - location[0], targetLocation[1] - location[1]);
+            if (menu.getAlpha() < 1f) canvas.saveLayerAlpha(null, Math.round(255 * menu.getAlpha()));
+            menu.draw(canvas);
+            canvas.restoreToCount(savedMenu);
         }
     }
 

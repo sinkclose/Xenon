@@ -93,6 +93,10 @@ public class PopupHelper {
                 return;
             }
             var popup = ItemOptions.makeOptions(container, resourcesProvider, itemView);
+            if (zxc.iconic.xenon.NekoConfig.iosPopups) {
+                popup.setDrawScrim(false);
+                popup.setBlur(false, false);
+            }
             var parent = itemView.getParent();
             if (parent instanceof RecyclerListView listView) {
                 popup.setScrimViewBackground(listView.getClipBackground(itemView));

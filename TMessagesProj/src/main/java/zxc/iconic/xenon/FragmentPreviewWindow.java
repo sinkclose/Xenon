@@ -17,6 +17,7 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.Utilities;
 import org.telegram.ui.ActionBar.ActionBarLayout;
 import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.Components.IosPopupMorph;
 
 import java.util.function.Consumer;
 
@@ -87,22 +88,32 @@ public class FragmentPreviewWindow {
         return visible;
     }
 
+    private final class PreviewView extends View implements IosPopupMorph.Backdrop {
+        PreviewView(Context context) { super(context); }
+
+        @Override public void drawPopupBackdrop(Canvas canvas) {
+            if (previewBlurDrawable != null) {
+                previewBlurDrawable.setAlpha(255);
+                previewBlurDrawable.draw(canvas);
+            }
+        }
+
+        @Override protected void onDraw(@NonNull Canvas canvas) {
+            if (!visible) return;
+            if (previewBlurDrawable != null) {
+                previewBlurDrawable.setAlpha((int) (actionBarLayout.getCurrentPreviewFragmentAlpha() * 255));
+                previewBlurDrawable.draw(canvas);
+            }
+            actionBarLayout.setPreviewMenuBackdrop(this);
+            actionBarLayout.drawCurrentPreviewFragment(canvas, null);
+        }
+    }
+
     private void createPreviewView() {
         if (previewView == null) {
             windowManager = context.getSystemService(WindowManager.class);
 
-            previewView = new View(context) {
-                @Override
-                protected void onDraw(@NonNull Canvas canvas) {
-                    if (visible) {
-                        if (previewBlurDrawable != null) {
-                            previewBlurDrawable.setAlpha((int) (actionBarLayout.getCurrentPreviewFragmentAlpha() * 255));
-                            previewBlurDrawable.draw(canvas);
-                        }
-                        actionBarLayout.drawCurrentPreviewFragment(canvas, null);
-                    }
-                }
-            };
+            previewView = new PreviewView(context);
 
             layoutParams = new WindowManager.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
@@ -110,7 +121,8 @@ public class FragmentPreviewWindow {
                     0, PixelFormat.TRANSLUCENT
             );
             layoutParams.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
-            layoutParams.flags |= WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
+            layoutParams.flags |= WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
+                    | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
                     | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                     | WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR
                     | WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS

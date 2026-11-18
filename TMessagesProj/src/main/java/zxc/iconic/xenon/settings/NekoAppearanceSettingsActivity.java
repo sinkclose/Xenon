@@ -60,6 +60,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
     private final int iosListItemsRow = rowId++;
     private final int iosSlidersRow = rowId++;
     private final int iosBottomBarRow = rowId++;
+    private final int iosPopupsRow = rowId++;
     private final int material3PopupsRow = rowId++;
     private boolean ios26Expanded;
 
@@ -246,10 +247,11 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         items.add(UItem.asRoundCheckbox(material3PopupsRow, LocaleController.getString(R.string.Material3Popups)).setChecked(NekoConfig.material3Popups).slug("material3Popups"));
         items.add(InfoCheckboxCellFactory.of(material3DialogsRow, LocaleController.getString(R.string.Material3Dialogs), NekoConfig.material3Dialogs, this::showDialogsInfo).slug("material3Dialogs"));
         }
-        items.add(UItem.asExpandableSwitch(ios26Row, "iOS 26 design", ios26Count() + "/6")
+        items.add(UItem.asExpandableSwitch(ios26Row, "iOS design", ios26Count() + "/7")
                 .setChecked(ios26Count() > 0).setCollapsed(!ios26Expanded)
                 .setClickCallback(v -> setIos26Enabled(ios26Count() == 0)).slug("ios26"));
         if (ios26Expanded) {
+            items.add(UItem.asRoundCheckbox(iosPopupsRow, "Popups").setChecked(NekoConfig.iosPopups).slug("iosPopups"));
             items.add(UItem.asRoundCheckbox(iosLikeInputFieldRow, LocaleController.getString(R.string.IosLikeInputField)).setChecked(NekoConfig.iosLikeInputField).slug("iosLikeInputField"));
             items.add(UItem.asRoundCheckbox(liquidChatElementsRow, LocaleController.getString(R.string.LiquidChatElements)).setChecked(NekoConfig.liquidChatElements).slug("liquidChatElements"));
             items.add(UItem.asRoundCheckbox(iosSwitchesRow, LocaleController.getString(R.string.Switches)).setChecked(NekoConfig.iosSwitches).slug("iosSwitches"));
@@ -319,10 +321,11 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
     }
 
     private int ios26Count() {
-        return (NekoConfig.iosLikeInputField ? 1 : 0) + (NekoConfig.liquidChatElements ? 1 : 0) + (NekoConfig.iosSwitches ? 1 : 0) + (NekoConfig.iosListItems ? 1 : 0) + (NekoConfig.iosSliders ? 1 : 0) + (NekoConfig.iosBottomBar ? 1 : 0);
+        return (NekoConfig.iosPopups ? 1 : 0) + (NekoConfig.iosLikeInputField ? 1 : 0) + (NekoConfig.liquidChatElements ? 1 : 0) + (NekoConfig.iosSwitches ? 1 : 0) + (NekoConfig.iosListItems ? 1 : 0) + (NekoConfig.iosSliders ? 1 : 0) + (NekoConfig.iosBottomBar ? 1 : 0);
     }
 
     private void setIos26Enabled(boolean enabled) {
+        if (NekoConfig.iosPopups != enabled) NekoConfig.toggleIosPopups();
         if (NekoConfig.iosLikeInputField != enabled) NekoConfig.toggleIosLikeInputField();
         if (NekoConfig.liquidChatElements != enabled) NekoConfig.toggleLiquidChatElements();
         if (NekoConfig.iosSwitches != enabled) NekoConfig.toggleIosSwitches();
@@ -427,6 +430,9 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
             listView.adapter.update(true);
             parentLayout.rebuildAllFragmentViews(false, false);
             refreshActivitySwitches();
+        } else if (id == iosPopupsRow) {
+            NekoConfig.toggleIosPopups();
+            listView.adapter.update(true);
         } else if (id == material3PopupsRow) {
             NekoConfig.toggleMaterial3Popups();
             listView.adapter.update(true);
@@ -658,6 +664,13 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
                     }
                     if (fragment instanceof BaseNekoSettingsActivity) {
                         ((BaseNekoSettingsActivity) fragment).syncCenterTitle(true);
+                    } else if (fragment instanceof org.telegram.ui.SettingsActivity) {
+                        ((org.telegram.ui.SettingsActivity) fragment).syncCenterTitle(true);
+                    } else if (fragment instanceof org.telegram.ui.MainTabsActivity) {
+                        BaseFragment visible = ((org.telegram.ui.MainTabsActivity) fragment).getCurrentVisibleFragment();
+                        if (visible instanceof org.telegram.ui.SettingsActivity) {
+                            ((org.telegram.ui.SettingsActivity) visible).syncCenterTitle(true);
+                        }
                     } else if (fragment instanceof DialogsActivity) {
                         ((DialogsActivity) fragment).syncCenterTitle(true);
                     }

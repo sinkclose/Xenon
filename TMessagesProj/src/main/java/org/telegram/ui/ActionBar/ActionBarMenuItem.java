@@ -197,6 +197,7 @@ public class ActionBarMenuItem extends FrameLayout {
     private View searchAdditionalButton;
     protected RLottieImageView iconView;
     private int iconViewResId;
+    private int navigationIconResId;
     protected TextView textView;
     private FrameLayout searchContainer;
     private boolean isSearchField;
@@ -312,7 +313,7 @@ public class ActionBarMenuItem extends FrameLayout {
                 && !parentMenu.isActionMode && parentMenu.parentActionBar != null) {
             parentMenu.parentActionBar.drawPlainButtonCircle(canvas, this, getWidth() / 2f, getHeight() / 2f);
         }
-        if (fixBackground) {
+        if (fixBackground && getBackground() != null) {
             getBackground().draw(canvas);
         }
 
@@ -389,7 +390,7 @@ public class ActionBarMenuItem extends FrameLayout {
                 } else if (delegate != null) {
                     delegate.onItemClick((Integer) selectedMenuView.getTag());
                 }
-                popupWindow.dismiss(allowCloseAnimation);
+                popupWindow.dismiss(allowCloseAnimation || popupWindow.hasIosPopupSurface());
             } else if (showSubmenuByMove) {
                 popupWindow.dismiss();
             }
@@ -505,7 +506,7 @@ public class ActionBarMenuItem extends FrameLayout {
                     return;
                 }
                 processedPopupClick = true;
-                popupWindow.dismiss(allowCloseAnimation);
+                popupWindow.dismiss(allowCloseAnimation || popupWindow.hasIosPopupSurface());
             }
             if (parentMenu != null) {
                 parentMenu.onItemClick((Integer) view1.getTag());
@@ -551,7 +552,7 @@ public class ActionBarMenuItem extends FrameLayout {
                 if (!allowCloseAnimation) {
                     popupWindow.setAnimationStyle(R.style.PopupAnimation);
                 }
-                popupWindow.dismiss(allowCloseAnimation);
+                popupWindow.dismiss(allowCloseAnimation || popupWindow.hasIosPopupSurface());
             }
             if (parentMenu != null) {
                 parentMenu.onItemClick((Integer) view.getTag());
@@ -638,7 +639,7 @@ public class ActionBarMenuItem extends FrameLayout {
                         return;
                     }
                     processedPopupClick = true;
-                    popupWindow.dismiss(allowCloseAnimation);
+                    popupWindow.dismiss(allowCloseAnimation || popupWindow.hasIosPopupSurface());
                 }
             }
             if (parentMenu != null) {
@@ -1281,6 +1282,19 @@ public class ActionBarMenuItem extends FrameLayout {
 
     public RLottieImageView getIconView() {
         return iconView;
+    }
+
+    public Object getNavigationIconKey() {
+        if (navigationIconResId != 0) return "resource:" + navigationIconResId;
+        if (iconViewResId != 0) return "resource:" + iconViewResId;
+        Drawable drawable = iconView == null ? null : iconView.getDrawable();
+        return drawable == null ? "text:" + (textView == null ? getTag() : textView.getText())
+                : drawable.getClass().getName() + ":" + System.identityHashCode(
+                        drawable.getConstantState() == null ? drawable : drawable.getConstantState());
+    }
+
+    public void setNavigationIconResource(int resId) {
+        navigationIconResId = resId;
     }
 
     public TextView getTextView() {
@@ -2532,7 +2546,7 @@ public class ActionBarMenuItem extends FrameLayout {
                                 return;
                             }
                             parent.processedPopupClick = true;
-                            parent.popupWindow.dismiss(parent.allowCloseAnimation);
+                            parent.popupWindow.dismiss(parent.allowCloseAnimation || parent.popupWindow.hasIosPopupSurface());
                         }
                     }
                     if (parent.parentMenu != null) {
@@ -2718,6 +2732,13 @@ public class ActionBarMenuItem extends FrameLayout {
     }
 
     public static FrameLayout addColoredGap(ActionBarPopupWindow.ActionBarPopupWindowLayout windowLayout, Theme.ResourcesProvider resourcesProvider) {
+        if (zxc.iconic.xenon.NekoConfig.iosPopups) {
+            // Use the same surface-aware separator as the main glass menu.
+            // A plain FrameLayout retains its opaque CombinedDrawable in submenus.
+            ActionBarPopupWindow.GapView gap = new ActionBarPopupWindow.GapView(windowLayout.getContext(), resourcesProvider);
+            windowLayout.addView(gap, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 3));
+            return gap;
+        }
         CombinedDrawable shadowDrawable = new CombinedDrawable(new ColorDrawable(Theme.getColor(Theme.key_actionBarDefaultSubmenuSeparator, resourcesProvider)), Theme.getThemedDrawable(windowLayout.getContext(), R.drawable.greydivider, Theme.getColor(Theme.key_windowBackgroundGrayShadow, resourcesProvider)));
         shadowDrawable.setFullsize(true);
         FrameLayout gap = new FrameLayout(windowLayout.getContext());

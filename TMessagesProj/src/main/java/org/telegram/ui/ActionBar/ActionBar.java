@@ -29,6 +29,7 @@ import android.graphics.Paint;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.VectorDrawable;
@@ -289,6 +290,105 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
     private boolean plainBackCircle;
     private org.telegram.ui.Components.FadeHeaderButtonGlass fadeButtonGlass;
+    private boolean navigationButtonsOwned;
+    private boolean drawingNavigationButton;
+
+    public void setNavigationButtonsOwned(boolean owned) {
+        if (navigationButtonsOwned == owned) return;
+        navigationButtonsOwned = owned;
+        invalidate();
+        if (menu != null) {
+            menu.invalidate();
+            menu.requestLayout();
+        }
+    }
+
+    public boolean areNavigationButtonsOwned() { return navigationButtonsOwned; }
+
+    public boolean isChatHeader() { return parentFragment instanceof org.telegram.ui.ChatActivity; }
+
+    public void setDialogsNavigationTitleAlpha(float alpha) {
+        if (parentFragment instanceof org.telegram.ui.DialogsActivity) {
+            ((org.telegram.ui.DialogsActivity) parentFragment).setNavigationTitleAlpha(alpha);
+        }
+    }
+
+    public boolean hasChatNavigationSurface(boolean leading) {
+        return !nonIsland && (leading || !doNotDrawGlassMenu && !avatarRightBigger && !glassOnlyBack);
+    }
+
+    public boolean isChatNavigationAvatar(View action) {
+        return liquidAvatar != null && liquidAvatar.getParent() == this && liquidAvatar.isLiquidAvatarOnMenu()
+                && liquidAvatar.getVisibility() == VISIBLE && liquidAvatar.hasVisibleAvatar()
+                && action instanceof ActionBarMenuItem && ((ActionBarMenuItem) action).getIconView() != null
+                && ((ActionBarMenuItem) action).getIconView().getVisibility() == INVISIBLE;
+    }
+
+    private boolean isChatNavigationTitleChild(View child) {
+        return child == liquidAvatar || externalHeaderTitleVisible && isExternalHeaderTitleChild(child)
+                || child == additionalSubTitleOverlayContainer;
+    }
+
+    private boolean ownsChatNavigationTitle() {
+        return navigationButtonsOwned && isChatHeader();
+    }
+
+    public void getChatNavigationTitleBounds(RectF bounds) {
+        bounds.set(liquidGlassLeft, liquidGlassTop, liquidGlassRight, liquidGlassBottom);
+    }
+
+    public void drawChatNavigationTitleSurface(Canvas canvas) {
+        prepareLiquidGlassSurfaces();
+        if (!nonIsland) drawTitleSurface(canvas);
+    }
+
+    public void drawChatNavigationTitle(Canvas canvas) {
+        if (doNotDrawChild) return;
+        final long drawingTime = getDrawingTime();
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            if (isChatNavigationTitleChild(child) && child.getVisibility() == VISIBLE && child.getAlpha() > 0f) {
+                super.drawChild(canvas, child, drawingTime);
+            }
+        }
+    }
+
+    public Theme.ResourcesProvider getResourcesProvider() { return resourcesProvider; }
+
+    private View navigationButtonOverlayAnchor, navigationButtonOverlay;
+
+    /** Media search/options morph with their button, rather than the toolbar's right edge. */
+    public void setNavigationButtonOverlay(View anchor, View overlay) {
+        navigationButtonOverlayAnchor = anchor;
+        navigationButtonOverlay = overlay;
+        requestLayout();
+        invalidate();
+    }
+
+    private boolean hasNavigationButtonOverlay() {
+        return navigationButtonOverlayAnchor != null && navigationButtonOverlay != null
+                && navigationButtonOverlay.getParent() == this
+                && navigationButtonOverlayAnchor.getVisibility() == VISIBLE
+                && navigationButtonOverlayAnchor.getAlpha() > 0f
+                && navigationButtonOverlay.getVisibility() == VISIBLE;
+    }
+
+    /** Record only the action's contents in the navigation host's display list. */
+    public void drawNavigationButton(Canvas canvas, View action) {
+        drawingNavigationButton = true;
+        try {
+            action.draw(canvas);
+            if (action == navigationButtonOverlayAnchor && hasNavigationButtonOverlay()) {
+                View overlay = navigationButtonOverlay;
+                int save = canvas.saveLayerAlpha(0, 0, action.getWidth(), action.getHeight(), Math.round(255 * overlay.getAlpha()));
+                canvas.translate((action.getWidth() - overlay.getWidth()) / 2f, (action.getHeight() - overlay.getHeight()) / 2f);
+                canvas.scale(overlay.getScaleX(), overlay.getScaleY(), overlay.getWidth() / 2f, overlay.getHeight() / 2f);
+                overlay.draw(canvas);
+                canvas.restoreToCount(save);
+            }
+        }
+        finally { drawingNavigationButton = false; }
+    }
 
     public void setFadeButtonGlass(org.telegram.ui.Components.FadeHeaderButtonGlass glass) {
         if (fadeButtonGlass == glass) return;
@@ -332,6 +432,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     }
 
     public int beginFadeButtonContent(Canvas canvas, View child, boolean localCanvas) {
+        if (navigationButtonsOwned || drawingNavigationButton) return -1;
         return fadeButtonGlass != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
                 ? fadeButtonGlass.beginChild(canvas, child, localCanvas) : -1;
     }
@@ -341,6 +442,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     }
 
     void drawPlainButtonCircle(Canvas canvas, View host, float cx, float cy) {
+        if (navigationButtonsOwned || drawingNavigationButton) return;
         if ((!plainBackCircle && !materialActivityHeader) || nonIsland && !materialActivityHeader) {
             return;
         }
@@ -551,6 +653,9 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
     @Override
     protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
+        if (navigationButtonsOwned && child == backButtonImageView) return true;
+        if (navigationButtonsOwned && !isSearchFieldVisible && child == navigationButtonOverlay && hasNavigationButtonOverlay()) return true;
+        if (ownsChatNavigationTitle() && isChatNavigationTitleChild(child)) return true;
         if (!externalHeaderTitleVisible && isExternalHeaderTitleChild(child)) return true;
         if (parentFragment != null && parentFragment.getParentLayout() != null && parentFragment.getParentLayout().isActionBarInCrossfade()) {
             return false;
@@ -2028,6 +2133,16 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
                     childLeft = lp.leftMargin;
             }
 
+            if (child == navigationButtonOverlay && hasPlainButtonCircles() && !isSearchFieldVisible
+                    && navigationButtonOverlayAnchor != null) {
+                float center = navigationButtonOverlayAnchor.getX() + navigationButtonOverlayAnchor.getWidth() / 2f;
+                View ancestor = navigationButtonOverlayAnchor;
+                while (ancestor.getParent() instanceof View && ancestor.getParent() != this) {
+                    ancestor = (View) ancestor.getParent();
+                    center += ancestor.getX();
+                }
+                childLeft = Math.round(center - width / 2f);
+            }
             switch (verticalGravity) {
                 case Gravity.CENTER_VERTICAL:
                     childTop = (bottom - top - height) / 2 + lp.topMargin - lp.bottomMargin;
@@ -2854,7 +2969,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     }
 
     public boolean prepareLiquidGlassHeader(BlurredBackgroundDrawable[] members, LiquidTouchEffect[] effects) {
-        if (materialActivityHeader || externalHeaderFade || !glassMode || nonIsland || glassOnlyBack || plainBackCircle
+        if (navigationButtonsOwned || materialActivityHeader || externalHeaderFade || !glassMode || nonIsland || glassOnlyBack || plainBackCircle
                 || liquidAvatar == null || actionModeVisible || searchFactor > 0f
                 || glassDrawable == null || glassDrawableBack == null) return false;
         prepareLiquidGlassSurfaces();
@@ -2955,42 +3070,25 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
     @Override
     protected void dispatchDraw(Canvas canvas) {
+        if (canvas.isHardwareAccelerated() && !org.telegram.ui.Components.IosPopupMorph.isCapturingBackdrop()
+                && !org.telegram.ui.Components.SizeNotifierFrameLayout.drawingBlur
+                && parentFragment != null && parentFragment.getParentLayout() instanceof ActionBarLayout) {
+            ((ActionBarLayout) parentFragment.getParentLayout()).registerNavigationHeaderBar(this);
+        }
         prepareLiquidGlassSurfaces();
         final int p = dp(6), s = dp(46);
         final int left = liquidGlassLeft, right = liquidGlassRight;
         final int t = liquidGlassTop, b = liquidGlassBottom;
         final int menuWidth = liquidGlassMenuWidth;
         final boolean hasBackButton = liquidGlassHasBack;
-        if (!materialActivityHeader && fadeButtonGlass != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        if (!navigationButtonsOwned && !materialActivityHeader && fadeButtonGlass != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             fadeButtonGlass.drawToolbar(canvas, this, dp(35), (t + b) / 2f);
         }
 
-        if (!materialActivityHeader && !externalHeaderFade && glassDrawable != null && !glassOnlyBack && drawGlassTitle && !m3ChatHeader && !liquidGlassGroupDrawn) {
-            if (nonIsland) {
-                glassDrawable.setBounds(0, 0, getWidth(), getHeight());
-            } else {
-                glassDrawable.setBounds(left, t, right, b);
-            }
-            // Fade the centered chat pill out while searching (searchFactor is
-            // animated 0->1 with ease-out over ~0.3s) and restore it on exit.
-            // Back/menu glass stays visible.
-            if (chatAvatarContainer != null && !nonIsland && searchFactor > 0f) {
-                glassDrawable.setAlpha((int) (255 * (1f - searchFactor)));
-            } else {
-                glassDrawable.setAlpha(255);
-            }
-            int save = beginLiquid(canvas, liquidTitle);
-            LiquidTouchEffect.updateBackground(glassDrawable, liquidTitleTouchAllowed() ? liquidTitle : null, 0f, 0f);
-            glassDrawable.draw(canvas);
-            if (liquidTitleTouchAllowed()) {
-                int glowSave = canvas.save();
-                canvas.clipPath(glassDrawable.getPath());
-                liquidTitle.drawHighlight(canvas, dp(23), dp(6));
-                canvas.restoreToCount(glowSave);
-            }
-            if (save != -1) canvas.restoreToCount(save);
+        if (!liquidGlassGroupDrawn && (nonIsland || !ownsChatNavigationTitle())) {
+            drawTitleSurface(canvas);
         }
-        if (!materialActivityHeader && !externalHeaderFade && glassDrawableBack != null && hasBackButton && !nonIsland && !liquidGlassGroupDrawn) {
+        if (!navigationButtonsOwned && !materialActivityHeader && !externalHeaderFade && glassDrawableBack != null && hasBackButton && !nonIsland && !liquidGlassGroupDrawn) {
             glassDrawableBack.setBounds(0, t, s + p * 2, b);
             int save = beginLiquid(canvas, liquidBack);
             LiquidTouchEffect.updateBackground(glassDrawableBack, liquidTouchAllowed() ? liquidBack : null, 0f, 0f);
@@ -2998,13 +3096,13 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             if (liquidTouchAllowed()) liquidBack.drawHighlight(canvas, dp(23), dp(6));
             if (save != -1) canvas.restoreToCount(save);
         }
-        if (plainBackCircle && hasBackButton && !nonIsland) {
+        if (!navigationButtonsOwned && plainBackCircle && hasBackButton && !nonIsland) {
             int save = beginLiquid(canvas, liquidBack);
             drawPlainButtonCircle(canvas, dp(materialActivityHeader ? 44 : 35), (t + b) / 2f);
             if (liquidTouchAllowed()) liquidBack.drawHighlight(canvas, dp(23), dp(6));
             if (save != -1) canvas.restoreToCount(save);
         }
-        if (!materialActivityHeader && !externalHeaderFade && glassDrawableMenu != null && menuWidth > 0 && !nonIsland && !glassOnlyBack && !doNotDrawGlassMenu && !avatarRightBigger && !liquidGlassGroupDrawn) {
+        if (!navigationButtonsOwned && !materialActivityHeader && !externalHeaderFade && glassDrawableMenu != null && menuWidth > 0 && !nonIsland && !glassOnlyBack && !doNotDrawGlassMenu && !avatarRightBigger && !liquidGlassGroupDrawn) {
             glassDrawableMenu.setBounds(getWidth() - Math.max(s, menuWidth) - p * 2, t, getWidth(), b);
             glassDrawableMenu.setAlpha(hasForcedMenuWidth ? 255 : (int) (255 * animatorHasMenuItems.getFloatValue()));
             boolean liquidSelection = actionModeVisible && actionMode != null && liquidTouchAllowed();
@@ -3039,6 +3137,24 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         }
 
         super.dispatchDraw(canvas);
+    }
+
+    private void drawTitleSurface(Canvas canvas) {
+        if (materialActivityHeader || externalHeaderFade || glassDrawable == null || glassOnlyBack || !drawGlassTitle || m3ChatHeader) {
+            return;
+        }
+        glassDrawable.setAlpha(chatAvatarContainer != null && !nonIsland
+                ? (int) (255 * (1f - searchFactor)) : 255);
+        int save = beginLiquid(canvas, liquidTitle);
+        LiquidTouchEffect.updateBackground(glassDrawable, liquidTitleTouchAllowed() ? liquidTitle : null, 0f, 0f);
+        glassDrawable.draw(canvas);
+        if (liquidTitleTouchAllowed()) {
+            int glowSave = canvas.save();
+            canvas.clipPath(glassDrawable.getPath());
+            liquidTitle.drawHighlight(canvas, dp(23), dp(6));
+            canvas.restoreToCount(glowSave);
+        }
+        if (save != -1) canvas.restoreToCount(save);
     }
 
     public void setForceSkipTouches(boolean forceSkipTouches) {

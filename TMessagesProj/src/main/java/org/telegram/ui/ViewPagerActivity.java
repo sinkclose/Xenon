@@ -183,6 +183,18 @@ public abstract class ViewPagerActivity extends BaseFragment {
         return state != null ? state.fragment : null;
     }
 
+    public void collectNavigationHeaderFragments(ArrayList<BaseFragment> into) {
+        for (int i = 0; i < fragmentsArr.size(); i++) {
+            FragmentState state = fragmentsArr.valueAt(i);
+            if (state != null) into.add(state.fragment);
+        }
+    }
+
+    public BaseFragment getNavigationHeaderFragment() {
+        FragmentState state = viewPager == null ? null : fragmentsArr.get(viewPager.getTransitionTargetPosition());
+        return state == null ? getCurrentVisibleFragment() : state.fragment;
+    }
+
     @Override
     public void clearViews() {
         if (viewPager != null) {

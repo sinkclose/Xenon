@@ -87,6 +87,8 @@ public class ActionBarMenu extends LinearLayout implements LiquidTouchDispatcher
 
     @Override
     protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
+        if (!isActionMode && parentActionBar != null && parentActionBar.areNavigationButtonsOwned()
+                && child instanceof ActionBarMenuItem) return true;
         // All toolbar icons share the pill's transform. The weighted selection
         // count/title child and the status-bar padding stay outside that surface.
         int save = child instanceof ActionBarMenuItem && liquidTouchAllowed()
@@ -697,6 +699,26 @@ public class ActionBarMenu extends LinearLayout implements LiquidTouchDispatcher
         this.onLayoutListener = listener;
     }
 
+    public void drawPopupSourceButton(Canvas canvas, View button) {
+        if (parentActionBar != null) parentActionBar.drawNavigationButton(canvas, button);
+        else button.draw(canvas);
+    }
+
+    public java.util.List<View> getPopupSourceButtons(View anchor) {
+        java.util.ArrayList<View> buttons = new java.util.ArrayList<>();
+        buttons.add(anchor);
+        boolean sharedHeader = glassMode || parentActionBar != null && parentActionBar.hasPlainButtonCircles();
+        if (!sharedHeader || searchFieldVisible()) return buttons;
+        for (int i = 0; i < getChildCount(); i++) {
+            View button = getChildAt(i);
+            if (button == anchor || !(button instanceof ActionBarMenuItem)
+                    || button.getVisibility() != VISIBLE || button.getAlpha() == 0 || button.getWidth() <= 0) continue;
+            int gap = Math.max(button.getLeft(), anchor.getLeft()) - Math.min(button.getRight(), anchor.getRight());
+            if (gap <= dp(16) && Math.abs(button.getTop() - anchor.getTop()) <= dp(2)) buttons.add(button);
+        }
+        return buttons;
+    }
+
     public void setGlassMode(boolean glassMode) {
         if (this.glassMode == glassMode) return;
         this.glassMode = glassMode;
@@ -719,8 +741,10 @@ public class ActionBarMenu extends LinearLayout implements LiquidTouchDispatcher
                             if (!plainCircleMargins.containsKey(view)) {
                                 plainCircleMargins.put(view, new int[]{mlp.leftMargin, mlp.rightMargin});
                             }
-                            // 46dp circles: 12dp gaps, matching their distance from the screen edge.
-                            int space = dp(58) - mlp.width;
+                            // Glasmio members are 44dp wide with an 8dp gap inside the shared shell.
+                            int space = dp(android.os.Build.VERSION.SDK_INT >= 31
+                                    && !parentActionBar.isChatHeader()
+                                    && org.telegram.ui.Components.NavigationHeaderButtons.modeEnabled() ? 52 : 58) - mlp.width;
                             mlp.leftMargin = space / 2;
                             mlp.rightMargin = space - mlp.leftMargin;
                         } else {

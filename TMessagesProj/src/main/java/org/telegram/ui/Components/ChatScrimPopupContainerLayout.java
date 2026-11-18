@@ -3,6 +3,7 @@ package org.telegram.ui.Components;
 import static org.telegram.messenger.AndroidUtilities.dp;
 
 import android.content.Context;
+import android.graphics.Canvas;
 import android.util.Log;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -28,6 +29,29 @@ public class ChatScrimPopupContainerLayout extends LinearLayout {
         setOrientation(LinearLayout.VERTICAL);
         setClipChildren(false);
         setClipToPadding(false);
+    }
+
+    @Override
+    protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
+        if (child instanceof ActionBarPopupWindow.ActionBarPopupWindowLayout
+                && ((ActionBarPopupWindow.ActionBarPopupWindowLayout) child).hasIosMessageSurface()) {
+            // The spring grows past the row layout on the left and bottom. Replaying
+            // that View's cached display list clips it to its resting RenderNode bounds.
+            // Record the surface directly into the preview's unbounded overlay instead.
+            int saved = canvas.save();
+            try {
+                canvas.translate(child.getLeft() - getScrollX(), child.getTop() - getScrollY());
+                canvas.concat(child.getMatrix());
+                if (child.getAlpha() < 1f) {
+                    canvas.saveLayerAlpha(null, Math.round(255 * child.getAlpha()));
+                }
+                child.draw(canvas);
+            } finally {
+                canvas.restoreToCount(saved);
+            }
+            return true;
+        }
+        return super.drawChild(canvas, child, drawingTime);
     }
 
     @Override

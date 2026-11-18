@@ -847,6 +847,11 @@ public class SimpleTextView extends View implements Drawable.Callback {
         if (layout == null || layout.getLineCount() == 0) {
             return getMeasuredWidth() / 2f;
         }
+        return getTextOffsetX() + textWidth / 2f;
+    }
+
+    public float getTextOffsetX() {
+        if (layout == null || layout.getLineCount() == 0) return getPaddingLeft();
         int textOffsetX = 0;
         if ((gravity & Gravity.HORIZONTAL_GRAVITY_MASK) == Gravity.LEFT) {
             if (leftDrawable != null) {
@@ -856,7 +861,7 @@ public class SimpleTextView extends View implements Drawable.Callback {
                 textOffsetX += drawablePadding + replacedDrawable.getIntrinsicWidth();
             }
         }
-        return offsetX + textOffsetX + layout.getLineLeft(0) + textWidth / 2f;
+        return offsetX + textOffsetX + layout.getLineLeft(0);
     }
 
     public TextPaint getTextPaint() {
@@ -868,6 +873,10 @@ public class SimpleTextView extends View implements Drawable.Callback {
             return 0;
         }
         return (int) getY();
+    }
+
+    public int getTextOffsetY() {
+        return offsetY;
     }
 
     public void setRightPadding(int padding) {

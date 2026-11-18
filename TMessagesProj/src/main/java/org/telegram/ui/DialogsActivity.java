@@ -9617,6 +9617,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 presentFragmentAsPreview(previewActivity[0] = dialogsActivity);
             } else {
                 presentFragmentAsPreviewWithMenu(previewActivity[0] = dialogsActivity, previewMenu[0]);
+                if (NekoConfig.iosPopups && blurredView != null) previewMenu[0].setIosMessageBackdrop(blurredView);
             }
         } else if (getMessagesController().checkCanOpenChat(args, DialogsActivity.this)) {
             if (searchString != null) {
@@ -9629,6 +9630,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 presentFragmentAsPreview(previewActivity[0] = chatActivity1);
             } else {
                 presentFragmentAsPreviewWithMenu(previewActivity[0] = chatActivity1, previewMenu[0]);
+                if (NekoConfig.iosPopups && blurredView != null) previewMenu[0].setIosMessageBackdrop(blurredView);
                 if (chatActivity1 != null) {
                     chatActivity1.allowExpandPreviewByClick = true;
                     try {

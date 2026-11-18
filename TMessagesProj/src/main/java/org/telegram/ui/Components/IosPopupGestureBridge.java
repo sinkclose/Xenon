@@ -15,9 +15,35 @@ final class IosPopupGestureBridge {
 
     IosPopupGestureBridge(View source, Handler handler) {
         source.cancelLongPress();
+        source.setPressed(false);
+        cancelLiquidPress(source);
         window = IosPopupOpener.findWindow(source);
         callback = window == null || window.getCallback() == null ? null : new Callback(window.getCallback(), source, handler);
         if (callback != null) window.setCallback(callback);
+    }
+
+    private static void cancelLiquidPress(View source) {
+        long now = android.os.SystemClock.uptimeMillis();
+        MotionEvent cancel = MotionEvent.obtain(now, now, MotionEvent.ACTION_CANCEL, 0, 0, 0);
+        try {
+            for (View view = source; view != null;
+                 view = view.getParent() instanceof View ? (View) view.getParent() : null) {
+                view.setPressed(false);
+                view.cancelLongPress();
+                if (view instanceof org.telegram.ui.MainTabsLayout) {
+                    ((org.telegram.ui.MainTabsLayout) view).releaseLiquidPressForPopup();
+                }
+                if (view instanceof LiquidTouchDispatcher.Target) {
+                    ((LiquidTouchDispatcher.Target) view).observeLiquidTouch(cancel);
+                }
+            }
+            // Clear the source's press without cancelling ancestors' touch routing.
+            // The bridge continues the original pointer in window coordinates.
+            if (source instanceof org.telegram.ui.MainTabsLayout) source.onTouchEvent(cancel);
+            else source.dispatchTouchEvent(cancel);
+        } finally {
+            cancel.recycle();
+        }
     }
 
     void release() {

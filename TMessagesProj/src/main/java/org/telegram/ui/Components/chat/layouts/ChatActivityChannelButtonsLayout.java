@@ -148,6 +148,7 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
             ((View) getParent().getParent()).invalidate();
     }
     private final LiquidPressAnimationSuppressor liquidPressAnimations = new LiquidPressAnimationSuppressor();
+    private final LiquidPressAnimationSuppressor centerPressAnimations = new LiquidPressAnimationSuppressor();
 
     public void setLiquidTouchEnabled(boolean enabled) {
         if (liquidTouchEnabled == enabled) return;
@@ -185,6 +186,7 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
 
     @Override
     public void observeLiquidTouch(MotionEvent event) {
+        centerPressAnimations.sync(container, true);
         boolean enabled = liquidTouchAllowed();
         liquidPressAnimations.sync(this, enabled);
         for (ButtonHolder holder : buttonHolders) {
@@ -215,6 +217,7 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
             if (holder != null && holder.liquid != null) holder.liquid.reset();
         }
         centerLiquid = null;
+        centerPressAnimations.restore();
         liquidPressAnimations.restore();
         super.onDetachedFromWindow();
     }
@@ -668,6 +671,7 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
 
     @Override
     protected boolean drawChild(@NonNull Canvas canvas, View child, long drawingTime) {
+        centerPressAnimations.sync(container, true);
         liquidPressAnimations.sync(this, liquidTouchAllowed());
         LiquidTouchEffect sideLiquid = null;
         for (ButtonHolder holder : buttonHolders) {

@@ -653,9 +653,8 @@ public class NekoConfig {
             }
             disableScrimBlur = preferences.getBoolean("disableScrimBlur", false);
             iosBottomBar = preferences.getBoolean("iosBottomBar", false);
-            // The experimental iOS popup switch is temporarily hidden; keep its implementation.
-            iosPopups = false;
-            material3Popups = preferences.getBoolean("material3Popups", false);
+            iosPopups = preferences.getBoolean("iosPopups", false);
+            material3Popups = preferences.getBoolean("material3Popups", false) && !iosPopups;
             material3BottomNavigationBar = preferences.getBoolean("material3BottomNavigationBar", false) && !iosBottomBar;
             md3Folders = preferences.getBoolean("md3Folders", false);
             avatarShape = preferences.getInt("avatarShape", 0);
@@ -1029,14 +1028,16 @@ public class NekoConfig {
 
     public static void toggleMaterial3Popups() {
         material3Popups = !material3Popups;
+        if (material3Popups) iosPopups = false;
         ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
-                .edit().putBoolean("material3Popups", material3Popups).apply();
+                .edit().putBoolean("material3Popups", material3Popups).putBoolean("iosPopups", iosPopups).apply();
     }
 
     public static void toggleIosPopups() {
         iosPopups = !iosPopups;
+        if (iosPopups) material3Popups = false;
         ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE)
-                .edit().putBoolean("iosPopups", iosPopups).apply();
+                .edit().putBoolean("iosPopups", iosPopups).putBoolean("material3Popups", material3Popups).apply();
     }
 
     public static void toggleCenterChatHeader() {

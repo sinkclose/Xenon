@@ -89,6 +89,7 @@ import org.telegram.ui.Components.FloatingDebug.FloatingDebugProvider;
 import org.telegram.ui.Components.GroupCallPip;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.LaunchActivity;
+import org.telegram.ui.ProfileActivity;
 import org.telegram.ui.Stories.StoryViewer;
 
 import java.util.ArrayList;
@@ -104,6 +105,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
 
     public boolean highlightActionButtons = false;
     private boolean attached;
+    private org.telegram.ui.Components.NavigationHeaderButtons navigationHeaderButtons;
     private boolean isSheet;
     private Window window;
 
@@ -1194,6 +1196,25 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
 
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
+        Canvas destination = canvas;
+        ProfileActivity returningProfile = null;
+        if (Build.VERSION.SDK_INT >= 31 && canvas.isHardwareAccelerated()
+                && !org.telegram.ui.Components.IosPopupMorph.isCapturingBackdrop()
+                && !org.telegram.ui.Components.SizeNotifierFrameLayout.drawingBlur) {
+            if (navigationHeaderButtons == null && org.telegram.ui.Components.NavigationHeaderButtons.modeEnabled()) {
+                navigationHeaderButtons = new org.telegram.ui.Components.NavigationHeaderButtons(this);
+            }
+            if (navigationHeaderButtons != null) {
+                canvas = navigationHeaderButtons.begin(canvas,
+                        !isSheet && !inPreviewMode && !transitionAnimationPreviewMode && !previewOpenAnimationInProgress
+                                && !hasNavigationHeaderSheet());
+            }
+            if (onCloseAnimationEndRunnable != null && oldFragment instanceof ProfileActivity) {
+                returningProfile = (ProfileActivity) oldFragment;
+                BaseFragment destinationFragment = canvas != destination ? getNavigationHeaderFragment() : null;
+                returningProfile.setNavigationReturningAvatarBar(destinationFragment == null ? null : destinationFragment.getActionBar());
+            }
+        }
         boolean legacyTransition = m3PredictiveActive
                 ? NavigationTransition.usesBlackSurface(NekoConfig.predictiveBackAnimationStyle)
                 : transitionAnimationInProgress && !transitionAnimationPreviewMode
@@ -1217,6 +1238,10 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
         super.dispatchDraw(canvas);
         if (isLayersLayout) {
             canvas.restore();
+        }
+        if (canvas != destination) {
+            navigationHeaderButtons.end(destination);
+            if (returningProfile != null) returningProfile.drawNavigationReturningAvatar(destination, this);
         }
     }
 
@@ -1420,6 +1445,12 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                 }
             }
             canvas.restore();
+        }
+    }
+
+    public void setPreviewMenuBackdrop(View backdrop) {
+        if (previewMenu != null && NekoConfig.iosPopups) {
+            previewMenu.setIosMessageBackdrop(backdrop);
         }
     }
 
@@ -1955,6 +1986,26 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
         return lastFragment;
     }
 
+    public BaseFragment getNavigationHeaderFragment() {
+        BaseFragment fragment = getLastFragment();
+        if (fragmentsStack.size() > 1 && (onCloseAnimationEndRunnable != null || startedTracking
+                || m3PredictiveActive || predictiveBackInProgress)) {
+            fragment = fragmentsStack.get(fragmentsStack.size() - 2);
+        }
+        return fragment instanceof MainTabsActivity
+                ? ((MainTabsActivity) fragment).getNavigationHeaderFragment() : fragment;
+    }
+
+    public void registerNavigationHeaderBar(ActionBar bar) {
+        if (Build.VERSION.SDK_INT >= 31 && navigationHeaderButtons != null) navigationHeaderButtons.register(bar);
+    }
+
+    private boolean hasNavigationHeaderSheet() {
+        BaseFragment last = getLastFragment();
+        return sheetFragment != null && sheetFragment.getLastSheet() != null && sheetFragment.getLastSheet().attachedToParent()
+                || last != null && last.getLastSheet() != null && last.getLastSheet().attachedToParent();
+    }
+
     public void cancelAndResetAnimations() {
         if (m3PredictiveCallbackCancelRunnable != null) {
             try {
@@ -2210,13 +2261,13 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                         containerView.setAlpha(clampedInterpolated);
                     }
                     if (preview) {
-                        containerView.setScaleX(0.7f + 0.3f * interpolated);
-                        containerView.setScaleY(0.7f + 0.3f * interpolated);
+                        containerView.setScaleX(previewMenu != null && NekoConfig.iosPopups ? 1f : 0.7f + 0.3f * interpolated);
+                        containerView.setScaleY(previewMenu != null && NekoConfig.iosPopups ? 1f : 0.7f + 0.3f * interpolated);
                         if (previewMenu != null) {
-                            containerView.setTranslationY(dp(40) * (1f - interpolated));
-                            previewMenu.setTranslationY(-dp(40 + 30) * (1f - interpolated));
-                            previewMenu.setScaleX(0.95f + 0.05f * interpolated);
-                            previewMenu.setScaleY(0.95f + 0.05f * interpolated);
+                            containerView.setTranslationY(NekoConfig.iosPopups ? 0f : dp(40) * (1f - interpolated));
+                            previewMenu.setTranslationY(NekoConfig.iosPopups ? 0f : -dp(40 + 30) * (1f - interpolated));
+                            previewMenu.setScaleX(NekoConfig.iosPopups ? 1f : 0.95f + 0.05f * interpolated);
+                            previewMenu.setScaleY(NekoConfig.iosPopups ? 1f : 0.95f + 0.05f * interpolated);
                         }
                         previewBackgroundDrawable.setAlpha((int) (0x2e * clampedInterpolated));
                         Theme.moveUpDrawable.setAlpha((int) (255 * clampedInterpolated));
@@ -2386,12 +2437,18 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
         containerViewBack.setDrawNavigationBar(!preview && drawNavigationBar);
         int menuHeight = 0;
         if (menu != null) {
+            if (NekoConfig.iosPopups) menu.enableIosMessageSurface(this, new android.graphics.RectF());
+            containerViewBack.setClipChildren(false);
             containerViewBack.addView(menu);
             menu.measure(MeasureSpec.makeMeasureSpec(getMeasuredWidth(), MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(getMeasuredHeight(), MeasureSpec.AT_MOST));
             menuHeight = menu.getMeasuredHeight() + dp(24);
             FrameLayout.LayoutParams menuParams = (FrameLayout.LayoutParams) menu.getLayoutParams();
             menuParams.width = LayoutHelper.WRAP_CONTENT;
             menuParams.height = LayoutHelper.WRAP_CONTENT;
+            if (NekoConfig.iosPopups) {
+                menuParams.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+                menuParams.leftMargin = menuParams.rightMargin = dp(8);
+            }
             menuParams.topMargin = (getMeasuredHeight() - AndroidUtilities.navigationBarHeight)  - menuHeight - dp(6);
             menu.setLayoutParams(menuParams);
         }
@@ -3823,6 +3880,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         attached = false;
+        if (Build.VERSION.SDK_INT >= 31 && navigationHeaderButtons != null) navigationHeaderButtons.release();
     }
 
     public int measureKeyboardHeight() {
@@ -3863,6 +3921,9 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
         if (ev.getAction() == MotionEvent.ACTION_UP || ev.getAction() == MotionEvent.ACTION_CANCEL) {
             tabsEvents = false;
         }
+        if (Build.VERSION.SDK_INT >= 31 && navigationHeaderButtons != null
+                && navigationHeaderButtons.dispatchTouchEvent(ev, animationInProgress || transitionAnimationInProgress
+                || m3PredictiveActive || predictiveBackInProgress || inPreviewMode || transitionAnimationPreviewMode)) return true;
         return super.dispatchTouchEvent(ev);
     }
 

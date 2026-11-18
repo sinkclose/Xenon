@@ -193,7 +193,8 @@ public class UnreadCounterTextView extends View {
             paint.setColor(counterColor = color);
         }
 
-        if (getParent() != null) {
+        if (getParent() != null && !(getParent().getParent() instanceof
+                org.telegram.ui.Components.chat.layouts.ChatActivityChannelButtonsLayout)) {
             int contentWidth = getMeasuredWidth();
             int x = (getMeasuredWidth() - contentWidth) / 2;
             if (rippleColor != Theme.getColor(textColorKey, getResourceProvider()) || selectableBackground == null) {

@@ -217,6 +217,9 @@ public class BackButtonMenu {
         if (!hadDialogs) return null;
 
         ActionBarPopupWindow scrimPopupWindow = new ActionBarPopupWindow(layout, LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT);
+        if (thisFragment instanceof ChatActivity && thisFragment.getActionBar().areNavigationButtonsOwned()) {
+            scrimPopupWindow.setAnimationSource(backButton);
+        }
         scrimPopupWindowRef.set(scrimPopupWindow);
         scrimPopupWindow.setPauseNotifications(true);
         scrimPopupWindow.setDismissAnimationDuration(220);

@@ -20,10 +20,13 @@ final class IosPopupInteraction {
     private final View root;
     private final Runnable invalidate;
     private View selected;
-    private float downY, pull;
+    private float downY, downX, pull;
+    private float press, offsetX, offsetY;
+    private final SpringAnimation[] flex = new SpringAnimation[3];
     private boolean tracking;
     private final SpringAnimation deformation;
     private final IosPopupFeedback feedback;
+    private final boolean allowDeformation;
     private float pivotX = .5f, pivotY = .5f;
     private float lastX, lastY;
     private ScrollView scrolling;
@@ -44,13 +47,52 @@ final class IosPopupInteraction {
     }
 
     IosPopupInteraction(View root, Runnable invalidate, boolean drawFeedback) {
+        this(root, invalidate, drawFeedback, true);
+    }
+
+    IosPopupInteraction(View root, Runnable invalidate, boolean drawFeedback, boolean allowDeformation) {
+        this.allowDeformation = allowDeformation;
         this.root = root;
         this.invalidate = invalidate;
         feedback = drawFeedback ? new IosPopupFeedback(root, invalidate) : null;
+        for (int i=0;i<flex.length;i++) {
+            final int index=i;
+            flex[i]=new SpringAnimation(new FloatValueHolder());
+            flex[i].setSpring(new SpringForce(0).setDampingRatio(.5f).setStiffness(300f));
+            flex[i].setMinimumVisibleChange(i==0?.001f:.01f);
+            flex[i].addUpdateListener((a,value,velocity)-> {
+                if(index==0) press=value; else if(index==1) offsetX=value; else offsetY=value;
+                invalidate.run();
+            });
+        }
         deformation = new SpringAnimation(new FloatValueHolder());
         deformation.setSpring(new SpringForce(0).setDampingRatio(.85f).setStiffness(400f));
         deformation.setMinimumVisibleChange(.1f);
         deformation.addUpdateListener((a, value, velocity) -> { pull = value; invalidate.run(); });
+    }
+
+    // Glasmio GlassSurface.applyGlassDragScale; both axes expand, with bounded translation.
+    float scale(float width,float height,boolean horizontal) {
+        if (!allowDeformation) return 1f;
+        float controlHeight=Math.max(1,height), maximum=Math.max(1,Math.max(width,height));
+        float lift=AndroidUtilities.dp(4)/controlHeight;
+        float angle=(float)Math.atan2(offsetY,offsetX);
+        float drag=horizontal ? Math.abs((float)Math.cos(angle)*offsetX/maximum)*Math.min(width/controlHeight,1)
+                : Math.abs((float)Math.sin(angle)*offsetY/maximum)*Math.min(controlHeight/Math.max(1,width),1);
+        return 1+lift*Math.max(0,Math.min(1,press))+lift*drag;
+    }
+    private float translation(float width,float height,boolean horizontal) {
+        if (!allowDeformation) return 0f;
+        float limit=Math.max(1,Math.min(width,height));
+        return limit*(float)Math.tanh(.05f*(horizontal?offsetX:offsetY)/limit);
+    }
+    void transform(Canvas canvas,android.graphics.RectF bounds) {
+        canvas.translate(translation(bounds.width(),bounds.height(),true),translation(bounds.width(),bounds.height(),false));
+        canvas.scale(scale(bounds.width(),bounds.height(),true),scale(bounds.width(),bounds.height(),false),bounds.centerX(),bounds.centerY());
+    }
+    float untransform(float value,android.graphics.RectF bounds,boolean horizontal) {
+        float center=horizontal?bounds.centerX():bounds.centerY();
+        return center+(value-center-translation(bounds.width(),bounds.height(),horizontal))/scale(bounds.width(),bounds.height(),horizontal);
     }
 
     float pull() { return pull; }
@@ -77,7 +119,12 @@ final class IosPopupInteraction {
             if (action != MotionEvent.ACTION_DOWN && !(forwarded && action == MotionEvent.ACTION_MOVE)) return forwarded;
             if (hit == null && !forwarded) return false;
             tracking = true;
-            downY = event.getRawY();
+            downY = event.getRawY(); downX = event.getRawX();
+            if(feedback!=null && allowDeformation) {
+                flex[0].animateToFinalPosition(1);
+                for(int i=1;i<3;i++) { flex[i].cancel(); flex[i].setStartValue(0); }
+                offsetX=offsetY=0;
+            }
             // The pivot belongs to the inner glass bounds, excluding legacy shadow padding.
             pivotX = Math.max(0, Math.min(1, (x - root.getPaddingLeft())
                     / Math.max(1, root.getWidth() - root.getPaddingLeft() - root.getPaddingRight())));
@@ -85,9 +132,11 @@ final class IosPopupInteraction {
                     / Math.max(1, root.getHeight() - root.getPaddingTop() - root.getPaddingBottom())));
         }
         if (feedback != null) feedback.touch(event, x, y, starting);
-        if (action == MotionEvent.ACTION_MOVE) {
-            deformation.animateToFinalPosition(IosPopupMorphGeometry.dragOffset(event.getRawY() - downY,
+        if (action == MotionEvent.ACTION_MOVE && allowDeformation) {
+            if(feedback==null) deformation.animateToFinalPosition(IosPopupMorphGeometry.dragOffset(event.getRawY() - downY,
                     Math.min(AndroidUtilities.dp(36), root.getHeight() * .14f)));
+            else { offsetX=event.getRawX()-downX; offsetY=event.getRawY()-downY;
+                flex[1].cancel(); flex[1].setStartValue(offsetX); flex[2].cancel(); flex[2].setStartValue(offsetY); }
             invalidate.run();
         }
         select(hit);
@@ -111,6 +160,7 @@ final class IosPopupInteraction {
         root.removeCallbacks(scrollFrame);
         select(null);
         deformation.animateToFinalPosition(0);
+        for(SpringAnimation channel:flex) channel.animateToFinalPosition(0);
         if (click && item != null && item.isEnabled() && item.isAttachedToWindow()) item.performClick();
     }
 
@@ -118,6 +168,7 @@ final class IosPopupInteraction {
         tracking = false;
         root.removeCallbacks(scrollFrame);
         select(null);
+        for(SpringAnimation channel:flex) channel.cancel();
         deformation.cancel();
         deformation.setStartValue(0);
         if (feedback != null) feedback.release();

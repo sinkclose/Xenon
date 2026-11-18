@@ -4581,7 +4581,7 @@ if (feedIntegration != null) {
                     });
                     chatListView.stopScroll();
                     chatLayoutManager.setCanScrollVertically(false);
-                    dimBehindView(backButton, 0.3f);
+                    dimBehindView(actionBar.areNavigationButtonsOwned() ? null : backButton, 0.3f);
                     hideHints(false);
                     if (topUndoView != null) {
                         topUndoView.hide(true, 1);
@@ -5085,6 +5085,7 @@ if (feedIntegration != null) {
         }
 
         if (headerItem != null) {
+            headerItem.setNavigationIconResource(R.drawable.ic_ab_other);
             headerItem.setBlurredBackgroundFactory(scrimBlur3Factory, BlurredBackgroundProviderImpl.messageMenuBackground(resourceProvider));
         }
 

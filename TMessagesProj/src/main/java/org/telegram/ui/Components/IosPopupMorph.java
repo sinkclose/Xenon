@@ -1,19 +1,12 @@
 package org.telegram.ui.Components;
 
-import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
-import android.animation.AnimatorSet;
 import android.animation.ValueAnimator;
 import android.graphics.Canvas;
-import android.graphics.Outline;
 import android.graphics.Paint;
-import android.graphics.Path;
 import android.graphics.RectF;
-import android.graphics.RenderEffect;
-import android.graphics.RenderNode;
-import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
+import android.view.Choreographer;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -32,39 +25,54 @@ import java.util.Map;
 
 /** The popup's actual window content: one persistent glass surface and live, background-free rows. */
 public final class IosPopupMorph extends FrameLayout {
+    public interface Backdrop {
+        void drawPopupBackdrop(Canvas canvas);
+    }
+
     public final View content;
     private final View menuSurface;
     private final View host;
+    private final java.util.List<View> portalButtons;
+    private final RectF throughSource = new RectF();
+    private final boolean morphFromAnchor;
+    private final NavigationHeaderButtons.MenuSource headerSource;
     private final Runnable dismiss;
     private final ViewGroup.LayoutParams previousLayoutParams;
     private final IdentityHashMap<View, Drawable> backgrounds = new IdentityHashMap<>();
-    private final RectF source = new RectF(), target = new RectF(), lens = new RectF();
-    private final float[] geometry = new float[9], radii = new float[8];
-    private final Path clip = new Path();
+    private final RectF source = new RectF(), target = new RectF();
+    private final float[] geometry = new float[9];
+    private final GlasmioMenuMotion motion = new GlasmioMenuMotion();
     private final Paint fallbackPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final int tint;
     private final int[] windowLocation = new int[2];
     private final int[] surfaceLocation = new int[2];
-    private float sourceRadius, progress;
+    private long lastFrameNanos, closingStartedNanos;
+    private Runnable closeCompletion;
+    private final Choreographer.FrameCallback frameCallback = this::advanceFrame;
     private int menuWidth, menuHeight, targetScreenX, targetScreenY;
-    private boolean released, glassFailed, backgroundDirty = true;
+    private boolean released, glassFailed;
     private boolean translatingTouch;
+    private boolean backdropDirty = true;
+    private final ViewTreeObserver.OnPreDrawListener backdropListener = () -> {
+        backdropDirty = true;
+        invalidate();
+        return true;
+    };
     private Glass glass;
     private final IosPopupInteraction interaction;
     private final IosPopupGestureBridge gestureBridge;
-    private final float[] closingStart = new float[9];
     private boolean closing;
-    private float closingFrom, closingOpacity = 1, closingDragScale = 1, closingDragScaleX = 1, dragScale = 1, dragScaleX = 1;
-    private final ViewTreeObserver.OnPreDrawListener hostDrawListener = () -> {
-        backgroundDirty = true;
-        postInvalidateOnAnimation();
-        return true;
-    };
+    private float dragScale = 1, dragScaleX = 1;
+    public static boolean isCapturingBackdrop() {
+        return Build.VERSION.SDK_INT >= 33 && GlasmioPopupRenderer.isCapturing();
+    }
 
     public static boolean canAnimate(View anchor) {
         if (anchor == null || !anchor.isAttachedToWindow() || anchor.getWidth() <= 0 || anchor.getHeight() <= 0) return false;
         View root = anchor.getRootView();
-        return anchor.getWidth() < root.getWidth() * .9f && anchor.getHeight() < root.getHeight() * .65f;
+        return anchor != root && anchor.getWidth() <= root.getWidth()
+                && anchor.getHeight() < root.getHeight() * .65f
+                && (anchor.getWidth() < root.getWidth() * .9f || anchor.getHeight() <= AndroidUtilities.dp(96));
     }
 
     public IosPopupMorph(View content, View anchor, int x, int y, Runnable dismiss, RectF sourceBounds, View menuSurface) {
@@ -72,9 +80,24 @@ public final class IosPopupMorph extends FrameLayout {
         this.content = content;
         this.menuSurface = menuSurface != null ? menuSurface : content;
         this.host = anchor.getRootView();
-        interaction = new IosPopupInteraction(this.menuSurface, this::postInvalidateOnAnimation);
+        View gestureAnchor = anchor;
+        if (sourceBounds == null) anchor = selectionAnchor(anchor);
+        if (sourceBounds == null) {
+            View button = anchor;
+            while (button.getParent() instanceof View && !(button instanceof org.telegram.ui.ActionBar.ActionBarMenuItem)) {
+                button = (View) button.getParent();
+            }
+            if (button instanceof org.telegram.ui.ActionBar.ActionBarMenuItem) anchor = button;
+        }
+        headerSource = sourceBounds == null && Build.VERSION.SDK_INT >= 33 ? NavigationHeaderButtons.acquireMenuSource(anchor) : null;
+        morphFromAnchor = sourceBounds == null && (headerSource != null || canAnimate(anchor));
+        portalButtons = headerSource != null || sourceBounds != null || !morphFromAnchor ? java.util.Collections.emptyList()
+                : anchor.getParent() instanceof org.telegram.ui.ActionBar.ActionBarMenu
+                ? ((org.telegram.ui.ActionBar.ActionBarMenu) anchor.getParent()).getPopupSourceButtons(anchor)
+                : java.util.Collections.singletonList(anchor);
+        interaction = new IosPopupInteraction(this.menuSurface, this::postInvalidateOnAnimation, true, sourceBounds == null);
         this.dismiss = dismiss;
-        if (sourceBounds == null && canAnimate(anchor)) IosPopupOpener.install(anchor);
+        if (sourceBounds == null && canAnimate(gestureAnchor)) IosPopupOpener.install(gestureAnchor);
         previousLayoutParams = content.getLayoutParams();
         menuWidth = content.getMeasuredWidth();
         menuHeight = content.getMeasuredHeight();
@@ -83,14 +106,51 @@ public final class IosPopupMorph extends FrameLayout {
         int[] point = new int[2];
         anchor.getLocationOnScreen(point);
         source.set(point[0], point[1], point[0] + anchor.getWidth(), point[1] + anchor.getHeight());
-        if (sourceBounds != null) source.set(messageSourceCircle(sourceBounds));
-        sourceRadius = Math.min(source.width(), source.height()) / 2;
-        if (anchor.getBackground() != null) {
-            Outline outline = new Outline();
-            anchor.getBackground().getOutline(outline);
-            if (!outline.isEmpty() && outline.getRadius() > 0) sourceRadius = outline.getRadius();
+        if (sourceBounds != null) {
+            source.set(messageSourceCircle(sourceBounds));
+        } else if (anchor instanceof BackupImageView) {
+            android.graphics.RectF image = ((BackupImageView) anchor).getImageReceiver().getDrawRegion();
+            if (image != null && !image.isEmpty()) {
+                source.set(point[0]+image.left, point[1]+image.top, point[0]+image.right, point[1]+image.bottom);
+            }
         }
-        if (sourceBounds != null) sourceRadius = source.width() / 2;
+        if (sourceBounds == null && !(anchor instanceof BackupImageView)) {
+            android.graphics.Matrix matrix = new android.graphics.Matrix();
+            anchor.transformMatrixToGlobal(matrix);
+            float visualHeight = anchor instanceof AnimatedTextView
+                    ? Math.min(anchor.getHeight(), ((AnimatedTextView) anchor).getTextHeight() + AndroidUtilities.dp(6))
+                    : anchor.getHeight();
+            RectF visual = new RectF(0, (anchor.getHeight() - visualHeight) / 2,
+                    anchor.getWidth(), (anchor.getHeight() + visualHeight) / 2);
+            matrix.mapRect(visual);
+            int[] rootScreen = new int[2];
+            int[] rootWindow = new int[2];
+            anchor.getRootView().getLocationOnScreen(rootScreen);
+            anchor.getRootView().getLocationInWindow(rootWindow);
+            visual.offset(rootScreen[0] - rootWindow[0], rootScreen[1] - rootWindow[1]);
+            source.set(visual);
+        }
+        throughSource.set(source);
+        if (headerSource != null) {
+            targetScreenX += Math.round(headerSource.through.centerX() - throughSource.centerX());
+            targetScreenY += Math.round(headerSource.through.centerY() - throughSource.centerY());
+            source.set(headerSource.bounds);
+            throughSource.set(headerSource.through);
+        }
+        if (portalButtons.size() > 1) {
+            for (View button : portalButtons) {
+                button.getLocationOnScreen(point);
+                source.union(point[0], point[1], point[0] + button.getWidth(), point[1] + button.getHeight());
+            }
+        } else if (portalButtons.size() == 1 && !(anchor instanceof android.widget.TextView)
+                && !(anchor instanceof AnimatedTextView) && !(anchor instanceof org.telegram.ui.ActionBar.SimpleTextView)) {
+            float centerX = source.centerX();
+            float centerY = source.centerY();
+            float halfWidth = Math.min(AndroidUtilities.dp(22), source.width() * .5f);
+            float halfHeight = Math.min(AndroidUtilities.dp(22), source.height() * .5f);
+            source.set(centerX-halfWidth, centerY-halfHeight, centerX+halfWidth, centerY+halfHeight);
+            throughSource.set(source);
+        }
         tint = Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground);
         stripMenuSurfaces(content, content, backgrounds);
         if (this.menuSurface != content && this.menuSurface instanceof ActionBarPopupWindow.ActionBarPopupWindowLayout) {
@@ -104,8 +164,30 @@ public final class IosPopupMorph extends FrameLayout {
         setClipChildren(false);
         setClipToPadding(false);
         setWillNotDraw(false);
-        host.getViewTreeObserver().addOnPreDrawListener(hostDrawListener);
-        gestureBridge = new IosPopupGestureBridge(anchor, this::forwardTouch);
+        host.getViewTreeObserver().addOnPreDrawListener(backdropListener);
+        gestureBridge = new IosPopupGestureBridge(gestureAnchor, this::forwardTouch);
+    }
+
+    /** Selection menus originate at the current caption, like Glasmio's measured local anchor. */
+    private static View selectionAnchor(View view) {
+        View value = null;
+        if (view instanceof org.telegram.ui.Cells.TextSettingsCell) {
+            value = ((org.telegram.ui.Cells.TextSettingsCell) view).getValueTextView();
+        } else if (view instanceof org.telegram.ui.Cells.TextDetailSettingsCell) {
+            value = ((org.telegram.ui.Cells.TextDetailSettingsCell) view).getValueTextView();
+        } else if (view instanceof org.telegram.ui.Cells.TextCell) {
+            value = ((org.telegram.ui.Cells.TextCell) view).getValueTextView();
+        }
+        return value != null && value.isShown() && value.getWidth() > 0 ? value : view;
+    }
+
+    public static void prepareRows(View view) {
+        if(view instanceof org.telegram.ui.ActionBar.ActionBarMenuSubItem)
+            ((org.telegram.ui.ActionBar.ActionBarMenuSubItem)view).setIosPopupStyle(true);
+        if(view instanceof ViewGroup) {
+            ViewGroup group=(ViewGroup)view;
+            for(int i=0;i<group.getChildCount();i++) prepareRows(group.getChildAt(i));
+        }
     }
 
     private static void stripMenuSurfaces(View view, View root, IdentityHashMap<View, Drawable> backgrounds) {
@@ -160,60 +242,74 @@ public final class IosPopupMorph extends FrameLayout {
         getLocationOnScreen(windowLocation);
         int x = targetScreenX - windowLocation[0], y = targetScreenY - windowLocation[1];
         content.layout(x, y, x + menuWidth, y + menuHeight);
-        // The old nine-patch shadow padding is not part of the new glass surface.
-        target.set(x + content.getPaddingLeft(), y + content.getPaddingTop(),
-                x + menuWidth - content.getPaddingRight(), y + menuHeight - content.getPaddingBottom());
+        // iOS padding is real foreground padding; it is part of the physical glass bounds.
+        target.set(x,y,x+menuWidth,y+menuHeight);
     }
 
-    public AnimatorSet opening() {
-        return animateProgress(1, IosPopupMorphGeometry.OPEN_DURATION, null);
+    public void open() {
+        startMotion(true, null);
     }
 
-    public void setPredictiveBackProgress(float visible) {
-        if (released) return;
-        closing = false;
-        progress = Math.max(0, Math.min(1, visible));
+    public void close(Runnable onEnd) {
+        if (headerSource != null && motion.initialized) {
+            headerSource.updateBounds();
+            getLocationOnScreen(windowLocation);
+            RectF live = new RectF(headerSource.bounds);
+            RectF through = new RectF(headerSource.through);
+            live.offset(-windowLocation[0], -windowLocation[1]);
+            through.offset(-windowLocation[0], -windowLocation[1]);
+            motion.updateSource(live, through);
+        }
+        startMotion(false, onEnd);
+    }
+
+    private void startMotion(boolean expanded, Runnable onEnd) {
+        Choreographer.getInstance().removeFrameCallback(frameCallback);
+        closing = !expanded;
+        closingStartedNanos = closing ? System.nanoTime() : 0;
+        setAlpha(1);
+        closeCompletion = onEnd;
+        lastFrameNanos = System.nanoTime();
+        if (motion.initialized) motion.retarget(expanded);
+        if (closing && (!motion.initialized || Build.VERSION.SDK_INT >= 26 && !ValueAnimator.areAnimatorsEnabled())) {
+            finishMotion();
+            return;
+        }
         invalidate();
+        Choreographer.getInstance().postFrameCallback(frameCallback);
     }
 
-    public AnimatorSet closing(Runnable onEnd) {
-        closingOpacity = IosPopupMorphGeometry.surfaceOpacity(progress, false);
-        closing = true;
-        closingFrom = Math.max(.0001f, progress);
-        closingDragScale = dragScale;
-        closingDragScaleX = dragScaleX;
-        System.arraycopy(geometry, 0, closingStart, 0, geometry.length);
-        return animateProgress(0, IosPopupMorphGeometry.CLOSE_DURATION, onEnd);
-    }
-
-    private AnimatorSet animateProgress(float end, long duration, Runnable onEnd) {
-        ValueAnimator frames = ValueAnimator.ofFloat(progress, end);
-        frames.setDuration(Build.VERSION.SDK_INT >= 26 && !ValueAnimator.areAnimatorsEnabled() ? 0 : duration);
-        frames.setInterpolator(t -> t);
-        frames.addUpdateListener(a -> {
-            progress = (float) a.getAnimatedValue();
+    private void advanceFrame(long frameTimeNanos) {
+        if (released) return;
+        float seconds = Math.max(0, frameTimeNanos - lastFrameNanos) / 1_000_000_000f;
+        lastFrameNanos = frameTimeNanos;
+        boolean animate = Build.VERSION.SDK_INT < 26 || ValueAnimator.areAnimatorsEnabled();
+        boolean settled = motion.initialized && motion.advanceBy(animate ? seconds : 10);
+        if (closing) setAlpha(closingOpacity((frameTimeNanos - closingStartedNanos) / 1_000_000_000f));
+        if (closing && getAlpha() <= 0 || settled && !closing) {
+            finishMotion();
+        } else {
             invalidate();
-        });
-        AnimatorSet animation = new AnimatorSet();
-        animation.playTogether(frames);
-        animation.addListener(new AnimatorListenerAdapter() {
-            private boolean cancelled;
-            @Override public void onAnimationCancel(Animator a) { cancelled = true; }
-            @Override public void onAnimationEnd(Animator a) {
-                if (!cancelled) {
-                    progress = end;
-                    invalidate();
-                    if (onEnd != null) onEnd.run();
-                }
-            }
-        });
-        return animation;
+            Choreographer.getInstance().postFrameCallback(frameCallback);
+        }
+    }
+
+    private static float closingOpacity(float seconds) {
+        float t = Math.max(0, Math.min(1, (seconds - .20f) / .16f));
+        return 1 - t * t * (3 - 2 * t);
+    }
+
+    private void finishMotion() {
+        Runnable completion = closeCompletion;
+        closeCompletion = null;
+        if (completion != null) completion.run();
+        else invalidate();
     }
 
     @Override public boolean dispatchTouchEvent(MotionEvent event) {
-        if (closing) return true;
-        float mappedX = target.centerX() + (event.getX() - geometry[0]) / dragScaleX;
-        float mappedY = target.centerY() + (event.getY() - geometry[1]) / dragScale;
+        if (closing || !motion.initialized) return true;
+        float mappedX = target.centerX() + (interaction.untransform(event.getX(),target,true) - geometry[0]) / dragScaleX;
+        float mappedY = target.centerY() + (interaction.untransform(event.getY(),target,false) - geometry[1]) / dragScale;
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
             translatingTouch = target.contains(mappedX, mappedY);
             boolean onOtherContent = menuSurface != content && event.getX() >= content.getX()
@@ -229,7 +325,7 @@ public final class IosPopupMorph extends FrameLayout {
         menuSurface.getLocationOnScreen(surfaceLocation);
         float x = mappedX + windowLocation[0] - surfaceLocation[0];
         float y = mappedY + windowLocation[1] - surfaceLocation[1];
-        boolean handled = interaction.touch(event, x, y, false)
+        boolean handled = (translatingTouch && interaction.touch(event, x, y, false))
                 || super.dispatchTouchEvent(translated != null ? translated : event);
         if (translated != null) translated.recycle();
         if (event.getActionMasked() == MotionEvent.ACTION_UP || event.getActionMasked() == MotionEvent.ACTION_CANCEL) translatingTouch = false;
@@ -237,96 +333,88 @@ public final class IosPopupMorph extends FrameLayout {
     }
 
     public boolean forwardTouch(MotionEvent event) {
-        if (closing || released) return true;
+        if (closing || released || !motion.initialized) return true;
         getLocationOnScreen(windowLocation);
         menuSurface.getLocationOnScreen(surfaceLocation);
-        float x = target.centerX() + (event.getRawX() - windowLocation[0] - geometry[0]) / dragScaleX
+        float x = target.centerX() + (interaction.untransform(event.getRawX()-windowLocation[0],target,true) - geometry[0]) / dragScaleX
                 + windowLocation[0] - surfaceLocation[0];
-        float y = target.centerY() + (event.getRawY() - windowLocation[1] - geometry[1]) / dragScale
+        float y = target.centerY() + (interaction.untransform(event.getRawY()-windowLocation[1],target,false) - geometry[1]) / dragScale
                 + windowLocation[1] - surfaceLocation[1];
         return interaction.touch(event, x, y, true);
     }
 
     @Override protected void dispatchDraw(Canvas canvas) {
-        if (released || target.isEmpty()) return;
+        if (released || target.isEmpty() || Build.VERSION.SDK_INT >= 33 && GlasmioPopupRenderer.isCapturing()) return;
         if (menuSurface != content) super.dispatchDraw(canvas);
         getLocationOnScreen(windowLocation);
         menuSurface.getLocationOnScreen(surfaceLocation);
-        float surfaceX = surfaceLocation[0] - windowLocation[0], surfaceY = surfaceLocation[1] - windowLocation[1];
-        float width = menuSurface.getWidth(), height = menuSurface.getHeight();
+        float surfaceX=surfaceLocation[0]-windowLocation[0], surfaceY=surfaceLocation[1]-windowLocation[1];
+        float surfaceWidth = menuSurface.getWidth();
+        float surfaceHeight = menuSurface.getHeight();
         if (menuSurface instanceof ActionBarPopupWindow.ActionBarPopupWindowLayout) {
             ActionBarPopupWindow.ActionBarPopupWindowLayout layout = (ActionBarPopupWindow.ActionBarPopupWindowLayout) menuSurface;
-            width *= layout.getBackScaleX();
-            height *= layout.getBackScaleY();
+            surfaceWidth *= layout.getBackScaleX();
+            surfaceHeight *= layout.getBackScaleY();
         }
-        target.set(surfaceX + menuSurface.getPaddingLeft(), surfaceY + menuSurface.getPaddingTop(),
-                surfaceX + width - menuSurface.getPaddingRight(), surfaceY + height - menuSurface.getPaddingBottom());
-        IosPopupMorphGeometry.evaluate(progress, source.centerX() - windowLocation[0], source.centerY() - windowLocation[1],
-                source.width(), source.height(), target.centerX(), target.centerY(), target.width(), target.height(),
-                sourceRadius, AndroidUtilities.dp(26), geometry);
-        if (closing) {
-            IosPopupMorphGeometry.evaluateClosing(1 - progress / closingFrom, closingStart,
-                    source.centerX() - windowLocation[0], source.centerY() - windowLocation[1],
-                    source.width(), source.height(), sourceRadius, geometry);
-        }
-        float pull = closing ? 0 : interaction.pull();
-        float baseWidth = geometry[2];
-        dragScale = IosPopupMorphGeometry.applyDrag(pull, interaction.pivotX(), interaction.pivotY(), geometry);
-        dragScaleX = geometry[2] / baseWidth;
-        if (closing) {
-            dragScale = 1 + (closingDragScale - 1) * progress / closingFrom;
-            dragScaleX = 1 + (closingDragScaleX - 1) * progress / closingFrom;
-        }
-        float w = geometry[2], h = geometry[3];
-        lens.set(-w / 2, -h / 2, w / 2, h / 2);
-        for (int i = 0; i < 4; i++) radii[2*i] = radii[2*i + 1] = geometry[5 + i];
-        clip.rewind();
-        clip.addRoundRect(lens, radii, Path.Direction.CW);
-        float phase = closing ? 1 - progress / closingFrom : progress;
-        int alpha = Math.round(255 * IosPopupMorphGeometry.surfaceOpacity(phase, closing) * (closing ? closingOpacity : 1));
-        int save = alpha < 255 ? canvas.saveLayerAlpha(geometry[0] - w / 2 - 1, geometry[1] - h / 2 - 1,
-                geometry[0] + w / 2 + 1, geometry[1] + h / 2 + 1, alpha) : canvas.save();
-        canvas.translate(geometry[0], geometry[1]);
-        canvas.clipPath(clip);
-        boolean drawn = false;
+        target.set(surfaceX, surfaceY, surfaceX + surfaceWidth, surfaceY + surfaceHeight);
+        RectF localSource=new RectF(source);
+        localSource.offset(-windowLocation[0],-windowLocation[1]);
+        if (!motion.initialized) {
+            if(morphFromAnchor) {
+                RectF through=new RectF(headerSource==null?throughSource:headerSource.through); through.offset(-windowLocation[0],-windowLocation[1]);
+                motion.initialize(localSource,target,AndroidUtilities.dp(34),AndroidUtilities.density,through);
+            }
+            else motion.initializeSeparate(target,localSource.centerY()>target.centerY(),AndroidUtilities.density);
+            motion.retarget(!closing);
+            if (Build.VERSION.SDK_INT >= 26 && !ValueAnimator.areAnimatorsEnabled()) motion.advanceBy(10);
+        } else motion.updateTarget(target,AndroidUtilities.dp(34));
+        setGeometry(motion,geometry);
+        float zoom = glassFailed || Build.VERSION.SDK_INT < 33 || !canvas.isHardwareAccelerated() ? 1 : motion.contentZoom;
+        dragScaleX = geometry[2] / target.width() * zoom;
+        dragScale = geometry[3] / target.height() * zoom;
         if (Build.VERSION.SDK_INT >= 33 && canvas.isHardwareAccelerated() && !glassFailed) {
-            int glassSave = canvas.save();
             try {
-                if (glass == null) glass = new Glass(this);
-                if (backgroundDirty) {
-                    glass.captureBackdrop(host, windowLocation);
-                    backgroundDirty = false;
+                if (glass == null) glass=new Glass(portalButtons,source,headerSource);
+                if (backdropDirty) {
+                    backdropDirty = !glass.captureBackdrop(host, windowLocation);
+                    if (backdropDirty) postInvalidateOnAnimation();
                 }
-                glass.draw(canvas, menuSurface, surfaceX, surfaceY, geometry, target, tint, progress, dragScaleX, dragScale);
-                drawn = true;
+                int save=canvas.save(); interaction.transform(canvas,target);
+                try { glass.draw(canvas,menuSurface,surfaceX,surfaceY,motion,target,tint,interaction); } finally { canvas.restoreToCount(save); }
+                return;
             } catch (RuntimeException e) {
-                FileLog.e(e);
-                if (glass != null) glass.release();
-                glass = null;
-                glassFailed = true;
-            } finally { canvas.restoreToCount(glassSave); }
+                FileLog.e(e); if (glass != null) glass.release(); glass=null; glassFailed=true;
+            }
         }
-        if (!drawn) {
-            fallbackPaint.setColor(tint);
-            fallbackPaint.setAlpha(220);
-            canvas.drawRect(lens, fallbackPaint);
-            int rows = canvas.save();
-            canvas.translate(surfaceX - target.centerX(), surfaceY - target.centerY());
-            canvas.scale(dragScaleX, dragScale, target.centerX() - surfaceX, target.centerY() - surfaceY);
-            drawMenuContent(menuSurface, canvas);
-            canvas.restoreToCount(rows);
-        }
-        interaction.drawFeedback(canvas, target.centerX() - surfaceX, target.centerY() - surfaceY, dragScaleX, dragScale);
-        canvas.restoreToCount(save);
+        drawFallback(canvas,menuSurface,surfaceX,surfaceY,motion,target,tint,fallbackPaint);
+    }
+
+    private static void setGeometry(GlasmioMenuMotion motion,float[] g) {
+        g[0]=motion.bounds.centerX(); g[1]=motion.bounds.centerY();
+        g[2]=motion.bounds.width(); g[3]=motion.bounds.height(); g[4]=0;
+        for(int i=5;i<9;i++) g[i]=Math.min(motion.radiusX,motion.radiusY);
+    }
+
+    private static void drawFallback(Canvas canvas,View content,float x,float y,GlasmioMenuMotion f,RectF target,int tint,Paint paint) {
+        int save=canvas.saveLayerAlpha(f.bounds,Math.round(255*f.contentProgress));
+        canvas.clipRect(f.bounds);
+        paint.setColor(Theme.multAlpha(tint, org.telegram.messenger.SharedConfig.chatBlurEnabled() ? 1f : .92f)); canvas.drawRoundRect(f.bounds,f.radiusX,f.radiusY,paint);
+        canvas.translate(f.bounds.centerX(),f.bounds.centerY());
+        canvas.scale(f.bounds.width()/target.width(),f.bounds.height()/target.height());
+        canvas.translate(x-target.centerX(),y-target.centerY());
+        drawMenuContent(content,canvas); canvas.restoreToCount(save);
     }
 
     public void release() {
         if (released) return;
         released = true;
+        Choreographer.getInstance().removeFrameCallback(frameCallback);
+        closeCompletion = null;
+        if (host.getViewTreeObserver().isAlive()) host.getViewTreeObserver().removeOnPreDrawListener(backdropListener);
         interaction.release();
         gestureBridge.release();
-        if (host.getViewTreeObserver().isAlive()) host.getViewTreeObserver().removeOnPreDrawListener(hostDrawListener);
         if (glass != null) glass.release();
+        if (headerSource != null) headerSource.release();
         removeView(content);
         content.setLayoutParams(previousLayoutParams != null ? previousLayoutParams
                 : new FrameLayout.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
@@ -359,7 +447,7 @@ public final class IosPopupMorph extends FrameLayout {
         }
     }
 
-    private static void drawMenuContent(View content, Canvas canvas) {
+    static void drawMenuContent(View content, Canvas canvas) {
         ActionBarPopupWindow.ActionBarPopupWindowLayout layout = content instanceof ActionBarPopupWindow.ActionBarPopupWindowLayout
                 ? (ActionBarPopupWindow.ActionBarPopupWindowLayout) content : null;
         if (layout != null) layout.setIosSurfaceRecording(true);
@@ -369,7 +457,7 @@ public final class IosPopupMorph extends FrameLayout {
 
     private static RectF messageSourceCircle(RectF bounds) {
         float r = AndroidUtilities.dp(20);
-        return new RectF(bounds.centerX() - r, bounds.bottom - r, bounds.centerX() + r, bounds.bottom + r);
+        return new RectF(bounds.centerX() - r, bounds.bottom - 2 * r, bounds.centerX() + r, bounds.bottom);
     }
 
     public static void closeEmbedded(View view) {
@@ -379,6 +467,16 @@ public final class IosPopupMorph extends FrameLayout {
             ViewGroup group = (ViewGroup) view;
             for (int i = 0; i < group.getChildCount(); i++) closeEmbedded(group.getChildAt(i));
         }
+    }
+
+    public static boolean embeddedClosed(View view) {
+        if (view instanceof ActionBarPopupWindow.ActionBarPopupWindowLayout
+                && !((ActionBarPopupWindow.ActionBarPopupWindowLayout)view).isIosMessageSurfaceClosed()) return false;
+        if (view instanceof ViewGroup) {
+            ViewGroup group=(ViewGroup)view;
+            for(int i=0;i<group.getChildCount();i++) if(!embeddedClosed(group.getChildAt(i))) return false;
+        }
+        return true;
     }
 
     public static boolean forwardEmbedded(View view, MotionEvent event) {
@@ -400,207 +498,105 @@ public final class IosPopupMorph extends FrameLayout {
     /** A menu inside the existing message-preview viewport; message/reaction views keep their own layout. */
     public static final class Embedded {
         private final ActionBarPopupWindow.ActionBarPopupWindowLayout content;
-        private final View host;
-        private final RectF source, target = new RectF(), lens = new RectF();
-        private final float[] geometry = new float[9], radii = new float[8];
-        private final int[] location = new int[2];
-        private final Path clip = new Path();
-        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final IdentityHashMap<View, Drawable> backgrounds = new IdentityHashMap<>();
+        private final RectF source, target=new RectF();
+        private final int[] location=new int[2];
+        private final float[] geometry=new float[9];
+        private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final IdentityHashMap<View,Drawable> backgrounds=new IdentityHashMap<>();
         private final int tint;
-        private ValueAnimator animator;
-        private float progress;
-        private boolean started, released, failed;
-        private Glass glass;
+        private final GlasmioMenuMotion motion=new GlasmioMenuMotion();
         private final IosPopupInteraction interaction;
         private final IosPopupGestureBridge gestureBridge;
-        private float dragScale = 1, dragScaleX = 1;
-        private boolean closing;
-        private float closingFrom;
-        private float closingOpacity = 1;
-        private float closingDragScale = 1, closingDragScaleX = 1;
-        private final float[] closingStart = new float[9];
+        private Glass glass;
+        private View backdropHost;
+        private long previousFrame;
+        private boolean closing,released,failed,settled;
+        private long closeStartedNanos;
 
-        public Embedded(ActionBarPopupWindow.ActionBarPopupWindowLayout content, View sourceView, RectF screenBounds, int tint) {
+        public Embedded(ActionBarPopupWindow.ActionBarPopupWindowLayout content,View sourceView,RectF screenBounds,int tint) {
             this.content = content;
-            interaction = new IosPopupInteraction(content, content::postInvalidateOnAnimation);
-            host = sourceView.getRootView();
-            source = messageSourceCircle(screenBounds);
+            source = screenBounds.isEmpty() ? new RectF() : messageSourceCircle(screenBounds);
             this.tint = tint;
-            stripMenuSurfaces(content, content, backgrounds);
-            gestureBridge = new IosPopupGestureBridge(sourceView, this::forwardTouch);
+            interaction=new IosPopupInteraction(content,content::postInvalidateOnAnimation, true, false);
+            stripMenuSurfaces(content,content,backgrounds);
+            gestureBridge=new IosPopupGestureBridge(sourceView,this::forwardTouch);
+        }
+        public void setBackdropHost(View host) { backdropHost = host; }
+
+        private View backdropHost() {
+            if (backdropHost != null) return backdropHost;
+            for (View view = content; view != null;
+                 view = view.getParent() instanceof View ? (View) view.getParent() : null) {
+                if (view instanceof Backdrop) return view;
+            }
+            return content.getRootView();
         }
 
         public void draw(Canvas canvas) {
-            if (released || content.getWidth() == 0 || content.getHeight() == 0) return;
-            if (!started) {
-                started = true;
-                animator = ValueAnimator.ofFloat(0, 1);
-                animator.setDuration(Build.VERSION.SDK_INT >= 26 && !ValueAnimator.areAnimatorsEnabled() ? 0 : IosPopupMorphGeometry.OPEN_DURATION);
-                animator.setInterpolator(t -> t);
-                animator.addUpdateListener(a -> { progress = (float) a.getAnimatedValue(); content.invalidate(); });
-                animator.start();
-            }
+            if(released || Build.VERSION.SDK_INT>=33 && GlasmioPopupRenderer.isCapturing() || content.getWidth()==0 || content.getHeight()==0) return;
             content.getLocationOnScreen(location);
-            target.set(content.getPaddingLeft(), content.getPaddingTop(),
-                    content.getWidth() * content.getBackScaleX() - content.getPaddingRight(),
-                    content.getHeight() * content.getBackScaleY() - content.getPaddingBottom());
-            IosPopupMorphGeometry.evaluate(progress, source.centerX() - location[0], source.centerY() - location[1],
-                    source.width(), source.height(), target.centerX(), target.centerY(), target.width(), target.height(),
-                    source.width() / 2, AndroidUtilities.dp(26), geometry);
-            if (closing) IosPopupMorphGeometry.evaluateClosing(1 - progress / closingFrom, closingStart,
-                    source.centerX() - location[0], source.centerY() - location[1], source.width(), source.height(),
-                    source.width() / 2, geometry);
-            float pull = closing ? 0 : interaction.pull();
-            float baseWidth = geometry[2];
-            dragScale = IosPopupMorphGeometry.applyDrag(pull, interaction.pivotX(), interaction.pivotY(), geometry);
-            dragScaleX = geometry[2] / baseWidth;
+            target.set(0,0,content.getWidth(),content.getHeight());
+            long now=System.nanoTime();
+            if(!motion.initialized) {
+                // Preview menus use Glasmio's compact scale/fade, without a source lobe.
+                motion.initializeSeparate(target, false, AndroidUtilities.density);
+                motion.retarget(!closing);
+            } else motion.updateTarget(target,AndroidUtilities.dp(34));
+            boolean animate=Build.VERSION.SDK_INT<26 || ValueAnimator.areAnimatorsEnabled();
+            settled=motion.advanceBy(animate ? (previousFrame==0 ? 0 : (now-previousFrame)/1_000_000_000f) : 10);
             if (closing) {
-                dragScale = 1 + (closingDragScale - 1) * progress / closingFrom;
-                dragScaleX = 1 + (closingDragScaleX - 1) * progress / closingFrom;
+                content.setAlpha(closingOpacity((now - closeStartedNanos) / 1_000_000_000f));
+                settled = content.getAlpha() <= 0;
             }
-            float w = geometry[2], h = geometry[3];
-            lens.set(-w / 2, -h / 2, w / 2, h / 2);
-            for (int i = 0; i < 4; i++) radii[2*i] = radii[2*i + 1] = geometry[5 + i];
-            clip.rewind();
-            clip.addRoundRect(lens, radii, Path.Direction.CW);
-            float phase = closing ? 1 - progress / closingFrom : progress;
-            int alpha = Math.round(255 * IosPopupMorphGeometry.surfaceOpacity(phase, closing) * (closing ? closingOpacity : 1));
-            int save = alpha < 255 ? canvas.saveLayerAlpha(geometry[0] - w / 2 - 1, geometry[1] - h / 2 - 1,
-                    geometry[0] + w / 2 + 1, geometry[1] + h / 2 + 1, alpha) : canvas.save();
-            canvas.translate(geometry[0], geometry[1]);
-            canvas.clipPath(clip);
-            boolean drawn = false;
-            if (Build.VERSION.SDK_INT >= 33 && canvas.isHardwareAccelerated() && !failed) {
-                int glassSave = canvas.save();
+            previousFrame=now; setGeometry(motion,geometry);
+            if(!settled) content.postInvalidateOnAnimation();
+            if(Build.VERSION.SDK_INT>=33 && canvas.isHardwareAccelerated() && !failed) {
                 try {
-                    if (glass == null) glass = new Glass(content);
-                    glass.captureBackdrop(host, location);
-                    glass.draw(canvas, content, 0, 0, geometry, target, tint, progress, dragScaleX, dragScale);
-                    drawn = true;
-                } catch (RuntimeException e) {
-                    FileLog.e(e);
-                    if (glass != null) glass.release();
-                    glass = null;
-                    failed = true;
-                } finally { canvas.restoreToCount(glassSave); }
+                    if(glass==null) glass=new Glass(java.util.Collections.emptyList(),source,null);
+                    glass.captureBackdrop(backdropHost(), location, true);
+                    int save=canvas.save(); interaction.transform(canvas,target);
+                    try { glass.draw(canvas,content,0,0,motion,target,tint,interaction); } finally { canvas.restoreToCount(save); } return;
+                } catch(RuntimeException e) { FileLog.e(e); if(glass!=null) glass.release(); glass=null; failed=true; }
             }
-            if (!drawn) {
-                paint.setColor(tint);
-                paint.setAlpha(220);
-                canvas.drawRect(lens, paint);
-                int rows = canvas.save();
-                canvas.translate(-target.centerX(), -target.centerY());
-                canvas.scale(dragScaleX, dragScale, target.centerX(), target.centerY());
-                drawMenuContent(content, canvas);
-                canvas.restoreToCount(rows);
-            }
-            interaction.drawFeedback(canvas, target.centerX(), target.centerY(), dragScaleX, dragScale);
-            canvas.restoreToCount(save);
+            drawFallback(canvas,content,0,0,motion,target,tint,paint);
         }
-
         public boolean touch(MotionEvent event) {
             if (closing) return true;
-            float x = target.centerX() + (event.getX() - geometry[0]) / dragScaleX;
-            float y = target.centerY() + (event.getY() - geometry[1]) / dragScale;
-            return interaction.touch(event, x, y, false);
+            if (!motion.initialized) return false;
+            float x=target.centerX()+(interaction.untransform(event.getX(),target,true)-geometry[0])*target.width()/Math.max(1,geometry[2]*foregroundZoom());
+            float y=target.centerY()+(interaction.untransform(event.getY(),target,false)-geometry[1])*target.height()/Math.max(1,geometry[3]*foregroundZoom());
+            return interaction.touch(event,x,y,false);
         }
-
         public boolean forwardTouch(MotionEvent event) {
-            if (closing || released) return true;
+            if (closing || released || !motion.initialized) return true;
             content.getLocationOnScreen(location);
-            return interaction.touch(event, target.centerX() + (event.getRawX() - location[0] - geometry[0]) / dragScaleX,
-                    target.centerY() + (event.getRawY() - location[1] - geometry[1]) / dragScale, true);
+            float x=target.centerX()+(interaction.untransform(event.getRawX()-location[0],target,true)-geometry[0])*target.width()/Math.max(1,geometry[2]*foregroundZoom());
+            float y=target.centerY()+(interaction.untransform(event.getRawY()-location[1],target,false)-geometry[1])*target.height()/Math.max(1,geometry[3]*foregroundZoom());
+            return interaction.touch(event,x,y,true);
+        }
+        private float foregroundZoom() {
+            return glass != null && !failed ? motion.contentZoom : 1f;
         }
 
         public void close() {
-            if (closing || released) return;
-            if (animator != null) animator.cancel();
-            started = true;
-            closingOpacity = IosPopupMorphGeometry.surfaceOpacity(progress, false);
-            closing = true;
-            closingFrom = Math.max(.0001f, progress);
-            closingDragScale = dragScale;
-            closingDragScaleX = dragScaleX;
-            System.arraycopy(geometry, 0, closingStart, 0, geometry.length);
-            animator = ValueAnimator.ofFloat(progress, 0);
-            animator.setDuration(Build.VERSION.SDK_INT >= 26 && !ValueAnimator.areAnimatorsEnabled()
-                    ? 0 : IosPopupMorphGeometry.CLOSE_DURATION);
-            animator.setInterpolator(t -> t);
-            animator.addUpdateListener(a -> { progress = (float) a.getAnimatedValue(); content.invalidate(); });
-            animator.start();
+            if(closing || released) return;
+            closing=true; settled=false; closeStartedNanos=previousFrame=System.nanoTime();
+            if(motion.initialized) motion.retarget(false);
+            content.invalidate();
         }
-
+        public boolean isClosed() { return closing && (settled || !motion.initialized
+                    || System.nanoTime() - closeStartedNanos >= 360_000_000L); }
         public void release() {
-            if (released) return;
-            released = true;
-            interaction.release();
-            gestureBridge.release();
-            if (animator != null) animator.cancel();
-            if (glass != null) glass.release();
-            restoreMenuSurfaces(backgrounds);
+            if(released) return; released=true;
+            interaction.release(); gestureBridge.release();
+            if(glass!=null) glass.release(); content.setAlpha(1); restoreMenuSurfaces(backgrounds);
         }
     }
 
     @RequiresApi(33)
-    private static final class Glass {
-        private final RenderNode backdrop = new RenderNode("PopupBackdrop");
-        private final RenderNode frosted = new RenderNode("PopupFrostedBackdrop");
-        private final RenderNode surface = new RenderNode("PopupGlassAndRows");
-        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final int[] location = new int[2];
-
-        Glass(View owner) {
-            frosted.setRenderEffect(RenderEffect.createBlurEffect(AndroidUtilities.dp(10), AndroidUtilities.dp(10), Shader.TileMode.CLAMP));
-        }
-
-        void captureBackdrop(View host, int[] windowLocation) {
-            host.getLocationOnScreen(location);
-            backdrop.setPosition(0, 0, host.getWidth(), host.getHeight());
-            Canvas recording = backdrop.beginRecording();
-            try { host.draw(recording); } finally { backdrop.endRecording(); }
-            location[0] -= windowLocation[0];
-            location[1] -= windowLocation[1];
-        }
-
-        private static void toWindow(Canvas canvas, float[] g, int width, int height) {
-            canvas.translate(width / 2f, height / 2f);
-            canvas.translate(-g[0], -g[1]);
-        }
-
-        void draw(Canvas canvas, View content, float contentX, float contentY, float[] g, RectF target, int tint, float progress, float dragScaleX, float dragScale) {
-            int w = Math.max(1, (int) Math.ceil(g[2])), h = Math.max(1, (int) Math.ceil(g[3]));
-            frosted.setPosition(0, 0, w, h);
-            Canvas recording = frosted.beginRecording();
-            try {
-                toWindow(recording, g, w, h);
-                recording.translate(location[0], location[1]);
-                recording.drawRenderNode(backdrop);
-            } finally { frosted.endRecording(); }
-            surface.setPosition(0, 0, w, h);
-            recording = surface.beginRecording();
-            try {
-                recording.drawRenderNode(frosted);
-                paint.setColor(tint);
-                paint.setAlpha(170);
-                recording.drawRect(0, 0, w, h, paint);
-                toWindow(recording, g, w, h);
-                recording.translate(contentX + IosPopupMorphGeometry.centeredContentOffset(g[0], target.centerX()),
-                        contentY + IosPopupMorphGeometry.centeredContentOffset(g[1], target.centerY()));
-                recording.scale(dragScaleX, dragScale, target.centerX() - contentX, target.centerY() - contentY);
-                // Only live rows enter this recording. Every legacy popup surface is suppressed.
-                drawMenuContent(content, recording);
-            } finally { surface.endRecording(); }
-            canvas.translate(-w / 2f, -h / 2f);
-            canvas.drawRenderNode(surface);
-        }
-
-        void release() {
-            surface.setRenderEffect(null);
-            surface.discardDisplayList();
-            frosted.setRenderEffect(null);
-            frosted.discardDisplayList();
-            backdrop.discardDisplayList();
+    private static final class Glass extends GlasmioPopupRenderer {
+        Glass(java.util.List<View> buttons, RectF bounds, NavigationHeaderButtons.MenuSource header) {
+            super(buttons, bounds, header);
         }
     }
 }

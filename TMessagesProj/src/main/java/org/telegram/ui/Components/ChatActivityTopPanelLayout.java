@@ -132,10 +132,10 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout implements 
             final ListAnimator.Entry<AnimatedLinearLayout.Holder> entry = getEntry(i);
             if (entry.item.view == capsuleView) {
                 // Extra panels extend the surface, but must not enlarge the pinned capsule's corners.
-                final float insets = Math.max(0f, height - getMetadata().getTotalHeight());
-                final float capsuleHeight = capsuleView.getMeasuredHeight() + insets;
-                final float capsuleRadius = Math.min(maximum, capsuleHeight / 2f);
-                return regular + (capsuleRadius - regular) * entry.getVisibility();
+                final float capsuleHeight = capsuleView.getMeasuredHeight();
+                final float alone = Math.max(0f, 1f - Math.max(0f,
+                        getMetadata().getTotalHeight() - capsuleHeight) / dp(24));
+                return regular + (maximum - regular) * alone * entry.getVisibility();
             }
         }
         return regular;
@@ -156,7 +156,9 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout implements 
             backgroundDrawable.setAlpha((int) (bgAlpha * 255));
             backgroundDrawable.setBounds(getPaddingLeft() - dp(7), 0, getMeasuredWidth() - getPaddingRight() + dp(7), getPaddingTop() + getPaddingBottom() + (int) bgHeight);
             if (!NonIslandHelper.chatHeader()) {
-                backgroundDrawable.setRadius(cornerRadius(backgroundDrawable.getBounds().width(), backgroundDrawable.getBounds().height()));
+                // The drawable has its own 7dp optical padding. Use the content's
+                // radius, not the taller padded bounds, for the shared contour.
+                backgroundDrawable.setRadius(r);
             }
         }
     }

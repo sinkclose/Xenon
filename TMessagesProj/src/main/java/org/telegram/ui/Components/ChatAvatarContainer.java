@@ -692,7 +692,21 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         autoDeletePopupWrapper.windowLayout.measure(View.MeasureSpec.makeMeasureSpec(dp(1000), View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(dp(1000), View.MeasureSpec.AT_MOST));
         scrimPopupWindow[0].setInputMethodMode(ActionBarPopupWindow.INPUT_METHOD_NOT_NEEDED);
         scrimPopupWindow[0].getContentView().setFocusableInTouchMode(true);
-        scrimPopupWindow[0].showAtLocation(avatarImageView, 0, (int) (avatarImageView.getX() + getX()), (int) avatarImageView.getY());
+        if (zxc.iconic.xenon.NekoConfig.iosPopups) {
+            int[] avatar = new int[2];
+            int[] root = new int[2];
+            avatarImageView.getLocationOnScreen(avatar);
+            View decor = avatarImageView.getRootView();
+            decor.getLocationOnScreen(root);
+            android.graphics.RectF image = avatarImageView.getImageReceiver().getDrawRegion();
+            float right = image.isEmpty() ? avatarImageView.getWidth() : image.right;
+            float bottom = image.isEmpty() ? avatarImageView.getHeight() : image.bottom;
+            scrimPopupWindow[0].showAtLocation(avatarImageView, Gravity.TOP | Gravity.RIGHT,
+                    Math.round(decor.getWidth() - (avatar[0] - root[0] + right)),
+                    Math.round(avatar[1] - root[1] + bottom + dp(6)));
+        } else {
+            scrimPopupWindow[0].showAtLocation(avatarImageView, 0, (int) (avatarImageView.getX() + getX()), (int) avatarImageView.getY());
+        }
         parentFragment.dimBehindView(true);
         return true;
     }

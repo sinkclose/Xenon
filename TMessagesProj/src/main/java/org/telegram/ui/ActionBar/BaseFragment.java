@@ -93,6 +93,7 @@ public abstract class BaseFragment {
     protected boolean hasOwnBackground = false;
     protected boolean isPaused = true;
     private org.telegram.ui.Components.ActivityHeadersController activityHeaders;
+    private boolean globalCenteredTitleApplied;
 
     public boolean hasSharedActivityHeader() {
         return activityHeaders != null;
@@ -558,6 +559,19 @@ public abstract class BaseFragment {
 
     public void onUserLeaveHint() {}
 
+    private void syncGlobalCenteredTitle() {
+        if (actionBar == null) return;
+        // Chat has its own avatar/title placement preference.
+        if (!(this instanceof org.telegram.ui.ChatActivity) && !actionBar.isChatHeader()
+                && zxc.iconic.xenon.NekoConfig.centerTitle) {
+            actionBar.centerTitleInFreeSpace(false);
+            globalCenteredTitleApplied = true;
+        } else if (globalCenteredTitleApplied) {
+            actionBar.cancelCenterTitle(false);
+            globalCenteredTitleApplied = false;
+        }
+    }
+
     @CallSuper
     public void onResume() {
         isPaused = false;
@@ -574,6 +588,7 @@ public abstract class BaseFragment {
         }
         if (actionBar != null) zxc.iconic.xenon.helpers.ClientFonts.applyToView(actionBar);
         if (actionBar != null) {
+            syncGlobalCenteredTitle();
             actionBar.onResume();
         }
         if (getLastStoryViewer() != null) {

@@ -307,6 +307,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         actionBar.setUseContainerForTitles();
         actionBar.setTitle(getString(R.string.Settings));
         actionBar.setAdditionalTextLeft(-dp(4));
+        syncCenterTitle(false);
         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
             @Override
             public void onItemClick(int id) {
@@ -653,9 +654,22 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         }
     }
 
+    public void syncCenterTitle(boolean animated) {
+        if (actionBar == null) return;
+        if (zxc.iconic.xenon.NekoConfig.centerTitle) {
+            actionBar.setAdditionalTextLeft(0);
+            if (animated) actionBar.centerTitleAnimated();
+            else actionBar.centerTitle();
+        } else {
+            actionBar.setAdditionalTextLeft(-dp(4));
+            actionBar.cancelCenterTitle(animated);
+        }
+    }
+
     @Override
     public void onResume() {
         super.onResume();
+        syncCenterTitle(false);
         if (hasSharedActivityHeader()) updateActionBarVisible(true, false);
         if (listView.adapter != null) {
             listView.adapter.notifyDataSetChanged();

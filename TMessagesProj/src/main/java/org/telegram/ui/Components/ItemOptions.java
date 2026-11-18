@@ -466,7 +466,9 @@ public class ItemOptions {
         final int textColorKey = Theme.key_actionBarDefaultSubmenuItem;
         final int iconColorKey = Theme.key_actionBarDefaultSubmenuItemIcon;
 
-        ActionBarMenuSubItem subItem = new ActionBarMenuSubItem(context, iconResId != 0 || icon != null ? 2 : 1, false, false, resourcesProvider);
+        ActionBarMenuSubItem subItem = new ActionBarMenuSubItem(context,
+                zxc.iconic.xenon.NekoConfig.iosPopups || iconResId != 0 || icon != null ? 2 : 1,
+                false, false, resourcesProvider);
         subItem.setPadding(dp(18), 0, dp(18), 0);
         if (icon != null) {
             subItem.setTextAndIcon(text, 0, icon);
@@ -1513,7 +1515,12 @@ public class ItemOptions {
         }
 
         actionBarPopupWindow.setScaleOut(scaleOut);
-        actionBarPopupWindow.setAnimationSource(scrimView);
+        View morphAnchor = scrimView;
+        if (zxc.iconic.xenon.NekoConfig.iosPopups && scrimView instanceof ChatAvatarContainer) {
+            View avatar = ((ChatAvatarContainer) scrimView).getAvatarImageView();
+            if (avatar != null && avatar.isShown() && avatar.getWidth() > 0) morphAnchor = avatar;
+        }
+        actionBarPopupWindow.setAnimationSource(morphAnchor);
         final android.graphics.Rect popupVisibleFrame = new android.graphics.Rect();
         final int[] popupRootLocation = new int[2];
         container.getWindowVisibleDisplayFrame(popupVisibleFrame);
@@ -2071,7 +2078,7 @@ public class ItemOptions {
                 canvas.drawColor(Theme.multAlpha(dim, dimProgress));
             }
 
-            if (!drawScrim) {
+            if (!drawScrim || zxc.iconic.xenon.NekoConfig.iosPopups) {
             } else if (cachedBitmap != null && scrimView.getParent() instanceof View) {
                 canvas.save();
                 if (clipTop < 1) {

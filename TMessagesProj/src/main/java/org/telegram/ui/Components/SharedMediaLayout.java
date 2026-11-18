@@ -1911,6 +1911,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
             optionsSearchImageView.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_actionBarActionModeDefaultIcon), PorterDuff.Mode.SRC_IN));
             optionsSearchImageView.setVisibility(GONE);
             actionBar.addView(optionsSearchImageView, LayoutHelper.createFrame(48, 56, Gravity.RIGHT | Gravity.BOTTOM));
+            actionBar.setNavigationButtonOverlay(searchItem, optionsSearchImageView);
         }
         photoVideoOptionsItem.setOnClickListener(org.telegram.ui.Components.IosPopupOpener.listener(photoVideoOptionsItem, new OnClickListener() {
             @Override

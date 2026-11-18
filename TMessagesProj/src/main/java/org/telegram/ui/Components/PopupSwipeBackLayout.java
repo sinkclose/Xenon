@@ -133,6 +133,9 @@ public class PopupSwipeBackLayout extends FrameLayout {
 
     public void setIosSurfaceContent(boolean enabled) {
         iosSurfaceContent = enabled;
+        if (!enabled) {
+            for (int i = 0; i < getChildCount(); i++) getChildAt(i).setAlpha(1f);
+        }
         invalidate();
     }
 
@@ -149,7 +152,7 @@ public class PopupSwipeBackLayout extends FrameLayout {
             canvas.drawRect(child.getX(), 0, child.getX() + child.getMeasuredWidth(), getMeasuredHeight(), foregroundPaint);
         }
         boolean b = super.drawChild(canvas, child, drawingTime);
-        if (i == 0) {
+        if (i == 0 && !iosSurfaceContent) {
             overlayPaint.setAlpha((int) (transitionProgress * 0x40));
             canvas.drawRect(0, 0, getWidth(), getHeight(), overlayPaint);
         }
@@ -442,7 +445,9 @@ public class PopupSwipeBackLayout extends FrameLayout {
             mRect.set(0, y, w, y + h);
         }
         mPath.addRoundRect(mRect, rad, rad, Path.Direction.CW);
-        canvas.clipPath(mPath);
+        // Glass already clips the shared foreground portal to the animated surface.
+        // A second, immediately resizing clip cuts long outgoing labels mid-slide.
+        if (!iosSurfaceContent) canvas.clipPath(mPath);
         super.dispatchDraw(canvas);
         canvas.restoreToCount(s);
 
@@ -484,6 +489,12 @@ public class PopupSwipeBackLayout extends FrameLayout {
     private void invalidateVisibility() {
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
+            if (iosSurfaceContent) {
+                float progress = Math.max(0f, Math.min(1f, transitionProgress));
+                // The outgoing page only travels half its width. Fade its remaining
+                // text before hiding the page at the endpoint of the transition.
+                child.setAlpha(i == 0 ? 1f - progress : i == currentForegroundIndex ? progress : 0f);
+            }
 
             if (i == 0) {
                 if (transitionProgress == 1 && child.getVisibility() != INVISIBLE)
