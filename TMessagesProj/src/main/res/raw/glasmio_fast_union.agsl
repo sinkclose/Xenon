@@ -315,18 +315,38 @@ float nativeVariance(float lod) {
     float a = exp2(2.0 * floor(level));
     return 4.0078125 / 3.0 * (mix(a, a * 4.0, fract(level)) - 1.0);
 }
-float4 nativeAtlasSample(float2 p, float lod) {
+// Resolve the cached planes once per ray. All seven spectral taps reuse
+// their atlas rectangles, scales and blend weight.
+struct LensSamplePlan {
+    float4 firstPlane;
+    float4 secondPlane;
+    float2 scales;
+    float blend;
+};
+
+LensSamplePlan lensSamplePlan(float lod) {
+    float4 sharpPlane = float4(0.0, 0.0, inputSize);
     float variance = nativeVariance(lod);
-    if (variance <= .00001 || planeVariance.x <= .00001) return nativeAtlasBilinear(p, 0);
-    if (variance <= planeVariance.x) {
-        float4 main = gaussianSample(p, mainPlane, planeScales.x);
-        if (variance >= planeVariance.x * .9999) return main;
-        return mix(nativeAtlasBilinear(p, 0), main, variance / planeVariance.x);
+    if (variance <= .00001 || planeVariance.x <= .00001) {
+        return LensSamplePlan(sharpPlane, sharpPlane, float2(1.0), 0.0);
     }
-    float4 fill = gaussianSample(p, fillPlane, planeScales.y);
-    if (variance >= planeVariance.y * .9999) return fill;
-    return mix(gaussianSample(p, mainPlane, planeScales.x), fill,
-        clamp((variance - planeVariance.x) / max(.00001, planeVariance.y - planeVariance.x), 0.0, 1.0));
+    if (variance <= planeVariance.x) {
+        if (variance >= planeVariance.x * .9999) {
+            return LensSamplePlan(mainPlane, mainPlane, planeScales.xx, 0.0);
+        }
+        return LensSamplePlan(sharpPlane, mainPlane, float2(1.0, planeScales.x), variance / planeVariance.x);
+    }
+    if (variance >= planeVariance.y * .9999) {
+        return LensSamplePlan(fillPlane, fillPlane, planeScales.yy, 0.0);
+    }
+    float blend = clamp((variance - planeVariance.x) / max(.00001, planeVariance.y - planeVariance.x), 0.0, 1.0);
+    return LensSamplePlan(mainPlane, fillPlane, planeScales, blend);
+}
+
+float4 sampleLensBackdrop(float2 p, LensSamplePlan plan) {
+    float4 first = gaussianSample(p, plan.firstPlane, plan.scales.x);
+    if (plan.blend == 0.0) return first;
+    return mix(first, gaussianSample(p, plan.secondPlane, plan.scales.y), plan.blend);
 }
 float nativeGlassLod(float radius) {
     float r = max(radius, 0.0) * 1.6;
@@ -397,7 +417,7 @@ float4 nativeGlassBackgroundCompletion(float4 coveredFace, float3 original, floa
 float nativeCasdfHighlightCoverage(float signedDistance, float2 gradient,
     float height, float angle, float curvature) {
     float depth = -signedDistance;
-    if (depth < -5.0) return 0.0;
+    if (depth < -5.0 || depth > height * 8.0 + 1.0) return 0.0;
     float2 normal = normalize(gradient);
     float aa = max(abs(normal.x) + abs(normal.y), 0.0001);
     float alignment = dot(normal, float2(sin(angle), -cos(angle)));
@@ -618,64 +638,68 @@ float nativeAtlasBlurOpacity(float distance) {
         clamp((d - nativeAtlasBlurParameters.x) / max(-1.0 - nativeAtlasBlurParameters.x, .00001), 0.0, 1.0))
         : (d < 0.0 ? mix(nativeAtlasBlurParameters.z, .5, d + 1.0) : 1.0);
 }
-float4 nativeAtlasRay(float2 coordinate, float3 field, bool outer) {
-    float inverseHeight = outer ? nativeAtlasLensParameters.z : nativeAtlasLensParameters.x;
-    float amount = outer ? nativeAtlasLensParameters.w : nativeAtlasLensParameters.y;
-    float displacement = nativeGlassDisplacement(field.x, inverseHeight, amount);
+// iOS 26 lens sampling, with the iOS 27 inset and exterior ray profiles.
+// A ray with no edge displacement samples its backdrop directly.
+float4 sampleLensRay(float2 coordinate, float3 field, float displacement, float4 sharpCenter) {
     float profile = recipeOpacity < 0.0 ? nativeAtlasBlurOpacity(field.x + displacement) : 1.0;
-    float lod = nativeGlassLod(nativeAtlasRadii.x * profile);
-    float2 address = coordinate + field.yz * displacement;
-    float4 sample = nativeAtlasSample(address, lod);
-    if (chromaticDispersion <= 0.0 || abs(displacement) < .001) return sample;
+    LensSamplePlan plan = lensSamplePlan(nativeGlassLod(nativeAtlasRadii.x * profile));
+    // The sharp plane starts at the origin of the atlas.
+    if (displacement == 0.0 && plan.firstPlane.x == 0.0 && plan.blend == 0.0) return sharpCenter;
+    float2 offset = field.yz * displacement;
+    float2 address = coordinate + offset;
+    float4 centerSample = sampleLensBackdrop(address, plan);
+    if (chromaticDispersion <= 0.0 || abs(displacement) < .001) return centerSample;
+
     float2 halfSizeForDispersion = max(size * .5, float2(1.0));
     float2 local = (coordinate - glassOrigin - halfSizeForDispersion) / halfSizeForDispersion;
     float crossTerm = clamp(local.x * local.y, -1.0, 1.0);
-    float2 spread = displacement * field.yz * (chromaticDispersion / max(6.0 * density, .001)) * crossTerm;
+    float2 spread = offset * (chromaticDispersion / max(6.0 * density, .001)) * crossTerm;
     float4 color = float4(0.0);
 
-    float4 red = nativeAtlasSample(address + spread, lod);
+    float4 red = sampleLensBackdrop(address + spread, plan);
     color.r += red.r / 3.5;
     color.a += red.a / 7.0;
 
-    float4 orange = nativeAtlasSample(address + spread * (2.0 / 3.0), lod);
+    float4 orange = sampleLensBackdrop(address + spread * (2.0 / 3.0), plan);
     color.r += orange.r / 3.5;
     color.g += orange.g / 7.0;
     color.a += orange.a / 7.0;
 
-    float4 yellow = nativeAtlasSample(address + spread * (1.0 / 3.0), lod);
+    float4 yellow = sampleLensBackdrop(address + spread * (1.0 / 3.0), plan);
     color.r += yellow.r / 3.5;
     color.g += yellow.g / 3.5;
     color.a += yellow.a / 7.0;
 
-    float4 green = nativeAtlasSample(address, lod);
-    color.g += green.g / 3.5;
-    color.a += green.a / 7.0;
+    color.g += centerSample.g / 3.5;
+    color.a += centerSample.a / 7.0;
 
-    float4 cyan = nativeAtlasSample(address - spread * (1.0 / 3.0), lod);
+    float4 cyan = sampleLensBackdrop(address - spread * (1.0 / 3.0), plan);
     color.g += cyan.g / 3.5;
     color.b += cyan.b / 3.0;
     color.a += cyan.a / 7.0;
 
-    float4 blue = nativeAtlasSample(address - spread * (2.0 / 3.0), lod);
+    float4 blue = sampleLensBackdrop(address - spread * (2.0 / 3.0), plan);
     color.b += blue.b / 3.0;
     color.a += blue.a / 7.0;
 
-    float4 purple = nativeAtlasSample(address - spread, lod);
+    float4 purple = sampleLensBackdrop(address - spread, plan);
     color.r += purple.r / 7.0;
     color.b += purple.b / 3.0;
     color.a += purple.a / 7.0;
 
     return color;
 }
-float4 nativeAtlasFiltered(float2 coordinate, float3 field) {
-    float4 inner = nativeAtlasRay(coordinate, field, false);
+float4 nativeAtlasFiltered(float2 coordinate, float3 field, float4 sharpCenter) {
+    float innerDisplacement = nativeGlassDisplacement(field.x, nativeAtlasLensParameters.x, nativeAtlasLensParameters.y);
+    float4 inner = sampleLensRay(coordinate, field, innerDisplacement, sharpCenter);
     // AIR first combines the mip samples, then removes source alpha once for the face.
     float3 color = nativeAtlasFlush(inner.rgb / max(inner.a, .000001));
     if (nativeAtlasRadii.y > 0.0 && nativeAtlasFillWeights.z > 0.0) {
         float lod = nativeGlassLod(nativeAtlasRadii.y);
         float offset = lod * .25;
-        float4 sampledFill = (nativeAtlasSample(coordinate - offset, lod)
-            + nativeAtlasSample(coordinate + offset, lod)) * .5;
+        LensSamplePlan plan = lensSamplePlan(lod);
+        float4 sampledFill = (sampleLensBackdrop(coordinate - offset, plan)
+            + sampleLensBackdrop(coordinate + offset, plan)) * .5;
         float3 fill = nativeAtlasFlush(sampledFill.rgb / max(sampledFill.a, .000001));
         color = nativeAtlasFillWeights.x * min(color, fill) + nativeAtlasFillWeights.y * max(color, fill)
             + (1.0 - nativeAtlasFillWeights.x - nativeAtlasFillWeights.y) * color;
@@ -685,7 +709,8 @@ float4 nativeAtlasFiltered(float2 coordinate, float3 field) {
     if (nativeAtlasOuterOpacity > 0.0) {
         float opacity = nativeGlassRefractionWeight(field.x, -pointScale, 0.0, nativeAtlasOuterOpacity);
         if (opacity > 0.0) {
-            float4 outer = nativeAtlasRay(coordinate, field, true);
+            float displacement = nativeGlassDisplacement(field.x, nativeAtlasLensParameters.z, nativeAtlasLensParameters.w);
+            float4 outer = sampleLensRay(coordinate, field, displacement, sharpCenter);
             outer.rgb = nativeAtlasFlush(outer.rgb);
             // The recovered outer sample remains raw RGBA. This is a four-channel mix, not SrcOver.
             result = mix(result, outer, opacity);
@@ -694,8 +719,8 @@ float4 nativeAtlasFiltered(float2 coordinate, float3 field) {
     // Native face processing consumes this mixed RGB directly and retains its raw alpha.
     // Do not force the outer sample opaque or unpremultiply it here.
     if (recipeOpacity >= 0.0 && recipeOpacity < 1.0) {
-        float displacement = nativeGlassDisplacement(field.x, nativeAtlasLensParameters.x, nativeAtlasLensParameters.y);
-        float4 sharp = nativeAtlasSample(coordinate + field.yz * displacement, 0.0);
+        float4 sharp = innerDisplacement == 0.0 ? sharpCenter
+            : nativeAtlasBilinear(coordinate + field.yz * innerDisplacement, 0);
         sharp = float4(nativeAtlasFlush(sharp.rgb / max(sharp.a, .000001)), 1.0);
         result = mix(sharp, result, recipeOpacity);
     }
@@ -708,7 +733,8 @@ half4 main(float2 coordinate) {
     if (coordinate.x < visibleBounds.x - guard || coordinate.x > visibleBounds.z + guard
         || coordinate.y < visibleBounds.y - guard || coordinate.y > visibleBounds.w + guard + 8.0 * density) return half4(0.0);
     float2 p = coordinate - glassOrigin;
-    float3 field = glassField(p, 0.0);
+    Surface localSurface = surface(p);
+    float3 field = float3(localSurface.d, localSurface.normal);
     float coverage = 1.0 - smoothstep(-0.75, 0.75, field.x);
     float threshold = cos(mix(1.8500490071139892, 1.3089969389957472, darkMode));
     float key = nativeGlassStrokeKeyFill(field, density, 1.0, threshold) * edgeOpacity;
@@ -723,17 +749,29 @@ half4 main(float2 coordinate) {
     float4 originalRaw = nativeAtlasBilinear(texturePoint, 0);
     float3 original = nativeAtlasFlush(originalRaw.rgb / max(originalRaw.a, .000001));
     float4 filtered = coverage > 0.0
-        ? nativeAtlasFiltered(texturePoint, float3(field.x * textureScale, field.yz)) : float4(original, 1.0);
+        ? nativeAtlasFiltered(texturePoint, float3(field.x * textureScale, field.yz), originalRaw) : float4(original, 1.0);
     float4 faceResult = endpoint_navigationMaterialFaceRaw(filtered);
-    float4 tint = surfaceTint(surface(coordinate));
+    // The union is normally recorded at zero origin. Reuse the same
+    // contributor weights for tint and opacity, including during motion.
+    Surface screenSurface = localSurface;
+    if (glassOrigin.x != 0.0 || glassOrigin.y != 0.0) screenSurface = surface(coordinate);
+    float4 tint = surfaceTint(screenSurface);
     faceResult.rgb = faceResult.rgb * (1.0 - tint.a) + tint.rgb;
     float4 shadowResult = float4(original * .7 * shadowAlpha, shadowAlpha);
     float4 covered = mix(shadowResult, faceResult, coverage);
     covered.rgb *= 1.0 - ring;
     covered.a = covered.a * (1.0 - ring) + ring;
-    float3 originalFace = endpoint_navigationMaterialFaceRaw(float4(original, 1.0)).rgb;
-    float4 completed = nativeGlassBackgroundCompletion(covered, original, originalFace, key, 1.0, -.3);
-    float highlightMask = (solidGlare > .5 ? (1.0 - smoothstep(0.0, 1.5 * density * lightSpread, abs(field.x))) * coverage : nativeCasdfHighlightCoverage(field.x, field.yz, density, lightAngle, .75 * lightSpread)) * topHighlight;
+    float4 completed = covered;
+    if (key > .000001) {
+        float3 originalFace = endpoint_navigationMaterialFaceRaw(float4(original, 1.0)).rgb;
+        completed = nativeGlassBackgroundCompletion(covered, original, originalFace, key, 1.0, -.3);
+    }
+    float highlightMask = 0.0;
+    if (topHighlight > 0.0) {
+        highlightMask = (solidGlare > .5
+            ? (1.0 - smoothstep(0.0, 1.5 * density * lightSpread, abs(field.x))) * coverage
+            : nativeCasdfHighlightCoverage(field.x, field.yz, density, lightAngle, .75 * lightSpread)) * topHighlight;
+    }
     if (highlightMask > 0.0) {
         float4 actual = float4(completed.rgb + (1.0 - completed.a) * original, 1.0);
         float4 light = nativeVibrantColorMatrix(float4(0.0, 0.0, 0.0, highlightMask), actual);
@@ -764,7 +802,6 @@ half4 main(float2 coordinate) {
             integral = integral * z + .0451020040;
             integral = integral * z + .393469334;
             float halo = clamp(exp(-.5 * z) * integral, 0.0, 1.0);
-            float3 ownField = transformedShapeDistance(coordinate, shapes[i], unionCorners[i], opacity[i], shapeScales[i]);
             float bigMask = min(1.0, 2.0 * halo); // Fade across the contact without a member outline.
             float little = max(extent.x, extent.y) / density < 120.0 ? 1.0 : .3 - .1 * t;
             half4 target = half4(glassWorkingToNativeGammaPremul(encoded));
@@ -774,5 +811,5 @@ half4 main(float2 coordinate) {
             encoded += coverage * (working - encoded);
         }
     }
-    return half4(encoded) * half(surfaceOpacity(surface(coordinate)));
+    return half4(encoded) * half(surfaceOpacity(screenSurface));
 }

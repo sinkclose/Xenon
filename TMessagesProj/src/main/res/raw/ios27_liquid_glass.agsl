@@ -76,6 +76,7 @@ half4 opticalColor(float2 coord) {
     float sd = sdRoundedRect(centeredCoord, halfSize, r);
 
     float d = refractionDistance(sd, min(halfSize.x, halfSize.y));
+    if (d == 0.0 && chromaticAberration <= 0.0) return sampleBackdrop(coord);
 
     // Edge zone: apply lens refraction
     // Use the actual outline normal, without an axial/radial warp of capsules.
@@ -113,7 +114,7 @@ half4 opticalColor(float2 coord) {
     color.g += yellow.g / 3.5;
     color.a += yellow.a / 7.0;
 
-    half4 green = sampleBackdrop(refractedCoord);
+    half4 green = baseColor;
     color.g += green.g / 3.5;
     color.a += green.a / 7.0;
 
