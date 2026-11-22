@@ -129,16 +129,27 @@ float3 glassNativeGammaToLinear(float3 value) {
     return float3(glassExtendedSrgbDecodeChannel(value.r),
         glassExtendedSrgbDecodeChannel(value.g), glassExtendedSrgbDecodeChannel(value.b));
 }
+// Skia converts this sRGB color uniform into the working space. If it arrives
+// unchanged, the surface is sRGB and both transfers below are identities.
+layout(color) uniform half4 colorSpaceProbe;
+bool workingIsNativeGamma() {
+    float3 delta = abs(float3(colorSpaceProbe.rgb) - float3(.5, .25, .75));
+    return max(max(delta.r, delta.g), delta.b) < .003;
+}
 float3 glassWorkingToNativeGamma(float3 straightWorkingRgb) {
+    if (workingIsNativeGamma()) return straightWorkingRgb;
     return glassLinearToNativeGamma(toLinearSrgb(straightWorkingRgb));
 }
 float3 glassNativeGammaToWorking(float3 straightNativeRgb) {
+    if (workingIsNativeGamma()) return straightNativeRgb;
     return fromLinearSrgb(glassNativeGammaToLinear(straightNativeRgb));
 }
 float4 glassWorkingToNativeGammaPremul(float4 value) {
+    if (workingIsNativeGamma()) return value;
     return float4(glassWorkingToNativeGamma(value.rgb / max(value.a, .000001)) * value.a, value.a);
 }
 float4 glassNativeGammaToWorkingPremul(float4 value) {
+    if (workingIsNativeGamma()) return value;
     return float4(glassNativeGammaToWorking(value.rgb / max(value.a, .000001)) * value.a, value.a);
 }
 

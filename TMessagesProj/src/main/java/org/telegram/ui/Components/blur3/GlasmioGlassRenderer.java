@@ -18,6 +18,8 @@ import java.util.Arrays;
 @RequiresApi(33)
 public class GlasmioGlassRenderer {
     private final RenderNode atlas = new RenderNode("GlasmioMaterial");
+    // Clips the material to the sharp region so the shader skips the packed blur planes.
+    private final RenderNode output = new RenderNode("GlasmioOutput");
     private final GlasmioBlurPlanes planes = new GlasmioBlurPlanes();
     private int previousPlanesGeneration = -1;
     protected final RuntimeShader material;
@@ -52,6 +54,7 @@ public class GlasmioGlassRenderer {
         unionRenderer = shapeCount > 0;
         material = new RuntimeShader(AndroidUtilities.readRes(shaderResource)
                 .replace("const int SHAPE_COUNT = 8;", "const int SHAPE_COUNT = " + shapeCount + ";"));
+        material.setColorUniform("colorSpaceProbe", android.graphics.Color.valueOf(.5f, .25f, .75f, 1f));
     }
 
     public void setTint(int color) {
@@ -130,13 +133,17 @@ public class GlasmioGlassRenderer {
                 || previousPlanesGeneration != planes.generation()
                 || previousSourceW != source.getWidth() || previousSourceH != source.getHeight()
                 || previousSourceLeft != source.getLeft() || previousSourceTop != source.getTop();
-        if (!topologyChanged && !geometryChanged && !materialDirty && !pressDirty) return atlas;
+        if (!topologyChanged && !geometryChanged && !materialDirty && !pressDirty) return output;
         if (topologyChanged) {
-            atlas.setPosition(source.getLeft(), source.getTop(),
-                    source.getLeft()+packed.getWidth(), source.getTop()+packed.getHeight());
+            atlas.setPosition(0, 0, packed.getWidth(), packed.getHeight());
             Canvas c = atlas.beginRecording();
             c.drawRenderNode(packed);
             atlas.endRecording();
+            output.setPosition(source.getLeft(), source.getTop(),
+                    source.getLeft()+source.getWidth(), source.getTop()+source.getHeight());
+            c = output.beginRecording();
+            c.drawRenderNode(atlas);
+            output.endRecording();
             previousPlanesGeneration = planes.generation();
             previousSource=source; previousSourceW=source.getWidth(); previousSourceH=source.getHeight();
             previousSourceLeft=source.getLeft(); previousSourceTop=source.getTop();
@@ -196,7 +203,7 @@ public class GlasmioGlassRenderer {
         }
         atlas.setRenderEffect(completed);
         materialDirty=pressDirty=false;
-        return atlas;
+        return output;
     }
 
     protected void configureVisibleBounds(float left,float top,float right,float bottom) {
@@ -213,10 +220,10 @@ public class GlasmioGlassRenderer {
     }
 
     public boolean hasDisplayList() {
-        return previousSource != null && previousSource.hasDisplayList() && planes.hasDisplayList() && atlas.hasDisplayList();
+        return previousSource != null && previousSource.hasDisplayList() && planes.hasDisplayList() && atlas.hasDisplayList() && output.hasDisplayList();
     }
 
     public void release() {
-        atlas.discardDisplayList(); planes.release(); previousSource=null; materialDirty=true;
+        atlas.discardDisplayList(); output.discardDisplayList(); planes.release(); previousSource=null; materialDirty=true;
     }
 }

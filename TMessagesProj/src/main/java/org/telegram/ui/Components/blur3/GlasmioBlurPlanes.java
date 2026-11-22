@@ -10,6 +10,8 @@ import androidx.annotation.RequiresApi;
 @RequiresApi(33)
 final class GlasmioBlurPlanes {
     private final RenderNode packed = new RenderNode("GlasmioSourcePlanes");
+    // The backdrop is rasterized once; the sharp copy and both planes sample this layer.
+    private final RenderNode sharp = new RenderNode("GlasmioSharpSource");
     private final RenderNode[] blur = new RenderNode[2];
     private final float[] scales = new float[2];
     private final int[] widths = new int[2], heights = new int[2];
@@ -30,6 +32,11 @@ final class GlasmioBlurPlanes {
         sourceLeft = input.getLeft(); sourceTop = input.getTop();
         mainSigma = main; fillSigma = fill; active = enabled;
         int x = sourceWidth + 2;
+        sharp.setUseCompositingLayer(enabled, null);
+        sharp.setPosition(0, 0, Math.max(1, sourceWidth), Math.max(1, sourceHeight));
+        Canvas s = sharp.beginRecording();
+        s.translate(-sourceLeft, -sourceTop); s.drawRenderNode(input);
+        sharp.endRecording();
         if (enabled) {
             for (int i = 0; i < 2; i++) {
                 float sigma = i == 0 ? main : fill;
@@ -44,8 +51,8 @@ final class GlasmioBlurPlanes {
                 }
                 blur[i].setPosition(0, 0, widths[i], heights[i]);
                 Canvas c = blur[i].beginRecording();
-                c.scale(scale, scale); c.translate(-sourceLeft, -sourceTop);
-                c.drawRenderNode(input); blur[i].endRecording();
+                c.scale(scale, scale);
+                c.drawRenderNode(sharp); blur[i].endRecording();
                 blur[i].setRenderEffect(RenderEffect.createBlurEffect(sigma * scale, sigma * scale, Shader.TileMode.CLAMP));
                 origins[i * 2] = x; origins[i * 2 + 1] = 0f;
                 x += widths[i] + 2;
@@ -56,7 +63,7 @@ final class GlasmioBlurPlanes {
         }
         packed.setPosition(0, 0, x, sourceHeight);
         Canvas c = packed.beginRecording();
-        c.save(); c.translate(-sourceLeft, -sourceTop); c.drawRenderNode(input); c.restore();
+        c.drawRenderNode(sharp);
         if (enabled) for (int i = 0; i < 2; i++) {
             c.save(); c.translate(origins[i * 2], origins[i * 2 + 1]);
             c.clipRect(0, 0, widths[i], heights[i]);
@@ -74,13 +81,13 @@ final class GlasmioBlurPlanes {
     int height(int plane) { return active ? heights[plane] : Math.max(1, sourceHeight); }
 
     boolean hasDisplayList() {
-        if (source == null || !source.hasDisplayList() || !packed.hasDisplayList()) return false;
+        if (source == null || !source.hasDisplayList() || !sharp.hasDisplayList() || !packed.hasDisplayList()) return false;
         if (active) for (RenderNode node : blur) if (node == null || !node.hasDisplayList()) return false;
         return true;
     }
 
     void release() {
-        packed.discardDisplayList();
+        packed.discardDisplayList(); sharp.discardDisplayList();
         for (RenderNode node : blur) if (node != null) node.discardDisplayList();
         source = null;
     }
