@@ -9,6 +9,7 @@ import android.content.pm.PackageInfo;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.SystemClock;
+import android.os.Trace;
 import android.text.TextUtils;
 import android.util.Base64;
 import android.util.Pair;
@@ -1109,9 +1110,14 @@ public class ConnectionsManager extends BaseController {
             if (isUpdating == value) {
                 return;
             }
-            isUpdating = value;
-            if (connectionState == ConnectionStateConnected) {
-                AccountInstance.getInstance(currentAccount).getNotificationCenter().postNotificationName(NotificationCenter.didUpdateConnectionState);
+            Trace.beginSection(value ? "Xenon: updating started" : "Xenon: updating ended");
+            try {
+                isUpdating = value;
+                if (connectionState == ConnectionStateConnected) {
+                    AccountInstance.getInstance(currentAccount).getNotificationCenter().postNotificationName(NotificationCenter.didUpdateConnectionState);
+                }
+            } finally {
+                Trace.endSection();
             }
         });
     }

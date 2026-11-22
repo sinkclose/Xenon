@@ -67,6 +67,7 @@ public final class PluginSafeMode {
     /** When true, we've already entered this launch — guards against double-handling. */
     private static volatile boolean bootHandledThisLaunch;
     private static boolean bootStartedThisProcess;
+    private static boolean bootCompletedThisProcess;
 
     /**
      * Snapshot of the boot flag from the PREVIOUS launch, captured before
@@ -449,10 +450,11 @@ public final class PluginSafeMode {
      * immediately after. This prevents a false "Failed to start" on the next
      * launch when the OS reclaims memory right after onResume.
      */
-    public static void markBootCompleted() {
+    public static synchronized void markBootCompleted() {
+        if (bootCompletedThisProcess) return;
         Context ctx = ApplicationLoader.applicationContext;
         if (ctx == null) return;
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        bootCompletedThisProcess = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .edit()
                 .putBoolean(KEY_BOOT_FLAG, false)
                 .commit();

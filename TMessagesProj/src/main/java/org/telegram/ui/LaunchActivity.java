@@ -45,6 +45,7 @@ import android.os.Parcelable;
 import android.os.StatFs;
 import android.os.StrictMode;
 import android.os.SystemClock;
+import android.os.Trace;
 import android.provider.ContactsContract;
 import android.provider.MediaStore;
 import android.provider.Settings;
@@ -7444,12 +7445,14 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         } catch (Throwable t) {
             org.telegram.messenger.FileLog.e("Plugin boot sequence threw", t);
         } finally {
-            // Reached here = this launch made it all the way to an interactive UI.
-            // Clear the boot-in-progress flag so the next start doesn't mistake us
-            // for a hang/crash. MUST be in finally so an exception in any plugin
-            // code above doesn't leave the flag set (which would cause a false
-            // "Failed to start" sheet on every subsequent launch).
-            zxc.iconic.xenon.plugins.PluginSafeMode.markBootCompleted();
+            // The UI has resumed. Clear the boot flag even if scheduling the
+            // plugin hook failed. The callback can finish independently.
+            Trace.beginSection("Xenon: mark plugin boot complete");
+            try {
+                zxc.iconic.xenon.plugins.PluginSafeMode.markBootCompleted();
+            } finally {
+                Trace.endSection();
+            }
         }
     }
 

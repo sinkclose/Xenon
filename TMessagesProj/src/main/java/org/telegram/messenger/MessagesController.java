@@ -33,6 +33,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.os.Trace;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Base64;
@@ -16954,6 +16955,10 @@ private boolean hasImportantUnread(TLRPC.Dialog dialog) {
         getConnectionsManager().sendRequest(req, (response, error) -> {
             if (error == null) {
                 TLRPC.updates_Difference res = (TLRPC.updates_Difference) response;
+                if (Build.VERSION.SDK_INT >= 29 && Trace.isEnabled()) {
+                    Trace.setCounter("Xenon: difference new messages", res.new_messages.size());
+                    Trace.setCounter("Xenon: difference other updates", res.other_updates.size());
+                }
                 if (res instanceof TLRPC.TL_updates_differenceTooLong) {
                     AndroidUtilities.runOnUIThread(() -> {
                         loadedFullUsers.clear();
@@ -17109,8 +17114,13 @@ private boolean hasImportantUnread(TLRPC.Dialog dialog) {
                                         ArrayList<MessageObject> arr = messages.valueAt(a);
                                         getMediaDataController().loadReplyMessagesForMessages(arr, dialogId, 0, 0, () -> {
                                             AndroidUtilities.runOnUIThread(() -> {
-                                                updateInterfaceWithMessages(dialogId, arr, 0);
-                                                getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload);
+                                                Trace.beginSection("Xenon: apply difference to dialog");
+                                                try {
+                                                    updateInterfaceWithMessages(dialogId, arr, 0);
+                                                    getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload);
+                                                } finally {
+                                                    Trace.endSection();
+                                                }
                                             });
                                         }, 0, null);
                                     }

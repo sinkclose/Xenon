@@ -74,7 +74,7 @@ public class PluginManager {
 
     private static final java.util.Map<String, PluginLuaRuntime> runtimes = new java.util.concurrent.ConcurrentHashMap<>();
     private static volatile PluginManager instance;
-    private static WeakReference<Activity> currentActivity = new WeakReference<>(null);
+    private static volatile WeakReference<Activity> currentActivity = new WeakReference<>(null);
     private static volatile long currentDialogId;
     private static volatile boolean requestFinishFragment;
 
@@ -358,6 +358,7 @@ public class PluginManager {
      * user adds/removes a plugin). No-op when plugins are disabled.
      */
     public void reloadAll() {
+        initialized = true;
         PluginApi.stopAll();
         plugins.clear();
         zxc.iconic.xenon.helpers.CustomBadgeController.getInstance().init();
@@ -771,45 +772,43 @@ public class PluginManager {
     // ------------------------------------------------------------------
 
     /**
-     * Fire a hook with no expected return value. Calls every registered handler
-     * for {@code hookName}, passing the given Lua args. Exceptions in a single
-     * plugin are logged and do not stop other plugins or the host.
+     * Enqueue a hook with no expected return value. The dispatcher preserves
+     * submission order and waits for callbacks away from the caller's thread.
      */
     public void fire(String hookName, LuaValue... args) {
+        if (!isEnabled()) return;
         ensureLoaded();
-        if (!isEnabled()) {
-            Log.d(TAG, "fire(" + hookName + "): plugins disabled");
-            return;
+
+        List<LoadedPlugin> subscribers = new ArrayList<>();
+        for (LoadedPlugin plugin : plugins) {
+            if (plugin.hooks.get(hookName).isfunction()
+                    && plugin.isEnabled() && allowsHook(plugin.fileName, hookName)) {
+                subscribers.add(plugin);
+            }
         }
-        if (plugins.isEmpty()) {
-            Log.d(TAG, "fire(" + hookName + "): no plugins loaded");
-            return;
-        }
-        Log.d(TAG, "fire(" + hookName + "): firing on " + plugins.size() + " plugin(s)");
-        try {
-            for (LoadedPlugin plugin : plugins) {
-                if (!plugin.isEnabled() || !allowsHook(plugin.fileName, hookName)) {
-                    Log.d(TAG, "fire(" + hookName + "): " + plugin.displayName + " disabled, skipping");
+        if (subscribers.isEmpty()) return;
+
+        hookDispatcher.execute(() -> {
+            for (LoadedPlugin plugin : subscribers) {
+                if (!isEnabled() || !plugin.isEnabled() || !allowsHook(plugin.fileName, hookName)) {
                     continue;
                 }
-                // Run on a guarded executor with a timeout, so a plugin that loops
-                // forever (while true do end) can't hang the calling thread (often
-                // the UI thread, e.g. onResume). We can't hard-kill the Lua thread
-                // (Java has no safe Thread.stop), but on timeout we flag the plugin
-                // as misbehaving, disable it, and rebuild — which is enough to keep
-                // the app responsive. Only applies to fire-and-forget hooks;
-                // synchronous result hooks (fireReturn) are left intact.
+                android.os.Trace.beginSection("Xenon: plugin " + hookName);
                 try {
                     invokeHookWithTimeout(plugin, hookName, args);
-                } catch (LuaError e) {
-                    FileLog.e("Plugin " + plugin.fileName + " hook " + hookName + " error", e);
-                    Log.e(TAG, "fire(" + hookName + "): error in " + plugin.fileName + ": " + e.getMessage());
+                } finally {
+                    android.os.Trace.endSection();
                 }
             }
-        } finally {
-            // Actual callback execution tracks its own watchdog lifetime.
-        }
+        });
     }
+
+    private static final java.util.concurrent.ExecutorService hookDispatcher =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread thread = new Thread(r, "XenonPluginDispatch");
+                thread.setDaemon(true);
+                return thread;
+            });
 
     /** Background executor used for guarded hook invocation. */
     private static final java.util.concurrent.ExecutorService hookExecutor =
@@ -837,10 +836,16 @@ public class PluginManager {
             future.cancel(true);
             Log.e(TAG, "fire(" + hookName + "): TIMEOUT after " + HOOK_TIMEOUT_MS
                     + "ms, quarantining " + plugin.fileName);
-            quarantinePlugin(plugin, "hook '" + hookName + "' exceeded timeout");
+            if (plugin.isEnabled()) {
+                quarantinePlugin(plugin, "hook '" + hookName + "' exceeded timeout");
+            }
         } catch (Exception e) {
-            quarantineFile(plugin.fileName, "hook " + hookName, e);
             Log.e(TAG, "fire(" + hookName + "): wait failed: " + e.getMessage());
+            org.telegram.messenger.AndroidUtilities.runOnUIThread(() -> {
+                if (plugin.isEnabled()) {
+                    quarantineFile(plugin.fileName, "hook " + hookName, e);
+                }
+            });
         }
     }
 
@@ -1578,7 +1583,12 @@ public class PluginManager {
             }
             Log.d(TAG, displayName + ": invoking hook '" + hookName + "'");
             if (!isEnabled() || !allowsHook(fileName, hookName)) return;
-            invokeCallback(fileName, handler, LuaValue.varargsOf(args));
+            markHookStart("callback " + fileName);
+            try {
+                runtime.invoke(handler, LuaValue.varargsOf(args));
+            } finally {
+                markHookEnd();
+            }
             Log.d(TAG, displayName + ": hook '" + hookName + "' completed");
         }
 
