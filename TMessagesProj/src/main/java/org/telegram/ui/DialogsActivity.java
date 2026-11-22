@@ -684,7 +684,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
     private boolean dialogsMaterialHeaderEnabled() {
         return NekoConfig.materialActivityHeaders && NekoConfig.materialHeadersInDialogs
-                && !NekoConfig.ios27DimmingEnabled() && !onlySelect;
+                && !onlySelect;
     }
 
     private int ios27DialogsFirstPosition() {
@@ -1399,6 +1399,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             updateContextViewPosition();
             updateStoriesViewAlpha(storiesAlpha);
             syncDialogsMaterialHeader();
+            final boolean materialHeader = dialogsMaterialHeaderEnabled();
+            final int listClipTop = (int) (-getY() + top + actionBarHeight);
+            final int compactHeaderBottom = top + actionBar.getHeight();
+            final int dimBottom = compactHeaderBottom + Math.round(materialDialogsExtraHeight());
             if (progressiveFadeController != null && canvas.isHardwareAccelerated()
                     && !org.telegram.ui.Components.IosPopupMorph.isCapturingBackdrop()) {
                 if (!progressiveFadeController.isEnabled()) {
@@ -1407,13 +1411,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 } else {
                     progressiveFadeController.setTopOffset(top);
                 // Extend the fade through the header and dissolve it into the rows.
-                final int listClipTop = (int) (-getY() + top + actionBarHeight);
-                final int fadeTop = (int) (top + actionBar.getHeight() + getInlineSearchHeight() + dp(SEARCH_TABS_HEIGHT));
+                final int fadeTop = (int) (compactHeaderBottom + getInlineSearchHeight() + dp(SEARCH_TABS_HEIGHT));
                 final int fadeZone = Math.max(fadeTop, listClipTop + dp(48));
-                progressiveFadeController.setProgressiveBlurZoneTop(dialogsMaterialHeaderEnabled() ? fadeZone : -1);
-                final int visibleFadeZone = dialogsMaterialHeaderEnabled()
+                progressiveFadeController.setProgressiveBlurZoneTop(materialHeader ? fadeZone : -1);
+                final int visibleFadeZone = materialHeader
                         ? Math.max(actionBar.getBottom(), listClipTop) + dp(12) : fadeZone;
-                progressiveFadeController.setIos27Dimming(NekoConfig.ios27DimmingEnabled(), top + actionBar.getHeight(),
+                progressiveFadeController.setIos27Dimming(NekoConfig.ios27DimmingEnabled(), dimBottom,
                         getThemedColor(Theme.key_windowBackgroundGray));
                 progressiveFadeController.setIos27SeparatorSource(viewPages[0].listView, ios27DialogsFirstPosition());
                 progressiveFadeController.setFadeZoneTop(visibleFadeZone);
@@ -1429,12 +1432,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 }
             }
             if (dialogsTopDimOverlay != null) {
-                final int listClipTop = (int) (-getY() + top + actionBarHeight);
-                final int fadeZone = dialogsMaterialHeaderEnabled()
+                final int fadeZone = materialHeader
                         ? Math.max(actionBar.getBottom(), listClipTop) + dp(12)
-                        : Math.max(top + actionBar.getHeight() + getInlineSearchHeight() + dp(SEARCH_TABS_HEIGHT),
+                        : Math.max(compactHeaderBottom + getInlineSearchHeight() + dp(SEARCH_TABS_HEIGHT),
                                 listClipTop + dp(48));
-                dialogsTopDimOverlay.setPosition(0, NekoConfig.ios27DimmingEnabled() ? top + actionBar.getHeight() : fadeZone);
+                dialogsTopDimOverlay.setPosition(0, NekoConfig.ios27DimmingEnabled() ? dimBottom : fadeZone);
                 dialogsTopDimOverlay.setIos27SeparatorSource(viewPages[0].listView, ios27DialogsFirstPosition());
                 dialogsTopDimOverlay.setColor(NekoConfig.blurredFadeDimming
                         ? Theme.multAlpha(getThemedColor(Theme.key_windowBackgroundGray),

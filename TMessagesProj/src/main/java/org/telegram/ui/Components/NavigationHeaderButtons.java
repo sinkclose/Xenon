@@ -402,7 +402,9 @@ public final class NavigationHeaderButtons {
         }
     }
 
-    public static boolean modeEnabled() { return NekoConfig.fadeViewOtherActivities() && (!NekoConfig.materialActivityHeaders || NekoConfig.ios27DimmingEnabled()); }
+    public static boolean modeEnabled() {
+        return NekoConfig.fadeViewOtherActivities() && !NekoConfig.materialActivityHeaders;
+    }
     private static float clamp(float x) { return Math.max(0, Math.min(1, x)); }
 
     private boolean eligible(ActionBar bar) {

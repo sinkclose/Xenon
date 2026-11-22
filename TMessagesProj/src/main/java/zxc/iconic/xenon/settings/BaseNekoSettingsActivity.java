@@ -521,7 +521,7 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
     private int materialFontGeneration = -1;
 
     protected boolean materialHeaderEnabled() {
-        return NekoConfig.materialActivityHeaders && !NekoConfig.ios27DimmingEnabled();
+        return NekoConfig.materialActivityHeaders;
     }
 
     /** Screens with a live preview own their background across header changes. */
@@ -852,6 +852,8 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
         }
         int headerBottom = Math.max(headerInsetTop + AndroidUtilities.dp(64), materialAppBar.getBottom());
         int zone = settingsFadeZoneTop(headerBottom);
+        boolean ios27Dimming = NekoConfig.ios27DimmingEnabled();
+        int color = getThemedColor(Theme.key_windowBackgroundGray);
         boolean blur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
                 && (NekoConfig.blurredFadeViewEnabled() || NekoConfig.progressiveFadeBlurOtherActivitiesEnabled());
         if (blur && materialFadeController == null) {
@@ -866,6 +868,8 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
             materialFadeController.setFadeViewVisibility(blur ? View.VISIBLE : View.GONE);
             materialFadeController.setAlpha(1f);
             if (blur) {
+                materialFadeController.setIos27Dimming(ios27Dimming, headerBottom, color);
+                materialFadeController.setIos27SeparatorSource(listView);
                 materialFadeController.setProgressiveBlurZoneTop(headerBottom + AndroidUtilities.dp(31));
                 materialFadeController.setFadeZoneTop(zone);
                 materialFadeController.invalidate();
@@ -881,9 +885,10 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
             materialPlainFade.setFadeTopAlpha(NekoConfig.blurredFadeDimming ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
             materialPlainFade.setVisibility(blur ? View.GONE : View.VISIBLE);
             materialPlainFade.setAlpha(1f);
+            materialPlainFade.setIos27Dimming(ios27Dimming, headerBottom, color);
+            materialPlainFade.setIos27SeparatorSource(listView);
             materialPlainFade.setFadeZoneTop(zone);
             materialPlainFade.setFadeHeightTop(AndroidUtilities.dp(32), false);
-            int color = getThemedColor(Theme.key_windowBackgroundGray);
             if (materialPlainFadeColor != color) {
                 materialPlainFadeColor = color;
                 materialPlainFade.setDimColor(color);
