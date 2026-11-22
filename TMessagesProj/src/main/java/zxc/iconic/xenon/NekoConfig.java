@@ -213,6 +213,7 @@ public class NekoConfig {
     public static int textAnimFadeDuration = 300;
     public static int textAnimBlurStrength = 20;
     public static int textAnimBlurDuration = 350;
+    public static final TextRemovalAnimationSettings textRemovalAnimation = new TextRemovalAnimationSettings();
     public static final int DEFAULT_IOS_DURATION = 450;
     public static final String DEFAULT_IOS_EASE = "0.3,0.5,0,1";
     public static final int DEFAULT_FADE_DURATION = 350;
@@ -584,6 +585,7 @@ public class NekoConfig {
             textAnimFadeDuration = preferences.getInt("textAnimFadeDuration", 300);
             textAnimBlurStrength = preferences.getInt("textAnimBlurStrength", 20);
             textAnimBlurDuration = preferences.getInt("textAnimBlurDuration", 350);
+            textRemovalAnimation.load(preferences);
             alternativeTransitionSpeed = preferences.getInt("alternativeTransitionSpeed", DEFAULT_IOS_DURATION);
             alternativeTransitionEase = preferences.getString("alternativeTransitionEase", DEFAULT_IOS_EASE);
             iosSwitches = preferences.getBoolean("iosSwitches", false);

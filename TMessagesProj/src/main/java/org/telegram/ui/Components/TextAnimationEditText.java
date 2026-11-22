@@ -19,6 +19,7 @@ import android.text.style.ForegroundColorSpan;
 import android.view.Choreographer;
 import android.view.Gravity;
 import android.view.animation.PathInterpolator;
+import android.view.inputmethod.BaseInputConnection;
 import android.widget.TextView;
 
 import org.telegram.messenger.AndroidUtilities;
@@ -29,6 +30,8 @@ import java.util.ArrayList;
 import java.util.Iterator;
 
 import zxc.iconic.xenon.NekoConfig;
+import zxc.iconic.xenon.TextRemovalAnimationSettings;
+import zxc.iconic.xenon.TextRemovalAnimationSettings.Phase;
 
 public class TextAnimationEditText extends EditTextCaption {
 
@@ -37,7 +40,9 @@ public class TextAnimationEditText extends EditTextCaption {
         int endIndex;   // exclusive end — covers full grapheme (surrogate pair, ZWJ seq)
         long startTime;
         long duration;
+        long fadeDuration;
         long blurDuration;
+        TextSlideAnimation slide;
         ForegroundColorSpan span;
         boolean done;        // animation finished, waiting for span removal
         boolean removalPosted;
@@ -58,6 +63,9 @@ public class TextAnimationEditText extends EditTextCaption {
 
     private final ArrayList<CharAnim> charAnims = new ArrayList<>();
     private final ArrayList<DeletedCharAnim> deletedCharAnims = new ArrayList<>();
+    private TextRemovalAnimation removalAnimation;
+    private boolean settingText;
+    private boolean capturingRemovalGlyph;
     private final Paint animPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint cursorPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private float animCursorX = -1;
@@ -110,14 +118,24 @@ public class TextAnimationEditText extends EditTextCaption {
                         backspacePulseActive = true;
                         backspacePulseTime = SystemClock.elapsedRealtime();
                     }
-                    if (start == 0 && count == s.length()) {
+                    boolean wholeText = start == 0 && count == s.length();
+                    if (wholeText) {
                         // The whole text is about to be replaced. Remove every
                         // transparency span from the old text first — spans must
                         // never outlive the CharAnim entries that own them.
                         finishAllCharAnims();
-                        deletedCharAnims.clear();
+                        if (settingText && removalAnimation != null) removalAnimation.clear();
+                    }
+
+                    TextRemovalAnimationSettings settings = NekoConfig.textRemovalAnimation;
+                    if (settings.isDisabled(Phase.REMOVAL)) return;
+                    if (settings.mode() != TextRemovalAnimationSettings.Mode.BLUR) {
+                        if (!settingText && !isComposingReplacement(s, start, count, after)) {
+                            animateRemovedGlyphs(s, start, count, settings);
+                        }
                         return;
                     }
+                    if (wholeText) return;
 
                     Layout layout = getLayout();
                     if (layout == null) return;
@@ -169,8 +187,9 @@ public class TextAnimationEditText extends EditTextCaption {
                         }
                     }
                 }
-                if (s.length() == 0) {
-                    finishAllCharAnims();
+                TextRemovalAnimationSettings settings = NekoConfig.textRemovalAnimation;
+                if (s.length() == 0 || settings.isAppearanceDisabled()) {
+                    finishAppearanceAnimations();
                     return;
                 }
                 Editable editable = s instanceof Editable ? (Editable) s : null;
@@ -206,6 +225,9 @@ public class TextAnimationEditText extends EditTextCaption {
                 }
                 if (count > 0 && editable != null) {
                     long now = System.currentTimeMillis();
+                    boolean slideMode = settings.mode() == TextRemovalAnimationSettings.Mode.SLIDE;
+                    boolean slide = slideMode && !settings.isDisabled(Phase.APPEARANCE);
+                    boolean blur = !slideMode || !settings.isDisabled(Phase.BLUR_APPEARANCE);
                     int created = 0;
                     for (int i = start; i < start + count && created < MAX_ANIM_CHARS; ) {
                         if (i >= s.length()) break;
@@ -219,10 +241,17 @@ public class TextAnimationEditText extends EditTextCaption {
                         anim.index = i;
                         anim.endIndex = spanEnd;
                         anim.startTime = now;
-                        anim.duration = Math.max(50, NekoConfig.textAnimFadeDuration);
+                        anim.slide = slide ? new TextSlideAnimation(settings) : null;
+                        anim.fadeDuration = blur ? Math.max(50, NekoConfig.textAnimFadeDuration) : 0;
+                        anim.duration = Math.max(anim.fadeDuration, slide ? anim.slide.duration : 0);
                         anim.blurDuration = Math.max(50, NekoConfig.textAnimBlurDuration);
                         charAnims.add(anim);
-                        ForegroundColorSpan span = new ForegroundColorSpan(Color.TRANSPARENT);
+                        ForegroundColorSpan span = new ForegroundColorSpan(Color.TRANSPARENT) {
+                            @Override
+                            public void updateDrawState(TextPaint paint) {
+                                if (!capturingRemovalGlyph) super.updateDrawState(paint);
+                            }
+                        };
                         anim.span = span;
                         editable.setSpan(span, i, spanEnd, Editable.SPAN_EXCLUSIVE_EXCLUSIVE);
                         i += clusterLen;
@@ -258,6 +287,54 @@ public class TextAnimationEditText extends EditTextCaption {
         });
     }
 
+    @Override
+    public void setText(CharSequence text, BufferType type) {
+        boolean wasSettingText = settingText;
+        settingText = true;
+        try {
+            super.setText(text, type);
+        } finally {
+            settingText = wasSettingText;
+        }
+    }
+
+    private static boolean isComposingReplacement(CharSequence text, int start, int count, int after) {
+        if (after == 0 || !(text instanceof Editable)) return false;
+        Editable editable = (Editable) text;
+        return BaseInputConnection.getComposingSpanStart(editable) < start + count
+                && BaseInputConnection.getComposingSpanEnd(editable) > start;
+    }
+
+    private void animateRemovedGlyphs(CharSequence text, int start, int count, TextRemovalAnimationSettings settings) {
+        Layout layout = getLayout();
+        if (layout == null) return;
+        if (removalAnimation == null) removalAnimation = new TextRemovalAnimation(this);
+        long now = SystemClock.uptimeMillis();
+        int end = start + count;
+        for (int i = start, captured = 0; i < end && captured < MAX_ANIM_CHARS; captured++) {
+            int next = i + graphemeClusterLength(text, i, text.length());
+            removalAnimation.addGlyph(layout, i, next, now, settings);
+            i = next;
+        }
+    }
+
+    void captureRemovalGlyph(Layout layout, Canvas canvas) {
+        capturingRemovalGlyph = true;
+        TextPaint paint = layout.getPaint();
+        int previousColor = paint.getColor();
+        paint.setColor(getCurrentTextColor());
+        try {
+            if (Build.VERSION.SDK_INT >= 34) {
+                layout.drawText(canvas);
+            } else {
+                layout.draw(canvas);
+            }
+        } finally {
+            paint.setColor(previousColor);
+            capturingRemovalGlyph = false;
+        }
+    }
+
     /**
      * Removes the transparency span owned by a {@link CharAnim} from the given
      * Editable. Every path that drops a CharAnim without letting its animation
@@ -281,22 +358,24 @@ public class TextAnimationEditText extends EditTextCaption {
      * replacement, detach) so no character can stay hidden.
      */
     private void finishAllCharAnims() {
-        if (charAnims.isEmpty()) {
-            deletedCharAnims.clear();
-            return;
-        }
+        finishAppearanceAnimations();
+        deletedCharAnims.clear();
+    }
+
+    private void finishAppearanceAnimations() {
+        if (charAnims.isEmpty()) return;
         Editable editable = getText();
         for (CharAnim anim : charAnims) {
             removeAnimSpan(editable, anim);
         }
         charAnims.clear();
-        deletedCharAnims.clear();
         invalidate();
     }
 
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        if (removalAnimation != null) removalAnimation.clear();
         // The field and its Editable can outlive detach and be re-attached later
         // (e.g. the shared chat input field). Never leave transparency spans
         // behind — the text they cover would be drawn invisible after re-attach.
@@ -383,6 +462,9 @@ public class TextAnimationEditText extends EditTextCaption {
 
     @Override
     protected void onDraw(Canvas canvas) {
+        if (!charAnims.isEmpty() && NekoConfig.textRemovalAnimation.isAppearanceDisabled()) {
+            finishAppearanceAnimations();
+        }
         boolean smoothCursor = NekoConfig.textAnimationEnabled && NekoConfig.textAnimCursorSpeed > 0;
         float origWidth = getCursorWidth();
         if (smoothCursor) {
@@ -581,6 +663,9 @@ public class TextAnimationEditText extends EditTextCaption {
             }
             return;
         }
+        if (!deletedCharAnims.isEmpty() && NekoConfig.textRemovalAnimation.isDisabled(Phase.REMOVAL)) {
+            deletedCharAnims.clear();
+        }
         if (charAnims.isEmpty() && deletedCharAnims.isEmpty()) return;
         Layout layout = getLayout();
         if (layout == null) return;
@@ -629,8 +714,7 @@ public class TextAnimationEditText extends EditTextCaption {
                 }
 
                 long elapsed = now - anim.startTime;
-                float linearProgress = Math.min(1f, elapsed / (float) Math.max(1, anim.duration));
-                if (linearProgress >= 1) {
+                if (elapsed >= anim.duration) {
                     if (!anim.done) {
                         anim.done = true;
                         anim.removalPosted = true;
@@ -656,21 +740,26 @@ public class TextAnimationEditText extends EditTextCaption {
                     continue;
                 }
 
-                float progress = bezier.getInterpolation(linearProgress);
-
                 float x = layout.getPrimaryHorizontal(anim.index);
                 int line = layout.getLineForOffset(anim.index);
                 float y = layout.getLineBaseline(line);
                 String ch = text.subSequence(anim.index, Math.min(anim.endIndex, text.length())).toString();
 
-                int alpha = (int) (progress * 255);
+                boolean fading = anim.fadeDuration > 0 && elapsed < anim.fadeDuration;
+                int alpha = fading ? (int) (bezier.getInterpolation(elapsed / (float) anim.fadeDuration) * 255) : 255;
                 animPaint.setAlpha(alpha);
                 animPaint.setMaskFilter(null);
+
+                if (anim.slide != null) {
+                    float remaining = 1f - TextSlideAnimation.ease(elapsed / (float) anim.slide.duration);
+                    x -= anim.slide.dx * remaining;
+                    y -= anim.slide.dy * remaining;
+                }
 
                 // Skip blur for multi-char clusters (emoji surrogate pairs, ZWJ seqs).
                 // BlurMaskFilter has no effect on bitmap glyphs and just wastes time.
                 final boolean isSingleScalarChar = (anim.endIndex - anim.index) == 1;
-                if (blur > 0 && isSingleScalarChar && Build.VERSION.SDK_INT >= 26) {
+                if (fading && blur > 0 && isSingleScalarChar && Build.VERSION.SDK_INT >= 26) {
                     float blurLinear = Math.min(1f, elapsed / (float) Math.max(1, anim.blurDuration));
                     float blurProgress = bezier.getInterpolation(blurLinear);
                     float blurRadius = blur * (1 - blurProgress);
