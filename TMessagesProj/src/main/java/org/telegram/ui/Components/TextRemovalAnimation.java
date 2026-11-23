@@ -96,8 +96,8 @@ final class TextRemovalAnimation extends Drawable {
             bitmap.recycle();
             if (glyph == null) return;
         } else {
-            glyph = new Glyph(now, settings, random);
-            glyph.shards.add(new Shard(bitmap, left + x, top + y, scale));
+            glyph = new Glyph(now, settings);
+            glyph.shards.add(new Shard(bitmap, left + x, top + y, scale, glyph.slide.duration));
         }
 
         if (host == null) {
@@ -166,14 +166,17 @@ final class TextRemovalAnimation extends Drawable {
             shardPixels[piece][(pixel / width - rect.top) * rect.width() + pixel % width - rect.left] = pixels[pixel];
         }
 
-        Glyph glyph = new Glyph(now, settings, random);
+        Glyph glyph = new Glyph(now, settings);
         float force = settings.get(Slider.FORCE) * AndroidUtilities.density;
+        int minLifetime = settings.get(Slider.LIFETIME_MIN);
+        int maxLifetime = settings.get(Slider.LIFETIME_MAX);
         for (int piece = 0; piece < count; piece++) {
             Rect rect = pieces[piece];
             // The mutable bitmap preserves its alpha, including the antialiased edges.
             Bitmap shardBitmap = Bitmap.createBitmap(rect.width(), rect.height(), Bitmap.Config.ARGB_8888);
             shardBitmap.setPixels(shardPixels[piece], 0, rect.width(), 0, 0, rect.width(), rect.height());
-            Shard shard = new Shard(shardBitmap, x + rect.left / scale, y + rect.top / scale, scale);
+            int lifetime = minLifetime + random.nextInt(maxLifetime - minLifetime + 1);
+            Shard shard = new Shard(shardBitmap, x + rect.left / scale, y + rect.top / scale, scale, lifetime);
             double direction = Math.atan2(rect.exactCenterY() - bounds.exactCenterY(),
                     rect.exactCenterX() - bounds.exactCenterX()) + (random.nextFloat() - .5f) * .5f;
             float speed = force * (.65f + .55f * random.nextFloat());
@@ -265,36 +268,42 @@ final class TextRemovalAnimation extends Drawable {
     }
 
     private boolean drawSlide(Canvas canvas, Glyph glyph, long now) {
-        float t = (now - glyph.start) / (float) glyph.duration;
+        Shard slide = glyph.shards.get(0);
+        float t = (now - glyph.start) / (float) slide.lifetime;
         if (t >= 1f) return false;
         float motion = TextSlideAnimation.ease(t);
-        Shard slide = glyph.shards.get(0);
         drawShard(canvas, slide, slide.x + glyph.slide.dx * motion, slide.y + glyph.slide.dy * motion, 1f - motion);
         return true;
     }
 
     private boolean drawExplosion(Canvas canvas, Glyph glyph, long now) {
         long age = now - glyph.start;
-        if (age >= glyph.duration + (glyph.fall ? MAX_FALL_MS : 0)) return false;
-        boolean dropping = glyph.fall && age >= glyph.duration;
-        float opacity = glyph.fall ? 1f : Math.min(1f, (glyph.duration - age) / (glyph.duration * .45f));
-        float remaining = Math.min(48, now - glyph.lastFrame) / 1000f;
+        float frameTime = Math.min(48, now - glyph.lastFrame) / 1000f;
         glyph.lastFrame = now;
-        while (remaining > 0f) {
-            float dt = Math.min(.008f, remaining);
-            for (Shard shard : glyph.shards) {
-                advanceShard(shard, glyph, viewport, now, dropping, dt);
-            }
-            remaining -= dt;
-        }
 
-        boolean alive = !dropping;
-        for (Shard shard : glyph.shards) {
-            if (shard.released && hasExited(shard, glyph, viewport)) continue;
+        for (int i = 0; i < glyph.shards.size(); ) {
+            Shard shard = glyph.shards.get(i);
+            if (age >= shard.lifetime + (glyph.fall ? MAX_FALL_MS : 0)) {
+                glyph.shards.remove(i);
+                continue;
+            }
+            boolean dropping = glyph.fall && age >= shard.lifetime;
+            float remaining = frameTime;
+            while (remaining > 0f) {
+                float dt = Math.min(.008f, remaining);
+                advanceShard(shard, glyph, viewport, now, dropping, dt);
+                remaining -= dt;
+            }
+
+            if (shard.released && hasExited(shard, glyph, viewport)) {
+                glyph.shards.remove(i);
+                continue;
+            }
+            float opacity = glyph.fall ? 1f : Math.min(1f, (shard.lifetime - age) / (shard.lifetime * .45f));
             drawShard(canvas, shard, shard.x, shard.y, opacity);
-            alive = true;
+            i++;
         }
-        return alive;
+        return !glyph.shards.isEmpty();
     }
 
     private static void advanceShard(Shard shard, Glyph glyph, Rect viewport, long now, boolean dropping, float dt) {
@@ -395,17 +404,15 @@ final class TextRemovalAnimation extends Drawable {
     private static final class Glyph {
         final ArrayList<Shard> shards = new ArrayList<>();
         final long start;
-        final int duration;
         final TextSlideAnimation slide;
         final boolean fall, ignoreCollisions;
         final float directionX, directionY, gravity, bounce, rotationStrength;
         long lastFrame;
 
-        Glyph(long now, TextRemovalAnimationSettings settings, Random random) {
+        Glyph(long now, TextRemovalAnimationSettings settings) {
             lastFrame = start = now;
             if (settings.mode() == TextRemovalAnimationSettings.Mode.EXPLOSION) {
                 slide = null;
-                duration = randomTime(settings, random, Slider.LIFETIME_MIN, Slider.LIFETIME_MAX);
                 fall = settings.isEnabled(Toggle.FALL);
                 ignoreCollisions = settings.isEnabled(Toggle.IGNORE_FLOOR);
                 double angle = Math.toRadians(settings.get(Slider.DIRECTION));
@@ -416,7 +423,6 @@ final class TextRemovalAnimation extends Drawable {
                 rotationStrength = settings.get(Slider.SPIN);
             } else {
                 slide = new TextSlideAnimation(settings);
-                duration = slide.duration;
                 fall = ignoreCollisions = false;
                 directionX = directionY = gravity = bounce = rotationStrength = 0;
             }
@@ -429,22 +435,19 @@ final class TextRemovalAnimation extends Drawable {
         private static float gravityComponent(double component) {
             return Math.abs(component) < .001 ? 0f : (float) component;
         }
-
-        private static int randomTime(TextRemovalAnimationSettings settings, Random random, Slider min, Slider max) {
-            int lower = settings.get(min);
-            return lower + random.nextInt(settings.get(max) - lower + 1);
-        }
     }
 
     private static final class Shard {
         final Bitmap bitmap;
         final float halfWidth, halfHeight, radius;
+        final int lifetime;
         float x, y, vx, vy, angle, angularVelocity, spinDirection;
         long impactTime;
         boolean released;
 
-        Shard(Bitmap bitmap, float left, float top, float scale) {
+        Shard(Bitmap bitmap, float left, float top, float scale, int lifetime) {
             this.bitmap = bitmap;
+            this.lifetime = lifetime;
             halfWidth = bitmap.getWidth() / (2f * scale);
             halfHeight = bitmap.getHeight() / (2f * scale);
             radius = (float) Math.hypot(halfWidth, halfHeight);
