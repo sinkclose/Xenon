@@ -208,11 +208,15 @@ public class NekoConfig {
     public static boolean disableOpeningFailureBottomsheet = true;
     public static boolean hidePhoneNumber = false;
     public static boolean removeAds = false;
+    private static final int DEFAULT_TEXT_ANIM_CURSOR_SPEED = 80;
+    private static final int DEFAULT_TEXT_ANIM_FADE_DURATION = 300;
+    private static final int DEFAULT_TEXT_ANIM_BLUR_STRENGTH = 20;
+    private static final int DEFAULT_TEXT_ANIM_BLUR_DURATION = 350;
     public static boolean textAnimationEnabled = false;
-    public static int textAnimCursorSpeed = 80;
-    public static int textAnimFadeDuration = 300;
-    public static int textAnimBlurStrength = 20;
-    public static int textAnimBlurDuration = 350;
+    public static int textAnimCursorSpeed = DEFAULT_TEXT_ANIM_CURSOR_SPEED;
+    public static int textAnimFadeDuration = DEFAULT_TEXT_ANIM_FADE_DURATION;
+    public static int textAnimBlurStrength = DEFAULT_TEXT_ANIM_BLUR_STRENGTH;
+    public static int textAnimBlurDuration = DEFAULT_TEXT_ANIM_BLUR_DURATION;
     public static final TextRemovalAnimationSettings textRemovalAnimation = new TextRemovalAnimationSettings();
     public static final int DEFAULT_IOS_DURATION = 450;
     public static final String DEFAULT_IOS_EASE = "0.3,0.5,0,1";
@@ -581,10 +585,10 @@ public class NekoConfig {
             spoilerExtendToLineEnd = preferences.getBoolean("spoilerExtendToLineEnd", false);
             removeAds = preferences.getBoolean("removeAds", false);
             textAnimationEnabled = preferences.getBoolean("textAnimationEnabled", false);
-            textAnimCursorSpeed = preferences.getInt("textAnimCursorSpeed", 80);
-            textAnimFadeDuration = preferences.getInt("textAnimFadeDuration", 300);
-            textAnimBlurStrength = preferences.getInt("textAnimBlurStrength", 20);
-            textAnimBlurDuration = preferences.getInt("textAnimBlurDuration", 350);
+            textAnimCursorSpeed = preferences.getInt("textAnimCursorSpeed", DEFAULT_TEXT_ANIM_CURSOR_SPEED);
+            textAnimFadeDuration = preferences.getInt("textAnimFadeDuration", DEFAULT_TEXT_ANIM_FADE_DURATION);
+            textAnimBlurStrength = preferences.getInt("textAnimBlurStrength", DEFAULT_TEXT_ANIM_BLUR_STRENGTH);
+            textAnimBlurDuration = preferences.getInt("textAnimBlurDuration", DEFAULT_TEXT_ANIM_BLUR_DURATION);
             textRemovalAnimation.load(preferences);
             alternativeTransitionSpeed = preferences.getInt("alternativeTransitionSpeed", DEFAULT_IOS_DURATION);
             alternativeTransitionEase = preferences.getString("alternativeTransitionEase", DEFAULT_IOS_EASE);
@@ -709,6 +713,17 @@ public class NekoConfig {
 
     private static Gson gson;
 
+    private static Map<String, Object> textAnimationConfigDefaults() {
+        Map<String, Object> defaults = new HashMap<>();
+        defaults.put("textAnimationEnabled", false);
+        defaults.put("textAnimCursorSpeed", DEFAULT_TEXT_ANIM_CURSOR_SPEED);
+        defaults.put("textAnimFadeDuration", DEFAULT_TEXT_ANIM_FADE_DURATION);
+        defaults.put("textAnimBlurStrength", DEFAULT_TEXT_ANIM_BLUR_STRENGTH);
+        defaults.put("textAnimBlurDuration", DEFAULT_TEXT_ANIM_BLUR_DURATION);
+        TextRemovalAnimationSettings.addConfigDefaults(defaults);
+        return defaults;
+    }
+
     public static String exportConfigs() {
         if (gson == null) {
             gson = new GsonBuilder()
@@ -716,7 +731,9 @@ public class NekoConfig {
                     .create();
         }
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
-        return gson.toJson(preferences.getAll());
+        Map<String, Object> config = textAnimationConfigDefaults();
+        config.putAll(preferences.getAll());
+        return gson.toJson(config);
     }
 
     public static void importConfigs(String config) {
@@ -726,8 +743,16 @@ public class NekoConfig {
                     .create();
         }
         //noinspection unchecked
-        Map<String, ?> map = gson.fromJson(config, Map.class);
+        Map<String, Object> map = gson.fromJson(config, Map.class);
+        if (map == null) throw new IllegalArgumentException("Missing configuration");
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        Map<String, ?> previous = preferences.getAll();
+        // Older backups may predate some text animation settings.
+        for (String key : textAnimationConfigDefaults().keySet()) {
+            if (!map.containsKey(key) && previous.containsKey(key)) {
+                map.put(key, previous.get(key));
+            }
+        }
         preferences.unregisterOnSharedPreferenceChangeListener(listener);
         var editor = preferences.edit();
         editor.clear();

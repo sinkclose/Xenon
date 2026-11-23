@@ -6,6 +6,7 @@ import org.telegram.messenger.R;
 
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.Map;
 
 public final class TextRemovalAnimationSettings {
     private static final String PREFIX = "textRemovalAnimation.";
@@ -104,6 +105,21 @@ public final class TextRemovalAnimationSettings {
     private final EnumMap<Mode, EnumSet<Phase>> disabledPhases = new EnumMap<>(Mode.class);
     private SharedPreferences preferences;
     private Mode mode = Mode.BLUR;
+
+    static void addConfigDefaults(Map<String, Object> config) {
+        config.put(PREFIX + "mode", Mode.BLUR.key);
+        for (Slider slider : Slider.values()) {
+            config.put(PREFIX + slider.key, slider.defaultValue);
+        }
+        for (Toggle toggle : Toggle.values()) {
+            config.put(PREFIX + toggle.key, false);
+        }
+        for (Mode mode : Mode.values()) {
+            for (Phase phase : Phase.values()) {
+                config.put(phase.preferenceKey(mode), false);
+            }
+        }
+    }
 
     void load(SharedPreferences preferences) {
         this.preferences = preferences;
