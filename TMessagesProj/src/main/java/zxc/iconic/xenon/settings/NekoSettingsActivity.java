@@ -328,11 +328,6 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
     }
 
     @Override
-    protected boolean materialHeaderEnabled() {
-        return false;
-    }
-
-    @Override
     protected boolean needActionBarPadding() {
         return materialHeaderEnabled();
     }
@@ -342,7 +337,7 @@ public class NekoSettingsActivity extends BaseNekoSettingsActivity implements Fa
         return false;
     }
 
-    // The main page keeps its logo/content header and no toolbar surface.
+    // The logo header keeps its own surface when Material Headers are off.
     @Override
     protected boolean fadeViewEnabled() {
         return false;
