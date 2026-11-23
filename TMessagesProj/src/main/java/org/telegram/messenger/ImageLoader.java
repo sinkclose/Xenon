@@ -1940,7 +1940,7 @@ public class ImageLoader {
                         if (imageLocation.location != null) {
                             FileLoader.getInstance(currentAccount).cancelLoadFile(imageLocation.location, ext);
                         } else if (imageLocation.document != null) {
-                            FileLoader.getInstance(currentAccount).cancelLoadFile(imageLocation.document);
+                            FileLoader.getInstance(currentAccount).cancelDocumentPreview(imageLocation.document);
                         } else if (imageLocation.secureDocument != null) {
                             FileLoader.getInstance(currentAccount).cancelLoadFile(imageLocation.secureDocument);
                         } else if (imageLocation.webFile != null) {

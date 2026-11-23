@@ -159,6 +159,7 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
             downloadBytesDownloaded = 0;
             downloadCompletions.clear();
             if (complete != null) downloadCompletions.add(complete);
+            FileDownloadService.startAppUpdate(this);
             downloadWorker = new Thread(() -> runDownload(url), "XenonUpdateDownload");
             downloadWorker.start();
         }

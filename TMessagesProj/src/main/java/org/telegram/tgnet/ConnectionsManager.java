@@ -136,6 +136,7 @@ public class ConnectionsManager extends BaseController {
 
     private long lastPauseTime = System.currentTimeMillis();
     private boolean appPaused = true;
+    private boolean backgroundDownloadActive;
     private boolean isUpdating;
     private int connectionState;
     private AtomicInteger lastRequestToken = new AtomicInteger(1);
@@ -817,7 +818,9 @@ public class ConnectionsManager extends BaseController {
             if (lastPauseTime == 0) {
                 lastPauseTime = System.currentTimeMillis();
             }
-            native_pauseNetwork(currentAccount);
+            if (!backgroundDownloadActive) {
+                native_pauseNetwork(currentAccount);
+            }
         } else {
             if (appPaused) {
                 return;
@@ -830,6 +833,21 @@ public class ConnectionsManager extends BaseController {
             }
             lastPauseTime = 0;
             native_resumeNetwork(currentAccount, false);
+        }
+    }
+
+    // Keep the transport available without changing the activity's lifecycle state.
+    public void setBackgroundDownloadActive(boolean active) {
+        if (backgroundDownloadActive == active) {
+            return;
+        }
+        backgroundDownloadActive = active;
+        if (appResumeCount == 0) {
+            if (active) {
+                native_resumeNetwork(currentAccount, false);
+            } else {
+                native_pauseNetwork(currentAccount);
+            }
         }
     }
 

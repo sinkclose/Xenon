@@ -2598,7 +2598,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
         boolean playingNext = false;
         if (playingMessageObject != null) {
             if (downloadingCurrentMessage) {
-                FileLoader.getInstance(playingMessageObject.currentAccount).cancelLoadFile(playingMessageObject.getDocument());
+                FileLoader.getInstance(playingMessageObject.currentAccount).cancelDocumentPreview(playingMessageObject.getDocument());
             }
             MessageObject lastFile = playingMessageObject;
             if (notify) {

@@ -8,6 +8,7 @@
 
 package org.telegram.messenger;
 
+import android.os.Looper;
 import android.text.TextUtils;
 import android.util.SparseArray;
 
@@ -556,6 +557,12 @@ public class FileLoader extends BaseController {
         cancelLoadFile(document, null, null, null, null, null, deleteFile);
     }
 
+    public void cancelDocumentPreview(TLRPC.Document document) {
+        if (document != null) {
+            cancelLoadFile(document, null, null, null, null, null, false, true);
+        }
+    }
+
     public void cancelLoadFile(SecureDocument document) {
         cancelLoadFile(null, document, null, null, null, null, false);
     }
@@ -591,6 +598,10 @@ public class FileLoader extends BaseController {
     }
 
     private void cancelLoadFile(final TLRPC.Document document, final SecureDocument secureDocument, final WebFile webDocument, final TLRPC.FileLocation location, final String locationExt, String name, boolean deleteFile) {
+        cancelLoadFile(document, secureDocument, webDocument, location, locationExt, name, deleteFile, false);
+    }
+
+    private void cancelLoadFile(final TLRPC.Document document, final SecureDocument secureDocument, final WebFile webDocument, final TLRPC.FileLocation location, final String locationExt, String name, boolean deleteFile, boolean previewOnly) {
         if (location == null && document == null && webDocument == null && secureDocument == null && TextUtils.isEmpty(name)) {
             return;
         }
@@ -606,13 +617,27 @@ public class FileLoader extends BaseController {
         } else {
             fileName = name;
         }
-        LoadOperationUIObject uiObject = loadOperationPathsUI.remove(fileName);
+        LoadOperationUIObject uiObject;
+        if (previewOnly) {
+            uiObject = loadOperationPathsUI.get(fileName);
+            if (uiObject == null || uiObject.requestedDownload || !loadOperationPathsUI.remove(fileName, uiObject)) {
+                return;
+            }
+        } else {
+            uiObject = loadOperationPathsUI.remove(fileName);
+        }
         Runnable runnable = uiObject != null ? uiObject.loadInternalRunnable : null;
         boolean removed = uiObject != null;
         if (runnable != null) {
             fileLoaderQueue.cancelRunnable(runnable);
         }
+        if (!previewOnly) {
+            AndroidUtilities.runOnUIThread(() -> FileDownloadService.finishIfIdle(currentAccount, fileName));
+        }
         fileLoaderQueue.postRunnable(() -> {
+            if (previewOnly && isRequestedDownload(fileName)) {
+                return;
+            }
             FileLoadOperation operation = loadOperationPaths.remove(fileName);
             if (operation != null) {
                 FileLoaderPriorityQueue queue = operation.getQueue();
@@ -635,6 +660,7 @@ public class FileLoader extends BaseController {
         if (runnable != null) {
             fileLoaderQueue.cancelRunnable(runnable);
         }
+        AndroidUtilities.runOnUIThread(() -> FileDownloadService.finishIfIdle(currentAccount, fileName));
         fileLoaderQueue.postRunnable(() -> {
             FileLoadOperation operation2 = loadOperationPaths.remove(fileName);
             if (operation2 != null) {
@@ -667,6 +693,9 @@ public class FileLoader extends BaseController {
         fileLoaderQueue.postRunnable(() -> {
             FileLoadOperation operation = loadOperationPaths.get(fileName);
             if (operation != null) {
+                if (priority < PRIORITY_NORMAL_UP && isRequestedDownload(fileName)) {
+                    return;
+                }
                 int newPriority = getPriorityValue(priority);
                 if (operation.getPriority() == newPriority) {
                     return;
@@ -745,6 +774,11 @@ public class FileLoader extends BaseController {
 
     public boolean isLoadingFile(final String fileName) {
         return fileName != null && loadOperationPathsUI.containsKey(fileName);
+    }
+
+    private boolean isRequestedDownload(String fileName) {
+        LoadOperationUIObject uiObject = loadOperationPathsUI.get(fileName);
+        return uiObject != null && uiObject.requestedDownload;
     }
 
     public float getBufferedProgressFromPosition(final float position, final String fileName) {
@@ -842,7 +876,8 @@ public class FileLoader extends BaseController {
             return null;
         }
         if (cacheType != 10 && !TextUtils.isEmpty(fileName) && !fileName.contains("" + Integer.MIN_VALUE)) {
-            loadOperationPathsUI.put(fileName, new LoadOperationUIObject());
+            loadOperationPathsUI.compute(fileName, (name, previous) -> new LoadOperationUIObject(
+                    null, previous != null && previous.requestedDownload));
         }
 
         if (document != null && parentObject instanceof MessageObject && ((MessageObject) parentObject).putInDownloadsStore && !((MessageObject) parentObject).isAnyKindOfSticker()) {
@@ -852,7 +887,13 @@ public class FileLoader extends BaseController {
         final String finalFileName = fileName;
         FileLoadOperation operation = loadOperationPaths.get(finalFileName);
 
-        priority = getPriorityValue(priority);
+        if (priority < PRIORITY_NORMAL_UP && isRequestedDownload(fileName)) {
+            int currentPriority = operation != null ? operation.getPriority() : 0;
+            priority = currentPriority > FileLoaderPriorityQueue.PRIORITY_VALUE_NORMAL
+                    ? currentPriority : getPriorityValue(PRIORITY_NORMAL_UP);
+        } else {
+            priority = getPriorityValue(priority);
+        }
 
         if (operation != null) {
             if (cacheType != 10 && operation.isPreloadVideoOperation()) {
@@ -1166,9 +1207,16 @@ public class FileLoader extends BaseController {
         }
         Runnable runnable = () -> loadFileInternal(document, secureDocument, webDocument, location, imageLocation, parentObject, locationExt, locationSize, priority, null, 0, false, cacheType);
         if (cacheType != 10 && !TextUtils.isEmpty(fileName) && !fileName.contains("" + Integer.MIN_VALUE)) {
-            LoadOperationUIObject uiObject = new FileLoader.LoadOperationUIObject();
-            uiObject.loadInternalRunnable = runnable;
-            loadOperationPathsUI.put(fileName, uiObject);
+            MessageObject message = parentObject instanceof MessageObject ? (MessageObject) parentObject : null;
+            boolean requestedDownload = !fileName.startsWith("0_0") && imageLocation == null && document != null
+                    && priority >= PRIORITY_NORMAL_UP && message != null && message.putInDownloadsStore
+                    && !message.isAnyKindOfSticker();
+            loadOperationPathsUI.compute(fileName, (name, previous) -> new LoadOperationUIObject(runnable,
+                    requestedDownload || (previous != null && previous.requestedDownload)));
+            if (requestedDownload && cacheType != 2 && !DialogObject.isEncryptedDialog(message.getDialogId())
+                    && Looper.myLooper() == Looper.getMainLooper() && !ApplicationLoader.mainInterfacePaused) {
+                FileDownloadService.track(currentAccount, fileName, document, message);
+            }
         }
         fileLoaderQueue.postRunnable(runnable);
     }
@@ -1915,7 +1963,13 @@ public class FileLoader extends BaseController {
     }
 
     private static class LoadOperationUIObject {
-        Runnable loadInternalRunnable;
+        final Runnable loadInternalRunnable;
+        final boolean requestedDownload;
+
+        LoadOperationUIObject(Runnable loadInternalRunnable, boolean requestedDownload) {
+            this.loadInternalRunnable = loadInternalRunnable;
+            this.requestedDownload = requestedDownload;
+        }
     }
 
     public static byte[] longToBytes(long x) {

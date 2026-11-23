@@ -821,6 +821,7 @@ public class ApplicationLoader extends Application {
     public void removeUpdateDownloadListener(Runnable listener) { updateDownloadListeners.remove(listener); }
     protected void notifyUpdateDownloadChanged() {
         AndroidUtilities.runOnUIThread(() -> {
+            FileDownloadService.syncAppUpdate(this);
             for (Runnable listener : updateDownloadListeners) listener.run();
         });
     }

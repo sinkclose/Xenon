@@ -19380,7 +19380,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             releasePlayer(true);
         }
         if (currentMessageObject != null && !currentMessageObject.putInDownloadsStore) {
-            FileLoader.getInstance(currentAccount).cancelLoadFile(currentMessageObject.getDocument());
+            FileLoader.getInstance(currentAccount).cancelDocumentPreview(currentMessageObject.getDocument());
         }
         isVisible = false;
         isVisibleOrAnimating = false;
@@ -20138,12 +20138,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     private void switchToNextIndex(int add, boolean init) {
         if (currentMessageObject != null) {
             releasePlayer(false);
-            FileLoader.getInstance(currentAccount).cancelLoadFile(currentMessageObject.getDocument());
+            FileLoader.getInstance(currentAccount).cancelDocumentPreview(currentMessageObject.getDocument());
         } else if (currentPageBlock != null) {
             final TLObject media = pageBlocksAdapter.getMedia(currentIndex);
             if (media instanceof TLRPC.Document) {
                 releasePlayer(false);
-                FileLoader.getInstance(currentAccount).cancelLoadFile((TLRPC.Document) media);
+                FileLoader.getInstance(currentAccount).cancelDocumentPreview((TLRPC.Document) media);
             }
         }
         if (groupedPhotosListView != null) {

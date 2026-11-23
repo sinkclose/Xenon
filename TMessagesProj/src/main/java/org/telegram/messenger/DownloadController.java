@@ -1300,6 +1300,9 @@ public class DownloadController extends BaseController implements NotificationCe
     public void didReceivedNotification(int id, int account, Object... args) {
         if (id == NotificationCenter.fileLoadFailed || id == NotificationCenter.httpFileDidFailedLoad) {
             String fileName = (String) args[0];
+            if (id == NotificationCenter.fileLoadFailed) {
+                FileDownloadService.finishIfIdle(account, fileName);
+            }
             Integer canceled = (Integer) args[1];
             listenerInProgress = true;
             ArrayList<WeakReference<FileDownloadProgressListener>> arrayList = loadingFileObservers.get(fileName);
@@ -1323,6 +1326,9 @@ public class DownloadController extends BaseController implements NotificationCe
         } else if (id == NotificationCenter.fileLoaded || id == NotificationCenter.httpFileDidLoad) {
             listenerInProgress = true;
             String fileName = (String) args[0];
+            if (id == NotificationCenter.fileLoaded) {
+                FileDownloadService.finishIfIdle(account, fileName);
+            }
             ArrayList<MessageObject> messageObjects = loadingFileMessagesObservers.get(fileName);
             if (messageObjects != null) {
                 for (int a = 0, size = messageObjects.size(); a < size; a++) {
@@ -1348,10 +1354,11 @@ public class DownloadController extends BaseController implements NotificationCe
         } else if (id == NotificationCenter.fileLoadProgressChanged) {
             listenerInProgress = true;
             String fileName = (String) args[0];
+            Long loadedSize = (Long) args[1];
+            Long totalSize = (Long) args[2];
+            FileDownloadService.updateProgress(account, fileName, loadedSize, totalSize);
             ArrayList<WeakReference<FileDownloadProgressListener>> arrayList = loadingFileObservers.get(fileName);
             if (arrayList != null) {
-                Long loadedSize = (Long) args[1];
-                Long totalSize = (Long) args[2];
                 for (int a = 0, size = arrayList.size(); a < size; a++) {
                     WeakReference<FileDownloadProgressListener> reference = arrayList.get(a);
                     if (reference.get() != null) {

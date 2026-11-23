@@ -40818,7 +40818,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             PhotoViewer.getInstance().openPhoto(arrayList, arrayList.indexOf(message), dialog_id, 0, getTopicId(),photoViewerProvider);
         } else {
             if (!PhotoViewer.getInstance().openPhoto(message, ChatActivity.this, message.type != 0 ? dialog_id : 0, message.type != 0 ? mergeDialogId : 0, message.type != 0 ? getTopicId() : 0, photoViewerProvider) && startStream) {
-                getFileLoader().cancelLoadFile(message.getDocument());
+                getFileLoader().cancelDocumentPreview(message.getDocument());
             }
         }
         hideHints(false);

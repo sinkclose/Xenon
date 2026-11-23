@@ -166,7 +166,7 @@ public class SearchDownloadsContainer extends FrameLayout implements Notificatio
                     AndroidUtilities.openDocument(message, parentActivity, parentFragment);
                 } else if (!cell.isLoading()) {
                     messageObject.putInDownloadsStore = true;
-                    AccountInstance.getInstance(UserConfig.selectedAccount).getFileLoader().loadFile(document, messageObject, FileLoader.PRIORITY_LOW, 0);
+                    AccountInstance.getInstance(UserConfig.selectedAccount).getFileLoader().loadFile(document, messageObject, FileLoader.PRIORITY_NORMAL_UP, 0);
                     cell.updateFileExistIcon(true);
                     DownloadController.getInstance(currentAccount).updateFilesLoadingPriority();
                 } else {
@@ -555,7 +555,8 @@ public class SearchDownloadsContainer extends FrameLayout implements Notificatio
                                     if (hasCurrentDownload) {
                                         AccountInstance.getInstance(UserConfig.selectedAccount).getFileLoader().cancelLoadFile(messageObject.getDocument());
                                     } else {
-                                        AccountInstance.getInstance(UserConfig.selectedAccount).getFileLoader().loadFile(messageObject.getDocument(), messageObject, FileLoader.PRIORITY_LOW, 0);
+                                        messageObject.putInDownloadsStore = true;
+                                        AccountInstance.getInstance(UserConfig.selectedAccount).getFileLoader().loadFile(messageObject.getDocument(), messageObject, FileLoader.PRIORITY_NORMAL_UP, 0);
                                         DownloadController.getInstance(currentAccount).updateFilesLoadingPriority();
                                     }
                                 }
