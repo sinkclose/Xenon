@@ -290,7 +290,7 @@ final class TextRemovalAnimation extends Drawable {
 
         boolean alive = !dropping;
         for (Shard shard : glyph.shards) {
-            if (shard.released && shard.y - shard.radius > viewport.bottom) continue;
+            if (shard.released && hasExited(shard, glyph, viewport)) continue;
             drawShard(canvas, shard, shard.x, shard.y, opacity);
             alive = true;
         }
@@ -302,8 +302,9 @@ final class TextRemovalAnimation extends Drawable {
         if (dropping && (glyph.ignoreCollisions || bounced)) {
             shard.released = true;
         }
-        float gravityX = dropping ? 0f : glyph.gravityX;
-        float gravityY = dropping ? Math.max(glyph.gravityY, AndroidUtilities.dp(1250)) : glyph.gravityY;
+        float gravity = dropping ? Math.max(glyph.gravity, AndroidUtilities.dp(1250)) : glyph.gravity;
+        float gravityX = glyph.directionX * gravity;
+        float gravityY = glyph.directionY * gravity;
         shard.vx += gravityX * dt;
         shard.vy += gravityY * dt;
         shard.x += shard.vx * dt;
@@ -322,31 +323,42 @@ final class TextRemovalAnimation extends Drawable {
         float top = viewport.top + extentY;
         float bottom = viewport.bottom - extentY;
 
-        if ((shard.x <= left && shard.vx < 0f) || (shard.x >= right && shard.vx > 0f)) {
-            shard.vx = rebound(shard, glyph, shard.vx, shard.vy);
-            if (shard.vx != 0f) shard.vy *= .9f;
-        }
-        shard.x = Math.max(left, Math.min(right, shard.x));
-
-        if (shard.y <= top) {
-            shard.y = top;
-            if (shard.vy < 0f) {
-                shard.vy = rebound(shard, glyph, shard.vy, shard.vx);
-                if (shard.vy != 0f) shard.vx *= .9f;
+        int wallX = hitWall(shard.x, left, right, shard.released, glyph.directionX);
+        if (wallX != 0) {
+            shard.x = wallX < 0 ? left : right;
+            if (shard.vx * wallX > 0f) {
+                if (wallX * glyph.directionX > 0f && shard.impactTime == 0) shard.impactTime = now;
+                shard.vx = rebound(shard, glyph, shard.vx, shard.vy);
+                if (shard.vx != 0f) shard.vy *= .9f;
             }
         }
-        if (!shard.released && shard.y >= bottom) {
-            shard.y = bottom;
-            if (shard.vy > 0f) {
-                if (shard.impactTime == 0) shard.impactTime = now;
+
+        int wallY = hitWall(shard.y, top, bottom, shard.released, glyph.directionY);
+        if (wallY != 0) {
+            shard.y = wallY < 0 ? top : bottom;
+            if (shard.vy * wallY > 0f) {
+                if (wallY * glyph.directionY > 0f && shard.impactTime == 0) shard.impactTime = now;
                 shard.vy = rebound(shard, glyph, shard.vy, shard.vx);
                 if (shard.vy != 0f) {
                     shard.vx *= .9f;
-                } else if (Math.abs(gravityX) < .01f && gravityY >= 0f) {
+                } else if (gravityX == 0f && gravityY * wallY >= 0f) {
                     shard.vx = 0f;
                 }
             }
         }
+    }
+
+    private static int hitWall(float position, float min, float max, boolean released, float direction) {
+        if (position <= min && (!released || direction >= 0f)) return -1;
+        if (position >= max && (!released || direction <= 0f)) return 1;
+        return 0;
+    }
+
+    private static boolean hasExited(Shard shard, Glyph glyph, Rect viewport) {
+        return (glyph.directionX < 0f && shard.x + shard.radius < viewport.left)
+                || (glyph.directionX > 0f && shard.x - shard.radius > viewport.right)
+                || (glyph.directionY < 0f && shard.y + shard.radius < viewport.top)
+                || (glyph.directionY > 0f && shard.y - shard.radius > viewport.bottom);
     }
 
     private static float rebound(Shard shard, Glyph glyph, float velocity, float tangent) {
@@ -386,7 +398,7 @@ final class TextRemovalAnimation extends Drawable {
         final int duration;
         final TextSlideAnimation slide;
         final boolean fall, ignoreCollisions;
-        final float gravityX, gravityY, bounce, rotationStrength;
+        final float directionX, directionY, gravity, bounce, rotationStrength;
         long lastFrame;
 
         Glyph(long now, TextRemovalAnimationSettings settings, Random random) {
@@ -397,21 +409,25 @@ final class TextRemovalAnimation extends Drawable {
                 fall = settings.isEnabled(Toggle.FALL);
                 ignoreCollisions = settings.isEnabled(Toggle.IGNORE_FLOOR);
                 double angle = Math.toRadians(settings.get(Slider.DIRECTION));
-                float gravity = settings.get(Slider.GRAVITY) * AndroidUtilities.density;
-                gravityX = gravity * (float) Math.sin(angle);
-                gravityY = gravity * (float) Math.cos(angle);
+                directionX = gravityComponent(Math.sin(angle));
+                directionY = gravityComponent(Math.cos(angle));
+                gravity = settings.get(Slider.GRAVITY) * AndroidUtilities.density;
                 bounce = settings.get(Slider.BOUNCE) / 100f;
                 rotationStrength = settings.get(Slider.SPIN);
             } else {
                 slide = new TextSlideAnimation(settings);
                 duration = slide.duration;
                 fall = ignoreCollisions = false;
-                gravityX = gravityY = bounce = rotationStrength = 0;
+                directionX = directionY = gravity = bounce = rotationStrength = 0;
             }
         }
 
         float spinImpulse(float speed) {
             return rotationStrength * Math.min(1f, speed / AndroidUtilities.dp(340));
+        }
+
+        private static float gravityComponent(double component) {
+            return Math.abs(component) < .001 ? 0f : (float) component;
         }
 
         private static int randomTime(TextRemovalAnimationSettings settings, Random random, Slider min, Slider max) {
