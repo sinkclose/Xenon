@@ -31,6 +31,11 @@ public class VideoEncodingService extends Service implements NotificationCenter.
     }
 
     public static void start(boolean cancelled) {
+        MediaController.VideoConvertMessage messageInController = getUncoveredVideo();
+        if (messageInController == null) {
+            stop();
+            return;
+        }
         if (instance == null) {
             try {
                 Intent intent = new Intent(ApplicationLoader.applicationContext, VideoEncodingService.class);
@@ -39,14 +44,21 @@ public class VideoEncodingService extends Service implements NotificationCenter.
                 FileLog.e(e);
             }
         } else if (cancelled) {
-            MediaController.VideoConvertMessage messageInController = MediaController.getInstance().getCurrentForegroundConverMessage();
             if (instance.currentMessage != messageInController) {
-                if (messageInController != null) {
-                    instance.setCurrentMessage(messageInController);
-                } else {
-                    instance.stopSelf();
-                }
+                instance.setCurrentMessage(messageInController);
             }
+        }
+    }
+
+    private static MediaController.VideoConvertMessage getUncoveredVideo() {
+        MediaController.VideoConvertMessage message = MediaController.getInstance().getCurrentForegroundConverMessage();
+        return message != null && !FileDownloadService.coversVideoUpload(message.messageObject) ? message : null;
+    }
+
+    static void hideCoveredNotification() {
+        if (instance != null && instance.currentMessage != null
+                && FileDownloadService.coversVideoUpload(instance.currentMessage.messageObject)) {
+            stop();
         }
     }
 
@@ -96,7 +108,7 @@ public class VideoEncodingService extends Service implements NotificationCenter.
             String fileName = (String) args[0];
             if (account == currentAccount && currentPath != null && currentPath.equals(fileName)) {
                 AndroidUtilities.runOnUIThread(() -> {
-                    MediaController.VideoConvertMessage message = MediaController.getInstance().getCurrentForegroundConverMessage();
+                    MediaController.VideoConvertMessage message = getUncoveredVideo();
                     if (message != null) {
                         setCurrentMessage(message);
                     } else {
@@ -124,8 +136,9 @@ public class VideoEncodingService extends Service implements NotificationCenter.
         if (isRunning()) {
             return Service.START_NOT_STICKY;
         }
-        MediaController.VideoConvertMessage videoConvertMessage = MediaController.getInstance().getCurrentForegroundConverMessage();
+        MediaController.VideoConvertMessage videoConvertMessage = getUncoveredVideo();
         if (videoConvertMessage == null) {
+            stopSelf(startId);
             return Service.START_NOT_STICKY;
         }
         instance = this;

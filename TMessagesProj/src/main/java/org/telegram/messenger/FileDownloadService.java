@@ -25,11 +25,12 @@ import org.telegram.ui.LaunchActivity;
 import java.util.LinkedHashMap;
 import java.util.UUID;
 
-/** Keeps document and app update downloads active while their UI is in the background. */
+/** Keeps user-requested transfers active while their UI is in the background. */
 public final class FileDownloadService extends Service {
     private static final String CHANNEL_ID = "file_downloads";
     private static final int NOTIFICATION_ID = 0x58444C;
     private static final int UPDATE_NOTIFICATION_ID = 0x58444D;
+    private static final int UPLOAD_NOTIFICATION_ID = 0x58444E;
     private static final String APP_UPDATE = "app_update";
     private static final String EXTRA_DOWNLOAD_KEY = "download_key";
     private static final String ACTION_CANCEL = "org.telegram.messenger.CANCEL_DOWNLOAD.";
@@ -39,6 +40,7 @@ public final class FileDownloadService extends Service {
     private final boolean[] activeAccounts = new boolean[UserConfig.MAX_ACCOUNT_COUNT];
     private boolean foreground;
     private Download shownDownload;
+    private Download shownSeparateUpload;
     private boolean showingUpdateAlongsideDocument;
     private NotificationManager notifications;
 
@@ -50,6 +52,56 @@ public final class FileDownloadService extends Service {
         }
         Download download = new Download(account, fileName, document, message);
         addDownload(key, download);
+    }
+
+    static void trackUpload(int account, MessageObject message, String path) {
+        String key = uploadKey(account, message.getId());
+        Download upload = downloads.get(key);
+        if (upload == null) {
+            addDownload(key, new Download(account, message, path));
+        } else if (upload.loaded == 0 && upload.total <= 0) {
+            upload.fileName = path;
+        }
+    }
+
+    static void updateUploadProgress(int account, String path, boolean encrypted, long loaded, long total) {
+        if (loaded < 0 || total <= 0) {
+            return;
+        }
+        for (Download transfer : downloads.values()) {
+            if (transfer.outgoingMessage != null && transfer.account == account && path.equals(transfer.fileName)
+                    && encrypted == DialogObject.isEncryptedDialog(transfer.dialogId)) {
+                updateProgress(transfer, loaded, total);
+            }
+        }
+    }
+
+    static void finishUpload(int account, int messageId) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            finishDownload(uploadKey(account, messageId));
+        } else {
+            AndroidUtilities.runOnUIThread(() -> finishUpload(account, messageId));
+        }
+    }
+
+    static void finishAccountUploads(int account) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            AndroidUtilities.runOnUIThread(() -> finishAccountUploads(account));
+            return;
+        }
+        if (downloads.values().removeIf(transfer -> transfer.account == account && transfer.outgoingMessage != null)
+                && instance != null && instance.foreground) {
+            instance.onTransfersChanged();
+        }
+    }
+
+    static boolean coversVideoUpload(MessageObject message) {
+        return instance != null && instance.foreground
+                && downloads.containsKey(uploadKey(message.currentAccount, message.getId()));
+    }
+
+    private static String uploadKey(int account, int messageId) {
+        return "upload:" + account + ":" + messageId;
     }
 
     static void startAppUpdate(ApplicationLoader updater) {
@@ -80,6 +132,9 @@ public final class FileDownloadService extends Service {
         if (instance != null && instance.foreground) {
             instance.updateActiveAccounts();
             instance.refreshNotifications();
+            if (download.outgoingMessage != null) {
+                VideoEncodingService.hideCoveredNotification();
+            }
             return;
         }
         Context context = ApplicationLoader.applicationContext;
@@ -123,12 +178,16 @@ public final class FileDownloadService extends Service {
 
     private static void finishDownload(String key) {
         if (downloads.remove(key) != null && instance != null && instance.foreground) {
-            instance.updateActiveAccounts();
-            if (downloads.isEmpty()) {
-                instance.stopDownloadService();
-            } else {
-                instance.refreshNotifications();
-            }
+            instance.onTransfersChanged();
+        }
+    }
+
+    private void onTransfersChanged() {
+        if (downloads.isEmpty()) {
+            stopDownloadService();
+        } else {
+            updateActiveAccounts();
+            refreshNotifications();
         }
     }
 
@@ -161,22 +220,28 @@ public final class FileDownloadService extends Service {
             stopDownloadService();
             return START_NOT_STICKY;
         }
-        updateActiveAccounts();
-        if (downloads.isEmpty()) {
-            stopDownloadService();
-        } else {
-            refreshNotifications();
-        }
+        onTransfersChanged();
+        VideoEncodingService.hideCoveredNotification();
         return START_NOT_STICKY;
     }
 
     private static Download selectForegroundDownload() {
         for (Download download : downloads.values()) {
-            if (download.account >= 0) {
+            if (download.account >= 0 && download.outgoingMessage == null) {
                 return download;
             }
         }
-        return downloads.get(APP_UPDATE);
+        Download upload = firstUpload();
+        return upload != null ? upload : downloads.get(APP_UPDATE);
+    }
+
+    private static Download firstUpload() {
+        for (Download transfer : downloads.values()) {
+            if (transfer.outgoingMessage != null) {
+                return transfer;
+            }
+        }
+        return null;
     }
 
     private void refreshNotifications() {
@@ -195,6 +260,16 @@ public final class FileDownloadService extends Service {
                 notifications.cancel(UPDATE_NOTIFICATION_ID);
             }
         }
+        Download upload = firstUpload();
+        Download separateUpload = upload != next ? upload : null;
+        if (shownSeparateUpload != separateUpload) {
+            shownSeparateUpload = separateUpload;
+            if (separateUpload != null) {
+                notifications.notify(UPLOAD_NOTIFICATION_ID, buildNotification(separateUpload));
+            } else {
+                notifications.cancel(UPLOAD_NOTIFICATION_ID);
+            }
+        }
     }
 
     private void postProgress(Download download) {
@@ -203,11 +278,14 @@ public final class FileDownloadService extends Service {
             notificationId = NOTIFICATION_ID;
         } else if (download.account < 0 && showingUpdateAlongsideDocument) {
             notificationId = UPDATE_NOTIFICATION_ID;
+        } else if (shownSeparateUpload == download) {
+            notificationId = UPLOAD_NOTIFICATION_ID;
         } else {
             return;
         }
         long now = SystemClock.elapsedRealtime();
-        if (download.account < 0 && now - download.lastNotificationTime < 500) {
+        if ((download.account < 0 || download.outgoingMessage != null) && download.loaded < download.total
+                && now - download.lastNotificationTime < 500) {
             return;
         }
         download.lastNotificationTime = now;
@@ -237,7 +315,9 @@ public final class FileDownloadService extends Service {
         shownDownload = null;
         updateActiveAccounts();
         notifications.cancel(UPDATE_NOTIFICATION_ID);
+        notifications.cancel(UPLOAD_NOTIFICATION_ID);
         showingUpdateAlongsideDocument = false;
+        shownSeparateUpload = null;
         stopForeground(STOP_FOREGROUND_REMOVE);
         stopSelf();
     }
@@ -253,6 +333,7 @@ public final class FileDownloadService extends Service {
         if (instance == this) {
             instance = null;
             notifications.cancel(UPDATE_NOTIFICATION_ID);
+            notifications.cancel(UPLOAD_NOTIFICATION_ID);
             if (foreground) {
                 downloads.clear();
                 foreground = false;
@@ -268,8 +349,9 @@ public final class FileDownloadService extends Service {
     }
 
     private Notification buildNotification(Download download) {
+        boolean upload = download != null && download.outgoingMessage != null;
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setSmallIcon(upload ? android.R.drawable.stat_sys_upload : android.R.drawable.stat_sys_download)
                 .setCategory(NotificationCompat.CATEGORY_PROGRESS)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setOnlyAlertOnce(true)
@@ -288,8 +370,10 @@ public final class FileDownloadService extends Service {
         } else {
             open.setAction("com.tmessages.openchat.download." + download.token)
                     .putExtra("currentAccount", download.account)
-                    .putExtra("message_id", download.messageId);
-            if (download.dialogId < 0) {
+                    .putExtra("message_id", upload ? 0 : download.messageId);
+            if (DialogObject.isEncryptedDialog(download.dialogId)) {
+                open.putExtra("encId", DialogObject.getEncryptedChatId(download.dialogId));
+            } else if (download.dialogId < 0) {
                 open.putExtra("chatId", -download.dialogId).putExtra("topicId", download.topicId);
             } else {
                 open.putExtra("userId", download.dialogId);
@@ -297,7 +381,8 @@ public final class FileDownloadService extends Service {
         }
         builder.setContentIntent(PendingIntent.getActivity(this, 0, open,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE));
-        String downloadKey = download.account < 0 ? APP_UPDATE : key(download.account, download.fileName);
+        String downloadKey = upload ? uploadKey(download.account, download.messageId)
+                : download.account < 0 ? APP_UPDATE : key(download.account, download.fileName);
         Intent cancel = new Intent(this, CancelReceiver.class)
                 .setAction(ACTION_CANCEL + download.token)
                 .putExtra(EXTRA_DOWNLOAD_KEY, downloadKey);
@@ -308,7 +393,8 @@ public final class FileDownloadService extends Service {
         int percent = indeterminate ? 0 : (int) Math.min(100, 100.0 * download.loaded / download.total);
         String loaded = AndroidUtilities.formatFileSize(download.loaded);
         builder.setContentText(indeterminate ? loaded : LocaleController.formatString(
-                R.string.AccDescrDownloadProgress, loaded, AndroidUtilities.formatFileSize(download.total)));
+                upload ? R.string.AccDescrUploadProgress : R.string.AccDescrDownloadProgress,
+                loaded, AndroidUtilities.formatFileSize(download.total)));
         if (Build.VERSION.SDK_INT >= 36) {
             builder.setStyle(new NotificationCompat.ProgressStyle()
                     .setProgress(percent)
@@ -332,7 +418,9 @@ public final class FileDownloadService extends Service {
                 return;
             }
             finishDownload(downloadKey);
-            if (download.document != null) {
+            if (download.outgoingMessage != null) {
+                SendMessagesHelper.getInstance(download.account).cancelSendingMessage(download.outgoingMessage);
+            } else if (download.document != null) {
                 FileLoader.getInstance(download.account).cancelLoadFile(download.document);
             } else if (ApplicationLoader.applicationLoaderInstance != null) {
                 ApplicationLoader.applicationLoaderInstance.cancelDownloadingUpdate();
@@ -347,8 +435,9 @@ public final class FileDownloadService extends Service {
         final long dialogId;
         final int messageId;
         final long topicId;
-        final String fileName;
+        String fileName;
         final TLRPC.Document document;
+        final MessageObject outgoingMessage;
         long loaded;
         long total;
         long lastNotificationTime;
@@ -361,6 +450,7 @@ public final class FileDownloadService extends Service {
             topicId = 0;
             fileName = null;
             document = null;
+            outgoingMessage = null;
             this.loaded = loaded;
             this.total = total;
         }
@@ -369,6 +459,7 @@ public final class FileDownloadService extends Service {
             this.account = account;
             this.fileName = fileName;
             this.document = document;
+            outgoingMessage = null;
             String documentName = FileLoader.getDocumentFileName(document);
             title = TextUtils.isEmpty(documentName) ? LocaleController.getString(R.string.Downloading) : documentName;
             dialogId = message.getDialogId();
@@ -381,6 +472,23 @@ public final class FileDownloadService extends Service {
                 if (progress[1] > 0) {
                     total = progress[1];
                 }
+            }
+        }
+
+        Download(int account, MessageObject message, String path) {
+            this.account = account;
+            outgoingMessage = message;
+            fileName = path;
+            document = null;
+            dialogId = message.getDialogId();
+            messageId = message.getId();
+            topicId = dialogId < 0 ? message.getTopicId() : 0;
+            String documentName = DialogObject.isEncryptedDialog(dialogId) || message.isSecretMedia()
+                    ? null : FileLoader.getDocumentFileName(message.getDocument());
+            if (!TextUtils.isEmpty(documentName)) {
+                title = documentName;
+            } else {
+                title = LocaleController.getString(message.isVideo() ? R.string.SendingVideo : R.string.SendingFile);
             }
         }
     }
