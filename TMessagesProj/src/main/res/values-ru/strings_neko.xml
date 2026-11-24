@@ -745,6 +745,7 @@
     <string name="TriangleDirectionHint">Направление: 0° — вправо, 90° — вниз, 180° — влево, 270° — вверх. Отключите анимацию для неподвижного узора. Высокая плотность и частота кадров увеличивают расход батареи.</string>
     <string name="TriangleCustomizeColor">Настроить цвета треугольников</string>
     <string name="TriangleUseMainThemeColor">Использовать основной цвет темы</string>
+    <string name="WallpaperThemeColor">Цвет темы</string>
     <string name="TriangleAutoColor">Автоматический цвет по обоям</string>
     <string name="TriangleHue">Цветовой тон</string>
     <string name="TriangleSaturation">Насыщенность</string>

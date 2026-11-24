@@ -744,6 +744,7 @@
     <string name="TriangleDirectionHint">Direction: 0° right, 90° down, 180° left, 270° up. Disable animation for a static pattern. Higher density and frame rate use more battery.</string>
     <string name="TriangleCustomizeColor">Customize triangle colors</string>
     <string name="TriangleUseMainThemeColor">Use main theme color</string>
+    <string name="WallpaperThemeColor">Theme color</string>
     <string name="TriangleAutoColor">Match wallpaper automatically</string>
     <string name="TriangleHue">Hue</string>
     <string name="TriangleSaturation">Saturation</string>

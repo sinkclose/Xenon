@@ -154,6 +154,156 @@ public class Theme {
     public static final String DEFAULT_BACKGROUND_SLUG = "d";
     public static final String THEME_BACKGROUND_SLUG = "t";
     public static final String COLOR_BACKGROUND_SLUG = "c";
+    public static final String THEME_COLOR_BACKGROUND_SLUG = "xenon_theme_color";
+    private static volatile ThemeColorWallpaper themeColorWallpaper;
+
+    public static class ThemeColorWallpaper {
+        public final File mask;
+        public final TLRPC.TL_wallPaper pattern;
+        public final float intensity;
+        public final boolean motion;
+
+        private ThemeColorWallpaper(File mask, TLRPC.TL_wallPaper pattern, float intensity, boolean motion) {
+            this.mask = mask;
+            this.pattern = pattern;
+            this.intensity = intensity;
+            this.motion = motion && pattern != null;
+        }
+    }
+
+    public static ThemeColorWallpaper getThemeColorWallpaper() {
+        return themeColorWallpaper;
+    }
+
+    public static int getThemeWallpaperColor() {
+        int color = currentColors.get(key_chat_wallpaper);
+        return (color != 0 ? color : getColor(key_windowBackgroundWhite, null, true)) | 0xff000000;
+    }
+
+    private static ThemeColorWallpaper readThemeColorWallpaper(SharedPreferences preferences) {
+        String value = preferences.getString(THEME_COLOR_BACKGROUND_SLUG, null);
+        if (value == null) {
+            return null;
+        }
+        try {
+            JSONObject settings = new JSONObject(value);
+            String name = settings.optString("mask");
+            File mask = name.isEmpty() ? null : new File(ApplicationLoader.getFilesDirFixed(), name);
+            TLRPC.TL_wallPaper pattern = null;
+            if (mask != null && mask.isFile()) {
+                SerializedData data = new SerializedData(Utilities.hexToBytes(settings.getString("pattern")));
+                try {
+                    TLRPC.WallPaper wallpaper = TLRPC.WallPaper.TLdeserialize(data, data.readInt32(true), true);
+                    if (wallpaper instanceof TLRPC.TL_wallPaper) {
+                        pattern = (TLRPC.TL_wallPaper) wallpaper;
+                    }
+                } finally {
+                    data.cleanup();
+                }
+            }
+            return new ThemeColorWallpaper(pattern == null ? null : mask, pattern,
+                    (float) settings.optDouble("intensity", 1), settings.optBoolean("motion"));
+        } catch (Exception e) {
+            FileLog.e(e);
+            return new ThemeColorWallpaper(null, null, 1f, false);
+        }
+    }
+
+    public static boolean setThemeColorWallpaper(TLRPC.TL_wallPaper pattern, float intensity, boolean motion, int account) {
+        File mask = null;
+        boolean saved = false;
+        try {
+            if (pattern != null) {
+                ThemeColorWallpaper previous = themeColorWallpaper;
+                if (previous != null && previous.pattern != null && previous.pattern.id == pattern.id && previous.mask.isFile()) {
+                    mask = previous.mask;
+                } else {
+                    File source = FileLoader.getInstance(account).getPathToAttach(pattern.document, true);
+                    Bitmap bitmap;
+                    if ("application/x-tgwallpattern".equals(pattern.document.mime_type) || FileLoader.getDocumentFileName(pattern.document).endsWith(".svg")) {
+                        int width = Math.min(AndroidUtilities.displaySize.x, AndroidUtilities.displaySize.y);
+                        int height = Math.max(AndroidUtilities.displaySize.x, AndroidUtilities.displaySize.y);
+                        bitmap = SvgHelper.getBitmap(source, width, height, false);
+                    } else {
+                        bitmap = loadScreenSizedBitmap(new FileInputStream(source), 0);
+                    }
+                    if (bitmap == null) {
+                        return false;
+                    }
+                    if (bitmap.getConfig() == Bitmap.Config.ALPHA_8) {
+                        Bitmap alphaMask = bitmap;
+                        bitmap = alphaMask.copy(Bitmap.Config.ARGB_8888, false);
+                        alphaMask.recycle();
+                        if (bitmap == null) {
+                            return false;
+                        }
+                    }
+                    try {
+                        mask = File.createTempFile("theme-color-pattern-", ".png", ApplicationLoader.getFilesDirFixed());
+                        try (FileOutputStream stream = new FileOutputStream(mask)) {
+                            if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)) {
+                                return false;
+                            }
+                        }
+                    } finally {
+                        bitmap.recycle();
+                    }
+                }
+            }
+            saved = saveThemeColorWallpaper(mask, pattern, Math.max(0, Math.min(intensity, 1)), motion);
+            return saved;
+        } catch (Exception e) {
+            FileLog.e(e);
+            return false;
+        } finally {
+            if (!saved && mask != null && (themeColorWallpaper == null || !mask.equals(themeColorWallpaper.mask))) {
+                mask.delete();
+            }
+        }
+    }
+
+    private static boolean saveThemeColorWallpaper(File mask, TLRPC.TL_wallPaper pattern, float intensity, boolean motion) {
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("themeconfig", Activity.MODE_PRIVATE);
+        try {
+            JSONObject settings = new JSONObject();
+            if (mask != null && pattern != null) {
+                SerializedData data = new SerializedData(pattern.getObjectSize());
+                try {
+                    pattern.serializeToStream(data);
+                    settings.put("pattern", Utilities.bytesToHex(data.toByteArray()));
+                } finally {
+                    data.cleanup();
+                }
+                settings.put("mask", mask.getName());
+            }
+            settings.put("intensity", intensity);
+            settings.put("motion", motion);
+            if (!preferences.edit().putString(THEME_COLOR_BACKGROUND_SLUG, settings.toString()).commit()) {
+                return false;
+            }
+            File previousMask = themeColorWallpaper != null ? themeColorWallpaper.mask : null;
+            themeColorWallpaper = new ThemeColorWallpaper(mask, pattern, intensity, motion);
+            if (previousMask != null && !previousMask.equals(mask)) {
+                previousMask.delete();
+            }
+            return true;
+        } catch (Exception e) {
+            FileLog.e(e);
+            return false;
+        }
+    }
+
+    public static void clearThemeColorWallpaper() {
+        ThemeColorWallpaper previous = themeColorWallpaper;
+        if (previous != null) {
+            ApplicationLoader.applicationContext.getSharedPreferences("themeconfig", Activity.MODE_PRIVATE)
+                    .edit().remove(THEME_COLOR_BACKGROUND_SLUG).apply();
+            themeColorWallpaper = null;
+            if (previous.mask != null) {
+                previous.mask.delete();
+            }
+        }
+    }
 
     public static final int MSG_OUT_COLOR_BLACK = 0xff212121;
     public static final int MSG_OUT_COLOR_WHITE = 0xffffffff;
@@ -3912,6 +4062,8 @@ public class Theme {
 
         SharedPreferences themeConfig = ApplicationLoader.applicationContext.getSharedPreferences("themeconfig", Activity.MODE_PRIVATE);
 
+        themeColorWallpaper = readThemeColorWallpaper(themeConfig);
+
         ThemeInfo themeInfo = new ThemeInfo();
         themeInfo.name = "Blue";
         themeInfo.assetName = "bluebubbles.attheme";
@@ -5544,6 +5696,7 @@ public class Theme {
             isApplyingAccent = false;
             reloadWallpaper(true);
         } else {
+            clearThemeColorWallpaper();
             currentTheme.setOverrideWallpaper(null);
         }
     }
@@ -9435,22 +9588,29 @@ public class Theme {
     }
 
     private static Drawable loadWallpaperInternal(OverrideWallpaperInfo overrideWallpaper, File wallpaperFile, int intensity, boolean wallpaperMotion, TLRPC.Document finalWallpaperDocument, boolean defaultTheme) {
-        BackgroundDrawableSettings settings = createBackgroundDrawable(
-                currentTheme,
-                overrideWallpaper,
-                currentColors,
-                wallpaperFile,
-                themedWallpaperLink,
-                themedWallpaperFileOffset,
-                intensity,
-                previousPhase,
-                defaultTheme,
-                hasPreviousTheme,
-                isApplyingAccent,
-                wallpaperMotion,
-                finalWallpaperDocument,
-                false
-        );
+        ThemeColorWallpaper themeColor = themeColorWallpaper;
+        BackgroundDrawableSettings settings;
+        if (themeColor != null && (!hasPreviousTheme || isApplyingAccent)) {
+            settings = createThemeColorBackground(themeColor);
+            intensity = Math.round(themeColor.intensity * 100);
+        } else {
+            settings = createBackgroundDrawable(
+                    currentTheme,
+                    overrideWallpaper,
+                    currentColors,
+                    wallpaperFile,
+                    themedWallpaperLink,
+                    themedWallpaperFileOffset,
+                    intensity,
+                    previousPhase,
+                    defaultTheme,
+                    hasPreviousTheme,
+                    isApplyingAccent,
+                    wallpaperMotion,
+                    finalWallpaperDocument,
+                    false
+            );
+        }
         isWallpaperMotion = settings.isWallpaperMotion != null ? settings.isWallpaperMotion : isWallpaperMotion;
         isPatternWallpaper = settings.isPatternWallpaper != null ? settings.isPatternWallpaper : isPatternWallpaper;
         isCustomTheme = settings.isCustomTheme != null ? settings.isCustomTheme : isCustomTheme;
@@ -9460,6 +9620,36 @@ public class Theme {
         calcBackgroundColor(drawable, 1);
         applyChatServiceMessageColor();
         return drawable;
+    }
+
+    private static BackgroundDrawableSettings createThemeColorBackground(ThemeColorWallpaper info) {
+        int color = getThemeWallpaperColor();
+        BackgroundDrawableSettings settings = new BackgroundDrawableSettings();
+        settings.wallpaper = new ColorDrawable(color);
+        settings.isWallpaperMotion = false;
+        settings.isPatternWallpaper = false;
+        settings.isCustomTheme = true;
+        if (info.mask != null) {
+            try (FileInputStream stream = new FileInputStream(info.mask)) {
+                Bitmap mask = loadScreenSizedBitmap(stream, 0);
+                if (mask != null) {
+                    Bitmap bitmap = Bitmap.createBitmap(mask.getWidth(), mask.getHeight(), Bitmap.Config.ARGB_8888);
+                    Canvas canvas = new Canvas(bitmap);
+                    canvas.drawColor(color);
+                    Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
+                    paint.setColorFilter(new PorterDuffColorFilter(AndroidUtilities.getPatternColor(color), PorterDuff.Mode.SRC_IN));
+                    paint.setAlpha(Math.round(255 * info.intensity));
+                    canvas.drawBitmap(mask, 0, 0, paint);
+                    mask.recycle();
+                    settings.wallpaper = new BitmapDrawable(ApplicationLoader.applicationContext.getResources(), bitmap);
+                    settings.isWallpaperMotion = info.motion;
+                    settings.isPatternWallpaper = true;
+                }
+            } catch (Exception e) {
+                FileLog.e(e);
+            }
+        }
+        return settings;
     }
 
 
@@ -9927,6 +10117,9 @@ public class Theme {
     }
 
     public static String getSelectedBackgroundSlug() {
+        if (themeColorWallpaper != null) {
+            return THEME_COLOR_BACKGROUND_SLUG;
+        }
         if (currentTheme.overrideWallpaper != null) {
             return currentTheme.overrideWallpaper.slug;
         }
@@ -9969,7 +10162,7 @@ public class Theme {
     }
 
     public static BackgroundGradientDrawable getCurrentGradientWallpaper() {
-        if (currentTheme.overrideWallpaper != null && currentTheme.overrideWallpaper.color != 0 && currentTheme.overrideWallpaper.gradientColor1 != 0) {
+        if (themeColorWallpaper == null && currentTheme.overrideWallpaper != null && currentTheme.overrideWallpaper.color != 0 && currentTheme.overrideWallpaper.gradientColor1 != 0) {
             final int[] colors = {currentTheme.overrideWallpaper.color, currentTheme.overrideWallpaper.gradientColor1};
             final GradientDrawable.Orientation orientation = BackgroundGradientDrawable.getGradientOrientation(currentTheme.overrideWallpaper.rotation);
             return new BackgroundGradientDrawable(orientation, colors);

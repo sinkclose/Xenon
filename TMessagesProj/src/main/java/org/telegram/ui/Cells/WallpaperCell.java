@@ -30,6 +30,7 @@ import android.widget.ImageView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.FileLoader;
+import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.ImageLocation;
 import org.telegram.messenger.MediaController;
 import org.telegram.messenger.R;
@@ -68,7 +69,11 @@ public class WallpaperCell extends FrameLayout {
                 @Override
                 protected void onDraw(Canvas canvas) {
                     super.onDraw(canvas);
-                    if (currentWallpaper instanceof WallpapersListActivity.ColorWallpaper || currentWallpaper instanceof WallpapersListActivity.FileWallpaper) {
+                    if (currentWallpaper instanceof WallpapersListActivity.ColorWallpaper && ((WallpapersListActivity.ColorWallpaper) currentWallpaper).usesThemeColor()) {
+                        float inset = themeColorOutlinePaint.getStrokeWidth() / 2f;
+                        themeColorOutlinePaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText) & 0x66ffffff);
+                        canvas.drawRect(inset, inset, getWidth() - inset, getHeight() - inset, themeColorOutlinePaint);
+                    } else if (currentWallpaper instanceof WallpapersListActivity.ColorWallpaper || currentWallpaper instanceof WallpapersListActivity.FileWallpaper) {
                         canvas.drawLine(1, 0, getMeasuredWidth() - 1, 0, framePaint);
                         canvas.drawLine(0, 0, 0, getMeasuredHeight(), framePaint);
                         canvas.drawLine(getMeasuredWidth() - 1, 0, getMeasuredWidth() - 1, getMeasuredHeight(), framePaint);
@@ -111,6 +116,8 @@ public class WallpaperCell extends FrameLayout {
 
         public void setWallpaper(Object object, Object selectedWallpaper, Drawable themedWallpaper, boolean themed) {
             currentWallpaper = object;
+            setContentDescription(object instanceof WallpapersListActivity.ColorWallpaper && ((WallpapersListActivity.ColorWallpaper) object).usesThemeColor()
+                    ? LocaleController.getString(R.string.WallpaperThemeColor) : null);
             imageView.setVisibility(VISIBLE);
             imageView2.setVisibility(INVISIBLE);
             imageView.setBackgroundDrawable(null);
@@ -164,7 +171,17 @@ public class WallpaperCell extends FrameLayout {
                 }
             } else if (object instanceof WallpapersListActivity.ColorWallpaper) {
                 WallpapersListActivity.ColorWallpaper wallPaper = (WallpapersListActivity.ColorWallpaper) object;
-                if (wallPaper.path != null || wallPaper.pattern != null || Theme.DEFAULT_BACKGROUND_SLUG.equals(wallPaper.slug)) {
+                if (wallPaper.usesThemeColor()) {
+                    int color = Theme.getThemeWallpaperColor();
+                    imageView.setBackgroundColor(color);
+                    if (wallPaper.path != null) {
+                        imageView.setImage(wallPaper.path.getAbsolutePath(), imageFilter, null);
+                        imageView.getImageReceiver().setColorFilter(new PorterDuffColorFilter(AndroidUtilities.getPatternColor(color), PorterDuff.Mode.SRC_IN));
+                        imageView.getImageReceiver().setAlpha(wallPaper.intensity);
+                    } else {
+                        imageView.setImageBitmap(null);
+                    }
+                } else if (wallPaper.path != null || wallPaper.pattern != null || Theme.DEFAULT_BACKGROUND_SLUG.equals(wallPaper.slug)) {
                     int patternColor;
                     if (wallPaper.gradientColor2 != 0) {
                         MotionBackgroundDrawable motionBackgroundDrawable = new MotionBackgroundDrawable(wallPaper.color, wallPaper.gradientColor1, wallPaper.gradientColor2, wallPaper.gradientColor3, true);
@@ -305,6 +322,7 @@ public class WallpaperCell extends FrameLayout {
     private boolean isBottom;
     private int currentType;
     private Paint framePaint;
+    private final Paint themeColorOutlinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private Paint circlePaint;
     private Paint backgroundPaint;
     private Drawable checkDrawable;
@@ -327,6 +345,8 @@ public class WallpaperCell extends FrameLayout {
 
         framePaint = new Paint();
         framePaint.setColor(0x33000000);
+        themeColorOutlinePaint.setStyle(Paint.Style.STROKE);
+        themeColorOutlinePaint.setStrokeWidth(AndroidUtilities.dp(1));
 
         circlePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
