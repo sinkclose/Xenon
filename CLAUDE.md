@@ -63,3 +63,12 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
+---
+
+## Project notes (Xenon)
+
+- Build APK: `./gradlew :TMessagesProj_App:assembleRelease -x prepareOsuRustToolchain -x buildOsuDifficulty` (output in `TMessagesProj_App/build/outputs/apk/release/`). The osu `.so` is prebuilt in `TMessagesProj/build/generated/osu-difficulty/`; drop the `-x` flags only when `rustup` is installed.
+- Fast Java check: `./gradlew :TMessagesProj:compileReleaseJavaWithJavac -x prepareOsuRustToolchain -x buildOsuDifficulty`.
+- Native build needs the `twidget`/`widget-sandbox` submodules (and widget-sandbox's nested `quickjs`): `git submodule update --init --recursive TMessagesProj/jni/twidget`.
+- Submodule pointers must match upstream Nekogram; do not commit locally drifted checkouts (`git submodule status` must show no `+`).

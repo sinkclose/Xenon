@@ -11,6 +11,24 @@
 -keep class org.webrtc.* { *; }
 -keep class org.webrtc.audio.* { *; }
 -keep class org.webrtc.voiceengine.* { *; }
+# org.telegram.messenger: only the names that native code and reflection resolve at runtime.
+# Before changing these rules see TMessagesProj/proguard-checklist.md and run Tools/r8_keep_check.py.
+# Static JNI exports Java_org_telegram_messenger_<Class>_<method> (Utilities, Intro, MediaController, MrzRecognizer).
+-keepclasseswithmembers,includedescriptorclasses class org.telegram.messenger.* {
+    native <methods>;
+}
+# gifvideo.cpp: FindClass + GetMethodID, called from the native reader.
+-keep class org.telegram.messenger.AnimatedFileDrawableStream {
+    int read(int, int);
+    void cancel();
+    boolean isFinishedLoadingFile();
+    boolean isCanceled();
+    java.lang.String getFinishedFilePath();
+}
+# NotificationBadge.BADGERS holds class literals, instances are made with Class.newInstance().
+-keep class org.telegram.messenger.NotificationBadge$* implements org.telegram.messenger.NotificationBadge$Badger {
+    <init>();
+}
 -keep class org.telegram.messenger.voip.* { *; }
 -keep class org.telegram.messenger.AnimatedFileDrawableStream { <methods>; }
 -keep class org.telegram.SQLite.SQLiteException { <methods>; }
@@ -125,3 +143,6 @@
 }
 -keep class org.telegram.utils.twidget.WidgetSandboxBackend { *; }
 -keep class org.telegram.utils.twidget.WidgetEngineBackend { *; }
+
+# ktor (app.nekogram.translator): its IntelliJ debugger detector is JVM-only.
+-dontwarn java.lang.management.**
