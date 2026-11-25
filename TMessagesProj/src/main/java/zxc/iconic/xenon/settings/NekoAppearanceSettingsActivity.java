@@ -896,7 +896,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoSettingsActivity imp
         String userName = user != null ? UserObject.getUserName(user) : "User";
         String onlineText = LocaleController.getString(R.string.Online);
 
-        org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceBitmap wallpaperSource = new org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceBitmap();
+        org.telegram.utils.glass.source.GlassSourceBitmap wallpaperSource = new org.telegram.utils.glass.source.GlassSourceBitmap();
 
         org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory factory = new org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory(wallpaperSource);
         org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundProvider colorProvider = org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl.topPanelChatActivity(resourcesProvider);

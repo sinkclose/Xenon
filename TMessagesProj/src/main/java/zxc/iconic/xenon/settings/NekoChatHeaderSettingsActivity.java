@@ -32,9 +32,9 @@ import org.telegram.ui.Components.UniversalAdapter;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
 import org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundProvider;
 import org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl;
-import org.telegram.ui.Components.blur3.source.BlurredBackgroundSource;
-import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceBitmap;
-import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode;
+import org.telegram.utils.glass.source.GlassSource;
+import org.telegram.utils.glass.source.GlassSourceBitmap;
+import org.telegram.utils.glass.source.GlassSourceRenderNode;
 
 import java.util.ArrayList;
 
@@ -68,9 +68,9 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
     private boolean previewM3 = false;
     private boolean previewCenter = false;
     private ActionBarMenuItem previewMoreItem;
-    private BlurredBackgroundSource wallpaperSource;
-    private BlurredBackgroundSourceRenderNode wallpaperRenderSource;
-    private BlurredBackgroundSourceBitmap wallpaperBitmapSource;
+    private GlassSource wallpaperSource;
+    private GlassSourceRenderNode wallpaperRenderSource;
+    private GlassSourceBitmap wallpaperBitmapSource;
     private boolean wallpaperCaptured;
 
     @Override
@@ -407,10 +407,10 @@ public class NekoChatHeaderSettingsActivity extends BaseNekoSettingsActivity {
         previewContainer.setLayoutParams(new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, AndroidUtilities.displaySize.y / 2 + AndroidUtilities.dp(80)));
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            wallpaperRenderSource = new BlurredBackgroundSourceRenderNode(null);
+            wallpaperRenderSource = new GlassSourceRenderNode(null);
             wallpaperSource = wallpaperRenderSource;
         } else {
-            wallpaperBitmapSource = new BlurredBackgroundSourceBitmap();
+            wallpaperBitmapSource = new GlassSourceBitmap();
             wallpaperSource = wallpaperBitmapSource;
         }
         BlurredBackgroundDrawableViewFactory factory = new BlurredBackgroundDrawableViewFactory(wallpaperSource);

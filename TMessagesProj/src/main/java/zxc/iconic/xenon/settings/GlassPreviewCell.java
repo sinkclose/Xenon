@@ -27,14 +27,14 @@ import org.telegram.ui.Components.MotionBackgroundDrawable;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawableRenderNode;
 import org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl;
-import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode;
+import org.telegram.utils.glass.source.GlassSourceRenderNode;
 
 import zxc.iconic.xenon.NekoConfig;
 
 /**
  * Live preview of a glass surface on top of the current chat wallpaper.
  * The wallpaper is drawn full-bleed (center-cropped) and recorded into the
- * backing {@link BlurredBackgroundSourceRenderNode}. The source uses the same
+ * backing {@link GlassSourceRenderNode}. The source uses the same
  * blur settings as the runtime chat path.
  * Sliders call {@link #invalidateGlass()} and force a redraw.
  */
@@ -49,7 +49,7 @@ public class GlassPreviewCell extends View implements NotificationCenter.Notific
     // Covers the maximum standard displacement (9 * 20 dp * 1.5 / sqrt(1.5² - 1))
     // and advanced displacement with full dispersion (32 dp * 2 * 2).
     private final int samplePadding = dp(256);
-    @Nullable private BlurredBackgroundSourceRenderNode renderNodeSource;
+    @Nullable private GlassSourceRenderNode renderNodeSource;
     @Nullable private BlurredBackgroundDrawable glassDrawable;
 
     private final android.graphics.RectF bubbleRect = new android.graphics.RectF();
@@ -63,7 +63,7 @@ public class GlassPreviewCell extends View implements NotificationCenter.Notific
     public GlassPreviewCell(Context context, Theme.ResourcesProvider resourcesProvider) {
         super(context);
         this.resourcesProvider = resourcesProvider;
-        renderNodeSource = new BlurredBackgroundSourceRenderNode(null);
+        renderNodeSource = new GlassSourceRenderNode(null);
         cornerRadius = dp(20);
         setWillNotDraw(false);
         rebuildGlass();
@@ -230,7 +230,7 @@ public class GlassPreviewCell extends View implements NotificationCenter.Notific
         super.onDraw(canvas);
         if (previewSourceDirty) {
             previewSourceDirty = false;
-            renderNodeSource = new BlurredBackgroundSourceRenderNode(null);
+            renderNodeSource = new GlassSourceRenderNode(null);
             rebuildGlass();
             wallpaperDirty = true;
         }

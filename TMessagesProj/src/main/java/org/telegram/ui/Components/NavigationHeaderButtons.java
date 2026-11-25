@@ -28,7 +28,7 @@ import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
 import org.telegram.ui.Components.blur3.drawable.LiquidGlassInputGroup;
 import org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl;
-import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode;
+import org.telegram.utils.glass.source.GlassSourceRenderNode;
 import zxc.iconic.xenon.NekoConfig;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -43,7 +43,7 @@ import java.util.Map;
 public final class NavigationHeaderButtons {
     private final ActionBarLayout host;
     private final RenderNode content = new RenderNode("NavigationWithoutHeaderButtons");
-    private final BlurredBackgroundSourceRenderNode source = new BlurredBackgroundSourceRenderNode(null);
+    private final GlassSourceRenderNode source = new GlassSourceRenderNode(null);
     private final BlurredBackgroundDrawableViewFactory factory = new BlurredBackgroundDrawableViewFactory(source);
     private final ArrayList<ActionBar> managed = new ArrayList<>();
     private final ArrayList<BaseFragment> pages = new ArrayList<>();

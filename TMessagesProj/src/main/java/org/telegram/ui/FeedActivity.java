@@ -10,7 +10,7 @@ import android.view.ViewTreeObserver;
 import org.telegram.ui.Components.chat.ViewPositionWatcher;
 import org.telegram.ui.Components.CircularProgressDrawable;
 import org.telegram.ui.Components.blur3.RenderNodeWithHash;
-import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode;
+import org.telegram.utils.glass.source.GlassSourceRenderNode;
 import android.os.Bundle;
 import android.view.MotionEvent;
 import android.view.View;
@@ -115,7 +115,7 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
         }
         return false;
     }
-    private BlurredBackgroundSourceRenderNode tabsBackgroundSource;
+    private GlassSourceRenderNode tabsBackgroundSource;
     private final RectF chatPositionForTabs = new RectF();
     private ViewTreeObserver.OnPreDrawListener initialPositionListener;
     private final SharedPreferences.OnSharedPreferenceChangeListener headerSettingsListener = (preferences, key) -> {
@@ -135,11 +135,11 @@ public class FeedActivity extends BaseFragment implements NotificationCenter.Not
     }
 
     @Override
-    public BlurredBackgroundSourceRenderNode getGlassSource() {
+    public GlassSourceRenderNode getGlassSource() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || fragmentView == null || chatContainer == null
                 || chatContainer.getAlpha() == 0f || chatContainer.chatActivity.contentView == null) return null;
         if (tabsBackgroundSource == null) {
-            tabsBackgroundSource = new BlurredBackgroundSourceRenderNode(null);
+            tabsBackgroundSource = new GlassSourceRenderNode(null);
             tabsBackgroundSource.setupRenderer(new RenderNodeWithHash.Renderer() {
                 @Override
                 public void renderNodeUpdateDisplayList(Canvas canvas) {

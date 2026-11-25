@@ -182,7 +182,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
 
     private final @NonNull GlassSourceWrapped navbarContentSourceWallpaper;
     private final @NonNull BlurredBackgroundDrawableViewFactory navbarContentDrawableFactory;
-    private final @NonNull BlurredBackgroundSourceWrapped navbarContentSourceWallpaperSharp;
+    private final @NonNull GlassSourceWrapped navbarContentSourceWallpaperSharp;
 
     private final @Nullable GlassSourceRenderNode glassBackgroundSourceRenderNode;
     private final @Nullable GlassSourceRenderNode glassBackgroundSourceFrostedRenderNode;
@@ -1024,8 +1024,8 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
                     ((GlassSourceBitmap) navbarContentSourceWallpaper.getSource())
                         .setParentSize(widthSize, heightSize, 0);
                 }
-                if (navbarContentSourceWallpaperSharp.getSource() instanceof BlurredBackgroundSourceBitmap) {
-                    ((BlurredBackgroundSourceBitmap) navbarContentSourceWallpaperSharp.getSource())
+                if (navbarContentSourceWallpaperSharp.getSource() instanceof GlassSourceBitmap) {
+                    ((GlassSourceBitmap) navbarContentSourceWallpaperSharp.getSource())
                         .setParentSize(widthSize, heightSize, 0);
                 }
                 if (glassBackgroundSourceFrostedRenderNode != null) {

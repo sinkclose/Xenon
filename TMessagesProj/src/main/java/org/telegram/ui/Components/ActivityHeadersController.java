@@ -38,7 +38,7 @@ public final class ActivityHeadersController {
     private final MaterialActivityTitleView title;
     private final ChatActivityFadeView plain;
     private ProgressiveFadeBlurController blur;
-    private org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode buttonSource;
+    private org.telegram.utils.glass.source.GlassSourceRenderNode buttonSource;
     private FadeHeaderButtonGlass buttonGlass;
     private boolean paused;
     private final float barTranslation;
@@ -289,7 +289,7 @@ public final class ActivityHeadersController {
         bar.setPlainBackCircle(material || fade);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && fade && !material) {
             if (buttonSource == null) {
-                buttonSource = new org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode(null);
+                buttonSource = new org.telegram.utils.glass.source.GlassSourceRenderNode(null);
                 buttonGlass = new FadeHeaderButtonGlass(overlay, buttonSource, fragment.getResourceProvider());
             }
             if (org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS)) {

@@ -46,7 +46,7 @@ public class WallpaperBitmapProvider {
 
         if (drawable instanceof BitmapDrawable) {
             // Glass blur for the wallpaper layer lives on the GPU now
-            // (BlurredBackgroundSourceRenderNode records the sharp source and
+            // (GlassSourceRenderNode records the sharp source and
             // blurs it with a RenderEffect). The provider only prepares the
             // stock frosted matte used by the action bar / status colors.
             final Bitmap bitmap = blurredFromBitmap.get(((BitmapDrawable) drawable).getBitmap());

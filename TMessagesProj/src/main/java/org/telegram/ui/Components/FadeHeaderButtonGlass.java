@@ -17,7 +17,7 @@ import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
 import org.telegram.ui.Components.blur3.drawable.LiquidGlassInputGroup;
 import org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundColorProvider;
 import org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl;
-import org.telegram.ui.Components.blur3.source.BlurredBackgroundSource;
+import org.telegram.utils.glass.source.GlassSource;
 import org.telegram.ui.Components.chat.ViewPositionWatcher;
 import zxc.iconic.xenon.NekoConfig;
 import java.util.ArrayList;
@@ -55,7 +55,7 @@ public final class FadeHeaderButtonGlass {
         }
     }
 
-    public FadeHeaderButtonGlass(View root, BlurredBackgroundSource source, Theme.ResourcesProvider resources) {
+    public FadeHeaderButtonGlass(View root, GlassSource source, Theme.ResourcesProvider resources) {
         this.root = root;
         factory = new BlurredBackgroundDrawableViewFactory(source);
         factory.setLiquidGlassEffectAllowed(true);

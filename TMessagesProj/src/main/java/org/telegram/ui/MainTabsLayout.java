@@ -38,7 +38,7 @@ import zxc.iconic.xenon.helpers.MainTabsUiHelper;
 import zxc.iconic.xenon.helpers.LiquidNavigationMath;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawableRenderNode;
-import org.telegram.ui.Components.blur3.source.BlurredBackgroundSource;
+import org.telegram.utils.glass.source.GlassSource;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -399,7 +399,7 @@ public class MainTabsLayout extends AnimatedLinearLayout {
         lastLiquidLensRadius = Float.NaN;
         liquidBackdrop = drawable; // Its factory tracks the panel's position in the content source.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            BlurredBackgroundSource combined = new BlurredBackgroundSource() {
+            GlassSource combined = new GlassSource() {
                 @Override public BlurredBackgroundDrawable createDrawable() {
                     return new BlurredBackgroundDrawableRenderNode(this);
                 }

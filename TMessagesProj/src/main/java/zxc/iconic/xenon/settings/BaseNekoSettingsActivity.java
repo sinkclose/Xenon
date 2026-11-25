@@ -74,7 +74,7 @@ import org.telegram.ui.Components.blur3.RenderNodeWithHash;
 import org.telegram.ui.Components.blur3.ViewGroupPartRenderer;
 import org.telegram.ui.Components.blur3.capture.IBlur3Capture;
 import org.telegram.ui.Components.blur3.capture.IBlur3Hash;
-import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode;
+import org.telegram.utils.glass.source.GlassSourceRenderNode;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -108,11 +108,11 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             scrollableViewNoiseSuppressor = new DownscaleScrollableNoiseSuppressor();
-            iBlur3SourceGlassFrosted = new BlurredBackgroundSourceRenderNode(null);
-            iBlur3SourceGlass = new BlurredBackgroundSourceRenderNode(null);
+            iBlur3SourceGlassFrosted = new GlassSourceRenderNode(null);
+            iBlur3SourceGlass = new GlassSourceRenderNode(null);
             iBlur3SourceGlass.setScrollableNoiseSuppressor(scrollableViewNoiseSuppressor,
                     DownscaleScrollableNoiseSuppressor.DRAW_GLASS);
-            iBlur3SourceGlass.setUnderSource(new org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceColor() {
+            iBlur3SourceGlass.setUnderSource(new org.telegram.utils.glass.source.GlassSourceColor() {
                 @Override public void draw(Canvas canvas, float left, float top, float right, float bottom) {
                     canvas.drawColor(getThemedColor(Theme.key_windowBackgroundWhite));
                 }
@@ -1133,8 +1133,8 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
     /* Blur */
 
     private final @Nullable DownscaleScrollableNoiseSuppressor scrollableViewNoiseSuppressor;
-    private final @Nullable BlurredBackgroundSourceRenderNode iBlur3SourceGlassFrosted;
-    private final @Nullable BlurredBackgroundSourceRenderNode iBlur3SourceGlass;
+    private final @Nullable GlassSourceRenderNode iBlur3SourceGlassFrosted;
+    private final @Nullable GlassSourceRenderNode iBlur3SourceGlass;
 
     private boolean iBlur3Invalidated;
     private IBlur3Capture iBlur3Capture;

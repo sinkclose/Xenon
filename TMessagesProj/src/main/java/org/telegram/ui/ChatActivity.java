@@ -478,8 +478,8 @@ public class ChatActivity extends BaseFragment implements
     private final @NonNull GlassSourceWrapped navbarContentSourceWallpaper;
     private @NonNull BlurredBackgroundDrawableViewFactory navbarContentDrawableFactory;
 
-    private final @NonNull BlurredBackgroundSourceWrapped navbarContentSourceWallpaperSharp;
-    private final BlurredBackgroundSource glassWallpaperSource = new BlurredBackgroundSourceWrapped() {
+    private final @NonNull GlassSourceWrapped navbarContentSourceWallpaperSharp;
+    private final GlassSource glassWallpaperSource = new GlassSourceWrapped() {
         @Override
         public void draw(Canvas canvas, float left, float top, float right, float bottom) {
             if (contentView != null && contentView.backgroundView != null) {
@@ -489,10 +489,10 @@ public class ChatActivity extends BaseFragment implements
             }
         }
     };
-    private final @Nullable BlurredBackgroundSourceRenderNode fadeWallpaperSource;
+    private final @Nullable GlassSourceRenderNode fadeWallpaperSource;
     private final @NonNull BlurredBackgroundDrawableViewFactory dimWallpaperDrawableFactory;
 
-    private final @Nullable BlurredBackgroundSourceRenderNode fadeBlurSource;
+    private final @Nullable GlassSourceRenderNode fadeBlurSource;
     private final @Nullable BlurredBackgroundDrawableViewFactory fadeBlurFactory;
     private OnPostDrawView fadeBlurCaptureView;
     private final RectF fadeBlurCaptureRect = new RectF();
@@ -2957,7 +2957,7 @@ public class ChatActivity extends BaseFragment implements
         scrimBlur3Factory.setLinkedViewsRef(new ReferenceList<>());
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && NekoConfig.blurredFadeViewEnabled()) {
-            fadeBlurSource = new BlurredBackgroundSourceRenderNode(null);
+            fadeBlurSource = new GlassSourceRenderNode(null);
             fadeBlurSource.setOnProgressiveBlurReadyListener(this::invalidateFadeBlur);
             fadeBlurSource.setUnderSource(isChatFadeDimmingEnabled()
                     ? fadeWallpaperSource : navbarContentSourceWallpaper);
@@ -51610,21 +51610,6 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
     }
 
-    final boolean positionsChanged = BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_POSITIONS);
-    final boolean hasChanges = BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_POSITIONS | BLUR_INVALIDATE_FLAG_SCROLL | BLUR_INVALIDATE_FLAG_CLIP | BLUR_INVALIDATE_FLAG_CONTENT_REGION)
-            && scrollableViewNoiseSuppressor.invalidateResultRenderNodes(glassListCapture, contentView.getWidth(), contentView.getHeight());
-    if (hasChanges || wallpaperChanged || positionsChanged) {
-        // Content updates re-record child RenderNodes already referenced by
-        // cached glass. Rebuild surface commands only if capture regions move.
-        if (positionsChanged) {
-            if (glassBackgroundSourceRenderNode != null) {
-                glassBackgroundSourceRenderNode.invalidateDisplayListForDrawables();
-            }
-            if (glassBackgroundSourceFrostedRenderNode != null) {
-                glassBackgroundSourceFrostedRenderNode.invalidateDisplayListForDrawables();
-            }
-        }
-    }
 
     private void invalidateAllGlassAttachedViews() {
         // Some glass surfaces are descendants of the captured list. Updating
@@ -52042,9 +52027,6 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             glassPositionsArray.clip(0, chatListView.getY(), chatListView.getWidth(), chatListView.getY() + chatListView.getHeight());
             scrollableViewNoiseSuppressor.setupRenderNodes(glassPositionsArray);
         }
-    }
-
-        scrollableViewNoiseSuppressor.invalidateResultRenderNodes(contentView.mDrawList, contentView.getWidth(), contentView.getHeight());
     }
 
     private final Rect clipBoundsTmp = new Rect();

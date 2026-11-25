@@ -3568,20 +3568,6 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
                             AndroidUtilities.doOnLayout(page.listView, () -> page.listView.scrollBy(0, scroll));
                         }
                     }
-                    // SharedMediaLayout.this.setPadding(0, , 0, 0);
-                });
-                fragmentContextView = new FragmentContextView(context, parent, this, false, resourcesProvider) {
-                    @Override
-                    public void setVisibility(int visibility) {
-                        topPanelLayout.setViewVisible(fragmentContextViewWrapper, visibility == VISIBLE);
-                    }
-                };
-                fragmentContextViewWrapper.addView(fragmentContextView);
-                topPanelLayout.setCallFragmentContextView(fragmentContextView);
-                addView(topPanelLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP, 0, NonIslandHelper.tabBars() ? 36 : (48 -14), 0, 0));
-                if (NonIslandHelper.tabBars()) {
-                    topPanelLayout.blurHelper = zxc.iconic.xenon.helpers.BlurBehindHelper.create(topPanelLayout, sizeNotifierFrameLayout, Theme.key_windowBackgroundWhite);
-                    topPanelLayout.setPadding(0, 0, 0, 0);
                 }
                 // SharedMediaLayout.this.setPadding(0, , 0, 0);
             });

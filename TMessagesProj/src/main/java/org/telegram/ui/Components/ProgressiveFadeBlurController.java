@@ -13,9 +13,9 @@ import android.widget.FrameLayout;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.FileLog;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
-import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceColor;
+import org.telegram.utils.glass.source.GlassSourceColor;
 import org.telegram.ui.Components.blur3.capture.IBlur3Capture;
-import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode;
+import org.telegram.utils.glass.source.GlassSourceRenderNode;
 import org.telegram.ui.Components.chat.layouts.ChatActivityFadeView;
 
 import java.util.ArrayList;
@@ -26,8 +26,8 @@ import zxc.iconic.xenon.NekoConfig;
 
 public class ProgressiveFadeBlurController {
 
-    private final BlurredBackgroundSourceRenderNode source;
-    private final BlurredBackgroundSourceColor underSource;
+    private final GlassSourceRenderNode source;
+    private final GlassSourceColor underSource;
     private final ChatActivityFadeView fadeView;
     private final CaptureLayout captureLayout;
     private View captureView;
@@ -146,8 +146,8 @@ public class ProgressiveFadeBlurController {
         this.backgroundColorProvider = backgroundColorProvider;
         this.captureView = captureView;
         captureLayout = new CaptureLayout(parent.getContext());
-        underSource = new BlurredBackgroundSourceColor();
-        source = new BlurredBackgroundSourceRenderNode(null);
+        underSource = new GlassSourceColor();
+        source = new GlassSourceRenderNode(null);
         source.setUnderSource(underSource);
         fadeView = new ChatActivityFadeView(parent.getContext());
         source.setOnProgressiveBlurReadyListener(() -> {
