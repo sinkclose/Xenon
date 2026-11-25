@@ -2669,6 +2669,12 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
             mediaPages[a].listView = new SharedMediaListView(context, resourcesProvider) {
 
                 @Override
+                public float getSectionBackgroundAlpha() {
+                    return viewType == VIEW_TYPE_PROFILE_ACTIVITY && profileActivity instanceof ProfileActivity
+                            && ((ProfileActivity) profileActivity).isRedesignedProfileEnabled() ? 0.5f : 1f;
+                }
+
+                @Override
                 public RecyclerListView.FastScrollAdapter getMovingAdapter() {
                     if (isAnyStoryPageType(changeColumnsTab)) {
                         return storyAlbums_getStoriesAdapterByTabType(changeColumnsTab);

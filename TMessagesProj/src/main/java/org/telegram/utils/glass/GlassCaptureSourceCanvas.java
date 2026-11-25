@@ -415,25 +415,32 @@ public class GlassCaptureSourceCanvas {
         private int glassOffsetX, glassOffsetY;
         private int frostedGlassOffsetX, frostedGlassOffsetY;
 
+        private float appliedGlassRaw = Float.NaN;
+        private float appliedFrostedRaw = Float.NaN;
+
         public void setDownsamples(
                 int glassDownsample,
                 int frostedGlassDownsample,
                 int normalizationDownsample
         ) {
-            if (this.glassDownsample != glassDownsample) {
+            // the blur follows the client's settings, as it did on the downscaled sources
+            final float glassRaw = dpf2(zxc.iconic.xenon.NekoConfig.getGlassBlurRadiusDp());
+            final float frostedRaw = dpf2(Math.max(0, Math.min(100, zxc.iconic.xenon.NekoConfig.blurStrength)) * 4f / 3f);
+            if (this.glassDownsample != glassDownsample || appliedGlassRaw != glassRaw) {
                 this.glassDownsample = glassDownsample;
-                glassRadius = blurRadiusForDownsample(dpf2(7), glassDownsample);
-                renderNode.setRenderEffect(RenderEffect.createBlurEffect(
-                        glassRadius, glassRadius, Shader.TileMode.CLAMP));
+                appliedGlassRaw = glassRaw;
+                glassRadius = blurRadiusForDownsample(glassRaw, glassDownsample);
+                renderNode.setRenderEffect(glassRadius > 0f ? RenderEffect.createBlurEffect(
+                        glassRadius, glassRadius, Shader.TileMode.CLAMP) : null);
             }
-            if (this.frostedGlassDownsample != frostedGlassDownsample) {
+            if (this.frostedGlassDownsample != frostedGlassDownsample || appliedFrostedRaw != frostedRaw) {
                 this.frostedGlassDownsample = frostedGlassDownsample;
-                frostedGlassRadius = blurRadiusForDownsample(
-                        dpf2(36), frostedGlassDownsample);
-                renderNodeGlassFrosted.setRenderEffect(RenderEffect.createBlurEffect(
-                        frostedGlassRadius, frostedGlassRadius, Shader.TileMode.CLAMP));
-                renderNodeFrostedFiltered.setRenderEffect(RenderEffect.createBlurEffect(
-                        frostedGlassRadius, frostedGlassRadius, Shader.TileMode.CLAMP));
+                appliedFrostedRaw = frostedRaw;
+                frostedGlassRadius = blurRadiusForDownsample(frostedRaw, frostedGlassDownsample);
+                final RenderEffect frosted = frostedGlassRadius > 0f ? RenderEffect.createBlurEffect(
+                        frostedGlassRadius, frostedGlassRadius, Shader.TileMode.CLAMP) : null;
+                renderNodeGlassFrosted.setRenderEffect(frosted);
+                renderNodeFrostedFiltered.setRenderEffect(frosted);
             }
             this.normalizationDownsample = normalizationDownsample;
         }
