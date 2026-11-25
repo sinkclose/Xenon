@@ -77,7 +77,6 @@ import org.telegram.ui.Components.SizeNotifierFrameLayout;
 import org.telegram.ui.Components.SnowflakesEffect;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
-import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawableRenderNode;
 import org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundColorProvider;
 import org.telegram.utils.glass.source.GlassSourceCrossfade;
 import org.telegram.ui.MainTabsLayout;
@@ -361,8 +360,8 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         if (glassDrawable == null || nonIsland) return null;
         BlurredBackgroundDrawable surface = factory.create(null, glassDrawable.getColorProvider())
                 .setRadius(dp(23)).setPadding(dp(6));
-        if (Build.VERSION.SDK_INT >= 33 && surface instanceof BlurredBackgroundDrawableRenderNode) {
-            ((BlurredBackgroundDrawableRenderNode) surface).setLiquidGlassEffectAllowed();
+        if (Build.VERSION.SDK_INT >= 33) {
+            surface.setLiquidGlassEffectAllowed();
         }
         return surface;
     }

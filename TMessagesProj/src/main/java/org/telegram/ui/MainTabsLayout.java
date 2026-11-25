@@ -37,7 +37,6 @@ import org.telegram.ui.Components.glass.GlassTabView;
 import zxc.iconic.xenon.helpers.MainTabsUiHelper;
 import zxc.iconic.xenon.helpers.LiquidNavigationMath;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
-import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawableRenderNode;
 import org.telegram.utils.glass.source.GlassSource;
 
 import java.util.HashSet;
@@ -400,22 +399,12 @@ public class MainTabsLayout extends AnimatedLinearLayout {
         liquidBackdrop = drawable; // Its factory tracks the panel's position in the content source.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             GlassSource combined = new GlassSource() {
-                @Override public BlurredBackgroundDrawable createDrawable() {
-                    return new BlurredBackgroundDrawableRenderNode(this);
-                }
-                @Override public void prepareToDraw() {
-                    liquidBackdrop.getSource().prepareToDraw();
-                }
                 @Override public void draw(Canvas canvas, float l, float t, float r, float b) {
                     drawLiquidCapture(canvas, l, t, r, b);
                 }
             };
-            BlurredBackgroundDrawableRenderNode lens = new BlurredBackgroundDrawableRenderNode(combined);
+            BlurredBackgroundDrawable lens = new BlurredBackgroundDrawable(combined);
             lens.setColorProvider(org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl.topPanel(resourcesProvider));
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                lens.setFollowGlassStyleLens();
-                lens.setRetainSurfaceDisplayList(true);
-            }
             lens.setThickness(dp(10));
             lens.setIntensity(1f);
             liquidLens = lens;
@@ -530,8 +519,8 @@ public class MainTabsLayout extends AnimatedLinearLayout {
         if (glassEnabled && progress > 0.001f && width > 0 && height > 0) {
             updateLiquidLensBounds(radius);
             liquidLens.setAlpha(Math.round(255 * progress));
-            if (liquidLens instanceof BlurredBackgroundDrawableRenderNode) {
-                ((BlurredBackgroundDrawableRenderNode) liquidLens).invalidateDisplayList();
+            if (liquidLens instanceof BlurredBackgroundDrawable) {
+                ((BlurredBackgroundDrawable) liquidLens).invalidateDisplayList();
             }
             liquidLens.draw(canvas);
             if (!liquidLens.hasDisplayList()) {
@@ -902,11 +891,11 @@ public class MainTabsLayout extends AnimatedLinearLayout {
     private void refreshGlassFrame() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
         Drawable background = getBackground();
-        if (background instanceof BlurredBackgroundDrawableRenderNode) {
-            ((BlurredBackgroundDrawableRenderNode) background).invalidateDisplayList();
+        if (background instanceof BlurredBackgroundDrawable) {
+            ((BlurredBackgroundDrawable) background).invalidateDisplayList();
         }
-        if (liquidLens instanceof BlurredBackgroundDrawableRenderNode) {
-            ((BlurredBackgroundDrawableRenderNode) liquidLens).invalidateDisplayList();
+        if (liquidLens instanceof BlurredBackgroundDrawable) {
+            ((BlurredBackgroundDrawable) liquidLens).invalidateDisplayList();
         }
         if (liquidBackdrop != null) {
             liquidBackdrop.getSource().dispatchOnDrawablesRelativePositionChange();

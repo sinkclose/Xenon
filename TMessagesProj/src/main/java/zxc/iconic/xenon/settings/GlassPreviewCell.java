@@ -25,7 +25,6 @@ import org.telegram.messenger.NotificationCenter;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.MotionBackgroundDrawable;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
-import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawableRenderNode;
 import org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl;
 import org.telegram.utils.glass.source.GlassSourceRenderNode;
 
@@ -81,9 +80,8 @@ public class GlassPreviewCell extends View implements NotificationCenter.Notific
         glassDrawable = renderNodeSource.createDrawable();
         glassDrawable.setCallback(this);
         glassDrawable.setSourceOffset(samplePadding, samplePadding);
-        if (glassDrawable instanceof BlurredBackgroundDrawableRenderNode) {
-            BlurredBackgroundDrawableRenderNode drawable = (BlurredBackgroundDrawableRenderNode) glassDrawable;
-            drawable.setLiquidGlassSamplePadding(samplePadding);
+        if (glassDrawable instanceof BlurredBackgroundDrawable) {
+            BlurredBackgroundDrawable drawable = (BlurredBackgroundDrawable) glassDrawable;
             // Blur-only preview must sample the filtered source directly,
             // without retaining glass optics or their material settings.
             if (previewLiquid) drawable.setLiquidGlassEffectAllowed();
@@ -126,8 +124,8 @@ public class GlassPreviewCell extends View implements NotificationCenter.Notific
             renderNodeSource.setPlainBlur(dpf2(NekoConfig.blurStrength * 4f / 3f),
                     org.telegram.messenger.utils.RenderNodeEffects.getSaturationX3RenderEffect());
         }
-        if (glassDrawable instanceof BlurredBackgroundDrawableRenderNode) {
-            ((BlurredBackgroundDrawableRenderNode) glassDrawable).invalidateDisplayList();
+        if (glassDrawable instanceof BlurredBackgroundDrawable) {
+            ((BlurredBackgroundDrawable) glassDrawable).invalidateDisplayList();
         }
     }
 
@@ -189,8 +187,8 @@ public class GlassPreviewCell extends View implements NotificationCenter.Notific
         }
         refreshRenderNodeBlur();
 
-        if (glassDrawable instanceof BlurredBackgroundDrawableRenderNode) {
-            ((BlurredBackgroundDrawableRenderNode) glassDrawable).invalidateDisplayList();
+        if (glassDrawable instanceof BlurredBackgroundDrawable) {
+            ((BlurredBackgroundDrawable) glassDrawable).invalidateDisplayList();
         }
         invalidate();
     }
