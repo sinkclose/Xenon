@@ -49,6 +49,7 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
     private final RectF[] iosGroupBounds = {new RectF(), new RectF(), new RectF()};
     private final float[] iosGroupAlpha = new float[3];
     private LiquidGlassInputGroup iosGlassGroup;
+    private final Runnable onIosGlassGroupReady = this::postInvalidateOnAnimation;
     private boolean iosGlassGroupFailed;
     private ChatActivityEnterView iosComposer;
     private float iosComposerVisibility = 1f;
@@ -525,6 +526,10 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
     private boolean drawIosGlassGroup(Canvas canvas, float visibility) {
         if (Build.VERSION.SDK_INT < 33 || !canvas.isHardwareAccelerated() || iosGlassGroupFailed
                 || (!liquidTouchAllowed() && !LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS))) return false;
+        if (iosGlassGroup == null) {
+            iosGlassGroup = LiquidGlassInputGroup.acquirePrepared(iosGroupMembers.length, onIosGlassGroupReady);
+            if (iosGlassGroup == null) return false;
+        }
         iosGroupMembers[0] = iosSideDrawables[0];
         iosGroupMembers[1] = blurredBackgroundDrawable;
         iosGroupMembers[2] = iosSideDrawables[1];
@@ -547,7 +552,6 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
                 if (!drawable.hasDisplayList()) drawable.updateDisplayList();
                 iosGroupAlpha[i] = i == 1 ? 1f : visibility * (i == 2 ? 1f - iosComposer.getIosInputProgress() : 1f);
             }
-            if (iosGlassGroup == null) iosGlassGroup = new LiquidGlassInputGroup(iosGroupMembers.length);
             iosGlassGroup.draw(canvas, iosGroupMembers, iosGroupBounds, iosGroupAlpha,
                     liquidTouchAllowed() ? iosLiquidEffects : null);
             return true;

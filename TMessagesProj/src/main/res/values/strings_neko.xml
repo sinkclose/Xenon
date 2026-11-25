@@ -641,6 +641,7 @@
     <string name="PredictiveBackIntensity">Predictive back intensity</string>
     <string name="OpenAnimationStyle">Open animation style</string>
     <string name="CloseAnimationStyle">Close animation style</string>
+    <string name="PredictiveBackDecelerate">Slow down predictive back</string>
     <string name="PredictiveBackAnimationStyle">Predictive back animation style</string>
     <string name="AnimationStyleIos">iOS</string>
     <string name="AnimationStyleAosp">AOSP</string>

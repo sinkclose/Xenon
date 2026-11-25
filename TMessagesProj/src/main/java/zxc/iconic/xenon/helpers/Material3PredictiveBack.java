@@ -94,7 +94,7 @@ public final class Material3PredictiveBack {
     private static final float LAZY_START = 0.015f;
 
     /** Interpolators.BACK_GESTURE — android.view.animation.BackGestureInterpolator. */
-    private static final Interpolator BACK_GESTURE = new PathInterpolator(0.1f, 0.1f, 0f, 1f);
+    private static final Interpolator BACK_GESTURE = PredictiveBackProgress.FULL_SCREEN;
     /** CrossActivityBackAnimation.verticalMoveInterpolator. */
     private static final Interpolator VERTICAL_INTERP = new DecelerateInterpolator();
     /** Shell Interpolators.EMPHASIZED — post-commit spatial motion. */

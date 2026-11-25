@@ -27,11 +27,15 @@ import zxc.iconic.xenon.NekoConfig;
 @RequiresApi(api = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
 public final class BottomSheetPredictiveBack {
     public static OnBackAnimationCallback createCallback(BottomSheet sheet) {
-        return new Callback(sheet);
+        return new PredictiveBackReturn(new Callback(sheet));
     }
 
     public static void releaseCallback(OnBackAnimationCallback callback) {
-        if (callback instanceof Callback) ((Callback) callback).release();
+        if (callback instanceof PredictiveBackReturn) {
+            PredictiveBackReturn back = (PredictiveBackReturn) callback;
+            back.reset();
+            ((Callback) back.delegate()).release();
+        }
     }
 
     static float scaleForIntensity(float materialScale, int intensity) {
@@ -91,10 +95,10 @@ public final class BottomSheetPredictiveBack {
         @Override
         public void onBackProgressed(BackEvent event) {
             if (!started || sheet.isDismissed()) return;
-            lastProgress = Math.max(0f, Math.min(1f, event.getProgress()));
+            float progress = Math.max(0f, Math.min(1f, event.getProgress()));
+            lastProgress = NekoConfig.predictiveBackDecelerate ? helper.interpolateProgress(progress) : progress;
             progressed |= lastProgress > 0f;
             if (view.getWidth() <= 0 || view.getHeight() <= 0) return;
-            float progress = lastProgress;
             // Use the helper's easing and bottom anchor, but scale the entire sheet
             // uniformly so its background and content share the same geometry.
             helper.updateBackProgress(progress);
@@ -118,7 +122,8 @@ public final class BottomSheetPredictiveBack {
             if (!started) return;
             started = false;
             helper.onHandleBackInvoked();
-            animateReset();
+            if (lastProgress == 0f) restoreTransforms();
+            else animateReset();
         }
 
         @Override

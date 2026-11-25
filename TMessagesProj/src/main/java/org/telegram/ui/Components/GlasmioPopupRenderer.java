@@ -10,9 +10,8 @@ import android.graphics.Shader;
 import android.view.View;
 import androidx.annotation.RequiresApi;
 import org.telegram.messenger.AndroidUtilities;
-import org.telegram.messenger.R;
-import org.telegram.messenger.FileLog;
-import org.telegram.ui.Components.blur3.GlasmioMenuGlassRenderer;
+import org.telegram.ui.Components.blur3.GlassShaderCache;
+import org.telegram.ui.Components.blur3.Ios27GlassMaterial;
 import zxc.iconic.xenon.NekoConfig;
 
 /** RenderNode adapter of Glasmio LiquidMenuMorphSurface's material and shared foreground portal.
@@ -22,13 +21,15 @@ import zxc.iconic.xenon.NekoConfig;
 class GlasmioPopupRenderer {
     private final RenderNode backdrop=new RenderNode("MenuBackdrop"), sampled=new RenderNode("MenuSample"),
             rows=new RenderNode("MenuRows"), portal=new RenderNode("MenuPortal"),
-            materialMask=new RenderNode("MenuMaterialMask"), material26=new RenderNode("Menu26Material");
+            materialMask=new RenderNode("MenuMaterialMask"), materialSurface=new RenderNode("MenuMaterial"),
+            filteredSample=new RenderNode("MenuBlurredSample");
     private final GlasmioMenuField field=new GlasmioMenuField();
-    private final RuntimeShader portalShader=new RuntimeShader(AndroidUtilities.readRes(R.raw.glasmio_menu_portal));
-    private final RuntimeShader materialMaskShader=new RuntimeShader(AndroidUtilities.readRes(R.raw.glasmio_menu_portal));
+    private RuntimeShader portalShader;
+    private RuntimeShader materialMaskShader;
     private RuntimeShader highlight26, optics26;
-    private GlasmioMenuGlassRenderer material27;
-    private boolean material27Failed;
+    private RuntimeShader optics27;
+    private final float[] ios27Lens = new float[4];
+    private final Runnable onOpticsReady;
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF viewport=new RectF();
     private final int[] location=new int[2];
@@ -43,9 +44,20 @@ class GlasmioPopupRenderer {
     private float sampledBlur = Float.NaN, rowsBlur = Float.NaN;
     private final RectF requiredViewport = new RectF();
 
-    static boolean isCapturing() { return captureDepth>0; }
-    GlasmioPopupRenderer(java.util.List<View> buttons, RectF bounds, NavigationHeaderButtons.MenuSource header) {
-        // The morph copies only source geometry. The source controls stay live.
+    static boolean isCapturing() { return captureDepth > 0; }
+
+    GlasmioPopupRenderer(Runnable onOpticsReady) {
+        this.onOpticsReady = onOpticsReady;
+    }
+
+    boolean hasPortalShaders() {
+        return portalShader != null && materialMaskShader != null;
+    }
+
+    boolean preparePortalShaders() {
+        if (portalShader == null) portalShader = GlassShaderCache.acquireMenuPortal(onOpticsReady);
+        if (materialMaskShader == null) materialMaskShader = GlassShaderCache.acquireMenuPortal(onOpticsReady);
+        return hasPortalShaders();
     }
 
     boolean captureBackdrop(View host,int[] windowLocation) {
@@ -108,7 +120,7 @@ class GlasmioPopupRenderer {
         field.update(f,left,top);
         boolean blurEnabled = org.telegram.messenger.SharedConfig.chatBlurEnabled();
         boolean glassEnabled = org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS);
-        boolean ios27 = glassEnabled && NekoConfig.ios27LiquidGlass && !material27Failed;
+        boolean ios27 = glassEnabled && NekoConfig.ios27LiquidGlass;
         int sampleX = offsetX - left, sampleY = offsetY - top;
         Canvas c;
         float scaleX = interaction.scale(target.width(), target.height(), true);
@@ -133,81 +145,86 @@ class GlasmioPopupRenderer {
             sampleTransform[2] = originX;
             sampleTransform[3] = originY;
         }
-        RenderNode material = null;
-        if (ios27) {
-            try {
-                setSampledBlur(0);
-                if (material27 == null) material27 = new GlasmioMenuGlassRenderer();
-                material27.setTint(tint);
-                material27.setMenuField(f, field, left, top);
-                material = material27.update(sampled, b.left-left, b.top-top, b.width(), b.height(),
-                        f.radiusX, f.radiusX, f.radiusX, f.radiusX);
-            } catch (RuntimeException e) {
-                FileLog.e(e);
-                if (material27 != null) material27.release();
-                material27 = null;
-                material27Failed = true;
-                ios27 = false;
+        if (glassEnabled) {
+            if (ios27 && optics27 == null) optics27 = GlassShaderCache.acquireMenuRefraction(true, onOpticsReady);
+            if (!ios27 && optics26 == null) optics26 = GlassShaderCache.acquireMenuRefraction(false, onOpticsReady);
+        }
+        RuntimeShader optics = ios27 ? optics27 : optics26;
+        boolean optical = glassEnabled && optics != null;
+        float blur = glassEnabled ? AndroidUtilities.dpf2(NekoConfig.getGlassBlurRadiusDp())
+                : blurEnabled ? AndroidUtilities.dpf2(NekoConfig.blurStrength * 4f / 3f) : 0f;
+        float blurOpacity = ios27 ? NekoConfig.getIos27GlassBlurOpacity() : 1f;
+        boolean blurPlane = optical && ios27 && blur > .01f;
+        if (blur > .01f) prepareFilteredSample(w, h, blur, blurPlane ? 1f : blurOpacity);
+        materialSurface.setPosition(0, 0, blurPlane ? Ios27GlassMaterial.packedBackdropWidth(w) : w, h);
+        c = materialSurface.beginRecording();
+        if (blurEnabled || glassEnabled) {
+            if (blurPlane || blur <= .01f || blurOpacity < 1f) c.drawRenderNode(sampled);
+            if (blurPlane) {
+                int filtered = c.save();
+                c.translate(w + 2, 0);
+                c.scale(.5f, .5f);
+                c.drawRenderNode(filteredSample);
+                c.restoreToCount(filtered);
+            } else if (blur > .01f) {
+                c.drawRenderNode(filteredSample);
             }
         }
-        if (!glassEnabled) {
-            if (material27 != null) { material27.release(); material27 = null; }
-            // A disabled lens must not leave refraction, glare or a glass tint behind.
-            setSampledBlur(blurEnabled ? AndroidUtilities.dpf2(NekoConfig.blurStrength * 4f / 3f) : 0);
-            material26.setPosition(0, 0, w, h);
-            c = material26.beginRecording();
-            if (blurEnabled) c.drawRenderNode(sampled);
+        float tintStrength = NekoConfig.getGlassTintPercent() * .006f;
+        if (!glassEnabled || !ios27 || !optical) {
             paint.setShader(null);
             paint.setColor(tint);
-            paint.setAlpha(blurEnabled ? 194 : 235);
+            paint.setAlpha(glassEnabled ? Math.round(255f * tintStrength) : blurEnabled ? 194 : 235);
             c.drawRect(0, 0, w, h, paint);
-            material26.endRecording();
-            material26.setRenderEffect(null);
-            material = material26;
         }
-        if (material == null) {
-            // iOS 27 never needs the two iOS 26 programs on its opening frame.
-            if (optics26 == null) optics26 = new RuntimeShader(AndroidUtilities.readRes(R.raw.glasmio_menu_26));
-            if (highlight26 == null) highlight26 = new RuntimeShader(AndroidUtilities.readRes(R.raw.glasmio_menu_highlight26));
-            setSampledBlur(NekoConfig.getGlassBlurRadiusDp() * AndroidUtilities.density);
-            material26.setPosition(0,0,w,h);
-            c=material26.beginRecording(); c.drawRenderNode(sampled);
-            paint.setColor(tint);
-            paint.setAlpha(Math.round(255*.6f*NekoConfig.getGlassTintPercent()/100f));
-            c.drawRect(0,0,w,h,paint); material26.endRecording();
-            bind(optics26,f,left,top);
-            optics26.setFloatUniform("resolution",(float)w,(float)h);
-            optics26.setFloatUniform("size",b.width(),b.height());
-            optics26.setFloatUniform("radius",f.radiusX,f.radiusX,f.radiusX,f.radiusX);
-            optics26.setFloatUniform("refractionHeight",16*AndroidUtilities.density*NekoConfig.getGlassRefraction());
-            optics26.setFloatUniform("refractionAmount",-32*AndroidUtilities.density*NekoConfig.getGlassRefraction());
-            optics26.setFloatUniform("depthEffect",0f);
-            optics26.setFloatUniform("chromaticAberration",NekoConfig.getGlassDispersion());
-            material26.setRenderEffect(RenderEffect.createRuntimeShaderEffect(optics26,"img"));
-            material=material26;
+        materialSurface.endRecording();
+        if (optical) {
+            bind(optics, f, left, top);
+            optics.setFloatUniform("resolution", (float) w, (float) h);
+            optics.setFloatUniform("size", b.width(), b.height());
+            optics.setFloatUniform("radius", f.radiusX, f.radiusX, f.radiusX, f.radiusX);
+            optics.setFloatUniform("refractionHeight", AndroidUtilities.dpf2(16) * NekoConfig.getGlassRefraction());
+            optics.setFloatUniform("refractionAmount", -AndroidUtilities.dpf2(32) * NekoConfig.getGlassRefraction());
+            optics.setFloatUniform("depthEffect", 0f);
+            optics.setFloatUniform("chromaticAberration", NekoConfig.getGlassDispersion());
+            if (ios27) {
+                Ios27GlassMaterial.renderLens(b.width(), b.height(), AndroidUtilities.density,
+                        NekoConfig.ios27GlassRefraction, false, ios27Lens, 0);
+                optics.setFloatUniform("backdropBlur", blurPlane ? 1f : 0f);
+                optics.setFloatUniform("blurMix", NekoConfig.ios27GlassAlpha == 0 ? -1f : blurOpacity);
+                optics.setFloatUniform("lensParams", ios27Lens);
+                optics.setFloatUniform("darkMode", org.telegram.ui.ActionBar.Theme.isCurrentThemeDark() ? 1f : 0f);
+                optics.setFloatUniform("pixelScale", AndroidUtilities.density);
+                optics.setFloatUniform("lightAngle", (float) Math.toRadians(NekoConfig.getGlassGlareAngle()));
+                optics.setFloatUniform("lightIntensity", NekoConfig.getIos27GlassLightIntensity());
+                optics.setFloatUniform("lightFalloff", NekoConfig.ios27GlassGlare);
+                optics.setFloatUniform("solidGlare", NekoConfig.ios27GlassGlareMode == NekoConfig.GLASS_GLARE_SOLID ? 1f : 0f);
+                optics.setFloatUniform("clearControl", 0f);
+                float alpha = android.graphics.Color.alpha(tint) / 255f * tintStrength;
+                optics.setFloatUniform("glassTint", android.graphics.Color.red(tint) / 255f * alpha,
+                        android.graphics.Color.green(tint) / 255f * alpha, android.graphics.Color.blue(tint) / 255f * alpha, alpha);
+            }
         }
-        if (ios27 && f.lensHeight <= .01f && !f.separate) {
-            int materialSave = canvas.save();
-            canvas.translate(left, top);
-            canvas.clipRect(0, 0, w, h);
-            canvas.drawRenderNode(material);
-            canvas.restoreToCount(materialSave);
-        } else {
-            // The iOS 27 material is transparent outside its clip; mask only that region.
-            android.graphics.Rect maskBounds = ios27 ? material27.getOutputClip() : null;
-            int maskLeft = maskBounds != null ? maskBounds.left : 0, maskTop = maskBounds != null ? maskBounds.top : 0;
-            materialMask.setPosition(maskLeft, maskTop, maskBounds != null ? maskBounds.right : w, maskBounds != null ? maskBounds.bottom : h);
-            c=materialMask.beginRecording(); c.translate(-maskLeft, -maskTop); c.drawRenderNode(material); materialMask.endRecording();
-            bind(materialMaskShader,f,left,top);
-            materialMaskShader.setFloatUniform("contentOrigin",(float) maskLeft,(float) maskTop);
-            materialMaskShader.setFloatUniform("drawingBounds",0f,0f,(float)w,(float)h);
-            materialMaskShader.setFloatUniform("preserveCoverage", ios27 && !f.separate ? 1f : 0f);
-            materialMaskShader.setFloatUniform("height",glassEnabled ? f.lensHeight : 0f);
-            materialMaskShader.setFloatUniform("amount",glassEnabled ? -f.lensAmount : 0f);
-            materialMask.setRenderEffect(RenderEffect.createRuntimeShaderEffect(materialMaskShader,"content"));
-            int materialSave=canvas.save(); canvas.translate(left,top); canvas.drawRenderNode(materialMask); canvas.restoreToCount(materialSave);
+        materialSurface.setRenderEffect(optical ? RenderEffect.createRuntimeShaderEffect(optics, "img") : null);
+        materialMask.setPosition(0, 0, w, h);
+        c = materialMask.beginRecording();
+        c.drawRenderNode(materialSurface);
+        materialMask.endRecording();
+        bind(materialMaskShader, f, left, top);
+        materialMaskShader.setFloatUniform("contentOrigin", 0f, 0f);
+        materialMaskShader.setFloatUniform("drawingBounds", 0f, 0f, (float) w, (float) h);
+        materialMaskShader.setFloatUniform("preserveCoverage", optical && ios27 ? 1f : 0f);
+        materialMaskShader.setFloatUniform("height", glassEnabled ? f.lensHeight : 0f);
+        materialMaskShader.setFloatUniform("amount", glassEnabled ? -f.lensAmount : 0f);
+        materialMask.setRenderEffect(RenderEffect.createRuntimeShaderEffect(materialMaskShader, "content"));
+        int materialSave = canvas.save();
+        canvas.translate(left, top);
+        canvas.drawRenderNode(materialMask);
+        canvas.restoreToCount(materialSave);
+        if (glassEnabled && !ios27 && highlight26 == null) {
+            highlight26 = GlassShaderCache.acquireMenuHighlight26(onOpticsReady);
         }
-        if (glassEnabled && !ios27) {
+        if (glassEnabled && !ios27 && highlight26 != null) {
             bind(highlight26,f,left,top);
             highlight26.setFloatUniform("lightAngle",(float)Math.toRadians(NekoConfig.getGlassGlareAngle()));
             highlight26.setFloatUniform("lightFalloff",Math.max(.1f,NekoConfig.advancedGlassGlare));
@@ -274,16 +291,24 @@ class GlasmioPopupRenderer {
                 (float) Math.ceil(viewport.bottom / quantum) * quantum);
     }
 
-    private void setSampledBlur(float blur) {
-        if (sampledBlur == blur) return;
-        sampled.setRenderEffect(blur > .01f ? RenderEffect.createBlurEffect(blur, blur, Shader.TileMode.CLAMP) : null);
-        sampledBlur = blur;
+    private void prepareFilteredSample(int width, int height, float blur, float opacity) {
+        if (!filteredSample.hasDisplayList() || filteredSample.getWidth() != width
+                || filteredSample.getHeight() != height) {
+            filteredSample.setPosition(0, 0, width, height);
+            Canvas canvas = filteredSample.beginRecording();
+            canvas.drawRenderNode(sampled);
+            filteredSample.endRecording();
+        }
+        if (sampledBlur != blur) {
+            filteredSample.setRenderEffect(RenderEffect.createBlurEffect(blur, blur, Shader.TileMode.CLAMP));
+            sampledBlur = blur;
+        }
+        filteredSample.setAlpha(opacity);
     }
 
     void release() {
-        for(RenderNode node:new RenderNode[]{backdrop,sampled,rows,portal,materialMask,material26}) {
+        for(RenderNode node:new RenderNode[]{backdrop,sampled,filteredSample,rows,portal,materialMask,materialSurface}) {
             node.setRenderEffect(null); node.discardDisplayList();
         }
-        if (material27 != null) material27.release();
     }
 }

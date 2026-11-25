@@ -296,6 +296,7 @@ import zxc.iconic.xenon.helpers.PasscodeHelper;
 import me.vkryl.android.animator.BoolAnimator;
 import me.vkryl.android.animator.FactorAnimator;
 import zxc.iconic.xenon.helpers.PopupHelper;
+import zxc.iconic.xenon.helpers.SystemBackGesture;
 import zxc.iconic.xenon.helpers.TypefaceHelper;
 import zxc.iconic.xenon.helpers.remote.ConfigHelper;
 import zxc.iconic.xenon.helpers.NonIslandHelper;
@@ -1006,6 +1007,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     private int maximumVelocity;
     private boolean startedTracking;
     private boolean maybeStartTracking;
+    private boolean swipeStartedAtSystemBackEdge;
     private static final Interpolator interpolator = t -> {
         --t;
         return t * t * t * t * t + 1.0F;
@@ -1702,6 +1704,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
         @Override
         public boolean onTouchEvent(MotionEvent ev) {
+            if (ev != null) {
+                if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                    swipeStartedAtSystemBackEdge = SystemBackGesture.startsAtEdge(this, ev);
+                }
+                if (swipeStartedAtSystemBackEdge) return false;
+            }
             if (
                     parentLayout != null &&
                             filterTabsView != null && !filterTabsView.isEditing() &&
@@ -1827,7 +1835,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     if (startedTracking) {
                         float x = viewPages[0].getX();
                         tabsAnimation = new AnimatorSet();
-                        if (viewPages[1].isLocked) {
+                        if ((ev != null && ev.getActionMasked() == MotionEvent.ACTION_CANCEL) || viewPages[1].isLocked) {
                             backAnimation = true;
                         } else {
                             if (additionalOffset != 0) {

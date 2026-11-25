@@ -34,6 +34,7 @@ public final class FadeHeaderButtonGlass {
     private final RectF barInRoot = new RectF(), childInBar = new RectF();
     private ActionBar bar;
     private LiquidGlassInputGroup group;
+    private final Runnable onUnionReady = this::invalidateRoot;
     private boolean grouped;
     private final LiquidPressAnimationSuppressor pressAnimations = new LiquidPressAnimationSuppressor();
     private BlurredBackgroundDrawable[] members;
@@ -123,10 +124,14 @@ public final class FadeHeaderButtonGlass {
             for (Button button : active) button.drawable.updateDisplayList();
             return;
         }
-        if (members == null || members.length != active.size()) {
+        if (group == null || members.length != active.size()) {
             if (group != null) group.release();
             int count = active.size();
-            group = new LiquidGlassInputGroup(count);
+            group = LiquidGlassInputGroup.acquirePrepared(count, onUnionReady);
+            if (group == null) {
+                for (Button button : active) button.drawable.updateDisplayList();
+                return;
+            }
             members = new BlurredBackgroundDrawable[count];
             bounds = new RectF[count];
             effects = new LiquidTouchEffect[count];
@@ -149,6 +154,10 @@ public final class FadeHeaderButtonGlass {
         if (!wasGrouped) {
             for (Button button : active) button.view.invalidate();
         }
+    }
+
+    private void invalidateRoot() {
+        root.postInvalidateOnAnimation();
     }
 
     public void observeTouch(MotionEvent event) {

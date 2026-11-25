@@ -3,10 +3,8 @@ package org.telegram.ui.Components.blur3;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
-import android.graphics.RenderEffect;
 import android.graphics.RuntimeShader;
 import android.graphics.RuntimeXfermode;
-import android.os.Build;
 import androidx.annotation.RequiresApi;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.R;
@@ -15,14 +13,22 @@ import org.telegram.ui.ActionBar.Theme;
 /** Backdrop-aware big/little flex glow from Glasmio's PressHighlightRenderer. */
 @RequiresApi(33)
 public final class GlasmioPressEffect {
-    private RuntimeShader effectShader;
-    private RuntimeShader mask;
-    private NativeBlender blender;
+    private final RuntimeShader mask;
+    private final NativeBlender blender;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private float appliedGain = Float.NaN;
+
+    @RequiresApi(36)
+    GlasmioPressEffect(String maskSource) {
+        mask = new RuntimeShader(maskSource);
+        blender = new NativeBlender();
+        paint.setShader(mask);
+        paint.setXfermode(blender.mode);
+    }
 
     private static float gain() { return 1f / (1f - (Theme.isCurrentThemeDark() ? .75f : .4f)); }
 
-    private static void configure(RuntimeShader shader, RectF bounds, float x, float y, float progress, float dissipation) {
+    static void configure(RuntimeShader shader, RectF bounds, float x, float y, float progress, float dissipation) {
         float density = AndroidUtilities.density;
         float min = Math.min(bounds.width(), bounds.height()), max = Math.max(bounds.width(), bounds.height());
         boolean compact = max / density < 120f;
@@ -36,21 +42,15 @@ public final class GlasmioPressEffect {
         shader.setFloatUniform("pressBounds", bounds.left, bounds.top, bounds.right, bounds.bottom);
     }
 
-    public RenderEffect effect(RectF bounds, float x, float y, float progress, float dissipation) {
-        if (effectShader == null) effectShader = new RuntimeShader(AndroidUtilities.readRes(R.raw.glasmio_press));
-        configure(effectShader, bounds, x, y, progress, dissipation);
-        return RenderEffect.createRuntimeShaderEffect(effectShader, "content");
-    }
-
     @RequiresApi(36)
     public void draw(Canvas canvas, RectF bounds, float x, float y, float progress, float dissipation) {
-        if (Build.VERSION.SDK_INT < 36 || progress <= 0f || !canvas.isHardwareAccelerated()) return;
-        if (blender == null) blender = new NativeBlender();
-        if (mask == null) mask = new RuntimeShader(AndroidUtilities.readRes(R.raw.glasmio_press_mask));
+        if (progress <= 0f || !canvas.isHardwareAccelerated()) return;
         configure(mask, bounds, x, y, progress, dissipation);
-        blender.mode.setFloatUniform("glowGain", gain());
-        paint.setShader(mask);
-        paint.setXfermode(blender.mode);
+        float gain = gain();
+        if (appliedGain != gain) {
+            blender.mode.setFloatUniform("glowGain", gain);
+            appliedGain = gain;
+        }
         canvas.drawRect(bounds, paint);
     }
 
