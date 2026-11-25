@@ -3712,6 +3712,17 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 if (child == blurredView) {
                     return true;
                 }
+                if (child == listView && isRedesignedProfileEnabled() && actionBar != null) {
+                    // the redesigned header is transparent: the rows must not show through under its title and buttons
+                    final float header = ActionBar.getCurrentActionBarHeight() + (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0)
+                            + extraHeight + searchTransitionOffset;
+                    final int top = (int) (header * (1.0f - mediaHeaderAnimationProgress));
+                    canvas.save();
+                    canvas.clipRect(0, top, getMeasuredWidth(), getMeasuredHeight());
+                    final boolean result = super.drawChild(canvas, child, drawingTime);
+                    canvas.restore();
+                    return result;
+                }
                 return super.drawChild(canvas, child, drawingTime);
             }
 
