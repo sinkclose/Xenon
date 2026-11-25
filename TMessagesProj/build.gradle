@@ -265,16 +265,23 @@ def osuWindows = OperatingSystem.current().isWindows()
 def osuNdkHost = osuWindows ? 'windows-x86_64' :
         OperatingSystem.current().isMacOsX() ? 'darwin-x86_64' : 'linux-x86_64'
 
+// The isolated toolchain with the Android target, once installed: its own cargo and rustc run
+// directly, so rustup is only needed to install it (it conflicts with a system rust package).
+def osuInstalledToolchain = {
+    def toolchains = new File(osuRustBuild, 'rustup/toolchains').listFiles()
+    toolchains?.find {
+        it.name.startsWith(osuRustToolchain + '-') &&
+                new File(it, "lib/rustlib/${osuRustTarget}/lib").isDirectory() &&
+                new File(it, "bin/cargo${osuWindows ? '.exe' : ''}").isFile()
+    }
+}
+
 def prepareOsuRustToolchain = tasks.register('prepareOsuRustToolchain', Exec) {
     environment(osuRustEnvironment)
     commandLine(osuWindows ? 'rustup.exe' : 'rustup', 'toolchain', 'install',
             osuRustToolchain, '--profile', 'minimal', '--target', osuRustTarget, '--no-self-update')
     onlyIf {
-        def toolchains = new File(osuRustBuild, 'rustup/toolchains').listFiles()
-        def ready = toolchains != null && toolchains.any {
-            it.name.startsWith(osuRustToolchain + '-') &&
-                    new File(it, "lib/rustlib/${osuRustTarget}/lib").isDirectory()
-        }
+        def ready = osuInstalledToolchain() != null
         if (!ready && gradle.startParameter.offline) {
             throw new GradleException('Run buildOsuDifficulty once online to install the isolated Rust toolchain and Android target')
         }
@@ -291,10 +298,16 @@ def buildOsuDifficulty = tasks.register('buildOsuDifficulty', Exec) {
     outputs.file(osuDifficultyOutput.map { it.file('arm64-v8a/libxenon_osu_difficulty.so') })
     environment(osuRustEnvironment)
     workingDir(rootProject.rootDir)
-    commandLine(osuWindows ? 'cargo.exe' : 'cargo', "+${osuRustToolchain}", 'build',
-            '--manifest-path', file('jni/osu-difficulty/Cargo.toml').absolutePath,
-            '--release', '--target', osuRustTarget, '--locked')
+    def cargoArgs = ['build', '--manifest-path', file('jni/osu-difficulty/Cargo.toml').absolutePath,
+            '--release', '--target', osuRustTarget, '--locked']
+    commandLine([osuWindows ? 'cargo.exe' : 'cargo', "+${osuRustToolchain}"] + cargoArgs)
     doFirst {
+        def toolchain = osuInstalledToolchain()
+        if (toolchain != null) {
+            def exe = osuWindows ? '.exe' : ''
+            commandLine([new File(toolchain, "bin/cargo${exe}").absolutePath] + cargoArgs)
+            environment('RUSTC', new File(toolchain, "bin/rustc${exe}").absolutePath)
+        }
         def ndk = androidComponents.sdkComponents.ndkDirectory.get().asFile
         def linker = new File(ndk, "toolchains/llvm/prebuilt/${osuNdkHost}/bin/aarch64-linux-android23-clang${osuWindows ? '.cmd' : ''}")
         if (!linker.isFile()) throw new GradleException("Android arm64 linker not found: ${linker}")

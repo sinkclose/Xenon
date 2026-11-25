@@ -1595,7 +1595,10 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         if (!settings.isBlurEnabled) {
             return null;
         }
-        return settings.isLiquidGlassEnabled && Build.VERSION.SDK_INT >= 33 ? iBlur3SourceTabGlass : iBlur3SourceTabFrosted;
+        // Material navigation draws no liquid glass (its factory does not allow it), so its drawables use the frosted source.
+        final boolean glass = settings.isLiquidGlassEnabled && Build.VERSION.SDK_INT >= 33
+                && !zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar();
+        return glass ? iBlur3SourceTabGlass : iBlur3SourceTabFrosted;
     }
 
     private final RectF fragmentPosition = new RectF();
