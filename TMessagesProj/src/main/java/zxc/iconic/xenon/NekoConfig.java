@@ -279,6 +279,7 @@ public class NekoConfig {
     public static int closeAnimationStyle = ANIMATION_STYLE_DEFAULT;
     public static int predictiveBackAnimationStyle = ANIMATION_STYLE_DEFAULT;
     public static int predictiveBackIntensity = 0;
+    public static boolean predictiveBackDecelerate = false;
     public static int fadeDuration = DEFAULT_FADE_DURATION;
     public static boolean removeChatDelay = false;
     public static boolean showOnlineDotsInChat = false;
@@ -628,6 +629,7 @@ public class NekoConfig {
             closeAnimationStyle = preferences.getInt("closeAnimationStyle", ANIMATION_STYLE_DEFAULT);
             predictiveBackAnimationStyle = preferences.getInt("predictiveBackAnimationStyle", ANIMATION_STYLE_DEFAULT);
             predictiveBackIntensity = preferences.getInt("predictiveBackIntensity", 0);
+            predictiveBackDecelerate = preferences.getBoolean("predictiveBackDecelerate", false);
             slideDuration = preferences.getInt("slideDuration", DEFAULT_SLIDE_DURATION);
             slideEase = preferences.getString("slideEase", DEFAULT_SLIDE_EASE);
             fadeEase = preferences.getString("fadeEase", DEFAULT_FADE_EASE);
@@ -1310,6 +1312,12 @@ public class NekoConfig {
         SharedPreferences.Editor editor = preferences.edit();
         editor.putInt("predictiveBackAnimationStyle", predictiveBackAnimationStyle);
         editor.apply();
+    }
+
+    public static void setPredictiveBackDecelerate(boolean enabled) {
+        predictiveBackDecelerate = enabled;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        preferences.edit().putBoolean("predictiveBackDecelerate", enabled).apply();
     }
 
     public static void setPredictiveBackIntensity(int value) {
@@ -2179,7 +2187,13 @@ public class NekoConfig {
     public static float getGlassGlare() { return ios27LiquidGlass ? ios27GlassGlare : advancedGlassGlare; }
     public static float getGlassGlareAngle() { return ios27LiquidGlass ? ios27GlassGlareAngle : advancedGlassGlareAngle; }
     public static int getIos27GlassRevision() { return ios27GlassRevision; }
-    public static float getIos27GlassBlurRadiusDp() { return ios27GlassBlur; }
+    /** Radius of the shared filtered backdrop used to approximate the wider optical blur. */
+    public static float getIos27GlassBlurRadiusDp() { return ios27GlassBlur * 2.9f; }
+    public static float getIos27GlassBlurOpacity() {
+        // Automatic opacity is resolved per pixel by the optical shader. Use a full blur in the fallback.
+        return ios27GlassAlpha == 0 ? 1f : ios27GlassAlpha / 100f;
+    }
+
     public static float getIos27GlassLightIntensity() {
         return ios27GlassGlareMode == GLASS_GLARE_DISABLE ? 0f : ios27GlassLightIntensity;
     }
@@ -2188,14 +2202,10 @@ public class NekoConfig {
     }
     public static int getIos27GlassSamplePaddingDp(float minimumDimensionDp) {
         float extent = Math.max(1f, minimumDimensionDp);
+        // The blur source is already filtered. This margin only covers the longest optical ray.
         float ray = Math.max(Math.min(extent * .5f, 60f), Math.max(16f, extent * .25f));
-        float captureScale = Math.max(.25f, Math.min(.5f, 50f / extent));
-        float blurSupport = org.telegram.ui.Components.blur3.GlasmioBlurProfile.sigmaPixels(
-                getIos27GlassBlurRadiusDp() * 1.6f, AndroidUtilities.density, captureScale)
-                / AndroidUtilities.density * 3f;
-        // Bound capture memory for extreme user radii; the Gaussian clamps beyond the capture.
         return Math.max(20, (int) Math.ceil(ray * ios27GlassRefraction / .7f
-                + Math.min(128f, blurSupport) + 2f));
+                * (1f + ios27GlassDispersion) + 4f));
     }
 
     /** Save only the iOS 27 namespace. Manual/legacy glass values stay independent. */

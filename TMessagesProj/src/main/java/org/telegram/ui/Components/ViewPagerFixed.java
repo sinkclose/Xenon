@@ -58,6 +58,8 @@ import org.telegram.ui.Stories.recorder.HintView2;
 
 import java.util.ArrayList;
 
+import zxc.iconic.xenon.helpers.SystemBackGesture;
+
 public class ViewPagerFixed extends FrameLayout {
 
     private Theme.ResourcesProvider resourcesProvider;
@@ -85,6 +87,7 @@ public class ViewPagerFixed extends FrameLayout {
     private int maximumVelocity;
     private boolean startedTracking;
     private boolean maybeStartTracking;
+    private boolean swipeStartedAtSystemBackEdge;
     private static final Interpolator interpolator = t -> {
         --t;
         return t * t * t * t * t + 1.0F;
@@ -667,6 +670,12 @@ public class ViewPagerFixed extends FrameLayout {
 
     public boolean onTouchEventInternal(MotionEvent ev) {
         if (predictiveBackActive) return true;
+        if (ev != null) {
+            if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                swipeStartedAtSystemBackEdge = SystemBackGesture.startsAtEdge(this, ev);
+            }
+            if (swipeStartedAtSystemBackEdge) return false;
+        }
         if (tabsView != null && tabsView.animatingIndicator) {
             return false;
         }
@@ -781,7 +790,9 @@ public class ViewPagerFixed extends FrameLayout {
             if (startedTracking) {
                 float x = viewPages[0].getX();
                 tabsAnimation = new AnimatorSet();
-                if (additionalOffset != 0) {
+                if (ev != null && ev.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+                    backAnimation = true;
+                } else if (additionalOffset != 0) {
                     if (Math.abs(velX) > 1500) {
                         backAnimation = animatingForward ? velX > 0 : velX < 0;
                     } else {

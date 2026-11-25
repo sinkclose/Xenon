@@ -221,13 +221,16 @@ public final class IosBottomSearchView extends FrameLayout {
         }
     }
 
+    private final Runnable onGlassGroupReady = this::postInvalidateOnAnimation;
+
     @Override protected void onDraw(Canvas canvas) {
-        if (Build.VERSION.SDK_INT >= 33 && canvas.isHardwareAccelerated()
-                && LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS)) {
-            if (glassGroup == null) {
-                glassGroup = new org.telegram.ui.Components.blur3.drawable.LiquidGlassInputGroup(2);
-                glassGroup.setPairMergeDistance(0, 1, AndroidUtilities.dp(6));
-            }
+        boolean grouped = Build.VERSION.SDK_INT >= 33 && canvas.isHardwareAccelerated()
+                && LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
+        if (grouped && glassGroup == null) {
+            glassGroup = org.telegram.ui.Components.blur3.drawable.LiquidGlassInputGroup.acquirePrepared(2, onGlassGroupReady);
+            if (glassGroup != null) glassGroup.setPairMergeDistance(0, 1, AndroidUtilities.dp(6));
+        }
+        if (grouped && glassGroup != null) {
             for (int i = 0; i < glassMembers.length; i++) {
                 RectF bounds = i == 0 ? fieldBounds : closeBounds;
                 glassMembers[i].setRadius(bounds.height() / 2f);

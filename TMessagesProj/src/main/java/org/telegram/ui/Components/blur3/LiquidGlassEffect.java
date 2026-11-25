@@ -47,6 +47,58 @@ public class LiquidGlassEffect {
             refractionUniformsInitialized = false;
         }
     }
+    private int backdropWidth;
+
+    public void setIos27BlurPlane(int logicalWidth) {
+        if (backdropWidth != logicalWidth) {
+            backdropWidth = logicalWidth;
+            uniformsInvalidated = true;
+            refractionUniformsInitialized = false;
+        }
+    }
+
+    private final RectF pressBounds = new RectF();
+    private float pressProgress, pressDissipation, pressX, pressY;
+    private boolean pressUniformsDirty;
+
+    public void setIos27Press(float progress, float dissipation, float x, float y, RectF bounds, float dx, float dy) {
+        if (!ios27 || android.os.Build.VERSION.SDK_INT >= 36) return;
+        if (progress <= 0f || bounds.isEmpty()) {
+            if (pressProgress == 0f) return;
+            pressProgress = 0f;
+        } else {
+            x += dx;
+            y += dy;
+            float left = bounds.left + dx, top = bounds.top + dy;
+            float right = bounds.right + dx, bottom = bounds.bottom + dy;
+            if (pressProgress == progress && pressDissipation == dissipation && pressX == x && pressY == y
+                    && pressBounds.left == left && pressBounds.top == top
+                    && pressBounds.right == right && pressBounds.bottom == bottom) return;
+            pressProgress = progress;
+            pressDissipation = dissipation;
+            pressX = x;
+            pressY = y;
+            pressBounds.set(left, top, right, bottom);
+        }
+        pressUniformsDirty = true;
+    }
+
+    public void refreshPress() {
+        if (pressUniformsDirty && refractionUniformsInitialized) installRefraction();
+    }
+
+    private void installRefraction() {
+        if (ios27 && pressUniformsDirty) {
+            if (pressProgress > 0f) {
+                GlasmioPressEffect.configure(shader, pressBounds, pressX, pressY, pressProgress, pressDissipation);
+            } else {
+                shader.setFloatUniform("pressOpacity", 0f, 0f);
+            }
+            pressUniformsDirty = false;
+        }
+        node.setRenderEffect(RenderEffect.createRuntimeShaderEffect(shader, "img"));
+    }
+
     private boolean refractionUniformsInitialized;
 
     public static void prewarmShaders() {
@@ -65,21 +117,28 @@ public class LiquidGlassEffect {
     }
 
     public LiquidGlassEffect(RenderNode node, boolean fixedRefraction, Runnable onShadersReady) {
-        this(node, fixedRefraction, onShadersReady, Float.NaN, Float.NaN, false);
+        this(node, fixedRefraction, onShadersReady, Float.NaN, Float.NaN, false, false);
     }
 
     /** Local advanced-glass optics; never reads or writes the global optical sliders. */
     public LiquidGlassEffect(RenderNode node, float refraction, float dispersion, Runnable onShadersReady) {
-        this(node, false, onShadersReady, refraction, dispersion, false);
+        this(node, false, onShadersReady, refraction, dispersion, false, false);
     }
 
     /** Fixed iOS 26 control optics, including the original shader and highlight. */
     public static LiquidGlassEffect forIos26Lens(RenderNode node, float refraction, float dispersion, Runnable onReady) {
-        return new LiquidGlassEffect(node, false, onReady, refraction, dispersion, true);
+        return new LiquidGlassEffect(node, false, onReady, refraction, dispersion, true, false);
     }
 
+    public static LiquidGlassEffect forControlLens(RenderNode node, float refraction, float dispersion, Runnable onReady) {
+        return new LiquidGlassEffect(node, false, onReady, refraction, dispersion, !zxc.iconic.xenon.NekoConfig.ios27LiquidGlass, true);
+    }
+
+    private final boolean clearControl;
+
     private LiquidGlassEffect(RenderNode node, boolean fixedRefraction, Runnable onShadersReady,
-                              float refraction, float dispersion, boolean localIos26) {
+                              float refraction, float dispersion, boolean localIos26, boolean clearControl) {
+        this.clearControl = clearControl;
         this.localIos26 = localIos26;
         customOptics = !Float.isNaN(refraction) && !Float.isNaN(dispersion);
         customRefraction = Math.max(0f, Math.min(2f, refraction));
@@ -118,10 +177,11 @@ public class LiquidGlassEffect {
                     : GlassShaderCache.acquireRefraction(advanced, prism, onShadersReady);
             if (shader != null) {
                 refractionUniformsInitialized = false;
+                pressUniformsDirty = ios27 && pressProgress > 0f;
                 changed = true;
             }
         }
-        if (refractionEnabled && highlightShader == null) {
+        if (refractionEnabled && !ios27 && highlightShader == null) {
             highlightShader = localIos26 ? GlassShaderCache.acquireIos26Highlight(onShadersReady)
                     : GlassShaderCache.acquireHighlight(onShadersReady);
             changed |= highlightShader != null;
@@ -147,7 +207,7 @@ public class LiquidGlassEffect {
     private int foregroundColor;
 
     public boolean isConfigurationCurrent() {
-        return (localIos26 || ios27 == zxc.iconic.xenon.NekoConfig.ios27LiquidGlass)
+        return ((localIos26 && !clearControl) || ios27 == zxc.iconic.xenon.NekoConfig.ios27LiquidGlass)
                 && prism == (!localIos26 && zxc.iconic.xenon.NekoConfig.isPrismGlassEnabled())
                 && (customOptics || advanced == (fixedRefraction || zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled()))
                 && refractionEnabled == (org.telegram.messenger.SharedConfig.chatBlurEnabled()
@@ -166,7 +226,7 @@ public class LiquidGlassEffect {
                     zxc.iconic.xenon.NekoConfig.getGlassTintPercent() / 100f));
             foregroundColor = org.telegram.ui.ActionBar.Theme.multAlpha(foregroundColor, strength);
         }
-        float resX = node.getWidth();
+        float resX = backdropWidth > 0 ? backdropWidth : node.getWidth();
         float resY = node.getHeight();
         float cX = (left + right) / 2f;
         float cY = (top + bottom) / 2f;
@@ -178,9 +238,9 @@ public class LiquidGlassEffect {
         rRB = Math.max(0f, Math.min(maxRadius, rRB));
         rLB = Math.max(0f, Math.min(maxRadius, rLB));
 
-        final float refractionSetting = ios27 ? zxc.iconic.xenon.NekoConfig.getGlassRefraction() : customOptics ? customRefraction
+        final float refractionSetting = customOptics ? customRefraction
                 : zxc.iconic.xenon.NekoConfig.getGlassRefraction();
-        final float dispersionSetting = ios27 ? zxc.iconic.xenon.NekoConfig.getGlassDispersion() : customOptics ? customDispersion
+        final float dispersionSetting = customOptics ? customDispersion
                 : zxc.iconic.xenon.NekoConfig.getGlassDispersion();
         final float angleDeg = localIos26 ? 45f : zxc.iconic.xenon.NekoConfig.getGlassGlareAngle();
         if (ios27 && ios27Revision != zxc.iconic.xenon.NekoConfig.getIos27GlassRevision()) {
@@ -198,6 +258,7 @@ public class LiquidGlassEffect {
                 || this.centerX != cX || this.centerY != cY || this.sizeX != sX || this.sizeY != sY
                 || this.radiusLeftTop != rLT || this.radiusRightTop != rRT
                 || this.radiusRightBottom != rRB || this.radiusLeftBottom != rLB
+                || (ios27 && (this.foregroundColor != foregroundColor || this.glareAngle != angleDeg))
                 || (advanced
                     ? (!fixedRefraction && this.cachedFresnel != refractionSetting)
                         || this.cachedDispersion != dispersionSetting
@@ -250,16 +311,24 @@ public class LiquidGlassEffect {
                     shader.setFloatUniform("refractionAmount", refractionAmount);
                     shader.setFloatUniform("depthEffect", 0f);
                     if (ios27) {
-                        Ios27GlassMaterial.lens(sX * 2f, sY * 2f, AndroidUtilities.density, ios27Lens, 0);
-                        ios27Lens[0] *= refractionSetting / .7f;
+                        Ios27GlassMaterial.renderLens(sX * 2f, sY * 2f, AndroidUtilities.density,
+                                refractionSetting, clearControl, ios27Lens, 0);
+                        shader.setFloatUniform("backdropBlur", backdropWidth > 0 ? 1f : 0f);
+                        int alphaPercent = zxc.iconic.xenon.NekoConfig.ios27GlassAlpha;
+                        shader.setFloatUniform("blurMix", alphaPercent == 0 ? -1f : alphaPercent / 100f);
                         shader.setFloatUniform("lensParams", ios27Lens);
+                        float tint = clearControl ? 0f : .006f * zxc.iconic.xenon.NekoConfig.getGlassTintPercent();
+                        shader.setFloatUniform("glassTint", r * tint, g * tint, b * tint, a * tint);
+                        shader.setFloatUniform("clearControl", clearControl ? 1f : 0f);
                         shader.setFloatUniform("lightIntensity", zxc.iconic.xenon.NekoConfig.getIos27GlassLightIntensity());
                         shader.setFloatUniform("lightAngle", (float) Math.toRadians(angleDeg));
                         shader.setFloatUniform("darkMode", dark ? 1f : 0f);
                         shader.setFloatUniform("pixelScale", AndroidUtilities.density);
+                        shader.setFloatUniform("lightFalloff", zxc.iconic.xenon.NekoConfig.ios27GlassGlare);
+                        shader.setFloatUniform("solidGlare", zxc.iconic.xenon.NekoConfig.ios27GlassGlareMode
+                                == zxc.iconic.xenon.NekoConfig.GLASS_GLARE_SOLID ? 1f : 0f);
                     }
                     shader.setFloatUniform("chromaticAberration", dispersion);
-                    node.setRenderEffect(RenderEffect.createRuntimeShaderEffect(shader, "img"));
                 } else {
                     shader.setFloatUniform("resolution", resX, resY);
                     shader.setFloatUniform("center", cX, cY);
@@ -269,9 +338,9 @@ public class LiquidGlassEffect {
                     shader.setFloatUniform("refract_intensity", intensity);
                     shader.setFloatUniform("refract_index", index);
                     shader.setFloatUniform("foreground_color_premultiplied", r, g, b, a);
-                    node.setRenderEffect(RenderEffect.createRuntimeShaderEffect(shader, "img"));
                 }
                 refractionUniformsInitialized = true;
+                installRefraction();
             }
 
             // Highlight (glare) uniforms — always updated so the glare draws
@@ -281,18 +350,8 @@ public class LiquidGlassEffect {
                 highlightShader.setFloatUniform("origin", left, top);
                 highlightShader.setFloatUniform("cornerRadii", rLT, rRT, rRB, rLB);
                 highlightShader.setColorUniform("color", Color.WHITE);
-                if (ios27) {
-                    highlightShader.setFloatUniform("pixelScale", AndroidUtilities.density);
-                    highlightShader.setFloatUniform("darkMode", dark ? 1f : 0f);
-                    highlightShader.setFloatUniform("lightIntensity", zxc.iconic.xenon.NekoConfig.getIos27GlassLightIntensity());
-                    highlightShader.setFloatUniform("lightAngle", (float) Math.toRadians(angleDeg));
-                    highlightShader.setFloatUniform("lightFalloff", zxc.iconic.xenon.NekoConfig.ios27GlassGlare);
-                    highlightShader.setFloatUniform("solidGlare", zxc.iconic.xenon.NekoConfig.ios27GlassGlareMode
-                            == zxc.iconic.xenon.NekoConfig.GLASS_GLARE_SOLID ? 1f : 0f);
-                } else {
-                    highlightShader.setFloatUniform("angle", (float) Math.toRadians(angleDeg));
-                    highlightShader.setFloatUniform("falloff", localIos26 ? 1f : Math.max(0.1f, zxc.iconic.xenon.NekoConfig.advancedGlassGlare));
-                }
+                highlightShader.setFloatUniform("angle", (float) Math.toRadians(angleDeg));
+                highlightShader.setFloatUniform("falloff", localIos26 ? 1f : Math.max(0.1f, zxc.iconic.xenon.NekoConfig.advancedGlassGlare));
 
                 highlightRect.set(left, top, right, bottom);
                 if (!highlightGeometryInitialized
@@ -316,6 +375,7 @@ public class LiquidGlassEffect {
             }
             uniformsInvalidated = false;
         }
+        refreshPress();
     }
 
     /**
@@ -338,9 +398,7 @@ public class LiquidGlassEffect {
         canvas.save();
         canvas.clipPath(highlightClipPath);
 
-        highlightPaint.setStyle(ios27 ? Paint.Style.FILL : Paint.Style.STROKE);
-        highlightPaint.setBlendMode(ios27 ? BlendMode.SRC_OVER : BlendMode.PLUS);
-        highlightPaint.setAlpha(Math.round((ios27 ? 255f : 42f) * Math.max(0f, Math.min(1f, parentAlpha))));
+        highlightPaint.setAlpha(Math.round(42f * Math.max(0f, Math.min(1f, parentAlpha))));
         highlightPaint.setShader(highlightShader);
         canvas.drawPath(highlightClipPath, highlightPaint);
         canvas.restore();

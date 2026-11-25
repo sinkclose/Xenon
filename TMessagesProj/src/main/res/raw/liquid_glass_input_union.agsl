@@ -31,18 +31,21 @@ uniform float shadowRadius;
 uniform float4 glows[8];
 uniform float links[64];
 uniform float touchActive;
+uniform float backdropBlur;
+uniform float blurMix;
 
 half4 sampleBackdrop(float2 coord) {
     return img.eval(clamp(coord, float2(0.5), resolution - float2(0.5)));
 }
 
+// ROUNDED_FIELD
+
+// BLUR_PLANE
+
+// PRESS_TRANSFER
+
 float touchLight(float2 p, float4 glow) {
     if (glow.w <= 0.0) return 0.0;
-    if (ios27 > 0.5) {
-        float distance = length(p - glow.xy) / max(glow.z, 0.001);
-        float halo = exp(-6.0 * distance * distance) * (1.0 - smoothstep(0.8, 1.0, distance));
-        return glow.w * 0.025 * halo;
-    }
     float halo = 1.0 - smoothstep(glow.z * 0.5, max(glow.z, 0.001), length(p - glow.xy));
     return glow.w * (0.08 + 0.15 * halo);
 }
@@ -55,6 +58,7 @@ float3 shapeDistance(float2 p, float4 shape, float4 corners, float alpha) {
     float2 local = p - shape.xy;
     float radius = local.x >= 0.0 ? (local.y >= 0.0 ? corners.z : corners.y)
                                  : (local.y >= 0.0 ? corners.w : corners.x);
+    if (ios27 > 0.5) return nativeGlassRoundedField(local, shape.zw, float2(radius), 0.0);
     float2 q = abs(local) - shape.zw + radius;
     float2 normal;
     float distance;
@@ -297,18 +301,6 @@ float4 surfaceLens(Surface s) {
     return result;
 }
 
-float2 surfaceCenter(Surface s) {
-    float2 result = shapes[0].xy * s.a.x;
-    if (SHAPE_COUNT > 1) result += shapes[1].xy * s.a.y;
-    if (SHAPE_COUNT > 2) result += shapes[2].xy * s.a.z;
-    if (SHAPE_COUNT > 3) result += shapes[3].xy * s.a.w;
-    if (SHAPE_COUNT > 4) result += shapes[4].xy * s.b.x;
-    if (SHAPE_COUNT > 5) result += shapes[5].xy * s.b.y;
-    if (SHAPE_COUNT > 6) result += shapes[6].xy * s.b.z;
-    if (SHAPE_COUNT > 7) result += shapes[7].xy * s.b.w;
-    return result;
-}
-
 float4 surfaceTint(Surface s) {
     float4 result = tints[0] * s.a.x;
     if (SHAPE_COUNT > 1) {
@@ -361,13 +353,63 @@ float connectedLight(float2 p, Surface s) {
     return result;
 }
 
+float rayDisplacement(float sd, float depth, float amount) {
+    if (depth <= 0.0 || sd <= -depth) return 0.0;
+    float u = clamp(-sd / depth, 0.0, 1.0);
+    return amount * (1.0 - sqrt(u * (2.0 - u)));
+}
+
+half4 sampleRay(float2 uv, float2 delta, float blurWeight) {
+    half4 color = sampleOpticalBackdrop(uv, blurWeight);
+    if (dot(delta, delta) <= 0.000001) return color;
+    half4 red = sampleOpticalBackdrop(uv + delta, blurWeight);
+    half4 orange = sampleOpticalBackdrop(uv + delta * (2.0 / 3.0), blurWeight);
+    half4 yellow = sampleOpticalBackdrop(uv + delta * (1.0 / 3.0), blurWeight);
+    half4 green = color;
+    half4 cyan = sampleOpticalBackdrop(uv - delta * (1.0 / 3.0), blurWeight);
+    half4 blue = sampleOpticalBackdrop(uv - delta * (2.0 / 3.0), blurWeight);
+    half4 purple = sampleOpticalBackdrop(uv - delta, blurWeight);
+    return half4((red.r + orange.r + yellow.r) / 3.5 + purple.r / 7.0,
+                  orange.g / 7.0 + (yellow.g + green.g + cyan.g) / 3.5,
+                  (cyan.b + blue.b + purple.b) / 3.0,
+                  (red.a + orange.a + yellow.a + green.a + cyan.a + blue.a + purple.a) / 7.0);
+}
+
+half4 applyUnionPress(half4 color, float2 coordinate, float coverage) {
+    if (coverage <= 0.0 || touchActive < 0.5) return color;
+    float4 encoded = float4(color);
+    for (int i = 0; i < SHAPE_COUNT; i++) {
+        float4 glow = glows[i];
+        if (glow.z <= 0.0 || opacity[i] <= 0.0) continue;
+        float2 extent = shapes[i].zw * 2.0;
+        bool compact = max(extent.x, extent.y) / pixelScale < 120.0;
+        float shortSide = min(extent.x, extent.y);
+        float sizeProgress = compact ? 0.0 : clamp((shortSide / pixelScale - 44.0) / 116.0, 0.0, 1.0);
+        float radius = min(shortSide * 0.75, 80.0 * pixelScale) * (1.0 + 3.0 * glow.w);
+        float halo = nativePressHalo(length((coordinate - glow.xy) / max(radius, 0.0001)));
+        float bigMask = min(1.0, 2.0 * halo);
+        float little = compact ? 1.0 : 0.3 - 0.1 * sizeProgress;
+        half4 target = half4(glassWorkingToNativeGammaPremul(encoded));
+        half4 glowing = nativeApplyPressGlow(target, glow.z * (1.0 - sizeProgress) * bigMask,
+            glow.z * little * halo, 1.0 / (1.0 - mix(0.4, 0.75, darkMode)));
+        float4 working = glassNativeGammaToWorkingPremul(float4(glowing));
+        encoded += coverage * (working - encoded);
+    }
+    return half4(encoded);
+}
+
 half4 main(float2 p) {
+    if (p.x >= resolution.x || p.y >= resolution.y) return half4(0.0);
     Surface s = surface(p);
-    float coverage = 1.0 - smoothstep(-0.75, 0.75, s.d);
+    float3 field = float3(s.d, s.normal);
+    float coverage = ios27 > 0.5 ? opticalShapeCoverage(field) : 1.0 - smoothstep(-0.75, 0.75, s.d);
+    float key = ios27 > 0.5 ? opticalSideStroke(field, coverage, darkMode, ios27LightIntensity) : 0.0;
     float alpha = surfaceOpacity(s);
     if (coverage <= 0.0) {
         float fade = exp(-max(s.d, 0.0) * max(s.d, 0.0) / (2.0 * shadowRadius * shadowRadius));
-        return half4(shadow.rgb * shadow.a, shadow.a) * half(fade * glassAlpha * alpha);
+        half4 shade = half4(shadow.rgb * shadow.a, shadow.a) * half(fade);
+        half4 edge = completeOpticalSideStroke(shade, p, key, darkMode, key > 0.0 ? surfaceDepth(s) * 2.0 : 0.0);
+        return edge * half(glassAlpha * alpha);
     }
     float2 grad = s.normal;
     // A smooth union is not a unit-distance field at the neck. Preserve its
@@ -375,25 +417,18 @@ half4 main(float2 p) {
     // and flips the refraction abruptly across the saddle between members.
     grad /= max(length(grad), 1.0);
     float2 displacement = float2(0.0);
+    float4 lens = float4(0.0);
+    float innerDistance = 0.0;
     if (refractive < 0.5) {
         displacement = float2(0.0);
+    } else if (ios27 > 0.5) {
+        lens = surfaceLens(s);
+        innerDistance = rayDisplacement(s.d, lens.y, lens.x);
+        displacement = grad * innerDistance;
     } else if (advanced > 0.5) {
-        float maxDepth = surfaceDepth(s);
-        float band = min(depth, maxDepth);
+        float band = min(depth, surfaceDepth(s));
         float edge = clamp(1.0 + min(s.d, 0.0) / max(band, 0.001), 0.0, 1.0);
-        float lensScale = ios27 > 0.5 ? band / max(depth, 0.001) : 1.0;
-        displacement = grad * amount * lensScale * (1.0 - sqrt(max(0.0, 1.0 - edge * edge)));
-        if (ios27 > 0.5) {
-            float4 lens = surfaceLens(s);
-            float2 radial = p - surfaceCenter(s);
-            radial /= max(length(radial), 0.0001);
-            float slope = min(length(grad), 1.0);
-            float2 normal = grad + radial * lens.z * slope;
-            normal /= max(length(normal), 0.0001);
-            float e = clamp(1.0 + min(s.d, 0.0) / max(lens.w, 0.001), 0.0, 1.0);
-            float profile = pow(1.0 - sqrt(max(0.0, 1.0 - e * e)), lens.y);
-            displacement = -normal * lens.x * profile * slope;
-        }
+        displacement = grad * amount * (1.0 - sqrt(max(0.0, 1.0 - edge * edge)));
     } else if (intensity != 0.0 && s.d > -thickness) {
         float sd = min(s.d, 0.0);
         float nc = clamp((thickness + sd) / thickness, 0.0, 1.0);
@@ -404,64 +439,40 @@ half4 main(float2 p) {
         float height = sd < -thickness ? thickness : sqrt(max(0.0, sd * (-2.0 * thickness - sd)));
         displacement = ray.xy * ((height + 8.0 * thickness) / max(-ray.z, 0.001)) * intensity;
     }
-    float2 uv = p + displacement;
-    half4 color = sampleBackdrop(uv);
-    if (advanced > 0.5 && dispersion > 0.0) {
-        float spread = dispersionSpread(p, s);
-        float2 delta = displacement * dispersion * clamp(spread, -1.0, 1.0);
-        if (ios27 > 0.5) delta = displacement * dispersion;
-        half4 red = sampleBackdrop(uv + delta);
-        half4 orange = sampleBackdrop(uv + delta * (2.0 / 3.0));
-        half4 yellow = sampleBackdrop(uv + delta * (1.0 / 3.0));
-        half4 green = color;
-        half4 cyan = sampleBackdrop(uv - delta * (1.0 / 3.0));
-        half4 blue = sampleBackdrop(uv - delta * (2.0 / 3.0));
-        half4 purple = sampleBackdrop(uv - delta);
-        color = half4((red.r + orange.r + yellow.r) / 3.5 + purple.r / 7.0,
-                      orange.g / 7.0 + (yellow.g + green.g + cyan.g) / 3.5,
-                      (cyan.b + blue.b + purple.b) / 3.0,
-                      (red.a + orange.a + yellow.a + green.a + cyan.a + blue.a + purple.a) / 7.0);
+    float spread = advanced > 0.5 && dispersion > 0.0
+            ? dispersion * clamp(dispersionSpread(p, s), -1.0, 1.0) : 0.0;
+    float halfExtent = backdropBlur > 0.5 ? surfaceDepth(s) : 0.0;
+    half4 color = sampleRay(p + displacement, displacement * spread, opticalBlurWeight(s.d, innerDistance, halfExtent));
+    if (backdropBlur > 0.5) color = mixOpticalFill(color, sampleBlurredBackdrop(p), darkMode);
+    if (ios27 > 0.5 && s.d > -pixelScale && lens.z > 0.0) {
+        float outerDistance = rayDisplacement(s.d, lens.w, lens.z);
+        float2 outer = grad * outerDistance;
+        float weight = 0.6 * clamp(1.0 + s.d / max(pixelScale, 0.001), 0.0, 1.0);
+        color = mix(color, sampleRay(p + outer, outer * spread, opticalBlurWeight(s.d, outerDistance, halfExtent)), half(weight));
     }
+    if (backdropBlur > 0.5 && blurMix >= 0.0 && blurMix < 1.0) {
+        color = mix(sampleBackdrop(p + displacement), color, half(blurMix));
+    }
+    if (ios27 > 0.5 && color.a < 0.999 && dot(displacement, displacement) > 0.000001) {
+        color += sampleBackdrop(p) * half(1.0 - color.a);
+    }
+    float extent = ios27 > 0.5 ? surfaceDepth(s) * 2.0 : 0.0;
     if (ios27 > 0.5) {
         half3 rgb = color.a > 0.0001 ? color.rgb / color.a : half3(0.0);
-        float luminance = dot(float3(rgb), float3(0.3, 0.59, 0.11));
-        if (darkMode > 0.5) {
-            rgb = clamp(rgb + half((0.6 - luminance) * 0.17), 0.0, 1.0);
-        } else {
-            rgb = clamp(rgb + half((0.972549 - luminance) * 0.2), 0.0, 1.0);
-            rgb = min(half3(1.0), rgb + half3(0.266667 * 0.6));
-            rgb = mix(rgb, half3(1.0), 0.25) * 0.75;
-        }
-        float inward = max(-s.d, 0.0) / max(pixelScale, 0.001);
-        float directional = abs(dot(grad, float2(sin(angle), cos(angle))));
-        float vertical = ios27SolidGlare > 0.5 ? 1.0 : pow(directional, ios27LightFalloff);
-        float scale = max(0.001, min(pixelScale, surfaceDepth(s) / 24.0));
-        // Query the actual shifted union, so inner shadows also follow its neck.
-        float shift = 40.0 * scale;
-        float2 lightDirection = float2(sin(angle), cos(angle));
-        float upperDistance = surface(p - lightDirection * shift).d - shift;
-        float lowerDistance = surface(p + lightDirection * shift).d - shift;
-        float upperLight = smoothstep(-10.0 * scale, 10.0 * scale, upperDistance);
-        float lowerLight = smoothstep(-10.0 * scale, 10.0 * scale, lowerDistance);
-        float burn = smoothstep(-30.0 * scale, 30.0 * scale, upperDistance);
-        rgb = max(half3(0.0), rgb - half3(burn * 0.098039));
-        rgb = min(half3(1.0), rgb + half3((upperLight + lowerLight) * mix(0.156863, 0.101961, darkMode) * (ios27LightIntensity / 0.25)));
-        // Keep the old tint strength: blend it after the body and inner shadows.
-        // The optical rim is lit afterwards, so the tint cannot color it.
+        rgb = opticalFace(rgb, darkMode, extent);
+        // Apply tint to the glass body before lighting the rim.
         half4 body = half4(rgb * color.a, color.a);
         half4 tint = half4(surfaceTint(s));
         body = tint + body * (1.0 - tint.a);
         rgb = body.a > 0.0001 ? body.rgb / body.a : half3(0.0);
-        float white = clamp(exp(-inward * inward / 0.9) * ios27LightIntensity * vertical, 0.0, 0.9);
-        float black = clamp((1.0 - smoothstep(0.25, 0.75, inward)) * mix(0.184314, 0.349020, darkMode), 0.0, 0.9);
-        rgb = mix(rgb * half(1.0 - black), half3(1.0), half(white));
+        rgb = applyOpticalRim(rgb, float3(s.d, grad), angle, ios27LightIntensity, ios27LightFalloff, ios27SolidGlare);
         color = half4(rgb * body.a, body.a);
     } else {
         half4 tint = half4(surfaceTint(s));
         color = tint + color * (1.0 - tint.a);
     }
     float touch = 0.0;
-    if (touchActive > 0.5) {
+    if (ios27 < 0.5 && touchActive > 0.5) {
         touch = connectedLight(p, s);
     }
     color.rgb = min(half3(color.a), color.rgb + half3(min(touch, 0.35) * color.a));
@@ -469,5 +480,8 @@ half4 main(float2 p) {
     float light = ios27 > 0.5 || glare <= 0.0 || abs(s.d) >= 1.2 ? 0.0 : pow(abs(dot(grad, float2(cos(angle), sin(angle)))), max(0.1, glare));
     float rim = 1.0 - smoothstep(0.0, 1.2, abs(s.d));
     color.rgb = min(half3(color.a), color.rgb + half3(light * rim * 0.165 * color.a));
-    return color * half(coverage * glassAlpha * alpha);
+    half4 body = color * half(coverage);
+    half4 completed = completeOpticalSideStroke(body, p, key, darkMode, extent);
+    if (ios27 > 0.5) completed = applyUnionPress(completed, p, coverage);
+    return completed * half(glassAlpha * alpha);
 }

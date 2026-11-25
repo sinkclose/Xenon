@@ -12,6 +12,7 @@ import android.view.View;
 import android.view.Gravity;
 import android.widget.FrameLayout;
 
+import androidx.annotation.RequiresApi;
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -101,13 +102,22 @@ public class ChatActivitySideControlsButtonsLayout extends FrameLayout implement
     private final float[] groupOrigins = new float[BUTTONS_COUNT * 2];
     private final float[] groupSourceOrigins = new float[BUTTONS_COUNT * 2];
 
+    private final Runnable onLiquidGroupReady = this::postInvalidateOnAnimation;
+
+    @RequiresApi(33)
+    private boolean prepareLiquidGroup() {
+        if (liquidGroup == null) {
+            liquidGroup = LiquidGlassInputGroup.acquirePrepared(groupMembers.length, onLiquidGroupReady);
+        }
+        return liquidGroup != null;
+    }
+
     @Override
     protected void dispatchDraw(Canvas canvas) {
         boolean merged = false;
         if (Build.VERSION.SDK_INT >= 33 && canvas.isHardwareAccelerated() && liquidTouchEnabled
-                && !zxc.iconic.xenon.helpers.NonIslandHelper.chatElements() && !liquidGroupFailed) {
+                && !zxc.iconic.xenon.helpers.NonIslandHelper.chatElements() && !liquidGroupFailed && prepareLiquidGroup()) {
             try {
-                if (liquidGroup == null) liquidGroup = new LiquidGlassInputGroup(groupMembers.length);
                 for (int i = 0; i < BUTTONS_COUNT; i++) {
                     ButtonHolder holder = buttonHolders[i];
                     groupMembers[i] = null;

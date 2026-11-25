@@ -384,18 +384,22 @@ public final class IosPopupMorph extends FrameLayout {
         dragScale = geometry[3] / target.height() * zoom;
         if (Build.VERSION.SDK_INT >= 33 && canvas.isHardwareAccelerated() && !glassFailed) {
             try {
-                if (glass == null) glass=new Glass(portalButtons,source,headerSource);
-                if (backdropDirty) {
-                    backdropDirty = !glass.captureBackdrop(host, windowLocation);
-                    if (backdropDirty) postInvalidateOnAnimation();
+                if (glass == null) glass=new Glass(this::postInvalidateOnAnimation);
+                if (glass.preparePortalShaders()) {
+                    if (backdropDirty) {
+                        backdropDirty = !glass.captureBackdrop(host, windowLocation);
+                        if (backdropDirty) postInvalidateOnAnimation();
+                    }
+                    int save=canvas.save(); interaction.transform(canvas,target);
+                    try { glass.draw(canvas,menuSurface,surfaceX,surfaceY,motion,target,tint,interaction); } finally { canvas.restoreToCount(save); }
+                    return;
                 }
-                int save=canvas.save(); interaction.transform(canvas,target);
-                try { glass.draw(canvas,menuSurface,surfaceX,surfaceY,motion,target,tint,interaction); } finally { canvas.restoreToCount(save); }
-                return;
             } catch (RuntimeException e) {
                 FileLog.e(e); if (glass != null) glass.release(); glass=null; glassFailed=true;
             }
         }
+        dragScaleX = geometry[2] / target.width();
+        dragScale = geometry[3] / target.height();
         drawFallback(canvas,menuSurface,surfaceX,surfaceY,motion,target,tint,fallbackPaint);
     }
 
@@ -562,10 +566,13 @@ public final class IosPopupMorph extends FrameLayout {
             if(!settled) content.postInvalidateOnAnimation();
             if(Build.VERSION.SDK_INT>=33 && canvas.isHardwareAccelerated() && !failed) {
                 try {
-                    if(glass==null) glass=new Glass(java.util.Collections.emptyList(),source,null);
-                    glass.captureBackdrop(backdropHost(), location, true);
-                    int save=canvas.save(); interaction.transform(canvas,target);
-                    try { glass.draw(canvas,content,0,0,motion,target,tint,interaction); } finally { canvas.restoreToCount(save); } return;
+                    if(glass==null) glass=new Glass(content::postInvalidateOnAnimation);
+                    if (glass.preparePortalShaders()) {
+                        glass.captureBackdrop(backdropHost(), location, true);
+                        int save=canvas.save(); interaction.transform(canvas,target);
+                        try { glass.draw(canvas,content,0,0,motion,target,tint,interaction); } finally { canvas.restoreToCount(save); }
+                        return;
+                    }
                 } catch(RuntimeException e) { FileLog.e(e); if(glass!=null) glass.release(); glass=null; failed=true; }
             }
             drawFallback(canvas,content,0,0,motion,target,tint,paint);
@@ -585,7 +592,7 @@ public final class IosPopupMorph extends FrameLayout {
             return interaction.touch(event,x,y,true);
         }
         private float foregroundZoom() {
-            return glass != null && !failed ? motion.contentZoom : 1f;
+            return glass != null && !failed && glass.hasPortalShaders() ? motion.contentZoom : 1f;
         }
 
         public void close() {
@@ -605,8 +612,8 @@ public final class IosPopupMorph extends FrameLayout {
 
     @RequiresApi(33)
     private static final class Glass extends GlasmioPopupRenderer {
-        Glass(java.util.List<View> buttons, RectF bounds, NavigationHeaderButtons.MenuSource header) {
-            super(buttons, bounds, header);
+        Glass(Runnable onOpticsReady) {
+            super(onOpticsReady);
         }
     }
 }

@@ -31,7 +31,6 @@ public final class IosSliderView extends View {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF track = new RectF(), fill = new RectF(), thumb = new RectF();
     private IosGlassThumb glass;
-    private GlasmioSwitchLens nativeLens;
     private float value, minimum, buffered, downX, downY, downValue;
     private boolean dragging, touchedThumb, framePosted;
     private int pointer = -1;
@@ -89,7 +88,6 @@ public final class IosSliderView extends View {
         removeThumbOverlay();
         if (glass != null) glass.release();
         glass = null;
-        if (nativeLens != null) { nativeLens.release(); nativeLens = null; }
     }
     @Override protected void onDetachedFromWindow() { release(); super.onDetachedFromWindow(); }
     private void requestFrame() {
@@ -226,23 +224,11 @@ public final class IosSliderView extends View {
         paint.setColor(0x0D000000);
         canvas.drawRoundRect(thumb.left, thumb.top + density, thumb.right, thumb.bottom + density, halfH, halfH, paint);
         boolean glassEnabled = org.telegram.messenger.SharedConfig.chatBlurEnabled() && LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
-        if (!glassEnabled && nativeLens != null) {
-            nativeLens.release();
-            nativeLens = null;
-        }
         if (!glassEnabled && glass != null) {
             glass.release();
             glass = null;
         }
         boolean drawGlass = glassEnabled && press > .001f && Build.VERSION.SDK_INT >= 33 && canvas.isHardwareAccelerated();
-        if (drawGlass && zxc.iconic.xenon.NekoConfig.ios27LiquidGlass) {
-            if (nativeLens == null) nativeLens = new GlasmioSwitchLens(true);
-            nativeLens.draw(canvas, thumb, press, accent, resourcesProvider, recording -> {
-                paint.setColor(off); recording.drawRoundRect(track, 3f * density, 3f * density, paint);
-                paint.setColor(accent); recording.drawRoundRect(fill, 3f * density, 3f * density, paint);
-            });
-            return;
-        }
         if (drawGlass) {
             if (glass == null) glass = new IosGlassThumb(this, resourcesProvider);
             glass.draw(canvas, thumb, press, 2f / 3f + press / 3f, press, resourcesProvider, recording -> {

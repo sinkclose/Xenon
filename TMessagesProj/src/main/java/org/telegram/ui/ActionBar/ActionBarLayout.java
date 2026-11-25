@@ -100,6 +100,7 @@ import zxc.iconic.xenon.FragmentPreviewWindow;
 
 import zxc.iconic.xenon.NekoConfig;
 import zxc.iconic.xenon.helpers.NavigationTransition;
+import zxc.iconic.xenon.helpers.SystemBackGesture;
 
 public class ActionBarLayout extends FrameLayout implements INavigationLayout, FloatingDebugProvider {
 
@@ -742,6 +743,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
     public float innerTranslationX;
 
     private boolean maybeStartTracking;
+    private boolean swipeStartedAtSystemBackEdge;
     protected boolean startedTracking;
     private float startedTrackingX;
     private float startedTrackingY;
@@ -1627,6 +1629,12 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
 
     @Override
     public boolean onTouchEvent(MotionEvent ev) {
+        if (ev != null) {
+            if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                swipeStartedAtSystemBackEdge = SystemBackGesture.startsAtEdge(this, ev);
+            }
+            if (swipeStartedAtSystemBackEdge) return false;
+        }
         if (!checkTransitionAnimation() && !inActionMode && !animationInProgress && !predictiveBackInProgress) {
             if (fragmentsStack.size() > 1 && allowSwipe()) {
                 if (ev != null && ev.getAction() == MotionEvent.ACTION_DOWN) {
@@ -1688,7 +1696,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                     velocityTracker.addMovement(ev);
                     velocityTracker.computeCurrentVelocity(1000);
                     BaseFragment currentFragment = fragmentsStack.get(fragmentsStack.size() - 1);
-                    if (!inPreviewMode && !transitionAnimationPreviewMode && !startedTracking && currentFragment.isSwipeBackEnabled(ev)) {
+                    if (ev.getActionMasked() != MotionEvent.ACTION_CANCEL && !inPreviewMode && !transitionAnimationPreviewMode && !startedTracking && currentFragment.isSwipeBackEnabled(ev)) {
                         float velX = velocityTracker.getXVelocity();
                         float velY = velocityTracker.getYVelocity();
                         if (velX >= 3500 && velX > Math.abs(velY) && currentFragment.canBeginSlide()) {
@@ -1706,7 +1714,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                         float x = containerView.getX();
                         float velX = velocityTracker.getXVelocity();
                         float velY = velocityTracker.getYVelocity();
-                        final boolean backAnimation = (newBackTransitions() ? x < dp(56) / 2 || velX < -1000 : x < containerView.getMeasuredWidth() / 3.0f) && (velX < 3500 || Math.abs(velX) < Math.abs(velY));
+                        final boolean backAnimation = ev.getActionMasked() == MotionEvent.ACTION_CANCEL || (newBackTransitions() ? x < dp(56) / 2 || velX < -1000 : x < containerView.getMeasuredWidth() / 3.0f) && (velX < 3500 || Math.abs(velX) < Math.abs(velY));
                         animateBackEndAnimation(backAnimation);
                     } else {
                         maybeStartTracking = false;

@@ -19042,12 +19042,26 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
         private final org.telegram.ui.Components.LiquidTouchDispatcher liquidTouchDispatcher = new org.telegram.ui.Components.LiquidTouchDispatcher();
         private LiquidGlassInputGroup headerGlassGroup;
+        private final Runnable onHeaderGlassReady = this::postInvalidateOnAnimation;
         private boolean headerGlassGroupFailed, headerGlassPrepared;
         private final BlurredBackgroundDrawable[] headerGlassMembers = new BlurredBackgroundDrawable[4];
         private final LiquidTouchEffect[] headerGlassEffects = new LiquidTouchEffect[4];
         private final RectF[] headerGlassBounds = {new RectF(), new RectF(), new RectF(), new RectF()};
         private final float[] headerGlassAlpha = new float[4];
         private final float[] headerGlassOrigins = new float[8];
+
+        @RequiresApi(33)
+        private boolean prepareHeaderGlassGroup() {
+            if (headerGlassGroup != null) return true;
+            headerGlassGroup = LiquidGlassInputGroup.acquirePrepared(headerGlassMembers.length, onHeaderGlassReady);
+            if (headerGlassGroup == null) return false;
+            // Header/pinned gap is 7 dp; keep it open at rest, join on deformation.
+            headerGlassGroup.setMergeDistance(dp(6));
+            headerGlassGroup.setPairMergeDistance(0, 1, dp(6));
+            headerGlassGroup.setPairMergeDistance(0, 3, dp(6));
+            headerGlassGroup.setPairMergeDistance(1, 3, dp(6));
+            return true;
+        }
 
         private void drawHeaderGlassGroup(Canvas canvas) {
             boolean merged = false;
@@ -19058,7 +19072,8 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     && actionBar != null && actionBar.getVisibility() == VISIBLE
                     && topPanelLayout != null && actionBar.getScaleX() == 1f && actionBar.getScaleY() == 1f
                     && topPanelLayout.getScaleX() == 1f && topPanelLayout.getScaleY() == 1f
-                    && actionBar.prepareLiquidGlassHeader(headerGlassMembers, headerGlassEffects)) {
+                    && actionBar.prepareLiquidGlassHeader(headerGlassMembers, headerGlassEffects)
+                    && prepareHeaderGlassGroup()) {
                 try {
                     headerGlassMembers[2] = topPanelLayout.prepareLiquidGlassGroup();
                     headerGlassEffects[2] = topPanelLayout.getLiquidGlassEffect();
@@ -19078,14 +19093,6 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                         bounds.offset(host.getX(), host.getY());
                         LiquidTouchEffect.updateBackground(drawable, effect, 0f, 0f);
                         if (!drawable.hasDisplayList()) drawable.updateDisplayList();
-                    }
-                    if (headerGlassGroup == null) {
-                        headerGlassGroup = new LiquidGlassInputGroup(headerGlassMembers.length);
-                        // Header/pinned gap is 7 dp; keep it open at rest, join on deformation.
-                        headerGlassGroup.setMergeDistance(dp(6));
-                        headerGlassGroup.setPairMergeDistance(0, 1, dp(6));
-                        headerGlassGroup.setPairMergeDistance(0, 3, dp(6));
-                        headerGlassGroup.setPairMergeDistance(1, 3, dp(6));
                     }
                     headerGlassGroup.draw(canvas, headerGlassMembers, headerGlassBounds, headerGlassAlpha,
                             headerGlassEffects, headerGlassOrigins);

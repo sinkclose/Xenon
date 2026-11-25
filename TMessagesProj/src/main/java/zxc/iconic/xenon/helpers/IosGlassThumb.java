@@ -38,7 +38,7 @@ public final class IosGlassThumb {
     }
 
     private void rebuildEffect() {
-        effect = LiquidGlassEffect.forIos26Lens(background, REFRACTION, CHROMATIC, owner::postInvalidateOnAnimation);
+        effect = LiquidGlassEffect.forControlLens(background, REFRACTION, CHROMATIC, owner::postInvalidateOnAnimation);
     }
 
     public void release() {

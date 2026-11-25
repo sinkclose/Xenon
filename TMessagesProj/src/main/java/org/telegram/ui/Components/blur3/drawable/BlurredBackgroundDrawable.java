@@ -46,8 +46,9 @@ import java.util.Arrays;
 import zxc.iconic.xenon.NekoConfig;
 
 public abstract class BlurredBackgroundDrawable extends Drawable {
-    public void setGlasmioPress(float progress, float dissipation, float x, float y,
-                               float left, float top, float right, float bottom) {}
+    public void setIos27Press(float progress, float dissipation, float x, float y,
+                              float left, float top, float right, float bottom) {}
+
     public BlurredBackgroundDrawable() {
         boundProps.strokeWidthTop = dpf2(1);
         boundProps.strokeWidthBottom = dpf2(2 / 3f);

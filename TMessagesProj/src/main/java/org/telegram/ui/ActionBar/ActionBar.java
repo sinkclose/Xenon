@@ -378,6 +378,20 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         drawTitleSurface(canvas, surface, scaleX, scaleY, translationX, translationY);
     }
 
+    public void getChatNavigationForegroundBounds(RectF bounds, RectF childBounds) {
+        bounds.setEmpty();
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            if (!isChatNavigationTitleChild(child) || child.getVisibility() != VISIBLE || child.getAlpha() <= 0f) {
+                continue;
+            }
+            childBounds.set(0, 0, child.getWidth(), child.getHeight());
+            child.getMatrix().mapRect(childBounds);
+            childBounds.offset(child.getLeft(), child.getTop());
+            bounds.union(childBounds);
+        }
+    }
+
     public void drawChatNavigationTitle(Canvas canvas) {
         if (doNotDrawChild) return;
         final long drawingTime = getDrawingTime();

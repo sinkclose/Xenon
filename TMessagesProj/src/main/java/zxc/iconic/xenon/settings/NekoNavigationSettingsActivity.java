@@ -34,6 +34,7 @@ public class NekoNavigationSettingsActivity extends BaseNekoSettingsActivity {
     private final int predictiveBackAnimationStyleRow = rowId++;
 
     private final int predictiveBackIntensityRow = rowId++;
+    private final int predictiveBackDecelerateRow = rowId++;
 
     private final int mainTabsRow = rowId++;
     private final int tabletModeRow = rowId++;
@@ -105,6 +106,8 @@ public class NekoNavigationSettingsActivity extends BaseNekoSettingsActivity {
             return String.format(java.util.Locale.US, "%.1f", f);
         };
         items.add(SeekbarCellFactory.of(predictiveBackIntensityRow, intensityConfig, NekoConfig.predictiveBackIntensity).slug("predictiveBackIntensity"));
+        items.add(UItem.asCheck(predictiveBackDecelerateRow, LocaleController.getString(R.string.PredictiveBackDecelerate))
+                .setChecked(NekoConfig.predictiveBackDecelerate).slug("predictiveBackDecelerate"));
 
         items.add(TextSettingsCellFactory.of(mainTabsRow, LocaleController.getString(R.string.MainTabsCustomizeTitle), LocaleController.getString(R.string.MainTabsCustomizeHint)).slug("mainTabs"));
         items.add(TextSettingsCellFactory.of(tabletModeRow, LocaleController.getString(R.string.TabletMode), switch (NekoConfig.tabletMode) {
@@ -154,6 +157,10 @@ public class NekoNavigationSettingsActivity extends BaseNekoSettingsActivity {
             showAnimationStylePopup(R.string.CloseAnimationStyle, NekoConfig.closeAnimationStyle, view, position, NekoConfig::setCloseAnimationStyle, item, false);
         } else if (id == predictiveBackAnimationStyleRow) {
             showAnimationStylePopup(R.string.PredictiveBackAnimationStyle, NekoConfig.predictiveBackAnimationStyle, view, position, NekoConfig::setPredictiveBackAnimationStyle, item, true);
+        } else if (id == predictiveBackDecelerateRow) {
+            NekoConfig.setPredictiveBackDecelerate(!NekoConfig.predictiveBackDecelerate);
+            item.checked = NekoConfig.predictiveBackDecelerate;
+            listView.adapter.notifyItemChanged(position, PARTIAL);
         } else if (id == tabletModeRow) {
             ArrayList<String> arrayList = new ArrayList<>();
             ArrayList<Integer> types = new ArrayList<>();
