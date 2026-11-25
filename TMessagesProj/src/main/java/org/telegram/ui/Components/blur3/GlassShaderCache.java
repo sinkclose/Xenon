@@ -24,8 +24,6 @@ import java.util.function.Supplier;
 public final class GlassShaderCache {
     private static final Pool<RuntimeShader> standard = shaderPool(R.raw.liquid_glass_shader, 12);
     private static final Pool<RuntimeShader> advanced = shaderPool(R.raw.liquid_glass_shader_advanced, 12);
-    private static final Pool<RuntimeShader> prismStandard = shaderPool(R.raw.prism_glass_shader, 12);
-    private static final Pool<RuntimeShader> prismAdvanced = shaderPool(R.raw.prism_glass_shader_advanced, 12);
     private static final Pool<RuntimeShader> ios27 = shaderPool(() -> ios27Source(Build.VERSION.SDK_INT < 36), 12);
     private static final Pool<RuntimeShader> ios27Menu = shaderPool(() -> menuSource(ios27Source(false))
             .replace("return nativeGlassRoundedField(local, extent, float2(r), 0.0); // MENU_DISTANCE",
@@ -72,7 +70,7 @@ public final class GlassShaderCache {
 
     private static Pool<RuntimeShader> refractionPool(boolean useAdvanced, boolean prism) {
         if (zxc.iconic.xenon.NekoConfig.ios27LiquidGlass) return ios27;
-        return prism ? (useAdvanced ? prismAdvanced : prismStandard) : (useAdvanced ? advanced : standard);
+        return useAdvanced ? advanced : standard;
     }
 
     static RuntimeShader acquireRefraction(boolean useAdvanced, boolean prism) {
@@ -81,7 +79,6 @@ public final class GlassShaderCache {
 
     static RuntimeShader acquireRefraction(boolean useAdvanced, boolean prism, Runnable onReady) {
         Pool<RuntimeShader> pool = refractionPool(useAdvanced, prism);
-        if (prism && pool.hasFailed()) pool = refractionPool(useAdvanced, false);
         return pool.acquire(onReady);
     }
 

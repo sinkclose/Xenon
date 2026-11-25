@@ -36,7 +36,6 @@ public class NekoLiquidGlassSettingsActivity extends BaseNekoSettingsActivity {
     private final int liquidGlassFlagRow = rowId++;
     private final int blurFlagRow = rowId++;
     private final int forceBlurLiquidGlassRow = rowId++;
-    private final int prismGlassRow = rowId++;
 
     // --- Glass / fade ---
     private final int disableScrimBlurRow = rowId++;
@@ -141,12 +140,6 @@ public class NekoLiquidGlassSettingsActivity extends BaseNekoSettingsActivity {
         }
         items.add(UItem.asCheck(forceBlurLiquidGlassRow, LocaleController.getString(R.string.ForceBlurLiquidGlass))
                 .setChecked(NekoConfig.forceBlurLiquidGlass).slug("forceBlurLiquidGlass"));
-        if (canLiquidGlass()) {
-            items.add(UItem.asCheck(prismGlassRow,
-                    LocaleController.getString(R.string.PrismGlass),
-                    LocaleController.getString(R.string.PrismGlassDesc))
-                    .setChecked(NekoConfig.usePrismGlass).slug("usePrismGlass"));
-        }
         items.add(UItem.asShadow(null));
 
         // --- Glass / fade ---
@@ -366,12 +359,6 @@ public class NekoLiquidGlassSettingsActivity extends BaseNekoSettingsActivity {
         } else if (id == liquidGlassFlagRow) {
             LiteMode.toggleFlag(LiteMode.FLAG_LIQUID_GLASS);
             listView.adapter.update(true);
-            listView.post(this::invalidatePreview);
-        } else if (id == prismGlassRow) {
-            NekoConfig.toggleUsePrismGlass();
-            if (view instanceof TextCheckCell) {
-                ((TextCheckCell) view).setChecked(NekoConfig.usePrismGlass);
-            }
             listView.post(this::invalidatePreview);
         } else if (id == blurFlagRow) {
             LiteMode.toggleFlag(LiteMode.FLAG_CHAT_BLUR);

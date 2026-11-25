@@ -325,7 +325,6 @@ public class NekoConfig {
     public static float ios27GlassGlareAngle = 0f;
     public static float ios27GlassLightIntensity = .25f;
     private static int ios27GlassRevision;
-    public static boolean usePrismGlass = false;
     
     // Advanced liquid glass parameters (separate from standard)
     public static int advancedGlassAlpha = DEFAULT_ADVANCED_GLASS_ALPHA;
@@ -570,7 +569,6 @@ public class NekoConfig {
             ios27GlassGlare = Math.max(.1f, Math.min(2f, preferences.getFloat("ios27GlassGlare", 1f)));
             ios27GlassGlareAngle = Math.max(0f, Math.min(360f, preferences.getFloat("ios27GlassGlareAngle", 0f)));
             ios27GlassLightIntensity = Math.max(0f, Math.min(1f, preferences.getFloat("ios27GlassLightIntensity", .25f)));
-            usePrismGlass = preferences.getBoolean("usePrismGlass", false);
             advancedGlassAlpha = preferences.getInt("advancedGlassAlpha", DEFAULT_ADVANCED_GLASS_ALPHA);
             advancedGlassBlur = preferences.getInt("advancedGlassBlur", DEFAULT_ADVANCED_GLASS_BLUR);
             blurStrength = preferences.getInt("blurStrength", DEFAULT_BLUR_STRENGTH);
@@ -2179,7 +2177,6 @@ public class NekoConfig {
 
     // Fixed material from Apple UI kit: Regular / Small. Keep user tuning intact.
     public static boolean isAdvancedGlassEnabled() { return ios27LiquidGlass || useAdvancedLiquidGlass; }
-    public static boolean isPrismGlassEnabled() { return !ios27LiquidGlass && usePrismGlass; }
     public static float getGlassRefraction() { return ios27LiquidGlass ? ios27GlassRefraction : advancedGlassFresnel; }
     public static float getGlassDispersion() { return ios27LiquidGlass ? ios27GlassDispersion : advancedGlassDispersion; }
     public static int getGlassTintPercent() { return ios27LiquidGlass ? ios27GlassTintPercent : advancedGlassTintPercent; }
@@ -2278,15 +2275,6 @@ public class NekoConfig {
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("useAdvancedLiquidGlass", useAdvancedLiquidGlass);
         editor.apply();
-    }
-
-    public static void toggleUsePrismGlass() {
-        usePrismGlass = !usePrismGlass;
-        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
-        preferences.edit().putBoolean("usePrismGlass", usePrismGlass).apply();
-        if (android.os.Build.VERSION.SDK_INT >= 33) {
-            org.telegram.ui.Components.blur3.LiquidGlassEffect.prewarmShaders();
-        }
     }
 
     public static void setAdvancedGlassAlpha(int value) {
