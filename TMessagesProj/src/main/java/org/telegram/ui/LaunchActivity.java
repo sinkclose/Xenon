@@ -1937,7 +1937,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                         }
                     }
                     if (error) {
-                        Toast.makeText(this, "Unsupported content", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, LocaleController.getString(R.string.UnsupportedContent), Toast.LENGTH_SHORT).show();
                     }
                 } else if ("org.telegram.messenger.CREATE_STICKER_PACK".equals(intent.getAction())) {
                     try {
@@ -2070,7 +2070,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                         error = true;
                     }
                     if (error) {
-                        Toast.makeText(this, "Unsupported content", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, LocaleController.getString(R.string.UnsupportedContent), Toast.LENGTH_SHORT).show();
                     }
                 } else if (Intent.ACTION_VIEW.equals(intent.getAction())) {
                     Uri data = intent.getData();

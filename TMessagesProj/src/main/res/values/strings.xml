@@ -3580,6 +3580,7 @@
     <string name="OutgoingCalls">Outgoing calls</string>
     <string name="IncomingCalls">Incoming calls</string>
     <string name="IncomingCallsSystemSetting">Internal calls notifications</string>
+    <string name="InternalNotificationsSystemSetting">Internal notifications</string>
     <string name="IncomingCallsSystemSettingDescription">You can change ringtone sound in Telegram -> Settings -> Notifications and Sounds.</string>
     <string name="OutgoingCallsCount_one">%1$d outgoing call</string>
     <string name="OutgoingCallsCount_other">%1$d outgoing calls</string>
@@ -5872,7 +5873,7 @@
     <string name="DeleteReaction">Delete Reaction</string>
     <string name="BanUser">Ban user</string>
     <string name="BanUserMonoforum">Ban User From Channel</string>
-    <string name="UnbanUserMonoforum">Ban User From Channel</string>
+    <string name="UnbanUserMonoforum">Unban User From Channel</string>
     <string name="AccDescrCustomEmoji">Custom emoji</string>
     <string name="RecentlyUsed">Recently Used</string>
     <string name="PopularReactions">Popular</string>
@@ -11876,4 +11877,17 @@
     <string name="Ios27LiquidGlassInfo">Glass inspired by the Apple iOS 27 UI kit, with independent settings. Restart the app after switching styles to refresh all surfaces.</string>
     <string name="Ios27GlassSettingsInfo">These settings apply only to iOS 27 Liquid Glass. Reset restores its original values without changing other glass styles.</string>
     <string name="Ios27GlassLightIntensity">Highlight brightness</string>
+    <string name="NewContactPhoneNotOnTelegram">This phone number is not on Telegram. **Invite >**</string>
+    <string name="NewContactPhoneInContacts">This phone number is already in your contacts. **View >**</string>
+    <string name="NewContactPhoneOnTelegram">This phone number is on Telegram.</string>
+    <string name="StoryPrivacyGroupNoContacts">All group members are not in your contact list.</string>
+    <string name="StoryPrivacyGroupNonContacts_one">%1$d member is not in your contact list</string>
+    <string name="StoryPrivacyGroupNonContacts_other">%1$d members are not in your contact list</string>
+    <string name="StoryPrivacyGroupAddContacts_one">Add %1$d contact</string>
+    <string name="StoryPrivacyGroupAddContacts_other">Add %1$d contacts</string>
+    <string name="ForwardHideSenderNamePremium">Subscribe to **Telegram Premium** to forward formatted messages without the sender’s name.</string>
+    <string name="StoryEditWaitUpload">Wait until current upload is complete</string>
+    <string name="UnsupportedContent">Unsupported content</string>
+    <string name="LocationPoweredBy">Powered by</string>
+    <string name="SettingsExperimental">Experimental</string>
 </resources>
