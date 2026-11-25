@@ -2932,7 +2932,7 @@ public class ChatActivity extends BaseFragment implements
             glassBackgroundSourceFrostedRenderNode.setUnderSource(glassWallpaperSource);
 
             glassBackgroundDrawableFactoryFrosted = new BlurredBackgroundDrawableViewFactory(glassBackgroundSourceFrostedRenderNode);
-            glassBackgroundDrawableFactoryFrosted.setLiquidGlassEffectAllowed(true);
+            glassBackgroundDrawableFactoryFrosted.setLiquidGlassEffectAllowed(!NonIslandHelper.chatElements() && !NekoConfig.materialChatElements);
 
             if (!NonIslandHelper.chatElements() && !NekoConfig.materialChatElements && LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS)) {
                 glassBackgroundSourceRenderNode = new GlassSourceRenderNode(navbarContentSourceWallpaper);
@@ -2940,7 +2940,7 @@ public class ChatActivity extends BaseFragment implements
                 glassBackgroundSourceRenderNode.setUnderSource(glassWallpaperSource);
                 glassBackgroundSourceRenderNode.shareWallpaperWith(glassBackgroundSourceFrostedRenderNode);
                 glassBackgroundDrawableFactory = new BlurredBackgroundDrawableViewFactory(glassBackgroundSourceRenderNode);
-                glassBackgroundDrawableFactory.setLiquidGlassEffectAllowed(true);
+                glassBackgroundDrawableFactory.setLiquidGlassEffectAllowed(!NonIslandHelper.chatElements() && !NekoConfig.materialChatElements);
             } else {
                 glassBackgroundSourceRenderNode = null;
                 glassBackgroundDrawableFactory = glassBackgroundDrawableFactoryFrosted;
@@ -5023,7 +5023,7 @@ if (feedIntegration != null) {
             ChatObject.isForum(currentChat));
         setupHeaderMenuOverlay(parentView);
 
-        if (chatMode == MODE_PINNED) {
+        if (centeredPill || chatMode == MODE_PINNED || chatMode == MODE_WELCOME_MESSAGES || isComments) {
             actionBar.setChatAvatarContainer(avatarContainer);
             avatarContainer.setActionBar(actionBar);
         }
@@ -8380,6 +8380,7 @@ if (feedIntegration != null) {
         // contentView.addView(topButtonsLayout, LayoutHelper.createFrame(57, 300, Gravity.RIGHT | Gravity.TOP));
 
         sideControlsButtonsLayout = new ChatActivitySideControlsButtonsLayout(context, resourceProvider, blurredBackgroundButtonsColorProvider, glassBackgroundDrawableFactory);
+        sideControlsButtonsLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElementsEnabled());
         sideControlsButtonsLayout.setOnClickListener(this::onSideControlButtonOnClick);
         sideControlsButtonsLayout.setOnLongClickListener(this::onSideControlButtonOnLongClick);
         {
@@ -9346,6 +9347,7 @@ if (feedIntegration != null) {
         }
 
         actionsButtonsLayout = new ChatActivityActionsButtonsLayout(context, resourceProvider, blurredBackgroundButtonsColorProvider, glassBackgroundDrawableFactory);
+        actionsButtonsLayout.setLiquidTouchEnabled(NekoConfig.liquidChatElementsEnabled());
         actionsButtonsLayout.setSelectButtonOnClickListener(v -> {
             ArrayList<Integer> ids = new ArrayList<>();
             for (int a = 1; a >= 0; a--) {
@@ -11079,6 +11081,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         reportSpamButton = new TextView(getContext());
         ThemeBind.textColor(reportSpamButton, Theme.key_text_RedBold, getResourceProvider());
         ThemeBind.selectorBackground(reportSpamButton, Theme.createInsetRoundRectDrawable(getThemedColor(Theme.key_text_RedBold) & 0x19ffffff, dp(18), dp(4)), null, ThemeBind.alpha(Theme.key_text_RedBold, 0x19), getResourceProvider());
+        NonIslandHelper.applyChatTopPanelButton(reportSpamButton);
         reportSpamButton.setTag(Theme.key_text_RedBold);
         reportSpamButton.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
         reportSpamButton.setTypeface(AndroidUtilities.bold());
@@ -11115,6 +11118,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         addToContactsButton.setPadding(AndroidUtilities.dp(4), 0, AndroidUtilities.dp(4), 0);
         addToContactsButton.setGravity(Gravity.CENTER);
         ThemeBind.selectorBackground(addToContactsButton, Theme.createInsetRoundRectDrawable(getThemedColor(Theme.key_chat_addContact) & 0x19ffffff, dp(18), dp(4)), null, ThemeBind.alpha(Theme.key_chat_addContact, 0x19), getResourceProvider());
+        NonIslandHelper.applyChatTopPanelButton(addToContactsButton);
         topChatPanelView.addView(addToContactsButton, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.LEFT | Gravity.TOP));
         addToContactsButton.setOnClickListener(v -> {
             if (addToContactsButtonArchive) {
@@ -11174,6 +11178,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         restartTopicButton.setGravity(Gravity.CENTER);
         restartTopicButton.setText(LocaleController.getString(R.string.RestartTopic));
         ThemeBind.selectorBackground(restartTopicButton, Theme.createSelectorDrawable(getThemedColor(Theme.key_chat_addContact) & 0x19ffffff, 3), null, ThemeBind.alpha(Theme.key_chat_addContact, 0x19), getResourceProvider());
+        NonIslandHelper.applyChatTopPanelButton(restartTopicButton);
         topPanelLayout.addView(restartTopicButton, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
         topPanelLayout.setPriority(restartTopicButton, 4);
         topPanelLayout.setDebugName(restartTopicButton, "restart topic button");
@@ -19749,6 +19754,13 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             shouldHaveLightNavigationBarIcons = navigationBarBrightness <= 0.9f;
 
             navbarContentSourceWallpaper.setSource(source);
+            navbarContentSourceWallpaperSharp.setSource(wallpaperBitmapProvider.updateSharpSourceFromBackgroundViewDrawable(drawable));
+            if (fadeBlurSource != null) {
+                // A drawable can cache the first wallpaper before its image has
+                // loaded. Redraw its source, not only the enclosing fade view.
+                fadeBlurSource.invalidateDisplayListForDrawables();
+            }
+            if (feedContentChangedCallback != null) feedContentChangedCallback.run();
             invalidateGlassSources();
             if (chatActivityFadeView != null) {
                 chatActivityFadeView.setOverlayColor(isCompactMode() ? getThemedColor(Theme.key_chat_compact_backgroundGradient) : 0);
@@ -19833,6 +19845,15 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         private final RectF tmpRectF2 = new RectF();
 
         public void drawList(Canvas blurCanvas, RectF position) {
+            glassSourceCaptureDepth++;
+            try {
+                drawListForGlass(blurCanvas, position);
+            } finally {
+                glassSourceCaptureDepth--;
+            }
+        }
+
+        private void drawListForGlass(Canvas blurCanvas, RectF position) {
             tmpRectF2.set(position);
             tmpRectF2.intersect(0, 0, getWidth(), getHeight());
             if (tmpRectF2.isEmpty()) {
@@ -19848,6 +19869,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             }
 
             Blur3Utils.captureRelativeParent(mDrawListImpl, blurCanvas, position, chatListView, this, chatListAlpha);
+            if (PhotoViewer.hasInstance()) {
+                PhotoViewer.getInstance().drawClosingPhotoBehindChatUi(blurCanvas, chatListView, this);
+            }
 
             if (messagesSearchListView != null) {
                 Blur3Utils.captureRelativeParent(messagesSearchListView, blurCanvas, position, messagesSearchListView, this, searchListAlpha);
@@ -19858,8 +19882,13 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     final View view = searchViewPager.getChildAt(a);
                     if (view instanceof ChatActivityContainer && view.getVisibility() == View.VISIBLE) {
                         ChatActivityContainer container = (ChatActivityContainer) view;
-                        Blur3Utils.captureRelativeParent(container.chatActivity.contentView.mDrawList, blurCanvas, position,
-                            container.chatActivity.contentView, this);
+                        // A visible search-page container can exist before its
+                        // chat view is created (including failed onFragmentCreate).
+                        final ChatActivityFragmentView childContent = container.chatActivity.contentView;
+                        if (childContent != null) {
+                            Blur3Utils.captureRelativeParent(childContent.mDrawList, blurCanvas, position,
+                                childContent, this);
+                        }
                     }
                 }
             }
@@ -20817,10 +20846,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
             int heightSize = allHeight;
 
-            if (navbarContentSourceWallpaper.getSource() instanceof GlassSourceBitmap) {
-                ((GlassSourceBitmap) navbarContentSourceWallpaper.getSource())
-                    .setParentSize(widthSize, heightSize, 0);
-            }
+            wallpaperBitmapProvider.setParentSize(widthSize, heightSize, 0);
             if (lastWidth != widthSize) {
                 globalIgnoreLayout = false;
                 lastWidth = widthMeasureSpec;
@@ -20841,7 +20867,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     if (avatarContainer != null && avatarContainer.getLayoutParams() != null) {
                         // a saved chat has no menu button, but may have the sidebar's button next to the search
                         final boolean oneIcon = chatMode == MODE_SAVED && (topicsPanelItem == null || topicsPanelItem.getVisibility() != View.VISIBLE);
-                        ((ViewGroup.MarginLayoutParams) avatarContainer.getLayoutParams()).rightMargin = AndroidUtilities.dp(oneIcon ? 52 : 92);
+                        ((ViewGroup.MarginLayoutParams) avatarContainer.getLayoutParams()).rightMargin = avatarOnRight ? AndroidUtilities.dp(6) : AndroidUtilities.dp(oneIcon ? 52 : 92);
                     }
                 } else {
                     if (avatarContainer != null && avatarContainer.getLayoutParams() != null) {
@@ -35127,7 +35153,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                     FrameLayout backContainer = new FrameLayout(contentView.getContext());
 
                     LinearLayout linearLayout = new LinearLayout(contentView.getContext());
-                    ThemeBind.backgroundColor(linearLayout, Theme.key_actionBarDefaultSubmenuBackground, getResourceProvider());
+                    if (!zxc.iconic.xenon.NekoConfig.material3Popups) {
+                        ThemeBind.backgroundColor(linearLayout, Theme.key_actionBarDefaultSubmenuBackground, getResourceProvider());
+                    } else {
+                        linearLayout.setPadding(AndroidUtilities.dp(4), AndroidUtilities.dp(4), AndroidUtilities.dp(4), 0);
+                    }
                     linearLayout.setOrientation(LinearLayout.VERTICAL);
                     RecyclerListView listView2 = finalMessageSeenView.createListView();
                     backContainer.addView(cell, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, zxc.iconic.xenon.NekoConfig.material3Popups ? 56 : 44));
@@ -36200,10 +36230,54 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 if (waitForLangDetection.get() || waitForQr.get()) {
                     return;
                 }
-                scrimPopupWindow.showAtLocation(chatListView, Gravity.LEFT | Gravity.TOP, finalPopupX, finalPopupY);
+                if (chatActivityEnterView != null) {
+                    chatActivityEnterView.closeKeyboard();
+                } else {
+                    AndroidUtilities.hideKeyboard(contentView);
+                }
+                scrimPopupWindow.showAtLocation(chatListView, Gravity.LEFT | Gravity.TOP,
+                        previewLayout != null ? previewWindowLocation[0] : finalPopupX,
+                        previewLayout != null ? previewWindowLocation[1] : finalPopupY);
                 keepScrimPopupAboveKeyboard(scrimPopupWindow);
-                if (isReactionsAvailableFinal && finalReactionsLayout != null) {
-                    finalReactionsLayout.startEnterAnimation(true);
+                View popupRoot = scrimPopupWindow.getContentView().getRootView();
+                if (popupRoot.getLayoutParams() instanceof WindowManager.LayoutParams) {
+                    // PopupWindow has its own surface; the activity's refresh-rate vote
+                    // does not apply to this focused window.
+                    WindowManager.LayoutParams popupParams = (WindowManager.LayoutParams) popupRoot.getLayoutParams();
+                    android.view.Display display = popupRoot.getDisplay();
+                    if (display != null) {
+                        android.view.Display.Mode currentMode = display.getMode(), fastestMode = currentMode;
+                        for (android.view.Display.Mode mode : display.getSupportedModes()) {
+                            if (mode.getPhysicalWidth() == currentMode.getPhysicalWidth()
+                                    && mode.getPhysicalHeight() == currentMode.getPhysicalHeight()
+                                    && mode.getRefreshRate() > fastestMode.getRefreshRate()) {
+                                fastestMode = mode;
+                            }
+                        }
+                        popupParams.preferredDisplayModeId = fastestMode.getModeId();
+                    }
+                    AndroidUtilities.setPreferredMaxRefreshRate(
+                            (WindowManager) popupRoot.getContext().getSystemService(Context.WINDOW_SERVICE),
+                            popupRoot, popupParams);
+                }
+                if (Build.VERSION.SDK_INT >= 35) {
+                    popupRoot.setRequestedFrameRate(AndroidUtilities.screenMaxRefreshRate);
+                }
+                if (previewLayout != null) {
+                    previewLayout.open(() -> {
+                        dimBehindView(v, true);
+                        chatListView.invalidate();
+                        contentView.invalidate();
+                        applyPopupBlur(v);
+                        if (isReactionsAvailableFinal && finalReactionsLayout != null) {
+                            finalReactionsLayout.startEnterAnimation(true);
+                        }
+                    });
+                } else {
+                    applyPopupBlur(v);
+                    if (isReactionsAvailableFinal && finalReactionsLayout != null) {
+                        finalReactionsLayout.startEnterAnimation(true);
+                    }
                 }
                 AndroidUtilities.runOnUIThread(() -> {
                     if (previewLayout != null && !AndroidUtilities.isAccessibilityScreenReaderEnabled()) return;
@@ -43258,7 +43332,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             searchItem.setSearchFieldCaption(null);
             animatorSearchFieldVisibility.setValue(false, true);
             animatorSearchHashtagHistoryVisibility.setValue(false, true);
-            if (chatActivityEnterView.hasText() && TextUtils.isEmpty(chatActivityEnterView.getSlowModeTimer()) && (currentChat == null || ChatObject.canSendPlain(currentChat)) && !isSidebarAttach()) {
+            if (chatActivityEnterView.hasText() && TextUtils.isEmpty(chatActivityEnterView.getSlowModeTimer()) && (currentChat == null || ChatObject.canSendPlain(getSendingChat())) && !isSidebarAttach()) {
                 if (headerItem != null) {
                     headerItem.setVisibility(View.GONE);
                 }
@@ -45242,6 +45316,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             }
             scrimPopupWindow.showAtLocation(chatListView, Gravity.LEFT | Gravity.TOP, scrimPopupX = popupX, scrimPopupY = popupY);
             keepScrimPopupAboveKeyboard(scrimPopupWindow);
+            applyPopupBlur(cell);
 
             chatListView.stopScroll();
             chatLayoutManager.setCanScrollVertically(false);
@@ -50209,6 +50284,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             }
             scrimPopupWindow.showAtLocation(chatListView, Gravity.LEFT | Gravity.TOP, scrimPopupX = popupX, scrimPopupY = popupY);
             keepScrimPopupAboveKeyboard(scrimPopupWindow);
+            applyPopupBlur(cell);
 
             chatListView.stopScroll();
             chatLayoutManager.setCanScrollVertically(false);
@@ -52030,11 +52106,8 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
     private OnPostDrawView invalidateBlurredSourcesView;
     private int glassSourceCaptureDepth;
-    private int pendingGlassSourceFlags;
-    private long glassListContentVersion;
     private final RectF glassMessageDirtyRect = new RectF();
     private final WeakHashMap<View, RectF> glassMessageBounds = new WeakHashMap<>();
-;
 
     private static final int BLUR_INVALIDATE_FLAG_SCROLL = 1;
     private static final int BLUR_INVALIDATE_FLAG_POSITIONS = 1 << 1;
@@ -52308,12 +52381,16 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         chatActivityFadeView.invalidate();
     }
 
-    private void invalidateMergedVisibleBlurredPositionsAndSourcesPositions() {
-        invalidateBlurCaptures(BLUR_INVALIDATE_FLAG_POSITIONS);
-    }
-
     private void invalidateMergedVisibleBlurredPositionsAndSources(int flags) {
-        invalidateBlurCaptures(flags);
+        if (BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_WALLPAPER | BLUR_INVALIDATE_FLAG_CLIP)) {
+            fadeWallpaperDirty = true;
+        }
+        if (BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_SCROLL | BLUR_INVALIDATE_FLAG_CLIP | BLUR_INVALIDATE_FLAG_WALLPAPER | BLUR_INVALIDATE_FLAG_CONTENT_REGION)) {
+            invalidateFadeBlur();
+        }
+        if (BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_POSITIONS)) {
+            getGlassEngine().invalidate();
+        }
     }
 
     private boolean isChatFadeDimmingEnabled() {
@@ -52321,14 +52398,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     private void invalidateBlurCaptures(int flags) {
-        if (BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_WALLPAPER | BLUR_INVALIDATE_FLAG_CLIP)) {
-            fadeWallpaperDirty = true;
-        }
-        if (BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_SCROLL | BLUR_INVALIDATE_FLAG_CLIP | BLUR_INVALIDATE_FLAG_WALLPAPER | BLUR_INVALIDATE_FLAG_CONTENT_REGION)) {
+        if (BitwiseUtils.hasFlag(flags, GlassEngine.FLAG_INVALIDATED_SCROLL | GlassEngine.FLAG_INVALIDATED_SCROLL_EDGES | GlassEngine.FLAG_INVALIDATED_OTHER)) {
             invalidateFadeBlur();
         }
 
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || scrollableViewNoiseSuppressor == null || invalidateBlurredSourcesView == null) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || scrollableViewNoiseSuppressor == null) {
             return;
         }
 
@@ -52337,6 +52411,13 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             glassPositionsArray.outset(dp(48), dp(48));
             glassPositionsArray.clip(0, chatListView.getY(), chatListView.getWidth(), chatListView.getY() + chatListView.getHeight());
             scrollableViewNoiseSuppressor.setupRenderNodes(glassPositionsArray);
+        }
+
+        glassSourceCaptureDepth++;
+        try {
+            scrollableViewNoiseSuppressor.invalidateResultRenderNodes(contentView.mDrawList, contentView.getWidth(), contentView.getHeight());
+        } finally {
+            glassSourceCaptureDepth--;
         }
     }
 

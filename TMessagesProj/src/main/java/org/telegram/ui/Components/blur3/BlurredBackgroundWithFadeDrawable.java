@@ -53,6 +53,47 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable implements Theme
 
     private int fadeHeight;
     private boolean opacity;
+    private boolean opaqueFade;
+    private int dimAlpha = 0;
+    private int dimColor = Color.BLACK;
+    private BlurredBackgroundDrawable dimDrawable;
+    private int dimFadeZoneTop = -1;
+    private final Paint dimGradientPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private Shader dimGradientShader;
+    private int dimGradientLast = -1;
+
+    public void setDimFadeZoneTop(int height) {
+        this.dimFadeZoneTop = height;
+    }
+
+    public void setDimColor(int color) {
+        if (this.dimColor != color) {
+            this.dimColor = color;
+            dimGradientShader = null;
+        }
+    }
+
+    public void setDimDrawable(BlurredBackgroundDrawable dimDrawable) {
+        this.dimDrawable = dimDrawable;
+        if (dimDrawable != null && !getBounds().isEmpty()) {
+            dimDrawable.setBounds(getBounds());
+        }
+    }
+
+    public void setOpaqueFade(boolean opaqueFade) {
+        if (this.opaqueFade != opaqueFade) {
+            this.opaqueFade = opaqueFade;
+            // The bounds can stay identical while the mask's shape changes.
+            int height = fadeHeight;
+            fadeHeight = Integer.MIN_VALUE;
+            dimGradientShader = null;
+            setFadeHeight(height, opacity);
+        }
+    }
+
+    public void setDimAlpha(int alpha) {
+        this.dimAlpha = Math.max(0, Math.min(255, alpha));
+    }
 
     private final Drawable.Callback callback = new Callback() {
         @Override
@@ -83,11 +124,11 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable implements Theme
         if (this.fadeHeight == fadeHeight && this.opacity == opacity) {
             return;
         }
-
         this.fadeHeight = fadeHeight;
         this.opacity = opacity;
-        maskFadeGradientPaint.setShader(shader = createGradient(Color.BLACK, opacity));
+        maskFadeGradientPaint.setShader(shader = opaqueFade ? createGradientOpaque(Color.BLACK) : createGradient(Color.BLACK, opacity));
         colorStaticPaint.setShader(null);
+        dimGradientShader = null;
 
         matrix.reset();
         matrix.setScale(1, fadeHeight);
@@ -101,11 +142,17 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable implements Theme
     protected void onBoundsChange(@NonNull Rect bounds) {
         super.onBoundsChange(bounds);
         drawable.setBounds(bounds);
+        if (dimDrawable != null) {
+            dimDrawable.setBounds(bounds);
+        }
     }
 
     private final Paint colorStaticPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private int colorStaticLast;
     private boolean ignoreFastWay;
+    private boolean hardEdge;
+
+    public void setHardEdge(boolean enabled) { hardEdge = enabled; }
 
     public void setIgnoreFastWay(boolean ignoreFastWay) {
         this.ignoreFastWay = ignoreFastWay;
@@ -119,6 +166,15 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable implements Theme
         }
 
         GlassSource source = drawable.getUnwrappedSource();
+        if (hardEdge) {
+            if (!(source instanceof GlassSourceColor)) {
+                int save = canvas.saveLayerAlpha(bounds.left, bounds.top, bounds.right, bounds.bottom, alpha);
+                canvas.clipRect(bounds);
+                drawable.draw(canvas);
+                canvas.restoreToCount(save);
+            }
+            return;
+        }
         if (!ignoreFastWay && source instanceof GlassSourceColor) {
             // fast way - just draw gradient
 
@@ -205,6 +261,28 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable implements Theme
         canvas.translate(bounds.left, bounds.top + offset);
         canvas.drawRect(0, - offset, bounds.width(), bounds.height() - offset, maskFadeGradientPaint);
         canvas.restoreToCount(save);
+        if (dimAlpha > 0) {
+            if (dimDrawable != null) {
+                // Dim layer shows the wallpaper itself: global transparency comes
+                // from the dimming strength slider, fade shape from the same mask.
+                final int saveDim = canvas.saveLayerAlpha(bounds.left, bounds.top, bounds.right, bounds.bottom, dimAlpha);
+                dimDrawable.draw(canvas);
+                canvas.translate(bounds.left, bounds.top + offset);
+                canvas.drawRect(0, -offset, bounds.width(), bounds.height() - offset, maskFadeGradientPaint);
+                canvas.restoreToCount(saveDim);
+            } else {
+                final int color = ColorUtils.setAlphaComponent(dimColor, dimAlpha);
+                if (dimGradientShader == null || dimGradientLast != color) {
+                    dimGradientLast = color;
+                    dimGradientShader = opaqueFade ? createGradientOpaque(color) : createGradient(color, opacity);
+                    dimGradientPaint.setShader(dimGradientShader);
+                }
+                matrixTmp.set(matrix);
+                matrixTmp.postTranslate(bounds.left, dimFadeZoneTop > 0 ? dimFadeZoneTop + fadeHeight : bounds.top + offset);
+                dimGradientShader.setLocalMatrix(matrixTmp);
+                canvas.drawRect(bounds, dimGradientPaint);
+            }
+        }
     }
 
     private int alpha = 255;
@@ -250,6 +328,17 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable implements Theme
         }, null, Shader.TileMode.CLAMP);
     }
 
+    private static LinearGradient createGradientOpaque(int color) {
+        final int alpha = Color.alpha(color);
+        return new LinearGradient(0, 0, 0, 1, new int[]{
+            ColorUtils.setAlphaComponent(color, 0),
+            ColorUtils.setAlphaComponent(color, 0x60 * alpha / 255),
+            ColorUtils.setAlphaComponent(color, 0xB0 * alpha / 255),
+            ColorUtils.setAlphaComponent(color, 0xFF * alpha / 255),
+            ColorUtils.setAlphaComponent(color, 0xFF * alpha / 255),
+        }, new float[]{0f, 0.25f, 0.5f, 0.65f, 1f}, Shader.TileMode.CLAMP);
+    }
+
 
 
 
@@ -289,39 +378,5 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable implements Theme
         } catch (Exception e) {
             FileLog.e(e);
         }
-    }
-
-    private int dimAlpha, dimColor, dimFadeZoneTop;
-    private boolean hardEdge, opaqueFade;
-    private BlurredBackgroundDrawable dimDrawable;
-
-    public void setDimDrawable(BlurredBackgroundDrawable drawable) {
-        dimDrawable = drawable;
-        invalidateSelf();
-    }
-
-    public void setDimFadeZoneTop(int zone) {
-        dimFadeZoneTop = zone;
-        invalidateSelf();
-    }
-
-    public void setDimColor(int color) {
-        dimColor = color;
-        invalidateSelf();
-    }
-
-    public void setHardEdge(boolean hardEdge) {
-        this.hardEdge = hardEdge;
-        invalidateSelf();
-    }
-
-    public void setDimAlpha(int alpha) {
-        dimAlpha = alpha;
-        invalidateSelf();
-    }
-
-    public void setOpaqueFade(boolean opaqueFade) {
-        this.opaqueFade = opaqueFade;
-        invalidateSelf();
     }
 }

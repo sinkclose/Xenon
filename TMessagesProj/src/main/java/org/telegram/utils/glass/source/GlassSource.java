@@ -19,8 +19,18 @@ public interface GlassSource {
         draw(canvas, left, top, right, bottom);
     }
 
+    /** Blend the sharp scene and its blur BEFORE the optical shader samples it. */
     default void drawWithBlurOpacity(@NonNull Canvas canvas, float left, float top, float right, float bottom, float opacity) {
+        opacity = Math.max(0f, Math.min(1f, opacity));
+        if (opacity >= 1f) {
+            draw(canvas, left, top, right, bottom);
+            return;
+        }
+        drawUnblurred(canvas, left, top, right, bottom);
+        if (opacity <= 0f) return;
+        int save = canvas.saveLayerAlpha(left, top, right, bottom, Math.round(255 * opacity));
         draw(canvas, left, top, right, bottom);
+        canvas.restoreToCount(save);
     }
 
     default long getGenerationId() {

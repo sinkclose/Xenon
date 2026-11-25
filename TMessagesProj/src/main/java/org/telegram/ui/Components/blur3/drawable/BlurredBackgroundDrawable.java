@@ -32,6 +32,7 @@ import org.telegram.messenger.utils.RadiiUtils;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.blur3.Blur3HashImpl;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
+import org.telegram.ui.Components.blur3.Ios27GlassMaterial;
 import org.telegram.ui.Components.blur3.LiquidGlassEffect;
 import org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundColorProvider;
 import org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundColorProviderThemed;
@@ -235,8 +236,73 @@ public class BlurredBackgroundDrawable extends GlassDrawable implements Theme.Co
         }
     }
 
+    /* Xenon glass: the iOS 26/27 and advanced lenses of LiquidGlassEffect */
+
+    private final RectF ios27PressBounds = new RectF();
+    private float ios27PressX, ios27PressY, ios27PressProgress, ios27PressDissipation;
+    private boolean fixedIos26Lens, followGlassStyleLens;
+    private int requestedLiquidGlassSamplePadding;
+    private Runnable effectReadyListener;
+
     public void setIos27Press(float progress, float dissipation, float x, float y,
-                              float left, float top, float right, float bottom) {}
+                              float left, float top, float right, float bottom) {
+        if (Build.VERSION.SDK_INT >= 36) return;
+        if (ios27PressProgress == progress && ios27PressDissipation == dissipation
+                && ios27PressX == x && ios27PressY == y
+                && ios27PressBounds.left == left && ios27PressBounds.top == top
+                && ios27PressBounds.right == right && ios27PressBounds.bottom == bottom) return;
+        ios27PressProgress = progress;
+        ios27PressDissipation = dissipation;
+        ios27PressX = x;
+        ios27PressY = y;
+        ios27PressBounds.set(left, top, right, bottom);
+        invalidateSelf();
+    }
+
+    /** Fixed iOS 26 control optics, whatever the glass style is. */
+    public void setFixedIos26Lens() {
+        fixedIos26Lens = true;
+        setLiquidGlassEffectAllowed();
+        invalidateDisplayList();
+    }
+
+    /** A control lens: iOS 26 optics, or the clear iOS 27 control while that style is on. */
+    public void setFollowGlassStyleLens() {
+        fixedIos26Lens = true;
+        followGlassStyleLens = true;
+        setLiquidGlassEffectAllowed();
+        invalidateDisplayList();
+    }
+
+    /** Extra backdrop pixels for lenses whose refraction can cross the opposite edge. */
+    public void setLiquidGlassSamplePadding(int padding) {
+        padding = Math.max(0, padding);
+        if (requestedLiquidGlassSamplePadding != padding) {
+            requestedLiquidGlassSamplePadding = padding;
+            invalidateDisplayList();
+        }
+    }
+
+    public void setEffectReadyListener(Runnable listener) {
+        effectReadyListener = listener;
+    }
+
+    private boolean usesIos27Glass() {
+        return (!fixedIos26Lens || followGlassStyleLens) && isLiquidGlassEffectEnabled()
+                && zxc.iconic.xenon.NekoConfig.ios27LiquidGlass;
+    }
+
+    /** The Xenon advanced glass has no color uniform: the tint is a soft overlay scaled by its slider. */
+    private boolean usesAdvancedTintOverlay() {
+        return !usesIos27Glass() && !fixedIos26Lens && isLiquidGlassEffectEnabled()
+                && zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled();
+    }
+
+    private float blurAlphaFactor() {
+        if (usesIos27Glass()) return followGlassStyleLens ? 0f : zxc.iconic.xenon.NekoConfig.getIos27GlassBlurOpacity();
+        return usesAdvancedTintOverlay()
+                ? Math.max(0f, Math.min(1f, zxc.iconic.xenon.NekoConfig.getGlassAlphaPercent() / 100f)) : 1f;
+    }
 
     private float sourceScaleX = 1f, sourceScaleY = 1f, sourceTranslationX, sourceTranslationY;
 
@@ -422,6 +488,11 @@ public class BlurredBackgroundDrawable extends GlassDrawable implements Theme.Co
     }
 
     private void drawRim(Canvas canvas, float alpha) {
+        if (zxc.iconic.xenon.NekoConfig.disableGlassGlare || !zxc.iconic.xenon.NekoConfig.strokeOnViews
+                || !org.telegram.messenger.SharedConfig.chatBlurEnabled()
+                || !org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS)) {
+            return;
+        }
         final Rect r = boundProps.boundsWithPadding;
         if (boundProps.hasArrow()) {
             rimRenderer.drawPath(canvas, boundProps.path, boundProps.shapeKey, r.left, r.top, r.right, r.bottom, getRim(), alpha);
@@ -444,7 +515,8 @@ public class BlurredBackgroundDrawable extends GlassDrawable implements Theme.Co
         boolean hasPadding;
 
         int liquidThickness;
-        float liquidIntensity = 0.75f;
+        // Negative means follow the user's setting; an explicit zero disables refraction.
+        float liquidIntensity = -1f;
         float liquidIndex = 1.5f;
 
         float strokeWidthTop;
@@ -847,7 +919,9 @@ public class BlurredBackgroundDrawable extends GlassDrawable implements Theme.Co
             impl = directImpl(drawn);
         }
         impl.draw(canvas, drawn);
-        drawRim(canvas, getAlpha() / 255f);
+        if (!(impl == renderNodeImpl && usesIos27Glass())) {
+            drawRim(canvas, getAlpha() / 255f);
+        }
     }
 
     private static GlassSource softwareSource(GlassSource source) {
@@ -1171,13 +1245,29 @@ public class BlurredBackgroundDrawable extends GlassDrawable implements Theme.Co
         private final RenderNode renderNodeFill = new RenderNode("BlurredFill");
         private final Paint paintShadow = new Paint(Paint.ANTI_ALIAS_FLAG);
         private LiquidGlassEffect liquidGlassEffect;
+        private boolean liquidGlassEnabled;
         private boolean invalidated = true;
         private boolean clipToOutline = true;
         private final RectF sourceBounds = new RectF();
+        /** Pixels of the source past each edge, for the Xenon lenses: their refraction crosses the edge. */
+        private int samplePadding;
+        private float recordedBlurOpacity = Float.NaN;
+        private int ios27Revision = -1;
+        private boolean ios27Dark;
+
+        private final Runnable onShadersReady = () -> {
+            invalidated = true;
+            if (effectReadyListener != null) {
+                effectReadyListener.run();
+            } else {
+                invalidateSelf();
+            }
+        };
 
         /** How much the lens is downsampled: as the source is. */
         private int getLensDownsample() {
-            if (liquidGlassEffect == null || Build.VERSION.SDK_INT < 33 || !(source instanceof GlassFadeBlurredDrawable.GlassFadeDownsampledSource)) {
+            if (liquidGlassEffect == null || Build.VERSION.SDK_INT < 33 || !liquidGlassEffect.supportsDownsample()
+                    || !(source instanceof GlassFadeBlurredDrawable.GlassFadeDownsampledSource)) {
                 return 1;
             }
             final GlassFadeBlurredDrawable.GlassFadeDownsampledSource downsampled = (GlassFadeBlurredDrawable.GlassFadeDownsampledSource) source;
@@ -1193,11 +1283,23 @@ public class BlurredBackgroundDrawable extends GlassDrawable implements Theme.Co
             paintShadow.setColor(0);
         }
 
+        /** The iOS 27 shader draws the edge itself, past the outline. */
+        private boolean shaderOwnsEdge() {
+            return Build.VERSION.SDK_INT >= 33 && usesIos27Glass() && !followGlassStyleLens
+                && liquidGlassEffect != null && liquidGlassEffect.hasRefractionShader();
+        }
+
+        private void updateClip() {
+            final boolean shaderOwnsEdge = shaderOwnsEdge();
+            // the arrow's path is not an outline every Android clips by: the canvas clips it
+            renderNode.setClipToOutline(clipToOutline && !boundProps.hasArrow() && !shaderOwnsEdge);
+            renderNode.setClipToBounds(!shaderOwnsEdge);
+        }
+
         @Override
         void setClipToOutline(boolean clipToOutline) {
             this.clipToOutline = clipToOutline;
-            // the arrow's path is not an outline every Android clips by: the canvas clips it
-            renderNode.setClipToOutline(clipToOutline && !boundProps.hasArrow());
+            updateClip();
         }
 
         @Override
@@ -1212,21 +1314,55 @@ public class BlurredBackgroundDrawable extends GlassDrawable implements Theme.Co
 
         @Override
         boolean hasDisplayList() {
-            return renderNode.hasDisplayList();
+            return renderNode.hasDisplayList() && renderNodeFill.hasDisplayList();
         }
 
         @Override
         void setLiquidGlassEnabled(boolean enabled) {
-            if (enabled == (liquidGlassEffect != null) || Build.VERSION.SDK_INT < 33) {
+            if (enabled == liquidGlassEnabled || Build.VERSION.SDK_INT < 33) {
                 return;
             }
-            if (enabled) {
-                liquidGlassEffect = new LiquidGlassEffect(renderNodeFill);
-            } else {
-                liquidGlassEffect = null;
-                renderNodeFill.setRenderEffect(null);
-            }
+            liquidGlassEnabled = enabled;
+            liquidGlassEffect = null;
+            renderNodeFill.setRenderEffect(null);
+            updateClip();
             invalidated = true;
+        }
+
+        /** Makes the lens for the glass settings as they are now, they may change at any moment. */
+        @RequiresApi(api = 33)
+        private void ensureLiquidGlassEffect() {
+            if (liquidGlassEnabled && (liquidGlassEffect == null || !liquidGlassEffect.isConfigurationCurrent())) {
+                renderNodeFill.setRenderEffect(null);
+                liquidGlassEffect = followGlassStyleLens ? LiquidGlassEffect.forControlLens(renderNodeFill, .50f, .65f, onShadersReady)
+                    : fixedIos26Lens ? LiquidGlassEffect.forIos26Lens(renderNodeFill, .50f, .65f, onShadersReady)
+                    : new LiquidGlassEffect(renderNodeFill, false, onShadersReady);
+                invalidated = true;
+            }
+            if (liquidGlassEffect != null && liquidGlassEffect.ensureShaders()) {
+                invalidated = true;
+            }
+            if (usesIos27Glass() && (ios27Revision != zxc.iconic.xenon.NekoConfig.getIos27GlassRevision() || ios27Dark != Theme.isCurrentThemeDark())) {
+                ios27Revision = zxc.iconic.xenon.NekoConfig.getIos27GlassRevision();
+                ios27Dark = Theme.isCurrentThemeDark();
+                invalidated = true;
+            }
+            int padding = 0;
+            if (liquidGlassEffect != null && !liquidGlassEffect.supportsDownsample()) {
+                final Rect b = boundProps.boundsWithPadding;
+                padding = Math.max(requestedLiquidGlassSamplePadding,
+                    usesIos27Glass() && followGlassStyleLens ? dp(28)
+                        : usesIos27Glass() ? dp(zxc.iconic.xenon.NekoConfig.getIos27GlassSamplePaddingDp(
+                            Math.min(b.width(), b.height()) / org.telegram.messenger.AndroidUtilities.density)) : 0);
+            }
+            if (samplePadding != padding) {
+                samplePadding = padding;
+                invalidated = true;
+            }
+            if (recordedBlurOpacity != blurAlphaFactor()) {
+                invalidated = true;
+            }
+            updateClip();
         }
 
         @Override
@@ -1240,7 +1376,7 @@ public class BlurredBackgroundDrawable extends GlassDrawable implements Theme.Co
                 renderNodeFill.setPosition(0, 0, b.width(), b.height());
                 renderNode.setPosition(0, 0, b.width(), b.height());
                 renderNode.setOutline(outline);
-                renderNode.setClipToOutline(clipToOutline && !boundProps.hasArrow());
+                updateClip();
                 invalidated = true;
             }
         }
@@ -1252,12 +1388,21 @@ public class BlurredBackgroundDrawable extends GlassDrawable implements Theme.Co
 
         @Override
         void record() {
+            if (Build.VERSION.SDK_INT >= 33) {
+                ensureLiquidGlassEffect();
+            }
             invalidated = false;
             final Rect b = boundProps.boundsWithPadding;
-            final float sL = b.left + getSourceOffsetX();
-            final float sT = b.top + getSourceOffsetY();
-            final float sR = b.right + getSourceOffsetX();
-            final float sB = b.bottom + getSourceOffsetY();
+            final int p = samplePadding;
+            final float sL = sourceScaleX * (b.left - p) + getSourceOffsetX() + sourceTranslationX;
+            final float sT = sourceScaleY * (b.top - p) + getSourceOffsetY() + sourceTranslationY;
+            final float sR = sourceScaleX * (b.right + p) + getSourceOffsetX() + sourceTranslationX;
+            final float sB = sourceScaleY * (b.bottom + p) + getSourceOffsetY() + sourceTranslationY;
+            final int width = b.width() + p * 2;
+            final int height = b.height() + p * 2;
+
+            // the iOS 27 lens gets the sharp source and a half-sized blurred copy next to it
+            final boolean blurPlane = shaderOwnsEdge() && zxc.iconic.xenon.NekoConfig.ios27GlassBlur > 0;
 
             // the lens works in the pixels of the source, on their grid, as a progressive blur does
             final int downsample = getLensDownsample();
@@ -1272,19 +1417,19 @@ public class BlurredBackgroundDrawable extends GlassDrawable implements Theme.Co
             } else {
                 originX = sL;
                 originY = sT;
-                renderNodeFill.setPosition(0, 0, b.width(), b.height());
+                renderNodeFill.setPosition(0, 0, blurPlane ? Ios27GlassMaterial.packedBackdropWidth(width) : width, height);
             }
             renderNodeFill.setPivotX(0f);
             renderNodeFill.setPivotY(0f);
             renderNodeFill.setScaleX(downsample);
             renderNodeFill.setScaleY(downsample);
-            renderNodeFill.setTranslationX(originX - sL);
-            renderNodeFill.setTranslationY(originY - sT);
+            renderNodeFill.setTranslationX(downsample > 1 ? originX - sL : -p);
+            renderNodeFill.setTranslationY(downsample > 1 ? originY - sT : -p);
 
             if (liquidGlassEffect != null && Build.VERSION.SDK_INT >= 33) {
                 final RectF body = boundProps.body;
                 final int thickness = Math.max(Math.min(
-                    boundProps.liquidThickness <= 0 ? dp(11) : boundProps.liquidThickness,
+                    boundProps.liquidThickness <= 0 ? dp(zxc.iconic.xenon.NekoConfig.liquidGlassThickness) : boundProps.liquidThickness,
                     (int) (Math.min(body.width(), body.height()) / 5)), 1);
 
                 if (boundProps.hasArrow()) {
@@ -1299,57 +1444,116 @@ public class BlurredBackgroundDrawable extends GlassDrawable implements Theme.Co
                 } else {
                     liquidGlassEffect.clearArrow();
                 }
+                liquidGlassEffect.setIos27BlurPlane(blurPlane ? width : 0);
+                updatePress();
                 liquidGlassEffect.update(
                     body.width(), body.height(),
-                    body.left - b.left, body.top - b.top,
+                    body.left - b.left + p, body.top - b.top + p,
                     boundProps.shaderRadii[0], boundProps.shaderRadii[2], boundProps.shaderRadii[4], boundProps.shaderRadii[6],
                     thickness,
-                    boundProps.liquidIntensity,
+                    boundProps.liquidIntensity < 0 ? zxc.iconic.xenon.NekoConfig.liquidGlassIntensity : boundProps.liquidIntensity,
                     boundProps.liquidIndex,
                     backgroundColor,
-                    originX - sL, originY - sT,
+                    downsample > 1 ? originX - sL : 0, downsample > 1 ? originY - sT : 0,
                     downsample
                 );
             }
 
+            final float blurOpacity = blurAlphaFactor();
             Canvas c = renderNodeFill.beginRecording();
             if (downsample > 1) {
                 sourceBounds.set(sL, sT, sR, sB);
                 ((GlassFadeBlurredDrawable.GlassFadeDownsampledSource) source).drawDownsampled(c, sourceBounds, downsample, originX, originY);
             } else {
                 c.save();
-                c.translate(-sL, -sT);
-                source.draw(c, sL, sT, sR, sB);
+                c.clipRect(0, 0, width, height);
+                transformSourceCanvas(c, p);
+                if (blurPlane) {
+                    source.drawUnblurred(c, sL, sT, sR, sB);
+                } else if (blurOpacity != 1f) {
+                    source.drawWithBlurOpacity(c, sL, sT, sR, sB, blurOpacity);
+                } else {
+                    source.draw(c, sL, sT, sR, sB);
+                }
                 c.restore();
+                if (blurPlane) {
+                    c.save();
+                    c.translate(width + 2, 0);
+                    c.clipRect(0, 0, (width + 1) / 2, (height + 1) / 2);
+                    c.scale(.5f, .5f);
+                    transformSourceCanvas(c, p);
+                    source.draw(c, sL, sT, sR, sB);
+                    c.restore();
+                }
             }
             renderNodeFill.endRecording();
+            recordedBlurOpacity = blurOpacity;
 
+            final boolean ios27 = usesIos27Glass();
+            final boolean refraction = liquidGlassEffect != null && liquidGlassEffect.hasRefractionShader();
             c = renderNode.beginRecording();
-            if (Color.alpha(backgroundColor) == 255) {
+            if (!ios27 && Color.alpha(backgroundColor) == 255) {
                 // nothing shows through an opaque tint (the glass without blur)
                 c.drawColor(backgroundColor);
             } else {
                 c.drawRenderNode(renderNodeFill);
-                if (liquidGlassEffect == null && Color.alpha(backgroundColor) != 0) {
+                if (usesAdvancedTintOverlay()) {
+                    final int percent = zxc.iconic.xenon.NekoConfig.getGlassTintPercent();
+                    if (percent > 0 && Color.alpha(backgroundColor) != 0) {
+                        c.drawColor(Theme.multAlpha(backgroundColor, Math.min(100, Math.max(0, percent)) / 100f * 0.60f));
+                    }
+                } else if (!(followGlassStyleLens && ios27) && !refraction && Color.alpha(backgroundColor) != 0) {
+                    // the basic lens tints in its shader, nothing else does
                     c.drawColor(backgroundColor);
                 }
             }
             renderNode.endRecording();
         }
 
+        /** Keeps the backdrop anchored while the enclosing canvas deforms the surface. */
+        private void transformSourceCanvas(Canvas c, int p) {
+            final Rect b = boundProps.boundsWithPadding;
+            c.translate(p - b.left, p - b.top);
+            c.scale(1f / sourceScaleX, 1f / sourceScaleY);
+            c.translate(-getSourceOffsetX() - sourceTranslationX, -getSourceOffsetY() - sourceTranslationY);
+        }
+
+        @RequiresApi(api = 33)
+        private void updatePress() {
+            if (liquidGlassEffect == null) {
+                return;
+            }
+            final Rect b = boundProps.boundsWithPadding;
+            liquidGlassEffect.setIos27Press(ios27PressProgress, ios27PressDissipation,
+                ios27PressX, ios27PressY, ios27PressBounds,
+                samplePadding - b.left, samplePadding - b.top);
+        }
+
         @Override
         void draw(Canvas canvas, GlassSource source) {
-            if (!renderNode.hasDisplayList() || invalidated) {
+            if (Build.VERSION.SDK_INT >= 33) {
+                ensureLiquidGlassEffect();
+            }
+            if (!hasDisplayList() || invalidated) {
                 record();
             }
+            if (Build.VERSION.SDK_INT >= 33 && liquidGlassEffect != null) {
+                updatePress();
+                liquidGlassEffect.refreshPress();
+            }
 
-            final int color = Theme.multAlpha(shadowColor, renderNode.getAlpha() * shadowAlpha);
+            final boolean ios27 = usesIos27Glass();
+            final int color = Theme.multAlpha(ios27 ? (followGlassStyleLens ? 0 : 0x0a000000) : shadowColor, renderNode.getAlpha() * shadowAlpha);
             if (Color.alpha(color) != 0) {
-                paintShadow.setShadowLayer(shadowLayerRadius, shadowLayerDx, shadowLayerDy, color);
+                if (ios27) {
+                    paintShadow.setShadowLayer(dpf2(15f), 0f, dpf2(8f), color);
+                } else {
+                    paintShadow.setShadowLayer(shadowLayerRadius, shadowLayerDx, shadowLayerDy, color);
+                }
                 boundProps.drawShadows(canvas, paintShadow, inAppKeyboardOptimization);
             }
             final int outlineShadow = Theme.multAlpha(outlineShadowColor, renderNode.getAlpha() * shadowAlpha);
-            if (Color.alpha(outlineShadow) != 0) {
+            if (!ios27 && Color.alpha(outlineShadow) != 0) {
                 paintShadow.setShadowLayer(OUTLINE_SHADOW_RADIUS, 0, 0, outlineShadow);
                 boundProps.drawShadows(canvas, paintShadow, inAppKeyboardOptimization);
             }
@@ -1362,6 +1566,12 @@ public class BlurredBackgroundDrawable extends GlassDrawable implements Theme.Co
             canvas.translate(b.left, b.top);
             canvas.drawRenderNode(renderNode);
             canvas.restore();
+            if (liquidGlassEffect != null && Build.VERSION.SDK_INT >= 33) {
+                canvas.save();
+                canvas.translate(b.left - samplePadding, b.top - samplePadding);
+                liquidGlassEffect.drawHighlight(canvas, renderNode.getAlpha());
+                canvas.restore();
+            }
         }
 
         @Override

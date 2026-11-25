@@ -158,6 +158,13 @@ public class BlurredBackgroundDrawableViewFactory {
 
     public BlurredBackgroundDrawable create(View view, BlurredBackgroundColorProvider provider, boolean multiwindow) {
         final BlurredBackgroundDrawable drawable = createDrawable();
+        if (view != null) {
+            final WeakReference<View> target = new WeakReference<>(view);
+            drawable.setEffectReadyListener(() -> {
+                final View current = target.get();
+                if (current != null) current.invalidate();
+            });
+        }
         if (isLiquidGlassEffectAllowed) {
             // drawn while the glass settings have it on
             drawable.setLiquidGlassEffectAllowed();
