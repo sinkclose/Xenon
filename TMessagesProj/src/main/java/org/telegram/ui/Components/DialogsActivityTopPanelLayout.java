@@ -20,7 +20,7 @@ import zxc.iconic.xenon.helpers.NonIslandHelper;
 
 import me.vkryl.android.animator.ListAnimator;
 
-public class DialogsActivityTopPanelLayout extends AnimatedLinearLayout {
+public class DialogsActivityTopPanelLayout extends AnimatedLinearLayout implements Theme.Colorable {
     public DialogsActivityTopPanelLayout(@NonNull Context context) {
         super(context);
 
@@ -80,6 +80,8 @@ public class DialogsActivityTopPanelLayout extends AnimatedLinearLayout {
         this.defaultRadiusDp = defaultRadius;
     }
 
+    /** also called on every theme update (Theme.Colorable) */
+    @Override
     public void updateColors() {
         if (backgroundDrawable != null) {
             backgroundDrawable.updateColors();

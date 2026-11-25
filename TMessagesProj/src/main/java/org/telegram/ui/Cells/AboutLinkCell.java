@@ -55,6 +55,7 @@ import org.telegram.messenger.browser.Browser;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.BottomSheet;
 import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.ActionBar.ThemeBind;
 import org.telegram.ui.Components.AlertsCreator;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.LayoutHelper;
@@ -66,7 +67,7 @@ import org.telegram.ui.Components.URLSpanNoUnderline;
 
 import java.util.concurrent.atomic.AtomicReference;
 
-public class AboutLinkCell extends FrameLayout {
+public class AboutLinkCell extends FrameLayout implements Theme.Colorable {
 
     private StaticLayout textLayout;
     private String oldText;
@@ -124,7 +125,7 @@ public class AboutLinkCell extends FrameLayout {
 
         valueTextView = new TextView(context);
         valueTextView.setVisibility(GONE);
-        valueTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2, resourcesProvider));
+        ThemeBind.textColor(valueTextView, Theme.key_windowBackgroundWhiteGrayText2, resourcesProvider);
         valueTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
         valueTextView.setLines(1);
         valueTextView.setMaxLines(1);
@@ -136,7 +137,7 @@ public class AboutLinkCell extends FrameLayout {
 
         bottomShadow = new FrameLayout(context);
         Drawable shadowDrawable = context.getResources().getDrawable(R.drawable.gradient_bottom).mutate();
-        shadowDrawable.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider), PorterDuff.Mode.SRC_ATOP));
+        ThemeBind.drawableColorFilter(this, shadowDrawable, Theme.key_windowBackgroundWhite, resourcesProvider, PorterDuff.Mode.SRC_ATOP);
         bottomShadow.setBackground(shadowDrawable);
         addView(bottomShadow, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 12, Gravity.BOTTOM | Gravity.FILL_HORIZONTAL, 16, 0, 16, 0));
 
@@ -167,7 +168,7 @@ public class AboutLinkCell extends FrameLayout {
                 super.onDraw(canvas);
             }
         };
-        showMoreTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, resourcesProvider));
+        ThemeBind.textColor(showMoreTextView, Theme.key_windowBackgroundWhiteBlueText, resourcesProvider);
         showMoreTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
         showMoreTextView.setLines(1);
         showMoreTextView.setMaxLines(1);
@@ -179,7 +180,7 @@ public class AboutLinkCell extends FrameLayout {
         showMoreTextView.setPadding(dp(2), 0, dp(2), 0);
         showMoreTextBackgroundView = new FrameLayout(context);
         showMoreBackgroundDrawable = context.getResources().getDrawable(R.drawable.gradient_left).mutate();
-        showMoreBackgroundDrawable.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider), PorterDuff.Mode.MULTIPLY));
+        ThemeBind.drawableColorFilter(this, showMoreBackgroundDrawable, Theme.key_windowBackgroundWhite, resourcesProvider, PorterDuff.Mode.MULTIPLY);
         showMoreTextBackgroundView.setBackground(showMoreBackgroundDrawable);
         showMoreTextBackgroundView.setPadding(
             showMoreTextBackgroundView.getPaddingLeft() + dp(4),
@@ -198,10 +199,23 @@ public class AboutLinkCell extends FrameLayout {
         return color;
     }
 
+    private int lastRippleColor;
+
+    @Override
     public void updateColors() {
         aboutTextPaint.set(Theme.profile_aboutTextPaint);
         aboutTextPaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
         aboutTextPaint.linkColor = processColor(Theme.getColor(Theme.key_chat_messageLinkIn, resourcesProvider));
+        try {
+            final int rippleColor = Theme.getColor(Theme.key_listSelector, resourcesProvider);
+            if (rippleBackground != null && rippleColor != lastRippleColor) { // recoloring a RippleDrawable allocates a ColorStateList
+                lastRippleColor = rippleColor;
+                Theme.setSelectorDrawableColor(rippleBackground, rippleColor, true);
+            }
+            backgroundPaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider));
+        } catch (Exception e) {
+            FileLog.e(e);
+        }
     }
 
     @Override

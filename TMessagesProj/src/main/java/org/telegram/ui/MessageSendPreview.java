@@ -60,6 +60,7 @@ import org.telegram.ui.ActionBar.AdjustPanLayoutHelper;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.ChatMessageCell;
+import org.telegram.ui.Cells.ChatMessageTransitionParams;
 import org.telegram.ui.Components.AnimatedEmojiDrawable;
 import org.telegram.ui.Components.AnimatedFloat;
 import org.telegram.ui.Components.BulletinFactory;
@@ -76,7 +77,7 @@ import org.telegram.ui.Components.SizeNotifierFrameLayout;
 import org.telegram.ui.Components.Text;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
 import org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl;
-import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceBitmap;
+import org.telegram.utils.glass.source.GlassSourceBitmap;
 import org.telegram.ui.Components.blur3.utils.Blur3Utils;
 import org.telegram.ui.Components.chat.ViewPositionWatcher;
 import org.telegram.ui.Components.spoilers.SpoilerEffect2;
@@ -147,7 +148,7 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
 
     private SpoilerEffect2 spoilerEffect2;
 
-    private final BlurredBackgroundSourceBitmap iBlur3SourceBitmap;
+    private final GlassSourceBitmap iBlur3SourceBitmap;
     private final BlurredBackgroundDrawableViewFactory iBlur3Factory;
 
     public MessageSendPreview(Context context, Theme.ResourcesProvider resourcesProvider) {
@@ -223,7 +224,7 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
             }
         });
 
-        iBlur3SourceBitmap = new BlurredBackgroundSourceBitmap();
+        iBlur3SourceBitmap = new GlassSourceBitmap();
         iBlur3Factory = new BlurredBackgroundDrawableViewFactory(iBlur3SourceBitmap);
         iBlur3Factory.setSourceRootView(new ViewPositionWatcher(windowView), windowView);
 
@@ -1416,7 +1417,7 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
         if (MessagesController.getInstance(currentAccount).hasAvailableEffects()) {
             showEffectSelector();
         } else {
-            NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.availableEffectsUpdate);
+            NotificationCenter.getInstance(currentAccount).addWeakObserver(this, NotificationCenter.availableEffectsUpdate);
         }
         if (effectSelector != null /*&& SharedConfig.getDevicePerformanceClass() < SharedConfig.PERFORMANCE_CLASS_HIGH*/) {
             effectSelector.setPaused(true, true);
@@ -1656,7 +1657,7 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
             mainMessageCell.isForumGeneral = destCell.isForumGeneral;
             mainMessageCell.setMessageObject(cell.getMessageObject(), null, cell.isPinnedBottom(), cell.isPinnedTop(), cell.isFirstInChat());
 
-            final ChatMessageCell.TransitionParams params = mainMessageCell.getTransitionParams();
+            final ChatMessageTransitionParams params = mainMessageCell.getTransitionParams();
             params.animateChange = mainMessageCell.getTransitionParams().animateChange();
             params.animateChangeProgress = 0f;
 

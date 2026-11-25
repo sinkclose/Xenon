@@ -193,10 +193,13 @@ class GlasmioPopupRenderer {
             canvas.drawRenderNode(material);
             canvas.restoreToCount(materialSave);
         } else {
-            materialMask.setPosition(0,0,w,h);
-            c=materialMask.beginRecording(); c.drawRenderNode(material); materialMask.endRecording();
+            // The iOS 27 material is transparent outside its clip; mask only that region.
+            android.graphics.Rect maskBounds = ios27 ? material27.getOutputClip() : null;
+            int maskLeft = maskBounds != null ? maskBounds.left : 0, maskTop = maskBounds != null ? maskBounds.top : 0;
+            materialMask.setPosition(maskLeft, maskTop, maskBounds != null ? maskBounds.right : w, maskBounds != null ? maskBounds.bottom : h);
+            c=materialMask.beginRecording(); c.translate(-maskLeft, -maskTop); c.drawRenderNode(material); materialMask.endRecording();
             bind(materialMaskShader,f,left,top);
-            materialMaskShader.setFloatUniform("contentOrigin",0f,0f);
+            materialMaskShader.setFloatUniform("contentOrigin",(float) maskLeft,(float) maskTop);
             materialMaskShader.setFloatUniform("drawingBounds",0f,0f,(float)w,(float)h);
             materialMaskShader.setFloatUniform("preserveCoverage", ios27 && !f.separate ? 1f : 0f);
             materialMaskShader.setFloatUniform("height",glassEnabled ? f.lensHeight : 0f);

@@ -11,7 +11,7 @@ public final class GlasmioMenuGlassRenderer extends GlasmioGlassRenderer {
     private int previousFieldGeneration = -1;
     public GlasmioMenuGlassRenderer() { super(0,R.raw.glasmio_menu_material); }
     @Override protected void configureVisibleBounds(float left,float top,float right,float bottom) {
-        material.setFloatUniform("visibleBounds",visible.left,visible.top,visible.right,visible.bottom);
+        setVisibleBounds(visible.left,visible.top,visible.right,visible.bottom);
     }
     public void setMenuField(org.telegram.ui.Components.GlasmioMenuMotion frame,
                              org.telegram.ui.Components.GlasmioMenuField field, float left, float top) {

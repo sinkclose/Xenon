@@ -7,7 +7,6 @@ import static org.telegram.ui.Components.EditTextEmoji.STYLE_GIFT;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.PorterDuff;
-import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.text.Editable;
@@ -30,9 +29,11 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.FileLog;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.ActionBar.ThemeBind;
 import org.telegram.ui.Components.AnimatedColor;
 import org.telegram.ui.Components.AnimatedEmojiDrawable;
 import org.telegram.ui.Components.AnimatedTextView;
@@ -45,10 +46,22 @@ import org.telegram.ui.Components.SizeNotifierFrameLayout;
 import org.telegram.ui.Components.TextStyleSpan;
 import org.telegram.ui.Components.TypefaceSpan;
 
-public class EditEmojiTextCell extends FrameLayout {
+public class EditEmojiTextCell extends FrameLayout implements Theme.Colorable {
 
     private boolean ignoreEditText;
     public final EditTextEmoji editTextEmoji;
+    private Theme.ResourcesProvider cursorResourcesProvider;
+
+    @Override
+    public void updateColors() {
+        try {
+            if (editTextEmoji != null && editTextEmoji.getEditText() != null) {
+                editTextEmoji.getEditText().setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, cursorResourcesProvider));
+            }
+        } catch (Exception e) {
+            FileLog.e(e);
+        }
+    }
     private int maxLength;
     private ImageView iconImageView;
     private ReplaceableIconDrawable iconImageDrawable;
@@ -61,6 +74,7 @@ public class EditEmojiTextCell extends FrameLayout {
     private boolean focused;
 
     private boolean allowEntities = true;
+    private boolean allowEmojiSearch;
 
     final AnimatedColor limitColor;
     private int limitCount;
@@ -128,6 +142,11 @@ public class EditEmojiTextCell extends FrameLayout {
         return this;
     }
 
+    public EditEmojiTextCell setAllowEmojiSearch(boolean allow) {
+        allowEmojiSearch = allow;
+        return this;
+    }
+
     public EditEmojiTextCell(
         Context context,
         SizeNotifierFrameLayout parent,
@@ -192,6 +211,11 @@ public class EditEmojiTextCell extends FrameLayout {
             }
 
             @Override
+            protected boolean allowSearch() {
+                return allowEmojiSearch;
+            }
+
+            @Override
             public int emojiCacheType() {
                 return EditEmojiTextCell.this.emojiCacheType();
             }
@@ -207,8 +231,8 @@ public class EditEmojiTextCell extends FrameLayout {
         limitColor = new AnimatedColor(editTextEmoji);
         limit.setCallback(editTextEmoji);
         editText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 17);
-        editText.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText, resourceProvider));
-        editText.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourceProvider));
+        ThemeBind.hintTextColor(editText, Theme.key_windowBackgroundWhiteHintText, resourceProvider);
+        ThemeBind.textColor(editText, Theme.key_windowBackgroundWhiteBlackText, resourceProvider);
         editText.setBackground(null);
         if (multiline) {
             editText.setMaxLines(5);
@@ -222,7 +246,8 @@ public class EditEmojiTextCell extends FrameLayout {
         editText.setInputType(InputType.TYPE_TEXT_FLAG_CAP_SENTENCES | InputType.TYPE_CLASS_TEXT | (multiline ? InputType.TYPE_TEXT_FLAG_MULTI_LINE : 0) | InputType.TYPE_TEXT_FLAG_AUTO_CORRECT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         editText.setRawInputType(InputType.TYPE_TEXT_FLAG_CAP_SENTENCES | InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_AUTO_CORRECT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         editText.setHint(hint);
-        editText.setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourceProvider));
+        ThemeBind.cursorColor(editText, Theme.key_windowBackgroundWhiteBlackText, resourceProvider);
+        cursorResourcesProvider = resourceProvider;
         editText.setCursorSize(dp(19));
         editText.setCursorWidth(1.5f);
         editText.addTextChangedListener(new TextWatcher() {
@@ -279,9 +304,9 @@ public class EditEmojiTextCell extends FrameLayout {
             editTextEmoji.setLayoutParams(LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.RIGHT | Gravity.TOP, 72 - 7 - 21, 0, 0, 0));
             iconImageView = new ImageView(getContext());
             iconImageView.setFocusable(true);
-            iconImageView.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_stickers_menuSelector)));
+            ThemeBind.selectorBackground(iconImageView, Theme.createSelectorDrawable(Theme.getColor(Theme.key_stickers_menuSelector, cursorResourcesProvider)), null, ThemeBind.of(Theme.key_stickers_menuSelector), cursorResourcesProvider);
             iconImageView.setScaleType(ImageView.ScaleType.CENTER);
-            iconImageView.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_chat_messagePanelIcons), PorterDuff.Mode.MULTIPLY));
+            ThemeBind.colorFilter(iconImageView, Theme.key_chat_messagePanelIcons, cursorResourcesProvider, PorterDuff.Mode.MULTIPLY);
             iconImageView.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
             iconImageView.setImageDrawable(iconImageDrawable = new ReplaceableIconDrawable(getContext()));
             addView(iconImageView, LayoutHelper.createFrame(48, 48, Gravity.LEFT | Gravity.CENTER_VERTICAL, 12, 0, 8, 0));

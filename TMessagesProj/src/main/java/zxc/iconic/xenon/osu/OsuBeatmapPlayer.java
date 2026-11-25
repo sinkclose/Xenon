@@ -236,7 +236,7 @@ public final class OsuBeatmapPlayer {
         rememberOtherAudio(); includeOtherAudio = !includeOtherAudio;
         if (includeOtherAudio && sourceDialog != 0 && sourceAccount == current.currentAccount) {
             final long dialog = sourceDialog;
-            MediaDataController.getInstance(sourceAccount).loadMusic(dialog, sourceMessage, sourceMessage, loaded -> {
+            MediaDataController.getInstance(sourceAccount).loadMusic(dialog, 0, sourceMessage, sourceMessage, loaded -> {
                 if (!includeOtherAudio || sourceDialog != dialog || !isMapPlaylist()) return;
                 for (MessageObject item : loaded) remember(item);
                 rebuildQueue();

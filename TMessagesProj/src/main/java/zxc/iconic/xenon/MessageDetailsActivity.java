@@ -173,7 +173,7 @@ public class MessageDetailsActivity extends BaseNekoSettingsActivity implements 
     public boolean onFragmentCreate() {
         super.onFragmentCreate();
 
-        NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.emojiLoaded);
+        NotificationCenter.getGlobalInstance().addWeakObserver(this, NotificationCenter.emojiLoaded);
 
         return true;
     }
@@ -367,7 +367,7 @@ public class MessageDetailsActivity extends BaseNekoSettingsActivity implements 
             var options = ItemOptions.makeOptions(this, view)
                     .setScrimViewBackground(listView.getClipBackground(view))
                     .setGravity(Gravity.LEFT);
-            DatacenterPopupWrapper.fillDcItems(options, null, resourcesProvider);
+            DatacenterPopupWrapper.fillDcItems(options, null);
             options.show();
         } else if (id == filePathRow) {
             if (!noforwards) {

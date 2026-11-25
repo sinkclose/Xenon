@@ -1,5 +1,7 @@
 package org.telegram.ui.Components.blur3;
 
+import org.telegram.messenger.FileLog;
+import org.telegram.ui.ActionBar.Theme;
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.AndroidUtilities.lerp;
 
@@ -26,13 +28,14 @@ import androidx.annotation.Nullable;
 import androidx.core.graphics.ColorUtils;
 import androidx.core.math.MathUtils;
 
+import org.telegram.messenger.utils.DrawableUtils;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
-import org.telegram.ui.Components.blur3.source.BlurredBackgroundSource;
-import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceBitmap;
-import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceColor;
-import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode;
+import org.telegram.utils.glass.source.GlassSource;
+import org.telegram.utils.glass.source.GlassSourceBitmap;
+import org.telegram.utils.glass.source.GlassSourceColor;
+import org.telegram.utils.glass.source.GlassSourceRenderNode;
 
-public class BlurredBackgroundWithFadeDrawable extends Drawable {
+public class BlurredBackgroundWithFadeDrawable extends Drawable implements Theme.Colorable {
     private final Paint maskFadeGradientPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final BlurredBackgroundDrawable drawable;
 
@@ -50,64 +53,41 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable {
 
     private int fadeHeight;
     private boolean opacity;
-    private boolean opaqueFade;
-    private int dimAlpha = 0;
-    private int dimColor = Color.BLACK;
-    private BlurredBackgroundDrawable dimDrawable;
-    private int dimFadeZoneTop = -1;
-    private final Paint dimGradientPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private Shader dimGradientShader;
-    private int dimGradientLast = -1;
 
-    public void setDimFadeZoneTop(int height) {
-        this.dimFadeZoneTop = height;
-    }
-
-    public void setDimColor(int color) {
-        if (this.dimColor != color) {
-            this.dimColor = color;
-            dimGradientShader = null;
+    private final Drawable.Callback callback = new Callback() {
+        @Override
+        public void invalidateDrawable(@NonNull Drawable who) {
+            BlurredBackgroundWithFadeDrawable.this.invalidateSelf();
         }
-    }
 
-    public void setDimDrawable(BlurredBackgroundDrawable dimDrawable) {
-        this.dimDrawable = dimDrawable;
-        if (dimDrawable != null && !getBounds().isEmpty()) {
-            dimDrawable.setBounds(getBounds());
+        @Override
+        public void scheduleDrawable(@NonNull Drawable who, @NonNull Runnable what, long when) {
+            BlurredBackgroundWithFadeDrawable.this.scheduleSelf(what, when);
         }
-    }
 
-    public void setOpaqueFade(boolean opaqueFade) {
-        if (this.opaqueFade != opaqueFade) {
-            this.opaqueFade = opaqueFade;
-            // The bounds can stay identical while the mask's shape changes.
-            int height = fadeHeight;
-            fadeHeight = Integer.MIN_VALUE;
-            dimGradientShader = null;
-            setFadeHeight(height, opacity);
+        @Override
+        public void unscheduleDrawable(@NonNull Drawable who, @NonNull Runnable what) {
+            BlurredBackgroundWithFadeDrawable.this.unscheduleSelf(what);
         }
-    }
-
-    public void setDimAlpha(int alpha) {
-        this.dimAlpha = Math.max(0, Math.min(255, alpha));
-    }
+    };
 
     public BlurredBackgroundWithFadeDrawable(BlurredBackgroundDrawable drawable) {
         this.drawable = drawable;
         maskFadeGradientPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_IN));
         bitmapPaint.setFilterBitmap(true);
         setFadeHeight(dp(40), false);
+        drawable.setCallback(callback);
     }
 
     public void setFadeHeight(int fadeHeight, boolean opacity) {
         if (this.fadeHeight == fadeHeight && this.opacity == opacity) {
             return;
         }
+
         this.fadeHeight = fadeHeight;
         this.opacity = opacity;
-        maskFadeGradientPaint.setShader(shader = opaqueFade ? createGradientOpaque(Color.BLACK) : createGradient(Color.BLACK, opacity));
+        maskFadeGradientPaint.setShader(shader = createGradient(Color.BLACK, opacity));
         colorStaticPaint.setShader(null);
-        dimGradientShader = null;
 
         matrix.reset();
         matrix.setScale(1, fadeHeight);
@@ -121,17 +101,11 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable {
     protected void onBoundsChange(@NonNull Rect bounds) {
         super.onBoundsChange(bounds);
         drawable.setBounds(bounds);
-        if (dimDrawable != null) {
-            dimDrawable.setBounds(bounds);
-        }
     }
 
     private final Paint colorStaticPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private int colorStaticLast;
     private boolean ignoreFastWay;
-    private boolean hardEdge;
-
-    public void setHardEdge(boolean enabled) { hardEdge = enabled; }
 
     public void setIgnoreFastWay(boolean ignoreFastWay) {
         this.ignoreFastWay = ignoreFastWay;
@@ -144,20 +118,11 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable {
             return;
         }
 
-        BlurredBackgroundSource source = drawable.getUnwrappedSource();
-        if (hardEdge) {
-            if (!(source instanceof BlurredBackgroundSourceColor)) {
-                int save = canvas.saveLayerAlpha(bounds.left, bounds.top, bounds.right, bounds.bottom, alpha);
-                canvas.clipRect(bounds);
-                drawable.draw(canvas);
-                canvas.restoreToCount(save);
-            }
-            return;
-        }
-        if (!ignoreFastWay && source instanceof BlurredBackgroundSourceColor) {
+        GlassSource source = drawable.getUnwrappedSource();
+        if (!ignoreFastWay && source instanceof GlassSourceColor) {
             // fast way - just draw gradient
 
-            final int color = ((BlurredBackgroundSourceColor) source).getColor();
+            final int color = ((GlassSourceColor) source).getColor();
             if (colorStaticLast != color ||gradientShader == null) {
                 gradientShader = createGradient(color, opacity);
                 colorStaticLast = color;
@@ -178,10 +143,10 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable {
             return;
         }
 
-        if (!ignoreFastWay && source instanceof BlurredBackgroundSourceBitmap && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        if (!ignoreFastWay && source instanceof GlassSourceBitmap && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             // fast way - just draw gradient
 
-            final BlurredBackgroundSourceBitmap s = (BlurredBackgroundSourceBitmap) source;
+            final GlassSourceBitmap s = (GlassSourceBitmap) source;
             final Bitmap bitmap = s.getBitmap();
             if (bitmap == null) {
                 return;
@@ -227,7 +192,7 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable {
             return;
         }
 
-        //if (source instanceof BlurredBackgroundSourceRenderNode) {
+        //if (source instanceof GlassSourceRenderNode) {
         //    return;
         //}
         final int save = canvas.saveLayerAlpha(bounds.left, bounds.top, bounds.right, bounds.bottom, alpha);
@@ -240,28 +205,6 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable {
         canvas.translate(bounds.left, bounds.top + offset);
         canvas.drawRect(0, - offset, bounds.width(), bounds.height() - offset, maskFadeGradientPaint);
         canvas.restoreToCount(save);
-        if (dimAlpha > 0) {
-            if (dimDrawable != null) {
-                // Dim layer shows the wallpaper itself: global transparency comes
-                // from the dimming strength slider, fade shape from the same mask.
-                final int saveDim = canvas.saveLayerAlpha(bounds.left, bounds.top, bounds.right, bounds.bottom, dimAlpha);
-                dimDrawable.draw(canvas);
-                canvas.translate(bounds.left, bounds.top + offset);
-                canvas.drawRect(0, -offset, bounds.width(), bounds.height() - offset, maskFadeGradientPaint);
-                canvas.restoreToCount(saveDim);
-            } else {
-                final int color = ColorUtils.setAlphaComponent(dimColor, dimAlpha);
-                if (dimGradientShader == null || dimGradientLast != color) {
-                    dimGradientLast = color;
-                    dimGradientShader = opaqueFade ? createGradientOpaque(color) : createGradient(color, opacity);
-                    dimGradientPaint.setShader(dimGradientShader);
-                }
-                matrixTmp.set(matrix);
-                matrixTmp.postTranslate(bounds.left, dimFadeZoneTop > 0 ? dimFadeZoneTop + fadeHeight : bounds.top + offset);
-                dimGradientShader.setLocalMatrix(matrixTmp);
-                canvas.drawRect(bounds, dimGradientPaint);
-            }
-        }
     }
 
     private int alpha = 255;
@@ -307,17 +250,6 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable {
         }, null, Shader.TileMode.CLAMP);
     }
 
-    private static LinearGradient createGradientOpaque(int color) {
-        final int alpha = Color.alpha(color);
-        return new LinearGradient(0, 0, 0, 1, new int[]{
-            ColorUtils.setAlphaComponent(color, 0),
-            ColorUtils.setAlphaComponent(color, 0x60 * alpha / 255),
-            ColorUtils.setAlphaComponent(color, 0xB0 * alpha / 255),
-            ColorUtils.setAlphaComponent(color, 0xFF * alpha / 255),
-            ColorUtils.setAlphaComponent(color, 0xFF * alpha / 255),
-        }, new float[]{0f, 0.25f, 0.5f, 0.65f, 1f}, Shader.TileMode.CLAMP);
-    }
-
 
 
 
@@ -345,6 +277,17 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable {
             final int alpha = MathUtils.clamp(lerp(alphaStart, alphaEnd, it), 0, 255);
 
             outColors[i] = ColorUtils.setAlphaComponent(baseColor, alpha);
+        }
+    }
+
+    @Override
+    public void updateColors() {
+        try {
+            drawable.updateColors();
+            invalidateSelf();
+    
+        } catch (Exception e) {
+            FileLog.e(e);
         }
     }
 }

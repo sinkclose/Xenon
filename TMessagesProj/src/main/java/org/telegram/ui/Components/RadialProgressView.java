@@ -20,11 +20,13 @@ import android.view.animation.DecelerateInterpolator;
 import androidx.annotation.Keep;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.FileLog;
 import org.telegram.ui.ActionBar.Theme;
 
+import java.util.HashSet;
 import zxc.iconic.xenon.NekoConfig;
 
-public class RadialProgressView extends View {
+public class RadialProgressView extends View implements Theme.Colorable {
 
     private long lastUpdateTime;
     private float radOffset = -90;
@@ -80,6 +82,45 @@ public class RadialProgressView extends View {
         progressPaint.setStrokeCap(Paint.Cap.ROUND);
         progressPaint.setStrokeWidth(AndroidUtilities.dp(3));
         progressPaint.setColor(progressColor);
+        themedProgressColor = progressColor;
+    }
+
+    // the key progressColor came from (Theme.key_progressCircle by default, see setProgressColorKey), and the color it gave
+    private int progressColorKey = Theme.key_progressCircle;
+    private int themedProgressColor;
+
+    /** same as setProgressColor(getThemedColor(key)), but follows theme changes */
+    public void setProgressColorKey(int key) {
+        progressColorKey = key;
+        setProgressColor(getThemedColor(key));
+        themedProgressColor = progressColor;
+    }
+
+    @Override
+    public void updateColors() {
+        try {
+            if (progressPaint == null || progressColor != themedProgressColor) {
+                return; // custom color set by the caller
+            }
+            final int color = getThemedColor(progressColorKey);
+            themedProgressColor = color;
+            if (color != progressColor) {
+                final int alpha = progressPaint.getAlpha();
+                setProgressColor(color);
+                themedProgressColor = color;
+                if (useSelfAlpha) {
+                    progressPaint.setAlpha(alpha);
+                }
+                invalidate();
+            }
+        } catch (Exception e) {
+            FileLog.e(e);
+        }
+    }
+
+    @Override
+    public void addColorKeys(HashSet<Integer> colors) {
+        colors.add(progressColorKey);
     }
 
     public void setUseSelfAlpha(boolean value) {

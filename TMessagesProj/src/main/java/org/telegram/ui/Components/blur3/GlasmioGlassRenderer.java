@@ -20,6 +20,11 @@ public class GlasmioGlassRenderer {
     private final RenderNode atlas = new RenderNode("GlasmioMaterial");
     // Clips the material to the sharp region so the shader skips the packed blur planes.
     private final RenderNode output = new RenderNode("GlasmioOutput");
+    // The material is transparent beyond its visible shapes and shadow guard.
+    private final android.graphics.RectF visibleBounds = new android.graphics.RectF();
+    private final android.graphics.Rect outputClip = new android.graphics.Rect();
+    private final android.graphics.Rect nextOutputClip = new android.graphics.Rect();
+    private float shadowGuard;
     private final GlasmioBlurPlanes planes = new GlasmioBlurPlanes();
     private int previousPlanesGeneration = -1;
     protected final RuntimeShader material;
@@ -86,7 +91,7 @@ public class GlasmioGlassRenderer {
                 bottom = Math.max(bottom, shapes[j + 1] + shapes[j + 3]);
             }
             if (!Float.isFinite(left)) left = top = right = bottom = 0f;
-            material.setFloatUniform("visibleBounds", left, top, right, bottom);
+            setVisibleBounds(left, top, right, bottom);
         }
     }
 
@@ -133,7 +138,10 @@ public class GlasmioGlassRenderer {
                 || previousPlanesGeneration != planes.generation()
                 || previousSourceW != source.getWidth() || previousSourceH != source.getHeight()
                 || previousSourceLeft != source.getLeft() || previousSourceTop != source.getTop();
-        if (!topologyChanged && !geometryChanged && !materialDirty && !pressDirty) return output;
+        if (!topologyChanged && !geometryChanged && !materialDirty && !pressDirty) {
+            updateOutputClip(source.getWidth(), source.getHeight());
+            return output;
+        }
         if (topologyChanged) {
             atlas.setPosition(0, 0, packed.getWidth(), packed.getHeight());
             Canvas c = atlas.beginRecording();
@@ -174,7 +182,9 @@ public class GlasmioGlassRenderer {
                     clearControlLens ? 0f : dark?0f:.9f,clearControlLens ? 0f : .5f);
             float sizeProgress=Math.max(0f,Math.min(1f,(extent-64f)/96f));
             material.setFloatUniform("nativeAtlasBlurParameters",-extent*.5f,.8f*sizeProgress,.4f*sizeProgress);
-            material.setFloatUniform("shadowProfile",clearControlLens ? 0f : 4f+20f*sizeProgress,
+            float shadowExtent = clearControlLens ? 0f : 4f+20f*sizeProgress;
+            shadowGuard = Math.max(2f * shadowExtent, 2f) * density;
+            material.setFloatUniform("shadowProfile",shadowExtent,
                     clearControlLens ? 0f : .04f+.56f*sizeProgress);
             float refraction=(clearControlLens ? .5f : NekoConfig.ios27GlassRefraction)/.7f;
             material.setFloatUniform("nativeAtlasLensParameters",
@@ -203,11 +213,35 @@ public class GlasmioGlassRenderer {
         }
         atlas.setRenderEffect(completed);
         materialDirty=pressDirty=false;
+        updateOutputClip(source.getWidth(), source.getHeight());
         return output;
     }
 
     protected void configureVisibleBounds(float left,float top,float right,float bottom) {
+        setVisibleBounds(left,top,right,bottom);
+    }
+
+    protected final void setVisibleBounds(float left,float top,float right,float bottom) {
         material.setFloatUniform("visibleBounds",left,top,right,bottom);
+        visibleBounds.set(left,top,right,bottom);
+    }
+
+    /** Matches the shader's early-out bounds; the material is transparent outside it. */
+    private void updateOutputClip(int width, int height) {
+        float bottomGuard = shadowGuard + 8f * AndroidUtilities.density;
+        nextOutputClip.set(Math.max(0, (int) Math.floor(visibleBounds.left - shadowGuard) - 1),
+                Math.max(0, (int) Math.floor(visibleBounds.top - shadowGuard) - 1),
+                Math.min(width, (int) Math.ceil(visibleBounds.right + shadowGuard) + 1),
+                Math.min(height, (int) Math.ceil(visibleBounds.bottom + bottomGuard) + 1));
+        if (nextOutputClip.isEmpty()) nextOutputClip.set(0, 0, 1, 1);
+        if (nextOutputClip.equals(outputClip)) return;
+        outputClip.set(nextOutputClip);
+        output.setClipRect(outputClip);
+    }
+
+    /** Region of the returned node that can contain material pixels, in its local coordinates. */
+    public android.graphics.Rect getOutputClip() {
+        return outputClip;
     }
 
     public static void configureVibrancy(RuntimeShader shader) {

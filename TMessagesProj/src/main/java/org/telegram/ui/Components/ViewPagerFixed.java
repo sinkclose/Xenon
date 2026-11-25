@@ -53,6 +53,7 @@ import org.telegram.messenger.Utilities;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.ActionBar.ThemeBind;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
 import org.telegram.ui.Stories.recorder.HintView2;
 
@@ -107,11 +108,44 @@ public class ViewPagerFixed extends FrameLayout {
                     tabsView.selectTab(nextPosition, currentPosition, currentProgress);
                 }
             }
-            onTabAnimationUpdate(false);
+            onTabAnimationUpdateInternal(false);
         }
     };
     private Rect rect = new Rect();
     private boolean allowDisallowInterceptTouch = true;
+
+    private final ArrayList<OnTabAnimationUpdateListener> onTabAnimationUpdateListeners = new ArrayList<>();
+    private final ArrayList<OnScrollListener> onScrollListeners = new ArrayList<>();
+
+    public void addOnTabAnimationUpdateListener(OnTabAnimationUpdateListener listener) {
+        onTabAnimationUpdateListeners.add(listener);
+    }
+
+    protected final void onTabAnimationUpdateInternal(boolean manual) {
+        for (OnTabAnimationUpdateListener onTabAnimationUpdateListener : onTabAnimationUpdateListeners) {
+            onTabAnimationUpdateListener.onTabAnimationUpdate(manual);
+        }
+
+        onTabAnimationUpdate(manual);
+    }
+
+    public interface OnTabAnimationUpdateListener {
+        void onTabAnimationUpdate(boolean manual);
+    }
+
+    public interface OnScrollListener {
+        void onScrolled(int dx);
+    }
+
+    public void addOnScrollListener(@NonNull OnScrollListener listener) {
+        if (!onScrollListeners.contains(listener)) {
+            onScrollListeners.add(listener);
+        }
+    }
+
+    public void removeOnScrollListener(@NonNull OnScrollListener listener) {
+        onScrollListeners.remove(listener);
+    }
 
     public void onTabAnimationUpdate(boolean manual) {
 
@@ -333,7 +367,7 @@ public class ViewPagerFixed extends FrameLayout {
                 setTranslationX(viewPages[0], viewPages[0].getMeasuredWidth() * progress);
             }
             currentProgress = progress;
-            onTabAnimationUpdate(true);
+            onTabAnimationUpdateInternal(true);
             if (tabsView != null) {
                 tabsView.listView.invalidate();
                 tabsView.listView.invalidateViews();
@@ -351,7 +385,7 @@ public class ViewPagerFixed extends FrameLayout {
                     viewPages[1] = null;
                 }
                 manualScrolling = null;
-                onTabAnimationUpdate(true);
+                onTabAnimationUpdateInternal(true);
                 if (tabsView != null) {
                     tabsView.listView.invalidate();
                     tabsView.listView.invalidateViews();
@@ -429,7 +463,7 @@ public class ViewPagerFixed extends FrameLayout {
                     setTranslationX(viewPages[1], -viewPages[0].getMeasuredWidth() * (1f - progress));
                     setTranslationX(viewPages[0], viewPages[0].getMeasuredWidth() * progress);
                 }
-                onTabAnimationUpdate(false);
+                onTabAnimationUpdateInternal(false);
             }
 
             @Override
@@ -491,7 +525,17 @@ public class ViewPagerFixed extends FrameLayout {
     }
 
     protected void setTranslationX(View view, float tx) {
-        view.setTranslationX(tx);
+        final int translationX = Math.round(tx);
+        final int previousTranslationX = Math.round(view.getTranslationX());
+        view.setTranslationX(translationX);
+        if (view == viewPages[0]) {
+            final int dx = previousTranslationX - translationX;
+            if (dx != 0) {
+                for (int i = 0; i < onScrollListeners.size(); i++) {
+                    onScrollListeners.get(i).onScrolled(dx);
+                }
+            }
+        }
     }
 
     protected void invalidateBlur() {
@@ -517,7 +561,7 @@ public class ViewPagerFixed extends FrameLayout {
         if (tabsView != null) {
             tabsView.selectTab(nextPosition, currentPosition, currentProgress);
         }
-        onTabAnimationUpdate(false);
+        onTabAnimationUpdateInternal(false);
     }
 
     private void updateViewForIndex(int index) {
@@ -537,7 +581,7 @@ public class ViewPagerFixed extends FrameLayout {
                 ViewGroup parent = (ViewGroup) v.getParent();
                 parent.removeView(v);
             }
-            v.setTranslationX(getMeasuredWidth());
+            v.setTranslationX(index == 0 ? 0 : getMeasuredWidth());
             viewPages[index] = v;
             adapter.bindView(viewPages[index], adapterPosition, viewTypes[index]);
             addView(v);
@@ -557,6 +601,7 @@ public class ViewPagerFixed extends FrameLayout {
                 } else {
                     viewsByType.remove(viewTypes[index]);
                 }
+                v.setTranslationX(index == 0 ? 0 : getMeasuredWidth());
                 viewPages[index] = v;
                 v.setTranslationX(getMeasuredWidth());
                 adapter.bindView(viewPages[index], adapterPosition, adapter.getItemViewType(adapterPosition));
@@ -632,7 +677,7 @@ public class ViewPagerFixed extends FrameLayout {
                 setTranslationX(viewPages[1], -viewPages[0].getMeasuredWidth());
             }
         }
-        onTabAnimationUpdate(false);
+        onTabAnimationUpdateInternal(false);
         return true;
     }
 
@@ -732,7 +777,7 @@ public class ViewPagerFixed extends FrameLayout {
                     if (tabsView != null) {
                         tabsView.selectTab(nextPosition, currentPosition, currentProgress);
                     }
-                    onTabAnimationUpdate(false);
+                    onTabAnimationUpdateInternal(false);
                 }
             }
             if (maybeStartTracking && !startedTracking) {
@@ -758,7 +803,7 @@ public class ViewPagerFixed extends FrameLayout {
                 if (tabsView != null) {
                     tabsView.selectTab(nextPosition, currentPosition, currentProgress);
                 }
-                onTabAnimationUpdate(false);
+                onTabAnimationUpdateInternal(false);
             }
         } else if (ev == null || ev.getPointerId(0) == startedTrackingPointerId && (ev.getAction() == MotionEvent.ACTION_CANCEL || ev.getAction() == MotionEvent.ACTION_UP || ev.getAction() == MotionEvent.ACTION_POINTER_UP)) {
             if (velocityTracker != null) {
@@ -877,7 +922,7 @@ public class ViewPagerFixed extends FrameLayout {
                             tabsView.setEnabled(true);
                         }
 
-                        onTabAnimationUpdate(false);
+                        onTabAnimationUpdateInternal(false);
                         onScrollEnd();
                         notificationsLocker.unlock();
                     }
@@ -886,7 +931,7 @@ public class ViewPagerFixed extends FrameLayout {
                 tabsAnimationInProgress = true;
                 startedTracking = false;
 
-                onTabAnimationUpdate(false);
+                onTabAnimationUpdateInternal(false);
             } else {
                 maybeStartTracking = false;
                 if (tabsView != null) {
@@ -939,7 +984,7 @@ public class ViewPagerFixed extends FrameLayout {
                 }
                 cancel = true;
             }
-            onTabAnimationUpdate(true);
+            onTabAnimationUpdateInternal(true);
             if (cancel) {
                 //showScrollbars(true);
                 if (tabsAnimation != null) {
@@ -962,7 +1007,7 @@ public class ViewPagerFixed extends FrameLayout {
     public void setPosition(int position) {
         if (adapter == null) {
             currentPosition = position;
-            onTabAnimationUpdate(false);
+            onTabAnimationUpdateInternal(false);
         }
         if (tabsAnimation != null) {
             tabsAnimation.cancel();
@@ -984,7 +1029,7 @@ public class ViewPagerFixed extends FrameLayout {
             if (tabsView != null) {
                 tabsView.selectTab(nextPosition, currentPosition, currentProgress);
             }
-            onTabAnimationUpdate(true);
+            onTabAnimationUpdateInternal(true);
         }
     }
 
@@ -997,7 +1042,7 @@ public class ViewPagerFixed extends FrameLayout {
                 viewPages[1] = null;
             }
             setTranslationX(viewPages[0], 0);
-            onTabAnimationUpdate(true);
+            onTabAnimationUpdateInternal(true);
         }
     }
 
@@ -1090,7 +1135,7 @@ public class ViewPagerFixed extends FrameLayout {
             if (viewPages[0] != null) {
                 tabsAnimation.playTogether(translateAnimator(viewPages[0], 0));
             }
-            onTabAnimationUpdate(true);
+            onTabAnimationUpdateInternal(true);
 
             tabsView.indicatorProgress2 = 0;
             tabsView.listView.invalidateViews();
@@ -1314,7 +1359,7 @@ public class ViewPagerFixed extends FrameLayout {
                         tabsView.setEnabled(true);
                     }
 
-                    onTabAnimationUpdate(false);
+                    onTabAnimationUpdateInternal(false);
                     onScrollEnd();
                     notificationsLocker.unlock();
                 }
@@ -1323,7 +1368,7 @@ public class ViewPagerFixed extends FrameLayout {
             tabsAnimationInProgress = true;
             startedTracking = false;
 
-            onTabAnimationUpdate(false);
+            onTabAnimationUpdateInternal(false);
         } else {
             maybeStartTracking = false;
             if (tabsView != null) {
@@ -1336,7 +1381,7 @@ public class ViewPagerFixed extends FrameLayout {
         }
     }
 
-    public static class TabsView extends FrameLayout {
+    public static class TabsView extends FrameLayout implements Theme.Colorable {
 
         private float overrideFromX;
         private float overrideFromW;
@@ -1758,7 +1803,7 @@ public class ViewPagerFixed extends FrameLayout {
                     listView.setSelectorRadius(6);
                 }
             }
-            listView.setSelectorDrawableColor(Theme.getColor(selectorColorKey, resourcesProvider));
+            ThemeBind.listSelectorColor(listView, selectorColorKey, resourcesProvider);
             listView.setLayoutManager(layoutManager = new LinearLayoutManager(context, LinearLayoutManager.HORIZONTAL, false) {
                 @Override
                 public void smoothScrollToPosition(RecyclerView recyclerView, RecyclerView.State state, int position) {
@@ -2174,13 +2219,18 @@ public class ViewPagerFixed extends FrameLayout {
             super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         }
 
+        @Override
         public void updateColors() {
             if (blurredBackgroundDrawable != null) {
                 blurredBackgroundDrawable.updateColors();
             }
-            selectorDrawable.setColor(Theme.getColor(tabLineColorKey, resourcesProvider));
-            listView.invalidateViews();
-            listView.invalidate();
+            if (selectorDrawable != null) {
+                selectorDrawable.setColor(Theme.getColor(tabLineColorKey, resourcesProvider));
+            }
+            if (listView != null) {
+                listView.invalidateViews();
+                listView.invalidate();
+            }
             invalidate();
         }
 

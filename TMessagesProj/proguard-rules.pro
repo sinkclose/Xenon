@@ -117,3 +117,11 @@
 -keep class org.telegram.utils.code.highlight.PrismaHighlighter {
     private static native <methods>;
 }
+
+# WidgetSandbox: JNI_OnLoad uses RegisterNatives; backend methods are called by native workers.
+-keep class org.telegram.utils.twidget.WidgetSandboxNative { *; }
+-keepclasseswithmembers,includedescriptorclasses class org.telegram.utils.twidget.WidgetClientNative {
+    native <methods>;
+}
+-keep class org.telegram.utils.twidget.WidgetSandboxBackend { *; }
+-keep class org.telegram.utils.twidget.WidgetEngineBackend { *; }

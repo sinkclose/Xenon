@@ -84,6 +84,7 @@ public class PhotoAttachPhotoCell extends FrameLayout {
     private static DispatchQueue livePhotoQueue;
     private Runnable livePhotoTask;
     private int livePhotoGeneration;
+    private final Runnable onLivePhotoLoaded = () -> imageView.invalidate();
     private boolean pressed;
     private static Rect rect = new Rect();
     private PhotoAttachPhotoCellDelegate delegate;
@@ -529,7 +530,7 @@ public class PhotoAttachPhotoCell extends FrameLayout {
     }
 
     private boolean isEntryLivePhoto() {
-        return photoEntry != null && (asyncLivePhotos ? photoEntry.isLivePhoto : photoEntry.isLivePhoto());
+        return photoEntry != null && (asyncLivePhotos ? photoEntry.isLivePhoto : photoEntry.isLivePhotoLoaded() && photoEntry.isLivePhoto());
     }
 
     private void cancelLivePhotoTask() {
@@ -600,6 +601,9 @@ public class PhotoAttachPhotoCell extends FrameLayout {
         isLast = last;
         this.allowLivePhotos = allowLivePhotos;
         loadLivePhotoMetadata();
+        if (allowLivePhotos && !asyncLivePhotos) {
+            photoEntry.loadLivePhoto(onLivePhotoLoaded);
+        }
         if (photoEntry.isVideo && !isEntryLivePhoto()) {
             imageView.setOrientation(0, true);
             videoInfoContainer.setVisibility(VISIBLE);
