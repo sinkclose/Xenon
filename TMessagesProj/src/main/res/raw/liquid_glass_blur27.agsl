@@ -1,0 +1,127 @@
+half4 sampleBlurredBackdrop(float2 coord) {
+    float2 filtered = clamp(coord * 0.5, float2(0.5), ceil(resolution * 0.5) - float2(0.5));
+    return img.eval(filtered + float2(resolution.x + 2.0, 0.0));
+}
+
+half4 sampleOpticalBackdrop(float2 coord, float blurWeight) {
+    if (blurWeight <= 0.0) return sampleBackdrop(coord);
+    if (blurWeight >= 1.0) return sampleBlurredBackdrop(coord);
+    return mix(sampleBackdrop(coord), sampleBlurredBackdrop(coord), half(blurWeight));
+}
+
+float opticalBlurWeight(float sd, float displacement, float halfExtent) {
+    if (backdropBlur < 0.5) return 0.0;
+    float radius = 1.0;
+    if (blurMix < 0.0) {
+        float d = (sd + displacement) / max(pixelScale, 0.001);
+        float extent = halfExtent * 2.0 / max(pixelScale, 0.001);
+        float sizeProgress = clamp((extent - 64.0) / 96.0, 0.0, 1.0);
+        radius = d < -1.0 ? mix(0.8, 0.4, clamp((d + extent * 0.5) / max(extent * 0.5 - 1.0, 0.001), 0.0, 1.0)) * sizeProgress
+            : (d < 0.0 ? mix(0.4 * sizeProgress, 0.5, d + 1.0) : 1.0);
+    } else {
+        return 1.0;
+    }
+    // The one filtered plane has the wider radius; interpolate by variance.
+    return radius * radius * 0.390625;
+}
+
+half4 mixOpticalFill(half4 lens, half4 fill, float darkMode) {
+    if (fill.a <= 0.0001) return lens;
+    half3 base = lens.a > 0.0001 ? lens.rgb / lens.a : fill.rgb / fill.a;
+    half3 filtered = fill.rgb / fill.a;
+    half3 selected = darkMode > 0.5 ? min(base, filtered) : max(base, filtered);
+    half alpha = max(lens.a, fill.a);
+    return half4(mix(mix(base, selected, 0.9), filtered, 0.5) * alpha, alpha);
+}
+
+float glassLightStrip(float depth, float height, float curvature, float aa) {
+    float relative = clamp(depth / max(height, 0.0001), 0.0, 1.0);
+    float profile = mix(relative < 1.0 ? 1.0 : 0.0, 1.0 - relative, curvature);
+    return profile * clamp(depth / aa + 0.5, 0.0, 1.0) *
+        clamp((height - depth) / aa + 0.5, 0.0, 1.0);
+}
+
+float opticalShapeCoverage(float3 field) {
+    float aa = max(abs(field.y) + abs(field.z), 0.0001);
+    return clamp(0.5 - field.x / aa, 0.0, 1.0);
+}
+
+// Glasmio's stroke sits outside the body. The two lobes follow +X and -X.
+float opticalSideStroke(float3 field, float coverage, float darkMode, float intensity) {
+    if (coverage >= 1.0 || intensity <= 0.0) return 0.0;
+    float aa = max(abs(field.y) + abs(field.z), 0.0001);
+    float height = 0.5333333333333333 * pixelScale;
+    float strip = (1.0 - coverage) * clamp((height - field.x) / aa + 0.5, 0.0, 1.0);
+    if (strip <= 0.0) return 0.0;
+    float threshold = cos(mix(1.8500490071139892, 1.3089969389957472, darkMode));
+    float key = strip * clamp((field.y - threshold) / (1.0 - threshold), 0.0, 1.0);
+    float fill = strip * clamp((-field.y - threshold) / (1.0 - threshold), 0.0, 1.0);
+    return (key / (1.0 + 0.5 * (1.0 - key)) + fill / (1.0 + 0.5 * (1.0 - fill))) * intensity * 4.0;
+}
+
+half3 opticalFace(half3 rgb, float darkMode, float extent) {
+    float luminance = dot(float3(rgb), float3(0.2126, 0.7152, 0.0722));
+    if (darkMode > 0.5) {
+        float rollOff = extent > 128.0 * pixelScale ? 0.65 : 0.4;
+        float gain = clamp(1.0 - luminance * rollOff, 0.0, 1.0);
+        rgb = half3(0.125 + luminance * gain) +
+            (rgb - half3(luminance)) * half(1.3 * gain * (1.0 + 0.3 * (1.0 - gain)));
+    } else {
+        rgb = mix(half3(0.4 + luminance * 0.63) + (rgb - half3(luminance)) * half(1.2), half3(1.0), 0.2);
+    }
+    return clamp(rgb, 0.0, 1.0);
+}
+
+half4 completeOpticalSideStroke(half4 body, float2 coord, float key, float darkMode, float extent) {
+    if (key <= 0.000001) return body;
+    half4 backdrop = sampleBackdrop(coord);
+    if (backdrop.a <= 0.0001) return body;
+    float3 original = float3(backdrop.rgb / backdrop.a);
+    float3 originalFace = float3(opticalFace(half3(original), darkMode, extent));
+    float alpha = body.a;
+    float3 color = float3(body.rgb);
+    float3 completion = mix(original, min(originalFace, original), key);
+    color += (1.0 - alpha) * completion;
+    color *= 1.0 - 0.3 * key * (3.0 - 2.0 * color);
+    float extendedAlpha = alpha + (1.0 - alpha) * key;
+    color -= (1.0 - extendedAlpha) * original;
+    // RGB is relative to the original backdrop and can be signed at the side.
+    return half4(half3(color), half(extendedAlpha));
+}
+
+float contourTail(float value) {
+    float x = clamp(value, -2.0, 2.0);
+    float square = x * x;
+    return (((0.00295448 * square - 0.03445430) * square + 0.168213) * square - 0.560546) * x + 0.5;
+}
+
+half3 applyOpticalRim(half3 rgb, float3 field, float angle, float intensity, float spread, float solid) {
+    float depth = -field.x;
+    if (depth > 24.0 * pixelScale) return rgb;
+    float2 normal = field.yz / max(length(field.yz), 0.0001);
+    float aa = max(abs(normal.x) + abs(normal.y), 0.0001);
+    // The reference darkens a recessed ring, offset down with the surface shadow.
+    float distance = field.x / max(pixelScale, 0.001) - 8.0 * normal.y;
+    float contour = clamp(contourTail(distance * 0.14142136) -
+        contourTail((distance + 4.0) * 0.14142136), 0.0, 1.0);
+    float coverage = clamp(0.5 + depth / aa, 0.0, 1.0);
+    rgb *= half(1.0 - 0.06 * contour * coverage);
+
+    if (intensity <= 0.0 || depth > 8.0 * pixelScale + 1.0) return rgb;
+    float mask;
+    if (solid > 0.5) {
+        mask = (1.0 - smoothstep(0.0, 1.5 * pixelScale * spread, abs(depth))) * coverage;
+    } else {
+        float alignment = abs(dot(normal, float2(sin(angle), -cos(angle))));
+        float key = glassLightStrip(depth, pixelScale, 0.75 * spread, aa) *
+            clamp((alignment - 0.173648) / 0.826352, 0.0, 1.0);
+        float diffuse = glassLightStrip(depth, 8.0 * pixelScale, 1.0, aa) *
+            clamp((alignment - 0.615661) / 0.384339, 0.0, 1.0);
+        mask = key + diffuse / (1.0 + 11.333333 * (1.0 - diffuse));
+    }
+    half3 light = half3(
+        dot(float3(rgb), float3(1.1202, -0.1894, -0.019)),
+        dot(float3(rgb), float3(-0.0563, 0.9871, -0.0191)),
+        dot(float3(rgb), float3(-0.0563, -0.1893, 1.1574))) + half3(0.1471);
+    return clamp(mix(rgb, light, half(clamp(mask * intensity * 4.0, 0.0, 1.0))), 0.0, 1.0);
+}

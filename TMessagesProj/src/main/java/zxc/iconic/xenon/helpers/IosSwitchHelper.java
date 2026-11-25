@@ -21,8 +21,6 @@ public final class IosSwitchHelper {
     private final RectF track = new RectF();
     private final RectF thumb = new RectF();
     private IosGlassThumb glass;
-    private GlasmioSwitchLens glasmioGlass;
-    private boolean glasmioLensDrawn;
     private final Switch owner;
     private final IosSwitchDynamics motion;
     private boolean framePosted;
@@ -85,9 +83,6 @@ public final class IosSwitchHelper {
         owner.setProgress(motion.fraction());
         if (glass != null) glass.release();
         glass = null;
-        if (glasmioGlass != null) glasmioGlass.release();
-        glasmioGlass = null;
-        glasmioLensDrawn = false;
     }
 
     public void draw(Canvas canvas, View owner, float progress, boolean pressed, boolean rtl,
@@ -95,8 +90,8 @@ public final class IosSwitchHelper {
         float fraction = motion.fraction();
         // The legacy 37x20 dp slot must not shrink this 64x28 dp control.
         float scale = AndroidUtilities.density;
-        boolean glasmio = zxc.iconic.xenon.NekoConfig.ios27LiquidGlass;
-        float trackWidth = glasmio ? 63f : 64f;
+        boolean ios27 = zxc.iconic.xenon.NekoConfig.ios27LiquidGlass;
+        float trackWidth = ios27 ? 63f : 64f;
         float left = (owner.getMeasuredWidth() - trackWidth * scale) / 2f;
         float top = (owner.getMeasuredHeight() - 28f * scale) / 2f;
         boolean dark = Theme.isCurrentThemeDark();
@@ -107,15 +102,15 @@ public final class IosSwitchHelper {
         paint.setColor(color);
         canvas.drawRoundRect(track, 14f * scale, 14f * scale, paint);
         float position = rtl ? 1f - fraction : fraction;
-        float thumbLeft = left + (2f + (glasmio ? 22f : 20f) * position) * scale;
-        thumb.set(thumbLeft, top + 2f * scale, thumbLeft + (glasmio ? 37f : 40f) * scale, top + 26f * scale);
+        float thumbLeft = left + (2f + (ios27 ? 22f : 20f) * position) * scale;
+        thumb.set(thumbLeft, top + 2f * scale, thumbLeft + (ios27 ? 37f : 40f) * scale, top + 26f * scale);
         float pressProgress = motion.pressProgress();
         float thumbWidth = thumb.width() * motion.thumbScaleX();
         float thumbHeight = thumb.height() * motion.thumbScaleY();
         float thumbCx = thumb.centerX(), thumbCy = thumb.centerY();
         thumb.set(thumbCx - thumbWidth / 2f, thumbCy - thumbHeight / 2f,
                 thumbCx + thumbWidth / 2f, thumbCy + thumbHeight / 2f);
-        if (!glasmio) {
+        if (!ios27) {
             paint.setColor(0x16000000);
             canvas.drawRoundRect(thumb.left, thumb.top + scale, thumb.right, thumb.bottom + scale,
                     thumb.height() / 2f, thumb.height() / 2f, paint);
@@ -125,20 +120,7 @@ public final class IosSwitchHelper {
             glass.release();
             glass = null;
         }
-        boolean drawGlasmio = glasmio && glassEnabled && pressProgress > .001f
-                && Build.VERSION.SDK_INT >= 33 && canvas.isHardwareAccelerated();
-        if (!drawGlasmio && glasmioLensDrawn) {
-            glasmioGlass.release();
-            glasmioLensDrawn = false;
-        }
-        if (drawGlasmio) {
-            if (glasmioGlass == null) glasmioGlass = new GlasmioSwitchLens();
-            glasmioGlass.draw(canvas, thumb, pressProgress, on, resourcesProvider, recording -> {
-                paint.setColor(color);
-                recording.drawRoundRect(track, track.height() / 2f, track.height() / 2f, paint);
-            });
-            glasmioLensDrawn = true;
-        } else if (glassEnabled && pressProgress > .001f && Build.VERSION.SDK_INT >= 33 && canvas.isHardwareAccelerated()) {
+        if (glassEnabled && pressProgress > .001f && Build.VERSION.SDK_INT >= 33 && canvas.isHardwareAccelerated()) {
             if (glass == null) glass = new IosGlassThumb(owner, resourcesProvider);
             glass.draw(canvas, thumb, pressProgress, IosSwitchDynamics.backdropScaleX(pressProgress),
                     IosSwitchDynamics.backdropScaleY(pressProgress), resourcesProvider, recording -> {

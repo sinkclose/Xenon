@@ -487,6 +487,18 @@ public class BlurredBackgroundSourceRenderNode implements BlurredBackgroundSourc
     }
 
     @Override
+    public long retainedDrawCommandsKey() {
+        if (scrollableNoiseSuppressor != null || underSource != null || wallpaperOwner != null
+                || renderNodeWithHash != null || !rawNode.hasDisplayList() || !renderNode.hasDisplayList()) {
+            return -1;
+        }
+        // These commands only refer to live nodes. A new display list in either child
+        // updates its pixels through the existing reference without changing the commands.
+        long scale = Float.floatToIntBits(renderNode.getScaleX()) & 0xffffffffL;
+        return scale << 2 | (noClip ? 2L : 0L) | (org.telegram.messenger.SharedConfig.chatBlurEnabled() ? 1L : 0L);
+    }
+
+    @Override
     public void draw(Canvas canvas, float left, float top, float right, float bottom) {
         if (!canvas.isHardwareAccelerated()) {
             if (fallbackSource != null) {

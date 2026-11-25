@@ -69,6 +69,15 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
     private final float[] groupAlpha = new float[6];
     private final float[] groupOrigins = new float[12];
 
+    private final Runnable onLiquidGroupReady = this::invalidateLiquidGroupHost;
+
+    private void invalidateLiquidGroupHost() {
+        postInvalidateOnAnimation();
+        if (getParent() != null && getParent().getParent() instanceof View) {
+            ((View) getParent().getParent()).postInvalidateOnAnimation();
+        }
+    }
+
     /** Draw in the input container's coordinates, keeping each button's spring independent. */
     public boolean drawLiquidGlassGroup(Canvas canvas, BlurredBackgroundDrawable center,
                                         LiquidTouchEffect centerEffect, float originX, float originY) {
@@ -84,7 +93,11 @@ public class ChatActivityChannelButtonsLayout extends FrameLayout implements Fac
         }
         try {
             if (liquidGroup == null) {
-                liquidGroup = new LiquidGlassInputGroup();
+                liquidGroup = LiquidGlassInputGroup.acquirePrepared(groupMembers.length, onLiquidGroupReady);
+                if (liquidGroup == null) {
+                    for (ButtonHolder holder : buttonHolders) if (holder != null) holder.button.setLiquidGroupDrawn(false);
+                    return false;
+                }
                 for (int a = 0; a < 6; a++) for (int b = a + 1; b < 6; b++)
                     liquidGroup.setPairMergeDistance(a, b, dp(6));
             }

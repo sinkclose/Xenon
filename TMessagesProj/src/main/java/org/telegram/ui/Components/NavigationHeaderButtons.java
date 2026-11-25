@@ -43,6 +43,7 @@ import java.util.Map;
 public final class NavigationHeaderButtons {
     private final ActionBarLayout host;
     private final RenderNode content = new RenderNode("NavigationWithoutHeaderButtons");
+    private int recordedBackdropColor;
     private final BlurredBackgroundSourceRenderNode source = new BlurredBackgroundSourceRenderNode(null);
     private final BlurredBackgroundDrawableViewFactory factory = new BlurredBackgroundDrawableViewFactory(source);
     private final ArrayList<ActionBar> managed = new ArrayList<>();
@@ -51,6 +52,7 @@ public final class NavigationHeaderButtons {
     private final ArrayList<View> trailingActions = new ArrayList<>();
     private static final float FOREGROUND_BLUR_STEP_DP = .5f;
     private final RenderEffect[] foregroundBlurs = new RenderEffect[21];
+    private final Runnable onUnionReady = this::invalidateHost;
     private final Group[] groups = new Group[2];
     private final BlurredBackgroundDrawable[] members = new BlurredBackgroundDrawable[2];
     private final RectF[] bounds = {new RectF(), new RectF()};
@@ -429,6 +431,10 @@ public final class NavigationHeaderButtons {
     public static boolean modeEnabled() {
         return NekoConfig.fadeViewOtherActivities() && !NekoConfig.materialActivityHeaders;
     }
+    private void invalidateHost() {
+        host.postInvalidateOnAnimation();
+    }
+
     private int foregroundBlurStep(float visibility) {
         return Math.round(HeaderButtonGroupMotion.foregroundBlur(visibility, 1f, animate) / FOREGROUND_BLUR_STEP_DP);
     }
@@ -586,19 +592,42 @@ public final class NavigationHeaderButtons {
         boolean moving = groups[0].advance(frameDelta) | groups[1].advance(frameDelta);
         boolean present = false;
         for (int i = 0; i < 2; i++) { groups[i].geometry(i); present |= surfaceAlpha[i] > .001f; }
+        if (activeChatTitle != null) activeChatTitle.record();
         if (SharedConfig.chatBlurEnabled() && (present && !nativeChatControls || !chatTitles.isEmpty())) {
-            Canvas backdrop = source.beginRecording(host.getWidth(), host.getHeight());
-            try {
-                backdrop.drawColor(Theme.getColor(Theme.key_windowBackgroundGray));
-                // The same display list includes both pages' current clipping, transforms and alpha.
-                backdrop.drawRenderNode(content);
-            } finally { source.endRecording(); }
+            float bottom = Math.max(bounds[0].bottom, bounds[1].bottom);
+            for (ChatTitle title : chatTitles) {
+                title.childBounds.set(title.titleBounds);
+                title.barTransform.mapRect(title.childBounds);
+                bottom = Math.max(bottom, title.y + title.childBounds.bottom);
+            }
+            // Only the toolbar and the filter's sampling margin need a blurred backdrop.
+            int margin = NekoConfig.ios27LiquidGlass ? NekoConfig.getIos27GlassSamplePaddingDp() : 0;
+            int guard = AndroidUtilities.dp(64 + margin);
+            int quantum = Math.max(1, AndroidUtilities.dp(64));
+            int backdropHeight = Math.min(host.getHeight(), (int) Math.ceil((bottom + guard) / quantum) * quantum);
+            int backdropColor = Theme.getColor(Theme.key_windowBackgroundGray);
+            if (recordedBackdropColor != backdropColor || source.retainedDrawCommandsKey() < 0
+                    || source.needUpdateDisplayList(host.getWidth(), backdropHeight)) {
+                Canvas backdrop = source.beginRecording(host.getWidth(), backdropHeight);
+                try {
+                    backdrop.drawColor(backdropColor);
+                    // The live content node updates the backdrop when the page display list changes.
+                    backdrop.drawRenderNode(content);
+                } finally {
+                    source.endRecording();
+                }
+                recordedBackdropColor = backdropColor;
+            }
             if (LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS)) source.setGlassBlur(AndroidUtilities.dp(8));
             else source.setPlainBlur(AndroidUtilities.dpf2(NekoConfig.blurStrength * 4f / 3f));
         }
         if (present && !nativeChatControls) {
-            if (SharedConfig.chatBlurEnabled() && Build.VERSION.SDK_INT >= 33 && NekoConfig.liquidChatElements) {
-                if (union == null) { union = new LiquidGlassInputGroup(2); union.setPairMergeDistance(0, 1, AndroidUtilities.dp(12)); }
+            if (SharedConfig.chatBlurEnabled() && Build.VERSION.SDK_INT >= 33 && NekoConfig.liquidChatElements
+                    && union == null) {
+                union = LiquidGlassInputGroup.acquirePrepared(2, onUnionReady);
+                if (union != null) union.setPairMergeDistance(0, 1, AndroidUtilities.dp(12));
+            }
+            if (SharedConfig.chatBlurEnabled() && Build.VERSION.SDK_INT >= 33 && NekoConfig.liquidChatElements && union != null) {
                 // Group presence is opacity, never a shrinking mask (unlike composer controls).
                 union.draw(destination, members, bounds, surfaceAlpha, effects, null, null, false);
             } else for (int i = 0; i < 2; i++) {
@@ -624,16 +653,17 @@ public final class NavigationHeaderButtons {
                     group.surface.setSourceTransform(group.sx, group.sy,
                             kick + (1f - group.sx) * centerX, (1f - group.sy) * centerY);
                     group.surface.setAlpha(Math.round(255 * surfaceAlpha[i]));
-                    group.surface.updateDisplayList();
                     group.surface.draw(destination);
                     destination.restoreToCount(save);
+                    if (Build.VERSION.SDK_INT >= 36 && NekoConfig.ios27LiquidGlass) {
+                        group.press.drawHighlight(destination, AndroidUtilities.dp(22));
+                    }
                 }
             }
         }
         if (!nativeChatControls) {
             for (int i = 0; i < 2; i++) groups[i].drawIcons(destination, i);
         }
-        if (activeChatTitle != null) activeChatTitle.record();
         for (ChatTitle title : chatTitles) title.draw(destination);
         if (moving || chatTitlesMoving) host.postInvalidateOnAnimation();
         else lastFrame = 0;

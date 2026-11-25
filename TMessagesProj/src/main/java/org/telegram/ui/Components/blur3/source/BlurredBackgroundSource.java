@@ -30,5 +30,8 @@ public interface BlurredBackgroundSource {
     /** Update source effects even when a drawable reuses its recorded display list. */
     default void prepareToDraw() {}
 
+    /** Negative when draw commands must be recorded again even if the sample rectangle is unchanged. */
+    default long retainedDrawCommandsKey() { return -1; }
+
     default void dispatchOnDrawablesRelativePositionChange() {}
 }

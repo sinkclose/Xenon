@@ -41,6 +41,7 @@ public final class LiquidTouchEffect {
     private float glowProgress, dissipationProgress;
     private boolean glowReleased = true;
     private org.telegram.ui.Components.blur3.GlasmioPressEffect nativeGlow;
+    private Runnable onNativeGlowReady;
     private float dragStrength = 1f;
     private float pressStrength = 1f;
     private float pressDamping = .5f, pressStiffness = 300f;
@@ -273,11 +274,11 @@ public final class LiquidTouchEffect {
         if (drawable == null) return false;
         if (android.os.Build.VERSION.SDK_INT >= 33) {
             if (effect != null && zxc.iconic.xenon.NekoConfig.ios27LiquidGlass) {
-                drawable.setGlasmioPress(effect.glowProgress, effect.dissipationProgress,
+                drawable.setIos27Press(effect.glowProgress, effect.dissipationProgress,
                         effect.downX + effect.offsetX - originX, effect.downY + effect.offsetY - originY,
                         effect.bounds.left - originX, effect.bounds.top - originY,
                         effect.bounds.right - originX, effect.bounds.bottom - originY);
-            } else drawable.setGlasmioPress(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
+            } else drawable.setIos27Press(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
         }
         if (effect == null) return drawable.setSourceTransform(scaleX, scaleY, translationX, translationY);
         effect.updateTransform();
@@ -305,6 +306,7 @@ public final class LiquidTouchEffect {
 
     /** Touch light in the same transformed host coordinates as the optical surface. */
     public void writeGlow(float[] values, int offset, float originX, float originY) {
+        if (progress <= 0f || bounds.isEmpty()) return;
         updateTransform();
         float x = Math.max(bounds.left, Math.min(bounds.right, downX + offsetX));
         float y = Math.max(bounds.top, Math.min(bounds.bottom, downY + offsetY));
@@ -315,7 +317,8 @@ public final class LiquidTouchEffect {
         values[offset + 3] = bounds.isEmpty() ? 0f : Math.max(0f, Math.min(1f, progress));
     }
 
-    public void writeGlasmioGlow(float[] values, int offset, float originX, float originY) {
+    public void writeIos27Glow(float[] values, int offset, float originX, float originY) {
+        if (glowProgress <= 0f || bounds.isEmpty()) return;
         updateTransform();
         float x = Math.max(bounds.left, Math.min(bounds.right, downX + offsetX));
         float y = Math.max(bounds.top, Math.min(bounds.bottom, downY + offsetY));
@@ -351,7 +354,11 @@ public final class LiquidTouchEffect {
         if (zxc.iconic.xenon.NekoConfig.ios27LiquidGlass) {
             if (!org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS)) return;
             if (android.os.Build.VERSION.SDK_INT >= 36 && glowProgress > 0f) {
-                if (nativeGlow == null) nativeGlow = new org.telegram.ui.Components.blur3.GlasmioPressEffect();
+                if (nativeGlow == null) {
+                    if (onNativeGlowReady == null) onNativeGlowReady = this::invalidateHost;
+                    nativeGlow = org.telegram.ui.Components.blur3.GlassShaderCache.acquireIos27PressOverlay(onNativeGlowReady);
+                    if (nativeGlow == null) return;
+                }
                 glowBounds.set(bounds.left + inset, bounds.top + inset, bounds.right - inset, bounds.bottom - inset);
                 if (glowBounds.isEmpty()) return;
                 glowClip.rewind();

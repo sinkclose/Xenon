@@ -13,6 +13,29 @@ public final class Ios27GlassMaterial {
     public static final float THIN_RADIAL = .70f;
     public static final float CAPSULE_RADIAL = .36f;
 
+    /** Sharp backdrop, a two-pixel guard, then the same backdrop filtered at half resolution. */
+    public static int packedBackdropWidth(int width) {
+        return width + 2 + (width + 1) / 2;
+    }
+
+    /** Signed inner displacement, inner depth, outer displacement and outer depth, in pixels. */
+    public static void renderLens(float width, float height, float density, float strength, boolean clearControl,
+                                  float[] out, int offset) {
+        if (clearControl) {
+            out[offset] = -16f * density;
+            out[offset + 1] = 8f * density;
+            out[offset + 2] = 0f;
+            out[offset + 3] = 0f;
+            return;
+        }
+        float extent = Math.max(0f, Math.min(width, height) / density);
+        float gain = strength / .7f * density;
+        out[offset] = -Math.min(extent * .5f, 60f) * gain;
+        out[offset + 1] = Math.min(extent * .25f, 20f) * density;
+        out[offset + 2] = Math.max(16f, extent * .25f) * gain;
+        out[offset + 3] = Math.max(16f, extent * .2f) * density;
+    }
+
     /** Amplitude in pixels, profile exponent, radial normal weight, lens depth in pixels. */
     public static void lens(float width, float height, float density, float[] out, int offset) {
         float shortSide = Math.min(width, height);

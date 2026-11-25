@@ -77,20 +77,7 @@ half4 nativeApplyPressGlow(half4 target, float bigOpacity, float littleOpacity, 
     return half4(result);
 }
 
-uniform float2 pressCenter;
-uniform float2 pressRadius;
-uniform float2 pressOpacity;
-uniform float pressDodgeGain;
-uniform float4 pressBounds;
-float nativePressBigMask(float2 p) {
-    float2 halfSize = max((pressBounds.zw - pressBounds.xy) * .5, float2(.001));
-    float radius = min(halfSize.x, halfSize.y);
-    float2 q = abs(p - (pressBounds.xy + pressBounds.zw) * .5) - halfSize + radius;
-    float distance = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
-    return clamp(.5 - distance, 0.0, 1.0);
-}
-float nativePressShadow(float2 p) {
-    float normalizedDistance = length((p - pressCenter) / max(pressRadius, float2(0.0001)));
+float nativePressHalo(float normalizedDistance) {
     float x = min(normalizedDistance, 5.0);
     float z = x * x;
     // Collect the original eight-point Gauss-Legendre quadrature's fixed degree-eight
@@ -106,12 +93,33 @@ float nativePressShadow(float2 p) {
     integral = integral * z + 0.393469334;
     return clamp(exp(-0.5 * z) * integral, 0.0, 1.0);
 }
+
+uniform float2 pressCenter;
+uniform float2 pressRadius;
+uniform float2 pressOpacity;
+uniform float pressDodgeGain;
+uniform float4 pressBounds;
+float nativePressBigMask(float2 p) {
+    float2 halfSize = max((pressBounds.zw - pressBounds.xy) * .5, float2(.001));
+    float radius = min(halfSize.x, halfSize.y);
+    float2 q = abs(p - (pressBounds.xy + pressBounds.zw) * .5) - halfSize + radius;
+    float distance = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+    return clamp(.5 - distance, 0.0, 1.0);
+}
+float nativePressShadow(float2 p) {
+    return nativePressHalo(length((p - pressCenter) / max(pressRadius, float2(0.0001))));
+}
 half4 nativePressGlow(half4 target, float2 p) {
     return nativeApplyPressGlow(target, pressOpacity.x * nativePressBigMask(p), pressOpacity.y * nativePressShadow(p), pressDodgeGain);
 }
 
+half4 applyGlassPress(half4 color, float2 p) {
+    if (color.a <= 0.0 || (pressOpacity.x <= 0.0 && pressOpacity.y <= 0.0)) return color;
+    half4 target = half4(glassWorkingToNativeGammaPremul(float4(color)));
+    return half4(glassNativeGammaToWorkingPremul(float4(nativePressGlow(target, p))));
+}
+
 uniform shader content;
 half4 main(float2 p) {
-    half4 target = half4(glassWorkingToNativeGammaPremul(float4(content.eval(p))));
-    return half4(glassNativeGammaToWorkingPremul(float4(nativePressGlow(target, p))));
+    return applyGlassPress(content.eval(p), p);
 }

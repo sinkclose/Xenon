@@ -1,0 +1,45 @@
+uniform float2 halfSize;
+uniform float2 menuRadii;
+uniform float secondaryEnabled;
+uniform float2 secondaryCenter;
+uniform float2 secondaryHalfSize;
+uniform float2 secondaryRadii;
+uniform float smoothing;
+
+uniform shader smoothedField;
+uniform float smoothedFieldEnabled;
+uniform float2 fieldCoordinateScale;
+uniform float2 fieldCoordinateOffset;
+uniform float fieldDistanceScale;
+uniform float2 fieldGradientScale;
+uniform float2 fieldExtent;
+// QuartzCore supercircle_sdf_sampler (24A434, 0x1c39c8dd0).
+// Oversized radii are intentional during overrounding; the native builder's
+// curvature terms handle them before the two fields are combined.
+float3 roundedFieldGradient(float2 point, float2 origin, float2 extent, float2 radii) {
+    return nativeGlassRoundedField(point - origin, extent, radii, 0.5);
+}
+float3 liquidAnalyticFieldGradient(float2 point) {
+    float3 a = roundedFieldGradient(point, center, halfSize, menuRadii);
+    if (secondaryEnabled < 0.5) return a;
+    float3 b = roundedFieldGradient(point, secondaryCenter, secondaryHalfSize, secondaryRadii);
+    // QuartzCore SDFUnion, iOS 24A434, 0x1c39e27d0: only opposing
+    // unit gradients widen the polynomial union between the two skins.
+    float k = smoothing * clamp(0.5 - 0.5 * dot(a.yz, b.yz), 0.0, 1.0);
+    if (k <= 0.000001) return a.x < b.x ? a : b;
+    float h = clamp(0.5 + 0.5 * (a.x - b.x) / k, 0.0, 1.0);
+    return float3(mix(a.x, b.x, h) - k * h * (1.0 - h), mix(a.yz, b.yz, h));
+}
+float3 liquidFieldGradient(float2 point) {
+    if (smoothedFieldEnabled > 0.5) {
+        float2 pixel = point * fieldCoordinateScale + fieldCoordinateOffset;
+        // The Gaussian grid covers a narrow skin band. Clamping its exterior distance
+        // would extend the native key strip across the remaining consumer rectangle.
+        if (pixel.x >= 0.5 && pixel.y >= 0.5 &&
+            pixel.x <= fieldExtent.x - 0.5 && pixel.y <= fieldExtent.y - 0.5) {
+            float3 field = smoothedField.eval(pixel).rgb;
+            return field * float3(fieldDistanceScale, fieldGradientScale);
+        }
+    }
+    return liquidAnalyticFieldGradient(point);
+}

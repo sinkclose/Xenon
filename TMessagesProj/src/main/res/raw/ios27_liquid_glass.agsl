@@ -13,6 +13,12 @@ uniform float pixelScale;
 uniform float4 lensParams;
 uniform float lightIntensity;
 uniform float lightAngle;
+uniform float4 glassTint;
+uniform float clearControl;
+uniform float lightFalloff;
+uniform float solidGlare;
+uniform float backdropBlur;
+uniform float blurMix;
 
 half4 sampleBackdrop(float2 coord) {
     return img.eval(clamp(coord, float2(0.5), resolution - float2(0.5)));
@@ -35,81 +41,41 @@ float radiusAt(float2 coord, float4 radii) {
     }
 }
 
-float sdRoundedRect(float2 coord, float2 halfSize, float r) {
-    float2 cornerCoord = abs(coord) - (halfSize - float2(r));
-    float outside = length(max(cornerCoord, 0.0)) - r;
-    float inside = min(max(cornerCoord.x, cornerCoord.y), 0.0);
-    return outside + inside;
+float rayDisplacement(float sd, float depth, float amount) {
+    if (depth <= 0.0 || sd <= -depth) return 0.0;
+    float u = clamp(-sd / depth, 0.0, 1.0);
+    return amount * (1.0 - sqrt(u * (2.0 - u)));
 }
 
-float2 gradSdRoundedRect(float2 coord, float2 halfSize, float r) {
-    float2 cornerCoord = abs(coord) - (halfSize - float2(r));
-    if (cornerCoord.x >= 0.0 || cornerCoord.y >= 0.0) {
-        float2 outside = max(cornerCoord, 0.0);
-        return sign(coord) * outside / max(length(outside), 0.0001);
-    } else {
-        float gradX = step(cornerCoord.y, cornerCoord.x);
-        return sign(coord) * float2(gradX, 1.0 - gradX);
-    }
+// ROUNDED_FIELD
+
+// MENU_FIELD
+
+float3 glassField(float2 coord) {
+    float2 local = coord - center;
+    float2 extent = size * 0.5;
+    float r = radiusAt(local, radius);
+    return nativeGlassRoundedField(local, extent, float2(r), 0.0); // MENU_DISTANCE
 }
 
-float circleMap(float x) {
-    return 1.0 - sqrt(max(0.0, 1.0 - x * x));
-}
+// BLUR_PLANE
 
-float refractionDistance(float sd, float maxHeight) {
-    // Opposing edge normals meet on the medial axis. Make displacement
-    // vanish there even when the requested lens depth exceeds the glass size.
-    // The Figma capsule bends the backdrop across its full short axis.
-    // Keep displacement below the medial axis, but do not flatten the lens.
-    float height = min(lensParams.w, maxHeight);
-    if (height <= 0.0 || -sd >= height) return 0.0;
-    float edge = clamp(1.0 + min(sd, 0.0) / height, 0.0, 1.0);
-    return -lensParams.x * pow(circleMap(edge), lensParams.y);
-}
-
-half4 opticalColor(float2 coord) {
-    float2 halfSize = size * 0.5;
-    float2 centeredCoord = coord - center;
-    float r = radiusAt(centeredCoord, radius);
-
-    float sd = sdRoundedRect(centeredCoord, halfSize, r);
-
-    float d = refractionDistance(sd, min(halfSize.x, halfSize.y));
-    if (d == 0.0 && chromaticAberration <= 0.0) return sampleBackdrop(coord);
-
-    // Edge zone: apply lens refraction
-    // Use the actual outline normal, without an axial/radial warp of capsules.
-    float2 grad = gradSdRoundedRect(centeredCoord, halfSize, r);
-    float2 radial = centeredCoord / max(length(centeredCoord), 0.0001);
-    grad += lensParams.z * radial;
-    grad /= max(length(grad), 0.0001);
-
-    // Measured inverse map: samples move inward while visible features expand
-    // toward the rim. The radial normal term is fitted independently of Splay.
-    float2 refractedCoord = coord + d * grad;
-
-    half4 baseColor = sampleBackdrop(refractedCoord);
-    if (chromaticAberration <= 0.0) {
-        return baseColor;
-    }
-
-    // 7-channel chromatic dispersion
-    // Dispersion follows optical displacement, not a fixed subpixel cap.
-    float2 dispersedCoord = (refractedCoord - coord) * chromaticAberration;
+half4 sampleRay(float2 refractedCoord, float2 dispersedCoord, float blurWeight) {
+    half4 baseColor = sampleOpticalBackdrop(refractedCoord, blurWeight);
+    if (dot(dispersedCoord, dispersedCoord) <= 0.000001) return baseColor;
 
     half4 color = half4(0.0);
 
-    half4 red = sampleBackdrop(refractedCoord + dispersedCoord);
+    half4 red = sampleOpticalBackdrop(refractedCoord + dispersedCoord, blurWeight);
     color.r += red.r / 3.5;
     color.a += red.a / 7.0;
 
-    half4 orange = sampleBackdrop(refractedCoord + dispersedCoord * (2.0 / 3.0));
+    half4 orange = sampleOpticalBackdrop(refractedCoord + dispersedCoord * (2.0 / 3.0), blurWeight);
     color.r += orange.r / 3.5;
     color.g += orange.g / 7.0;
     color.a += orange.a / 7.0;
 
-    half4 yellow = sampleBackdrop(refractedCoord + dispersedCoord * (1.0 / 3.0));
+    half4 yellow = sampleOpticalBackdrop(refractedCoord + dispersedCoord * (1.0 / 3.0), blurWeight);
     color.r += yellow.r / 3.5;
     color.g += yellow.g / 3.5;
     color.a += yellow.a / 7.0;
@@ -118,16 +84,16 @@ half4 opticalColor(float2 coord) {
     color.g += green.g / 3.5;
     color.a += green.a / 7.0;
 
-    half4 cyan = sampleBackdrop(refractedCoord - dispersedCoord * (1.0 / 3.0));
+    half4 cyan = sampleOpticalBackdrop(refractedCoord - dispersedCoord * (1.0 / 3.0), blurWeight);
     color.g += cyan.g / 3.5;
     color.b += cyan.b / 3.0;
     color.a += cyan.a / 7.0;
 
-    half4 blue = sampleBackdrop(refractedCoord - dispersedCoord * (2.0 / 3.0));
+    half4 blue = sampleOpticalBackdrop(refractedCoord - dispersedCoord * (2.0 / 3.0), blurWeight);
     color.b += blue.b / 3.0;
     color.a += blue.a / 7.0;
 
-    half4 purple = sampleBackdrop(refractedCoord - dispersedCoord);
+    half4 purple = sampleOpticalBackdrop(refractedCoord - dispersedCoord, blurWeight);
     color.r += purple.r / 7.0;
     color.b += purple.b / 3.0;
     color.a += purple.a / 7.0;
@@ -135,36 +101,62 @@ half4 opticalColor(float2 coord) {
     return color;
 }
 
-// Regular / Small fills, bottom to top: luminosity, dodge, white, black.
-half4 main(float2 coord) {
-    half4 c = opticalColor(coord);
-    half3 rgb = c.a > 0.0001 ? c.rgb / c.a : half3(0.0);
-    float luminance = dot(float3(rgb), float3(0.3, 0.59, 0.11));
-    if (darkMode > 0.5) {
-        // Dark Regular / Small: #999999, luminosity at 17%; no white backing.
-        rgb = clamp(rgb + half((0.6 - luminance) * 0.17), 0.0, 1.0);
-    } else {
-        // Bottom to top, not a single white SRC_OVER wash.
-        rgb = clamp(rgb + half((0.972549 - luminance) * 0.2), 0.0, 1.0);
-        rgb = min(half3(1.0), rgb + half3(0.266667 * 0.6));
-        rgb = mix(rgb, half3(1.0), 0.25) * 0.75;
-    }
-    // Inner shadows use shifted, expanded masks, not exponential rim bands.
-    // Negative spread (-40) expands the transparent interior of the shadow.
-    float2 local = coord - center;
+half4 opticalColor(float2 coord, float3 field) {
+    float sd = field.x;
     float2 halfSize = size * 0.5;
-    float scale = min(pixelScale, min(size.x, size.y) / 48.0);
-    float offset = 40.0 * scale;
-    float2 lightDirection = float2(sin(lightAngle), cos(lightAngle));
-    float2 up = local - lightDirection * offset;
-    float2 down = local + lightDirection * offset;
-    float upperDistance = sdRoundedRect(up, halfSize, radiusAt(up, radius)) - offset;
-    float lowerDistance = sdRoundedRect(down, halfSize, radiusAt(down, radius)) - offset;
-    // Smooth approximation of the Gaussian mask convolution (radius / 2 sigma).
-    float upperLight = smoothstep(-10.0 * scale, 10.0 * scale, upperDistance);
-    float lowerLight = smoothstep(-10.0 * scale, 10.0 * scale, lowerDistance);
-    float upperBurn = smoothstep(-30.0 * scale, 30.0 * scale, upperDistance);
-    rgb = max(half3(0.0), rgb - half3(upperBurn * 0.098039));
-    rgb = min(half3(1.0), rgb + half3((upperLight + lowerLight) * mix(0.156863, 0.101961, darkMode) * (lightIntensity / 0.25)));
-    return half4(rgb * c.a, c.a);
+    float innerDepth = min(lensParams.y, min(halfSize.x, halfSize.y));
+    float innerDistance = rayDisplacement(sd, innerDepth, lensParams.x);
+    float2 inner = field.yz * innerDistance;
+    float2 local = clamp((coord - center) / max(halfSize, float2(1.0)), -1.0, 1.0);
+    float spread = chromaticAberration * local.x * local.y;
+    float halfExtent = min(halfSize.x, halfSize.y);
+    half4 c = sampleRay(coord + inner, inner * spread, opticalBlurWeight(sd, innerDistance, halfExtent));
+    if (backdropBlur > 0.5) c = mixOpticalFill(c, sampleBlurredBackdrop(coord), darkMode);
+    if (lensParams.z > 0.0 && sd > -pixelScale) {
+        float outerDistance = rayDisplacement(sd, lensParams.w, lensParams.z);
+        float2 outer = field.yz * outerDistance;
+        float weight = 0.6 * clamp(1.0 + sd / max(pixelScale, 0.001), 0.0, 1.0);
+        c = mix(c, sampleRay(coord + outer, outer * spread, opticalBlurWeight(sd, outerDistance, halfExtent)), half(weight));
+    }
+    if (backdropBlur > 0.5 && blurMix >= 0.0 && blurMix < 1.0) {
+        c = mix(sampleBackdrop(coord + inner), c, half(blurMix));
+    }
+    // Keep capture gaps from turning refraction into a second translucent image.
+    if (c.a < 0.999 && dot(inner, inner) > 0.000001) {
+        c += sampleBackdrop(coord) * half(1.0 - c.a);
+    }
+    return c;
+}
+
+// PRESS_EFFECT
+
+half4 renderGlass(float2 coord) {
+    if (coord.x >= resolution.x || coord.y >= resolution.y) return half4(0.0);
+    float3 field = glassField(coord);
+    float coverage = opticalShapeCoverage(field);
+    float extent = min(size.x, size.y);
+    if (clearControl > 0.5) {
+        if (field.x > 2.0) return half4(0.0);
+        half4 c = opticalColor(coord, field);
+        half3 rgb = c.a > 0.0001 ? c.rgb / c.a : half3(0.0);
+        rgb = applyOpticalRim(rgb, field, lightAngle, lightIntensity, lightFalloff, solidGlare);
+        return half4(rgb * c.a, c.a);
+    }
+    float key = opticalSideStroke(field, coverage, darkMode, lightIntensity);
+    if (coverage <= 0.0) {
+        return completeOpticalSideStroke(half4(0.0), coord, key, darkMode, extent);
+    }
+    half4 c = opticalColor(coord, field);
+    half3 rgb = c.a > 0.0001 ? c.rgb / c.a : half3(0.0);
+    rgb = opticalFace(rgb, darkMode, extent);
+    rgb = rgb * half(1.0 - glassTint.a) + half3(glassTint.rgb);
+    rgb = applyOpticalRim(rgb, field, lightAngle, lightIntensity, lightFalloff, solidGlare);
+    half4 body = half4(rgb * c.a, c.a) * half(coverage);
+    return completeOpticalSideStroke(body, coord, key, darkMode, extent);
+}
+
+
+half4 main(float2 coord) {
+    half4 color = renderGlass(coord);
+    return applyGlassPress(color, coord); // PRESS_APPLY
 }
