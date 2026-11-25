@@ -82,6 +82,7 @@ public class GlassPreviewCell extends View implements NotificationCenter.Notific
         glassDrawable.setSourceOffset(samplePadding, samplePadding);
         if (glassDrawable instanceof BlurredBackgroundDrawable) {
             BlurredBackgroundDrawable drawable = (BlurredBackgroundDrawable) glassDrawable;
+            drawable.setLiquidGlassSamplePadding(samplePadding);
             // Blur-only preview must sample the filtered source directly,
             // without retaining glass optics or their material settings.
             if (previewLiquid) drawable.setLiquidGlassEffectAllowed();

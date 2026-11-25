@@ -3590,16 +3590,28 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
                 setVisibleHeight(lastVisibleHeight);
             });
 
-            BlurredBackgroundDrawable filterTabsViewBackground = iBlur3FactoryLiquidGlass.create(scrollSlidingTextTabStrip, glassColors);
-            filterTabsViewBackground.setRadius(dp(18));
-            filterTabsViewBackground.setPadding(dp(6.666f));
-            scrollSlidingTextTabStrip.setPadding(0, dp(7), 0, dp(7));
-            scrollSlidingTextTabStrip.setClipToPadding(false);
-            scrollSlidingTextTabStrip.setBackground(null);
-            scrollSlidingTextTabStrip.setBlurredBackground(filterTabsViewBackground);
-            scrollSlidingTextTabStrip.setOpen(false);
-            // the glass of the tabs (inset by its padding) 6dp from the sides of the screen
-            addView(scrollSlidingTextTabStrip, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, 50, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 6 - TABS_GLASS_INSET_DP, 0, 6 - TABS_GLASS_INSET_DP, 0));
+            if (NonIslandHelper.tabBars()) {
+                // flat full-width tabs instead of the glass island
+                final SizeNotifierFrameLayout sizeNotifierFrameLayout = profileActivity != null && profileActivity.getFragmentView() instanceof SizeNotifierFrameLayout
+                        ? (SizeNotifierFrameLayout) profileActivity.getFragmentView() : null;
+                topPanelLayout.blurHelper = zxc.iconic.xenon.helpers.BlurBehindHelper.create(topPanelLayout, sizeNotifierFrameLayout, Theme.key_windowBackgroundWhite);
+                addView(scrollSlidingTextTabStrip, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 36, Gravity.LEFT | Gravity.TOP));
+                scrollSlidingTextTabStrip.makeNonIsland(zxc.iconic.xenon.helpers.BlurBehindHelper.create(scrollSlidingTextTabStrip, sizeNotifierFrameLayout, Theme.key_windowBackgroundWhite));
+            } else {
+                BlurredBackgroundDrawable filterTabsViewBackground = iBlur3FactoryLiquidGlass.create(scrollSlidingTextTabStrip, glassColors);
+                filterTabsViewBackground.setRadius(dp(18));
+                filterTabsViewBackground.setPadding(dp(6.666f));
+                scrollSlidingTextTabStrip.setPadding(0, dp(7), 0, dp(7));
+                scrollSlidingTextTabStrip.setClipToPadding(false);
+                scrollSlidingTextTabStrip.setBackground(null);
+                scrollSlidingTextTabStrip.setBlurredBackground(filterTabsViewBackground);
+                scrollSlidingTextTabStrip.setOpen(false);
+                // the glass of the tabs (inset by its padding) 6dp from the sides of the screen
+                addView(scrollSlidingTextTabStrip, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, 50, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 6 - TABS_GLASS_INSET_DP, 0, 6 - TABS_GLASS_INSET_DP, 0));
+            }
+            if (scrollSlidingTextTabStrip.isMd3Enabled()) {
+                scrollSlidingTextTabStrip.setTranslationY(-dp(3));
+            }
             searchTagsList = new SearchTagsList(getContext(), profileActivity, profileActivity.getCurrentAccount(), includeSavedDialogs() ? 0 : dialog_id, resourcesProvider) {
                 @Override
                 protected boolean setFilter(ReactionsLayoutInBubble.VisibleReaction reaction) {
@@ -11471,6 +11483,11 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
 
         public ScrollSlidingTextTabStripInner(Context context, Theme.ResourcesProvider resourcesProvider) {
             super(context, resourcesProvider);
+        }
+
+        @Override
+        protected boolean isMd3Enabled() {
+            return viewType == VIEW_TYPE_PROFILE_ACTIVITY && zxc.iconic.xenon.helpers.Md3FilterTabsHelper.isEnabled();
         }
 
         protected void drawBackground(Canvas canvas) {}

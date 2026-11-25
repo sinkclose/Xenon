@@ -38,7 +38,8 @@ import zxc.iconic.xenon.helpers.M3SectionsHelper;
 public class SectionsScrollView extends ScrollView implements IBlur3Capture {
 
     private static final float OPAQUE_BACKGROUND_OVERLAP = 1.0f;
-    private static final int SECTION_VALUES_COUNT = 5;
+    // left, top, right, bottom, alpha, top radius, bottom radius
+    private static final int SECTION_VALUES_COUNT = 7;
     private static final long OVERSCROLL_CAPTURE_TIMEOUT_MS = 500L;
 
     private Theme.ResourcesProvider resourcesProvider;
@@ -71,6 +72,7 @@ public class SectionsScrollView extends ScrollView implements IBlur3Capture {
     public static boolean isSectionView(View view) {
         if (zxc.iconic.xenon.helpers.IosListItemsHelper.isEnabled() && view.getClass() == View.class) return false;
         return !Objects.equals(view.getTag(), RecyclerListView.TAG_NOT_SECTION) && !(
+                ((M3SectionsHelper.isEnabled() || zxc.iconic.xenon.helpers.IosListItemsHelper.isEnabled()) && view instanceof HeaderCell) ||
                 view instanceof TextInfoPrivacyCell ||
                         view instanceof ShadowSectionCell ||
                         view instanceof FiltersSetupActivity.HintInnerCell
@@ -183,6 +185,39 @@ public class SectionsScrollView extends ScrollView implements IBlur3Capture {
     }
 
     private final ArrayList<View> children = new ArrayList<>();
+    private final WeakHashMap<View, Integer> originalTopMargins = new WeakHashMap<>();
+    private final android.graphics.Path sectionPath = new android.graphics.Path();
+    private final float[] sectionRadii = new float[8];
+
+    /** Material 3 sections: every row is a card of its own, apart by the gap. */
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        children.clear();
+        gatherChildren(contentView, 0, 0);
+        boolean changed = false;
+        View prev = null;
+        for (View child : children) {
+            if (child.getLayoutParams() instanceof MarginLayoutParams) {
+                MarginLayoutParams lp = (MarginLayoutParams) child.getLayoutParams();
+                Integer original = originalTopMargins.get(child);
+                if (original == null) {
+                    original = lp.topMargin;
+                    originalTopMargins.put(child, original);
+                }
+                int margin = original + (M3SectionsHelper.isEnabled() && isSectionView(child)
+                    && prev != null && isSectionView(prev) ? 2 * M3SectionsHelper.getGap() : 0);
+                if (lp.topMargin != margin) {
+                    lp.topMargin = margin;
+                    child.setLayoutParams(lp);
+                    changed = true;
+                }
+            }
+            prev = child;
+        }
+        if (changed) super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+    }
+
     private void gatherChildren(ViewGroup layout, float x, float y) {
         for (int i = 0; i < layout.getChildCount(); ++i) {
             final View child = layout.getChildAt(i);
@@ -211,6 +246,26 @@ public class SectionsScrollView extends ScrollView implements IBlur3Capture {
         sectionsCount = 0;
         children.clear();
         gatherChildren(contentView, 0, 0);
+
+        if (M3SectionsHelper.isEnabled()) {
+            for (int i = 0; i < children.size(); i++) {
+                final View child = children.get(i);
+                if (!isSectionView(child)) continue;
+                final float[] radii = M3SectionsHelper.scrollRadii(child,
+                    i > 0 && isSectionView(children.get(i - 1)),
+                    i + 1 < children.size() && isSectionView(children.get(i + 1)));
+                final MarginLayoutParams lp = child.getLayoutParams() instanceof MarginLayoutParams
+                    ? (MarginLayoutParams) child.getLayoutParams() : null;
+                final Integer originalTop = originalTopMargins.get(child);
+                final float topMargin = child.getParent() == contentView ? 0 : originalTop != null ? originalTop : (lp != null ? lp.topMargin : 0);
+                final float left = contentView.getX() + contentView.getPaddingLeft();
+                final float top = contentView.getY() + getChildY(child) - topMargin;
+                final float right = contentView.getX() + contentView.getWidth() - contentView.getPaddingRight();
+                final float bottom = contentView.getY() + getChildY(child) + child.getHeight() + (child.getParent() == contentView || lp == null ? 0 : lp.bottomMargin);
+                putSection(left, top, right, bottom, child.getAlpha(), radii[0], radii[1]);
+            }
+            return;
+        }
 
         View start = null, prev = null;
         for (View child : children) {
@@ -250,14 +305,29 @@ public class SectionsScrollView extends ScrollView implements IBlur3Capture {
         final float top = contentView.getY() + getChildY(from) - fromTopMargin;
         final float right = left + from.getWidth();
         final float bottom = contentView.getY() + getChildY(to) + to.getHeight() + toBottomMargin;
-        if (right <= left || bottom <= top) return;
+        putSection(left, top, right, bottom, from.getAlpha(), sectionRadius, sectionRadius);
+    }
 
+    private void putSection(float left, float top, float right, float bottom, float alpha, float radiusTop, float radiusBottom) {
+        if (right <= left || bottom <= top) return;
         ensureSectionsCapacity();
         sections[sectionsCount++] = left;
         sections[sectionsCount++] = top;
         sections[sectionsCount++] = right;
         sections[sectionsCount++] = bottom;
-        sections[sectionsCount++] = from.getAlpha();
+        sections[sectionsCount++] = alpha;
+        sections[sectionsCount++] = radiusTop;
+        sections[sectionsCount++] = radiusBottom;
+    }
+
+    /** The rows' cards with corners of their own: drawn rounded, the rows are clipped to them. */
+    private void drawRoundedSection(Canvas canvas, int i, Paint paint) {
+        sectionRadii[0] = sectionRadii[1] = sectionRadii[2] = sectionRadii[3] = sections[i + 5];
+        sectionRadii[4] = sectionRadii[5] = sectionRadii[6] = sectionRadii[7] = sections[i + 6];
+        cornerDst.set(sections[i], sections[i + 1], sections[i + 2], sections[i + 3]);
+        sectionPath.rewind();
+        sectionPath.addRoundRect(cornerDst, sectionRadii, android.graphics.Path.Direction.CW);
+        canvas.drawPath(sectionPath, paint);
     }
 
     // bottom paddings of the gathered parents that end with this child (e.g. under LinkActionView buttons)
@@ -318,7 +388,11 @@ public class SectionsScrollView extends ScrollView implements IBlur3Capture {
             if (!captureRect.intersects(
                     sections[i], sections[i + 1], sections[i + 2], sections[i + 3])) continue;
             sectionPaint.setColor(getSectionColor(sections[i + 4]));
-            canvas.drawRect(sections[i], sections[i + 1], sections[i + 2], sections[i + 3], sectionPaint);
+            if (M3SectionsHelper.isEnabled()) {
+                drawRoundedSection(canvas, i, sectionPaint);
+            } else {
+                canvas.drawRect(sections[i], sections[i + 1], sections[i + 2], sections[i + 3], sectionPaint);
+            }
         }
     }
 
@@ -331,7 +405,7 @@ public class SectionsScrollView extends ScrollView implements IBlur3Capture {
         final float sectionRight = Math.max(sectionLeft, Math.min(viewRight, contentView.getX() + contentView.getWidth() - contentView.getPaddingRight()));
 
         collectOpaqueIntervals(viewTop, viewBottom);
-        if (opaqueIntervalsCount == 0 || sectionLeft >= sectionRight) {
+        if (M3SectionsHelper.isEnabled() || opaqueIntervalsCount == 0 || sectionLeft >= sectionRight) {
             canvas.drawRect(viewLeft, viewTop, viewRight, viewBottom, backgroundPaint);
         } else {
             final float firstTop = opaqueIntervals[0];
@@ -473,8 +547,7 @@ public class SectionsScrollView extends ScrollView implements IBlur3Capture {
                 }
                 final int sectionAlpha = Math.round(Color.alpha(sectionColor) * Math.max(0.0f, Math.min(1.0f, sections[i + 4])));
                 sectionPaint.setColor(ColorUtils.setAlphaComponent(sectionColor, sectionAlpha));
-                cornerDst.set(sections[i], sections[i + 1], sections[i + 2], sections[i + 3]);
-                canvas.drawRoundRect(cornerDst, sectionRadius, sectionRadius, sectionPaint);
+                drawRoundedSection(canvas, i, sectionPaint);
             }
 
             canvas.save();
@@ -528,7 +601,8 @@ public class SectionsScrollView extends ScrollView implements IBlur3Capture {
     }
 
     private void drawSectionCorners(Canvas canvas, RectF clipRect) {
-        if (sectionsCount == 0 || sectionRadius <= 0.0f) return;
+        // the rows of Material 3 cards are clipped to them instead
+        if (sectionsCount == 0 || sectionRadius <= 0.0f || M3SectionsHelper.isEnabled()) return;
         ensureCornerBitmap();
         for (int i = 0; i < sectionsCount; i += SECTION_VALUES_COUNT) {
             final float left = sections[i];
@@ -567,6 +641,21 @@ public class SectionsScrollView extends ScrollView implements IBlur3Capture {
         canvas.drawBitmap(cornerBitmap, cornerSrc, cornerDst, bitmapPaint);
     }
 
+    /** Clips a row of a Material 3 card to its corners, in the coordinates of the row's parent. */
+    private void clipChild(Canvas canvas, View parent, View child) {
+        final int index = children.indexOf(child);
+        if (index < 0 || !isSectionView(child)) return;
+        final boolean prev = index > 0 && isSectionView(children.get(index - 1));
+        final boolean next = index + 1 < children.size() && isSectionView(children.get(index + 1));
+        final float[] radii = M3SectionsHelper.scrollRadii(child, prev, next);
+        sectionRadii[0] = sectionRadii[1] = sectionRadii[2] = sectionRadii[3] = radii[0];
+        sectionRadii[4] = sectionRadii[5] = sectionRadii[6] = sectionRadii[7] = radii[1];
+        cornerDst.set(child.getX(), child.getY(), child.getX() + child.getWidth(), child.getY() + child.getHeight());
+        sectionPath.rewind();
+        sectionPath.addRoundRect(cornerDst, sectionRadii, android.graphics.Path.Direction.CW);
+        canvas.clipPath(sectionPath);
+    }
+
     public static class SectionsLinearLayout extends LinearLayout {
         public SectionsLinearLayout(Context context) {
             super(context);
@@ -574,7 +663,23 @@ public class SectionsScrollView extends ScrollView implements IBlur3Capture {
         }
 
         @Override
+        public void setBackgroundColor(int color) {
+            super.setBackgroundColor(M3SectionsHelper.isEnabled() ? Color.TRANSPARENT : color);
+        }
+
+        @Override
         public boolean drawChild(@NonNull Canvas canvas, View child, long drawingTime) {
+            if (M3SectionsHelper.isEnabled()) {
+                for (android.view.ViewParent parent = getParent(); parent != null; parent = parent.getParent()) {
+                    if (parent instanceof SectionsScrollView) {
+                        canvas.save();
+                        ((SectionsScrollView) parent).clipChild(canvas, this, child);
+                        final boolean result = super.drawChild(canvas, child, drawingTime);
+                        canvas.restore();
+                        return result;
+                    }
+                }
+            }
             return super.drawChild(canvas, child, drawingTime);
         }
 

@@ -324,6 +324,28 @@ public class BlurredBackgroundDrawable extends GlassDrawable implements Theme.Co
         return colorProvider;
     }
 
+    /* for LiquidGlassInputGroup, which draws several of them as one union */
+
+    float[] getRadiiInternal() {
+        return boundProps.radii;
+    }
+
+    int getBackgroundColorInternal() {
+        return backgroundColor;
+    }
+
+    int getShadowColorInternal() {
+        return shadowColor;
+    }
+
+    float getShadowRadiusInternal() {
+        return shadowLayerRadius;
+    }
+
+    float getLiquidIndexInternal() {
+        return boundProps.liquidIndex;
+    }
+
     public GlassSource getSource() {
         return source;
     }

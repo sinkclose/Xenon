@@ -398,13 +398,23 @@ public class MainTabsLayout extends AnimatedLinearLayout {
         lastLiquidLensRadius = Float.NaN;
         liquidBackdrop = drawable; // Its factory tracks the panel's position in the content source.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            GlassSource combined = new GlassSource() {
+            // a drawable owner: the lens is recorded into a render node, with the liquid glass effect
+            final class CombinedSource implements GlassSource, org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory.DrawableOwner {
+                @Override public BlurredBackgroundDrawable createDrawable() {
+                    return new BlurredBackgroundDrawable(this);
+                }
+                @Override public void prepareToDraw() {
+                    liquidBackdrop.getSource().prepareToDraw();
+                }
                 @Override public void draw(Canvas canvas, float l, float t, float r, float b) {
                     drawLiquidCapture(canvas, l, t, r, b);
                 }
-            };
-            BlurredBackgroundDrawable lens = new BlurredBackgroundDrawable(combined);
+            }
+            BlurredBackgroundDrawable lens = new CombinedSource().createDrawable();
             lens.setColorProvider(org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl.topPanel(resourcesProvider));
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                lens.setFollowGlassStyleLens();
+            }
             lens.setThickness(dp(10));
             lens.setIntensity(1f);
             liquidLens = lens;

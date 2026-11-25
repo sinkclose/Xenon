@@ -1257,6 +1257,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         @Override
         protected void dispatchDraw(Canvas canvas) {
             glassEngine.invalidate();
+            // Centered title follows the toggle live with a 300ms ease-out,
+            // no re-enter needed.
+            syncCenterTitle(true);
             if (invalidateScrollY && (rightSlidingDialogContainer == null || !rightSlidingDialogContainer.hasFragment()) && progressToActionMode == 0) {
                 invalidateScrollY = false;
                 int firstItemPosition = hasHiddenArchive() && viewPages[0].dialogsType == DIALOGS_TYPE_DEFAULT ? 1 : 0;
@@ -2870,7 +2873,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         return 0;
                     }
                     movingView = (DialogCell) viewHolder.itemView;
-                    ThemeBind.backgroundColor(movingView, Theme.key_windowBackgroundWhite, DialogsActivity.this.getResourceProvider());
+                    ThemeBind.backgroundColor(movingView, Theme.key_windowBackgroundGray, DialogsActivity.this.getResourceProvider());
                     swipeFolderBack = false;
                     return makeMovementFlags(ItemTouchHelper.UP | ItemTouchHelper.DOWN, 0);
                 } else {
@@ -3140,7 +3143,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     public DialogsActivity(Bundle args) {
         super(args);
 
-        iBlur3SourceColor = glassEngine.createThemedColorSource(() -> getThemedColor(Theme.key_windowBackgroundWhite));
+        iBlur3SourceColor = glassEngine.createThemedColorSource(() -> getThemedColor(Theme.key_windowBackgroundGray));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             scrollableViewNoiseSuppressor = new DownscaleScrollableNoiseSuppressor();
 
@@ -3915,7 +3918,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             } else {
                 actionBar.setTitle(getString(R.string.SelectChat));
             }
-            ThemeBind.backgroundColor(actionBar, Theme.key_windowBackgroundWhite, getResourceProvider());
+            ThemeBind.backgroundColor(actionBar, Theme.key_windowBackgroundGray, getResourceProvider());
         } else {
             if (searchString != null || folderId != 0 || communityId != 0) {
                 actionBar.setBackButtonDrawable(backDrawable = new BackDrawable(false));
@@ -5880,7 +5883,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             actionBar.addView(avatarContainer, 0, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT, Gravity.TOP | Gravity.LEFT, 0, 0, 40, 0));
             floatingButton3.imageView.setVisibility(View.INVISIBLE);
             actionBar.setOccupyStatusBar(false);
-            ThemeBind.backgroundColor(actionBar, Theme.key_windowBackgroundWhite, getResourceProvider());
+            ThemeBind.backgroundColor(actionBar, Theme.key_windowBackgroundGray, getResourceProvider());
             if (fragmentContextViewWrapper != null) {
                 AndroidUtilities.removeFromParent(fragmentContextViewWrapper);
             }
@@ -8266,7 +8269,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             setDialogsListFrozen(true);
             viewPages[0].listView.setVerticalScrollBarEnabled(false);
             if (searchViewPager != null) {
-                ThemeBind.backgroundColor(searchViewPager, Theme.key_windowBackgroundWhite, getResourceProvider());
+                ThemeBind.backgroundColor(searchViewPager, Theme.key_windowBackgroundGray, getResourceProvider());
             }
             searchAnimator = new AnimatorSet();
             ArrayList<Animator> animators = new ArrayList<>();
@@ -14797,7 +14800,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         if (BitwiseUtils.hasFlag(flags, GlassEngine.FLAG_INVALIDATED_POSITIONS)) {
             final int additionalList = dp(48);
             final int mainTabBottom = fragmentView.getMeasuredHeight() - navigationBarHeight - dp(DialogsActivity.MAIN_TABS_MARGIN);
-            final int mainTabTop = mainTabBottom - dp(DialogsActivity.MAIN_TABS_HEIGHT);
+            final int mainTabTop = mainTabBottom - dp(DialogsActivity.MAIN_TABS_HEIGHT) - getFilterTabsHeight();
 
             final int actionBarHeight = actionBar.getMeasuredHeight()
                 + getInlineSearchHeight()
@@ -14823,6 +14826,17 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     fragmentView.getMeasuredWidth(), fragmentView.getMeasuredHeight());
 
                 hasBottomBlur = true;
+            }
+
+            if (isIosBottomSearch() && (searching || iosBottomSearchInset > navigationBarHeight)) {
+                int bottom = fragmentView.getMeasuredHeight() - Math.max(navigationBarHeight, iosBottomSearchInset);
+                iBlur3PositionMainTabs.set(0, bottom - dp(72 + SEARCH_TABS_HEIGHT + 12), fragmentView.getMeasuredWidth(), bottom);
+                hasBottomBlur = true;
+            }
+
+            if (hasBottomBlur) {
+                // Both frosted and refracted glass need uncropped pixels for the backing blur.
+                iBlur3PositionMainTabs.inset(0, -dp(48));
             }
 
             scrollableViewNoiseSuppressor.setupRenderNodes(iBlur3Positions, hasBottomBlur ? 2 : 1);
@@ -15099,7 +15113,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     public void onThemeColorsChanged() {
         try {
             super.onThemeColorsChanged();
-            actionBarDefaultPaint.setColor(getThemedColor(Theme.key_windowBackgroundWhite));
+            actionBarDefaultPaint.setColor(getThemedColor(Theme.key_windowBackgroundGray));
             cellDelegateThemeColors();
             updateExtraThemeColors();
         } catch (Exception e) {
@@ -15126,7 +15140,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     actionBar.setSearchTextColor(getThemedColor(Theme.key_actionBarDefaultArchivedSearchPlaceholder), true);
                 }
                 if (actionBar.isActionModeShowed()) {
-                    actionBar.setActionModeOverrideColor(getThemedColor(Theme.key_windowBackgroundWhite));
+                    actionBar.setActionModeOverrideColor(getThemedColor(Theme.key_windowBackgroundGray));
                 }
                 // items colors are lerped by the search progress: re-apply them over the plain key bindings
                 updateSearchActionBarItemsColors();

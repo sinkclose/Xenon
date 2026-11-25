@@ -1419,6 +1419,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 // the capture records this view's drawing, not its node
                 glassEngine.invalidate();
             }
+            if (isRedesignedProfileEnabled()) {
+                updateBackgroundPaint();
+                return;
+            }
             final int height = ActionBar.getCurrentActionBarHeight() + (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0);
             final float v = height + extraHeight + searchTransitionOffset;
 
@@ -3559,7 +3563,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
             @Override
             protected void dispatchDraw(Canvas canvas) {
-                if (headerBlurFactor > 0) {
+                updateProfileAvatarColors();
+                drawRedesignedProfileBackdrop(canvas);
+                if (headerBlurFactor > 0 && !isRedesignedProfileEnabled()) {
                     // the colored header fades out: the rows go under the header, on the screen's background
                     grayPaint.setColor(getThemedColor(Theme.key_windowBackgroundGray));
                     canvas.drawRect(0, 0, getMeasuredWidth(), getHeaderBarHeight(), grayPaint);
@@ -4456,7 +4462,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         listView.applyPaddingToSections = false;
         // the rows above the list's top go under the header's blur, with their cards
         listView.setSectionsOverscanTop(AndroidUtilities.statusBarHeight + ActionBar.getCurrentActionBarHeight());
-        ThemeBind.backgroundColor(listView, Theme.key_windowBackgroundGray, resourcesProvider);
+        ThemeBind.backgroundColor(listView, isRedesignedProfileEnabled() ? ThemeBind.alpha(Theme.key_windowBackgroundGray, 0) : ThemeBind.of(Theme.key_windowBackgroundGray), resourcesProvider);
         listView.setVerticalScrollBarEnabled(false);
         final IBlur3Capture listViewCapture = new ViewGroupPartRenderer(listView, (ViewGroup) fragmentView, (canvas, child, drawingTime) -> {
             if (child == sharedMediaLayout) {
@@ -5819,7 +5825,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         nameTextView.setPadding(0, AndroidUtilities.dp(6), 0, AndroidUtilities.dp(4));
         nameTextView.setTextSizePx(dp(17.5f));
         nameTextView.setGravity(Gravity.LEFT);
-        nameTextView.setTypeface(AndroidUtilities.bold());
+        nameTextView.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(700, false));
         nameTextView.setLeftDrawableTopPadding(-AndroidUtilities.dp(1.3f));
         nameTextView.setPivotX(0);
         nameTextView.setPivotY(0);
@@ -6245,6 +6251,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         // only the images of the header: its texts (the name, the status) and buttons are over the glass, not under it
         iBlur3Capture = (c, p) -> {
             final ViewGroup root = (ViewGroup) fragmentView;
+            if (isRedesignedProfileEnabled()) {
+                profileBackdrop.drawCached(c);
+            }
             // over the media only they are under the glass: the rows above them would show through the pages' overscan
             final float mediaProgress = sharedMediaLayout != null && sharedMediaLayout.getParent() == listView ? mediaHeaderAnimationProgress : 0f;
             if (mediaProgress < 1f) {
@@ -12415,6 +12424,21 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 } else {
                     nameTextView.setLeftDrawableOutside(false);
                 }
+                // Use getDialogId() — the dialogId field stays 0 for normal (non-encrypted) peers.
+                long badgeEntityId = getDialogId();
+                CustomBadgeController.BadgeInfo badgeInfo =
+                        CustomBadgeController.getInstance().getBadgeInfo(badgeEntityId);
+                if (badgeInfo != null) {
+                    nameTextView.setRightDrawableOutside(true);
+                    Drawable badge = CustomBadgeController.getInstance()
+                            .createBadge(badgeEntityId, currentAccount, nameTextView, true, resourcesProvider);
+                    String localizedDesc = badgeInfo.getLocalizedDesc();
+                    nameTextView.setRightDrawable2(badge);
+                    nameTextView.setRightDrawable2OnClick(v ->
+                            BulletinFactory.of(ProfileActivity.this)
+                                    .createSimpleBulletin(R.raw.chats_infotip, localizedDesc).show());
+                }
+                // When no custom badge: keep scam/verified already set above (do not null rightDrawable2).
                 nameTextView.setLeftDrawable(leftIcon);
                 if (rightIconIsStatus || rightIconIsPremium) {
                     nameTextView.setRightDrawableOutside(true);
@@ -12707,6 +12731,21 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 } else {
                     nameTextView.setLeftDrawable(null);
                 }
+                // dialogId field is 0 for channel/group profiles; getDialogId() returns -chatId.
+                long badgeEntityId = getDialogId();
+                CustomBadgeController.BadgeInfo chatBadgeInfo =
+                        CustomBadgeController.getInstance().getBadgeInfo(badgeEntityId);
+                if (chatBadgeInfo != null) {
+                    nameTextView.setRightDrawableOutside(true);
+                    Drawable badge = CustomBadgeController.getInstance()
+                            .createBadge(badgeEntityId, currentAccount, nameTextView, true, resourcesProvider);
+                    nameTextView.setRightDrawable2(badge);
+                    String localizedDesc = chatBadgeInfo.getLocalizedDesc();
+                    nameTextView.setRightDrawable2OnClick(v ->
+                            BulletinFactory.of(ProfileActivity.this)
+                                    .createSimpleBulletin(R.raw.chats_infotip, localizedDesc).show());
+                }
+                // When no custom badge: keep scam/verified/mute already set above.
                 profileStatusText = appendCommunityHiddenRow(profileStatusString);
                 photoDescriptionText = null;
                 updateOnlineText(true);

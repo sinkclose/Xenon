@@ -146,6 +146,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             iBlur3SourceTabGlass = createTabSource(false);
             iBlur3SourceTabFrosted = createTabSource(true);
+            blur3_updateTabsBlur();
         } else {
             iBlur3SourceTabGlass = null;
             iBlur3SourceTabFrosted = null;
@@ -173,6 +174,9 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
             public void renderNodeCalculateHash(IBlur3Hash hash) {
                 hash.add(getThemedColor(Theme.key_windowBackgroundWhite));
                 hash.add(SharedConfig.chatBlurEnabled());
+                hash.add(useMaterialTabsBlur());
+                hash.add(useFixedMaterialTabsBlur());
+                hash.add(NekoConfig.blurStrength);
 
                 for (int a = 0, N = fragmentsArr.size(); a < N; a++) {
                     final FragmentState state = fragmentsArr.valueAt(a);
@@ -225,7 +229,11 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
                         if (pageSource != null) {
                             canvas.save();
                             canvas.translate(fragmentPosition.left, fragmentPosition.top);
-                            pageSource.draw(canvas, 0, 0, width, height);
+                            if (useMaterialTabsBlur()) {
+                                pageSource.drawUnblurred(canvas, 0, 0, width, height);
+                            } else {
+                                pageSource.draw(canvas, 0, 0, width, height);
+                            }
                             canvas.restore();
                         }
                     }
@@ -1638,10 +1646,26 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         }
     }
 
+    private void blur3_updateTabsBlur() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || iBlur3SourceTabGlass == null) {
+            return;
+        }
+        // Material navigation captures the sharp scene and owns its blur pass:
+        // glass keeps 24dp, blur-only follows the client strength, including zero.
+        // Other bottom bars continue to use their delegates' filtered sources.
+        final float radius = useMaterialTabsBlur()
+                ? useFixedMaterialTabsBlur() ? dp(24) : AndroidUtilities.dpf2(NekoConfig.blurStrength * 4f / 3f)
+                : 0f;
+        iBlur3SourceTabGlass.setPlainBlur(radius);
+        iBlur3SourceTabFrosted.setPlainBlur(radius);
+    }
+
     private void blur3_invalidateBlur() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || iBlur3SourceTabGlass == null || fragmentView == null) {
             return;
         }
+
+        blur3_updateTabsBlur();
 
         final int width = fragmentView.getMeasuredWidth();
         final int height = fragmentView.getMeasuredHeight();
