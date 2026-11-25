@@ -907,9 +907,14 @@ public class ActionBarMenuItem extends FrameLayout {
         return subMenuOverlayProvider != null ? subMenuOverlayProvider.run() : null;
     }
 
+    /** The iOS and Material 3 popups are their own windows, the overlay of the screen would draw its plain menu instead. */
+    static boolean overlayMenusDisabled() {
+        return zxc.iconic.xenon.NekoConfig.iosPopups || zxc.iconic.xenon.NekoConfig.material3Popups;
+    }
+
     @Nullable
     MenuOverlayHost getSubMenuOverlayHost() {
-        return subMenuOverlayProvider != null && parentMenu != null ? parentMenu.parentActionBar : null;
+        return subMenuOverlayProvider != null && parentMenu != null && !overlayMenusDisabled() ? parentMenu.parentActionBar : null;
     }
 
     boolean canOpenSubMenuOverlay() {

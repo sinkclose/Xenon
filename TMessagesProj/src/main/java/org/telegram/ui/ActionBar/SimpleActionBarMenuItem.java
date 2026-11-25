@@ -96,7 +96,7 @@ public class SimpleActionBarMenuItem extends ActionBarMenuItem {
     @Nullable
     @Override
     MenuOverlayHost getSubMenuOverlayHost() {
-        return parentMenu.parentBar;
+        return overlayMenusDisabled() ? null : parentMenu.parentBar;
     }
 
     @Override
