@@ -624,6 +624,7 @@
     <string name="PredictiveBackIntensity">Интенсивность predictive back</string>
     <string name="OpenAnimationStyle">Стиль анимации открытия</string>
     <string name="CloseAnimationStyle">Стиль анимации закрытия</string>
+    <string name="PredictiveBackDecelerate">Замедление жеста «Назад»</string>
     <string name="PredictiveBackAnimationStyle">Стиль predictive back анимации</string>
     <string name="AnimationStyleIos">iOS</string>
     <string name="AnimationStyleAosp">AOSP</string>

@@ -127,9 +127,13 @@ public final class IosPredictiveBack {
                 }
             }
             float p = clamp(rawP, 0f, 1f);
+            if (NekoConfig.predictiveBackDecelerate) {
+                p = clamp((p - LAZY_START) / (1f - LAZY_START), 0f, 1f);
+                p = usesGuidelineFadeThrough() ? PredictiveBackProgress.FULL_SCREEN.getInterpolation(p)
+                        : PredictiveBackProgress.interpolate(p);
+            }
             float intensity = Math.max(NekoConfig.predictiveBackIntensity / 10f, 0.001f);
-            float effectiveP = clamp(p * intensity, 0f, 1f);
-            applyFrame(effectiveP);
+            applyFrame(clamp(p * intensity, 0f, 1f));
         }
 
         @Override
@@ -137,6 +141,10 @@ public final class IosPredictiveBack {
             invoked = false;
             if (!attached) {
                 undoStockPrep();
+                return;
+            }
+            if (progress == 0f) {
+                finalizeStock(true);
                 return;
             }
             runFinishAnim(true);
@@ -191,6 +199,10 @@ public final class IosPredictiveBack {
             }
         }
 
+        private boolean usesGuidelineFadeThrough() {
+            return NekoConfig.predictiveBackDecelerate && style == NekoConfig.ANIMATION_STYLE_FADE;
+        }
+
         private void applyFrame(float p) {
             ViewGroup cv = layout.containerView;
             ViewGroup cvb = layout.containerViewBack;
@@ -202,7 +214,16 @@ public final class IosPredictiveBack {
                 return;
             }
             progress = p;
-            if (style == NekoConfig.ANIMATION_STYLE_IOS || style == NekoConfig.ANIMATION_STYLE_SLIDE) {
+            if (usesGuidelineFadeThrough()) {
+                cv.setTranslationX(0f);
+                cvb.setTranslationX(0f);
+                cv.setScaleX(1f - .1f * p);
+                cv.setScaleY(cv.getScaleX());
+                cvb.setScaleX(1.1f - .1f * p);
+                cvb.setScaleY(cvb.getScaleX());
+                cv.setAlpha(PredictiveBackProgress.exitAlpha(p));
+                cvb.setAlpha(PredictiveBackProgress.enterAlpha(p));
+            } else if (style == NekoConfig.ANIMATION_STYLE_IOS || style == NekoConfig.ANIMATION_STYLE_SLIDE) {
                 cv.setTranslationX(w * p);
                 float distance = style == NekoConfig.ANIMATION_STYLE_SLIDE ? w : AndroidUtilities.dp(PARALLAX_DP);
                 cvb.setTranslationX(-distance * (1f - p));

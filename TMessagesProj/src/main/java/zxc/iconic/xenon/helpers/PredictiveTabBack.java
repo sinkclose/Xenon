@@ -25,6 +25,7 @@ public final class PredictiveTabBack implements OnBackAnimationCallback {
 
     private final OnBackAnimationCallback fallback;
     private final Supplier<Target> destination;
+    private final PredictiveBackReturn backCallback = new PredictiveBackReturn(this);
     private Target target;
     private ValueAnimator settle;
     private float progress;
@@ -36,6 +37,8 @@ public final class PredictiveTabBack implements OnBackAnimationCallback {
     }
 
     public boolean isRunning() { return target != null; }
+
+    public OnBackAnimationCallback backCallback() { return backCallback; }
 
     @Override public void onBackStarted(BackEvent event) {
         if (target != null) complete(settle != null && committing);
@@ -52,7 +55,8 @@ public final class PredictiveTabBack implements OnBackAnimationCallback {
         if (target == null) {
             fallback.onBackProgressed(event);
         } else if (settle == null) {
-            progress = gestureProgress(event.getProgress(), zxc.iconic.xenon.NekoConfig.predictiveBackIntensity);
+            float previewProgress = PredictiveBackProgress.interpolate(event.getProgress());
+            progress = gestureProgress(previewProgress, zxc.iconic.xenon.NekoConfig.predictiveBackIntensity);
             target.update(progress);
         }
     }
@@ -102,7 +106,10 @@ public final class PredictiveTabBack implements OnBackAnimationCallback {
         }
     }
 
-    public void cancel() { complete(false); }
+    public void cancel() {
+        backCallback.reset();
+        complete(false);
+    }
 
     public static float gestureProgress(float raw, int intensity) {
         return Math.max(0, Math.min(1, raw * Math.max(0, intensity) / 10f));

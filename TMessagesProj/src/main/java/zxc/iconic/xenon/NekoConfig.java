@@ -279,6 +279,7 @@ public class NekoConfig {
     public static int closeAnimationStyle = ANIMATION_STYLE_DEFAULT;
     public static int predictiveBackAnimationStyle = ANIMATION_STYLE_DEFAULT;
     public static int predictiveBackIntensity = 0;
+    public static boolean predictiveBackDecelerate = false;
     public static int fadeDuration = DEFAULT_FADE_DURATION;
     public static boolean removeChatDelay = false;
     public static boolean showOnlineDotsInChat = false;
@@ -628,6 +629,7 @@ public class NekoConfig {
             closeAnimationStyle = preferences.getInt("closeAnimationStyle", ANIMATION_STYLE_DEFAULT);
             predictiveBackAnimationStyle = preferences.getInt("predictiveBackAnimationStyle", ANIMATION_STYLE_DEFAULT);
             predictiveBackIntensity = preferences.getInt("predictiveBackIntensity", 0);
+            predictiveBackDecelerate = preferences.getBoolean("predictiveBackDecelerate", false);
             slideDuration = preferences.getInt("slideDuration", DEFAULT_SLIDE_DURATION);
             slideEase = preferences.getString("slideEase", DEFAULT_SLIDE_EASE);
             fadeEase = preferences.getString("fadeEase", DEFAULT_FADE_EASE);
@@ -1310,6 +1312,12 @@ public class NekoConfig {
         SharedPreferences.Editor editor = preferences.edit();
         editor.putInt("predictiveBackAnimationStyle", predictiveBackAnimationStyle);
         editor.apply();
+    }
+
+    public static void setPredictiveBackDecelerate(boolean enabled) {
+        predictiveBackDecelerate = enabled;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        preferences.edit().putBoolean("predictiveBackDecelerate", enabled).apply();
     }
 
     public static void setPredictiveBackIntensity(int value) {

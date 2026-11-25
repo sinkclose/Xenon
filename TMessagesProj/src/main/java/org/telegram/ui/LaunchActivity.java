@@ -998,7 +998,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 tabBackCallback = new zxc.iconic.xenon.helpers.PredictiveTabBack(
                         (OnBackAnimationCallback) callback, this::getPredictiveTabBackTarget);
             }
-            callback = tabBackCallback;
+            callback = tabBackCallback.backCallback();
         }
         if (registered) {
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, callback);

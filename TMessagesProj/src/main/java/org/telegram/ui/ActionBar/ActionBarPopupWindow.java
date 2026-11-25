@@ -101,7 +101,7 @@ public class ActionBarPopupWindow extends PopupWindow {
                         @Override public void onBackInvoked() { dismiss(); }
                     }, this::getPredictiveBackTarget);
             predictiveBackDispatcher.registerOnBackInvokedCallback(
-                    android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, predictiveBackCallback);
+                    android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, predictiveBackCallback.backCallback());
         });
     }
 
@@ -112,7 +112,7 @@ public class ActionBarPopupWindow extends PopupWindow {
         zxc.iconic.xenon.helpers.PredictiveTabBack callback = predictiveBackCallback;
         predictiveBackCallback = null;
         if (predictiveBackDispatcher != null && callback != null) {
-            predictiveBackDispatcher.unregisterOnBackInvokedCallback(callback);
+            predictiveBackDispatcher.unregisterOnBackInvokedCallback(callback.backCallback());
         }
         predictiveBackDispatcher = null;
         if (callback != null) callback.cancel();
