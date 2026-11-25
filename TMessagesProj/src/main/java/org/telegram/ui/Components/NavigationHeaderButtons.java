@@ -47,6 +47,10 @@ public final class NavigationHeaderButtons {
     private final BlurredBackgroundDrawableViewFactory factory = new BlurredBackgroundDrawableViewFactory(source);
     private final ArrayList<ActionBar> managed = new ArrayList<>();
     private final ArrayList<BaseFragment> pages = new ArrayList<>();
+    private final ArrayList<View> leadingActions = new ArrayList<>();
+    private final ArrayList<View> trailingActions = new ArrayList<>();
+    private static final float FOREGROUND_BLUR_STEP_DP = .5f;
+    private final RenderEffect[] foregroundBlurs = new RenderEffect[21];
     private final Group[] groups = new Group[2];
     private final BlurredBackgroundDrawable[] members = new BlurredBackgroundDrawable[2];
     private final RectF[] bounds = {new RectF(), new RectF()};
@@ -73,9 +77,12 @@ public final class NavigationHeaderButtons {
         final Matrix barTransform = new Matrix();
         final float[] transformValues = new float[9];
         final RectF titleBounds = new RectF();
+        final RectF foregroundBounds = new RectF();
+        final RectF childBounds = new RectF();
         final HeaderButtonSpring visibility = new HeaderButtonSpring(0);
         final HeaderButtonPulse pulse = new HeaderButtonPulse();
-        float x, y, lastBlur = -1;
+        float x, y;
+        int blurStep = -1;
         boolean initialized;
         BlurredBackgroundDrawable glass;
 
@@ -97,11 +104,23 @@ public final class NavigationHeaderButtons {
             y = layoutCoordinate(bar, false);
             barTransform.set(bar.getMatrix());
             bar.getChatNavigationTitleBounds(titleBounds);
-            int pad = AndroidUtilities.dp(32);
-            pixels.setPosition(-pad, -pad, bar.getWidth() + pad, bar.getHeight() + pad);
+            bar.getChatNavigationForegroundBounds(foregroundBounds, childBounds);
+            if (foregroundBounds.isEmpty()) {
+                pixels.discardDisplayList();
+            } else {
+                int pad = AndroidUtilities.dp(24);
+                pixels.setPosition((int) Math.floor(foregroundBounds.left) - pad,
+                        (int) Math.floor(foregroundBounds.top) - pad,
+                        (int) Math.ceil(foregroundBounds.right) + pad,
+                        (int) Math.ceil(foregroundBounds.bottom) + pad);
+                recordForeground();
+            }
+        }
+
+        private void recordForeground() {
             Canvas canvas = pixels.beginRecording();
             try {
-                canvas.translate(pad, pad);
+                canvas.translate(-pixels.getLeft(), -pixels.getTop());
                 bar.drawChatNavigationTitle(canvas);
             } finally {
                 pixels.endRecording();
@@ -109,12 +128,12 @@ public final class NavigationHeaderButtons {
         }
 
         void draw(Canvas canvas) {
-            if (visibility.value <= .001f || !pixels.hasDisplayList()) return;
+            if (visibility.value <= .001f) return;
             float progress = clamp(visibility.value);
-            float blur = HeaderButtonGroupMotion.foregroundBlur(visibility.value, AndroidUtilities.density, animate);
-            if (lastBlur != blur) {
-                pixels.setRenderEffect(blur > .01f ? RenderEffect.createBlurEffect(blur, blur, Shader.TileMode.DECAL) : null);
-                lastBlur = blur;
+            int step = foregroundBlurStep(visibility.value);
+            if (blurStep != step) {
+                pixels.setRenderEffect(foregroundBlurEffect(step));
+                blurStep = step;
             }
             surface.setAlpha(progress);
             pixels.setAlpha(progress * progress);
@@ -134,7 +153,9 @@ public final class NavigationHeaderButtons {
             float barScaleX = transformValues[Matrix.MSCALE_X], barScaleY = transformValues[Matrix.MSCALE_Y];
             float sourceX = x + transformValues[Matrix.MTRANS_X] + barScaleX * (1f - glassScaleX) * centerX;
             float sourceY = y + transformValues[Matrix.MTRANS_Y] + barScaleY * (1f - glassScaleY) * centerY;
-            surface.setPosition(pixels.getLeft(), pixels.getTop(), pixels.getRight(), pixels.getBottom());
+            int guard = AndroidUtilities.dp(24);
+            surface.setPosition((int) Math.floor(titleBounds.left) - guard, (int) Math.floor(titleBounds.top) - guard,
+                    (int) Math.ceil(titleBounds.right) + guard, (int) Math.ceil(titleBounds.bottom) + guard);
             Canvas background = surface.beginRecording();
             try {
                 background.translate(-surface.getLeft(), -surface.getTop());
@@ -147,7 +168,7 @@ public final class NavigationHeaderButtons {
             canvas.restoreToCount(glassSave);
             float foregroundScale = HeaderButtonGroupMotion.foregroundScale(visibility.value, animate);
             canvas.scale(shellScaleX * foregroundScale, shellScaleY * foregroundScale, centerX, centerY);
-            canvas.drawRenderNode(pixels);
+            if (pixels.hasDisplayList()) canvas.drawRenderNode(pixels);
             canvas.restoreToCount(save);
         }
 
@@ -184,9 +205,12 @@ public final class NavigationHeaderButtons {
             record();
             if (!pixels.hasDisplayList()) return;
             float p = motion.visibility.value;
-            float blur = Math.max(popupBlur, HeaderButtonGroupMotion.foregroundBlur(p, AndroidUtilities.density, animate));
+            int step = foregroundBlurStep(p);
+            float blur = Math.max(popupBlur, AndroidUtilities.dpf2(step * FOREGROUND_BLUR_STEP_DP));
             if (lastBlur != blur) {
-                pixels.setRenderEffect(blur > .01f ? RenderEffect.createBlurEffect(blur, blur, Shader.TileMode.DECAL) : null);
+                RenderEffect blurEffect = popupBlur == blur && popupBlur > .01f
+                        ? RenderEffect.createBlurEffect(blur, blur, Shader.TileMode.DECAL) : foregroundBlurEffect(step);
+                pixels.setRenderEffect(blurEffect);
                 lastBlur = blur;
             }
             pixels.setAlpha(groupAlpha * clamp(p));
@@ -405,6 +429,19 @@ public final class NavigationHeaderButtons {
     public static boolean modeEnabled() {
         return NekoConfig.fadeViewOtherActivities() && !NekoConfig.materialActivityHeaders;
     }
+    private int foregroundBlurStep(float visibility) {
+        return Math.round(HeaderButtonGroupMotion.foregroundBlur(visibility, 1f, animate) / FOREGROUND_BLUR_STEP_DP);
+    }
+
+    private RenderEffect foregroundBlurEffect(int step) {
+        if (step == 0) return null;
+        if (foregroundBlurs[step] == null) {
+            float radius = AndroidUtilities.dpf2(step * FOREGROUND_BLUR_STEP_DP);
+            foregroundBlurs[step] = RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.DECAL);
+        }
+        return foregroundBlurs[step];
+    }
+
     private static float clamp(float x) { return Math.max(0, Math.min(1, x)); }
 
     private boolean eligible(ActionBar bar) {
@@ -471,16 +508,17 @@ public final class NavigationHeaderButtons {
         ActionBar bar = fragment == null ? null : fragment.getActionBar();
         currentBar = eligible(bar) ? bar : null;
         nativeChatControls = bar != null && bar.isChatHeader() && bar.isShown() && currentBar == null;
-        ArrayList<View> leading = new ArrayList<>(), trailing = new ArrayList<>();
+        leadingActions.clear();
+        trailingActions.clear();
         if (currentBar != null && currentBar.getWidth() > 0) {
             register(currentBar);
             View back = currentBar.getBackButton();
-            if (visible(back) && ((android.widget.ImageView) back).getDrawable() != null) leading.add(back);
+            if (visible(back) && ((android.widget.ImageView) back).getDrawable() != null) leadingActions.add(back);
             ActionBarMenu menu = currentBar.createMenu();
             if (menu.getVisibility() == View.VISIBLE) {
                 for (int i = 0; i < menu.getChildCount(); i++) {
                     View child = menu.getChildAt(i);
-                    if (child instanceof ActionBarMenuItem && visible(child)) trailing.add(child);
+                    if (child instanceof ActionBarMenuItem && visible(child)) trailingActions.add(child);
                 }
             }
             float top = layoutCoordinate(currentBar, false);
@@ -488,14 +526,14 @@ public final class NavigationHeaderButtons {
                     + (ActionBar.getCurrentActionBarHeight() - AndroidUtilities.dp(44)) / 2f;
             groups[0].y = groups[1].y = y;
             if (currentBar.isChatHeader()) {
-                trailing.sort((a, b) -> Float.compare(actionCenter(a, currentBar, true), actionCenter(b, currentBar, true)));
+                trailingActions.sort((a, b) -> Float.compare(actionCenter(a, currentBar, true), actionCenter(b, currentBar, true)));
                 top += currentBar.getTranslationY() - AndroidUtilities.dp(22);
-                if (!leading.isEmpty()) groups[0].y = top + actionCenter(leading.get(0), currentBar, false);
-                if (!trailing.isEmpty()) groups[1].y = top + actionCenter(trailing.get(trailing.size() - 1), currentBar, false);
+                if (!leadingActions.isEmpty()) groups[0].y = top + actionCenter(leadingActions.get(0), currentBar, false);
+                if (!trailingActions.isEmpty()) groups[1].y = top + actionCenter(trailingActions.get(trailingActions.size() - 1), currentBar, false);
             }
         }
-        groups[0].retarget(leading, currentBar);
-        groups[1].retarget(trailing, currentBar);
+        groups[0].retarget(leadingActions, currentBar);
+        groups[1].retarget(trailingActions, currentBar);
         long now = SystemClock.uptimeMillis();
         frameDelta = lastFrame == 0 ? 0 : Math.min(1, (now - lastFrame) / 1000f);
         lastFrame = now;
@@ -653,6 +691,8 @@ public final class NavigationHeaderButtons {
             bar.setDialogsNavigationTitleAlpha(1f);
         }
         managed.clear();
+        leadingActions.clear();
+        trailingActions.clear();
         currentBar = null;
         activeChatTitle = null;
         dialogsTitleAlpha = 1f;
