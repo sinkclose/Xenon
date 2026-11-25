@@ -5,6 +5,9 @@ import android.graphics.RecordingCanvas;
 import android.graphics.RectF;
 import android.graphics.RenderEffect;
 import android.graphics.RenderNode;
+import android.graphics.RuntimeShader;
+import org.telegram.messenger.FileLog;
+import org.telegram.ui.Components.blur3.GlassShaderCache;
 import android.graphics.Shader;
 import android.os.Build;
 
@@ -216,6 +219,230 @@ public final class GlassSourceRenderNode implements GlassSource, BlurredBackgrou
             capture.drawDownsampled(canvas, boundsRelativeRoot, targetDownsample, targetOriginX, targetOriginY);
         }
     }
+
+
+    // ---- Xenon extensions ----
+    private static final ThreadLocal<Canvas> unblurredCanvas = new ThreadLocal<>();
+    private float pixelationScale = 1f;
+    private float lastBlurRadius = -1f;
+    private RenderEffect lastBlurEffect;
+    private boolean glassBlurEnabled;
+    private float standardGlassBlurRadius;
+    private RenderEffect standardGlassBlurEffect;
+
+    public static boolean isUnblurredCanvas(Canvas canvas) {
+        return canvas == unblurredCanvas.get();
+    }
+
+    @Override
+    public void drawUnblurred(Canvas canvas, float left, float top, float right, float bottom) {
+        Canvas previous = unblurredCanvas.get();
+        unblurredCanvas.set(canvas);
+        try {
+            draw(canvas, left, top, right, bottom);
+        } finally {
+            if (previous == null) unblurredCanvas.remove();
+            else unblurredCanvas.set(previous);
+        }
+    }
+
+    public void setPixelation(float scale) {
+        this.pixelationScale = Math.max(1f, scale);
+    }
+
+    @Override
+    public void prepareToDraw() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && glassBlurEnabled) syncGlassBlur();
+    }
+
+    /** Companion glass/frosted sources shared a wallpaper layer in the old pipeline; the new engine captures it itself. */
+    public void shareWallpaperWith(GlassSourceRenderNode owner) {
+    }
+
+    public void setWallpaperSize(int width, int height) {
+    }
+
+    public void invalidateWallpaper() {
+        invalidateDisplayListForDrawables();
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.S)
+    public void setPlainBlur(float radius) {
+        setPlainBlur(radius, null);
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.S)
+    public void setPlainBlur(float radius, RenderEffect effect) {
+        glassBlurEnabled = false;
+        applyBlur(radius, effect);
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.S)
+    public void setGlassBlur(float standardRadius) {
+        setGlassBlur(standardRadius, null);
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.S)
+    public void setGlassBlur(float standardRadius, RenderEffect standardEffect) {
+        glassBlurEnabled = true;
+        standardGlassBlurRadius = standardRadius;
+        standardGlassBlurEffect = standardEffect;
+        syncGlassBlur();
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.S)
+    private void syncGlassBlur() {
+        if (!org.telegram.messenger.SharedConfig.chatBlurEnabled()) {
+            applyBlur(0f, null);
+            return;
+        }
+        if (org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS)
+                && zxc.iconic.xenon.NekoConfig.isAdvancedGlassEnabled()) {
+            applyBlur(org.telegram.messenger.AndroidUtilities.dpf2(zxc.iconic.xenon.NekoConfig.getGlassBlurRadiusDp()), null);
+        } else {
+            applyBlur(standardGlassBlurRadius, standardGlassBlurEffect);
+        }
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.S)
+    private void applyBlur(float radius, RenderEffect effect) {
+        if (lastBlurRadius == radius && lastBlurEffect == effect) return;
+        progressiveEffectApplied = false;
+        lastBlurRadius = radius;
+        lastBlurEffect = effect;
+        RenderEffect result = radius > 0 ? RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP) : null;
+        if (effect != null) {
+            result = result != null ? RenderEffect.createChainEffect(result, effect) : effect;
+        }
+        renderNode.setRenderEffect(result);
+    }
+
+    private RuntimeShader progressiveShader;
+    private RuntimeShader progressiveVerticalShader;
+    private RenderEffect progressiveEffect;
+    private boolean progressiveEffectApplied;
+    private boolean progressiveShaderFailed;
+    private int progressiveShaderSamples = -1;
+    private float progressiveMaxRadius = -1f;
+    private int progressiveWidth = -1;
+    private int progressiveHeight = -1;
+    private float progressiveFadeZoneTopFraction = -1f;
+    private float progressiveFadeZoneBottomFraction = -1f;
+    private int progressiveSamples = -1;
+    private Runnable onProgressiveBlurReadyListener;
+    private final Runnable onProgressiveShadersReady = () -> {
+        progressiveEffectApplied = false;
+        if (onProgressiveBlurReadyListener != null) onProgressiveBlurReadyListener.run();
+    };
+
+    public void setOnProgressiveBlurReadyListener(Runnable listener) {
+        onProgressiveBlurReadyListener = listener;
+    }
+
+    // Two materialized image-filter passes replace the N*N kernel with 2*N
+    // taps. Gaussian weights are normalized on the CPU only when quality changes;
+    // the GPU does no exp(), weight summation or division per pixel. For a varying
+    // radius this is a separable approximation: the vertical pass samples rows
+    // already blurred at their own radius, preserving a smooth progressive edge.
+    private static String buildProgressiveBlurShader(int samples) {
+        final int h = Math.max(1, Math.min(12, samples / 2));
+        final double gaussK = 2.0 / (h * h);
+        double totalWeight = 0;
+        for (int i = -h; i <= h; i++) {
+            totalWeight += Math.exp(-i * i * gaussK);
+        }
+        StringBuilder shader = new StringBuilder(4096);
+        shader.append(
+                "uniform shader inputTexture;\n" +
+                "uniform float maxRadius;\n" +
+                "uniform float2 textureSize;\n" +
+                "uniform float2 direction;\n" +
+                "uniform float fadeZoneTopFraction;\n" +
+                "uniform float fadeZoneBottomFraction;\n" +
+                "half4 main(float2 coord) {\n" +
+                "    float t = coord.y / textureSize.y;\n" +
+                "    float radius = 0.0;\n" +
+                "    if (fadeZoneTopFraction > 0.0 && t < fadeZoneTopFraction) {\n" +
+                "        radius = maxRadius * (1.0 - t / fadeZoneTopFraction);\n" +
+                "    } else if (fadeZoneBottomFraction > 0.0 && t > 1.0 - fadeZoneBottomFraction) {\n" +
+                "        radius = maxRadius * ((t - (1.0 - fadeZoneBottomFraction)) / fadeZoneBottomFraction);\n" +
+                "    }\n" +
+                "    if (radius < 0.5) return inputTexture.eval(coord);\n" +
+                "    float2 step = direction * radius / " + h + ".0;\n" +
+                "    half4 result = half4(0.0);\n");
+        for (int i = -h; i <= h; i++) {
+            shader.append("    result += inputTexture.eval(clamp(coord + step * ")
+                    .append(i).append(".0, float2(0.5), textureSize - float2(0.5))) * ")
+                    .append((float) (Math.exp(-i * i * gaussK) / totalWeight)).append(";\n");
+        }
+        return shader.append("    return result;\n}").toString();
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
+    public void setProgressiveBlur(float maxRadius, int sourceWidth, int sourceHeight, float fadeZoneTopFraction, float fadeZoneBottomFraction, int samples) {
+        if (sourceWidth <= 0 || sourceHeight <= 0) return;
+        final float topFraction = Math.max(0f, Math.min(1f, fadeZoneTopFraction));
+        final float bottomFraction = Math.max(0f, Math.min(1f, fadeZoneBottomFraction));
+        if (maxRadius <= 0f || (topFraction == 0f && bottomFraction == 0f)) {
+            setBlur(0f);
+            return;
+        }
+        final int sampleCount = Math.max(3, Math.min(25, samples | 1));
+        if (progressiveEffectApplied && progressiveMaxRadius == maxRadius && progressiveWidth == sourceWidth && progressiveHeight == sourceHeight && progressiveFadeZoneTopFraction == topFraction && progressiveFadeZoneBottomFraction == bottomFraction && progressiveSamples == sampleCount) return;
+        progressiveMaxRadius = maxRadius;
+        progressiveWidth = sourceWidth;
+        progressiveHeight = sourceHeight;
+        progressiveFadeZoneTopFraction = topFraction;
+        progressiveFadeZoneBottomFraction = bottomFraction;
+        progressiveSamples = sampleCount;
+        if (progressiveShaderFailed) {
+            setBlur(maxRadius);
+            return;
+        }
+        if (progressiveShader == null || progressiveVerticalShader == null || progressiveShaderSamples != sampleCount) {
+            try {
+                if (progressiveShaderSamples != sampleCount) {
+                    progressiveShader = progressiveVerticalShader = null;
+                    progressiveShaderSamples = sampleCount;
+                }
+                if (progressiveShader == null) progressiveShader = GlassShaderCache.acquireProgressive(
+                        sampleCount, () -> buildProgressiveBlurShader(sampleCount), onProgressiveShadersReady);
+                if (progressiveVerticalShader == null) progressiveVerticalShader = GlassShaderCache.acquireProgressive(
+                        sampleCount, () -> buildProgressiveBlurShader(sampleCount), onProgressiveShadersReady);
+                if (progressiveShader == null || progressiveVerticalShader == null) {
+                    setBlur(maxRadius);
+                    return;
+                }
+                progressiveShader.setFloatUniform("direction", 1f, 0f);
+                progressiveVerticalShader.setFloatUniform("direction", 0f, 1f);
+            } catch (RuntimeException e) {
+                // A shader compile error must never crash the app (e.g. the
+                // abs(int) AGSL crash): fall back to the platform blur.
+                FileLog.e(e);
+                progressiveShaderFailed = true;
+                setBlur(maxRadius);
+                return;
+            }
+        }
+        updateProgressiveUniforms(progressiveShader, maxRadius, sourceWidth, sourceHeight, topFraction, bottomFraction);
+        updateProgressiveUniforms(progressiveVerticalShader, maxRadius, sourceWidth, sourceHeight, topFraction, bottomFraction);
+        // createChainEffect(outer, inner): rasterize horizontal first, then vertical.
+        progressiveEffect = RenderEffect.createChainEffect(
+                RenderEffect.createRuntimeShaderEffect(progressiveVerticalShader, "inputTexture"),
+                RenderEffect.createRuntimeShaderEffect(progressiveShader, "inputTexture"));
+        renderNode.setRenderEffect(progressiveEffect);
+        progressiveEffectApplied = true;
+        lastBlurRadius = -1f;
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
+    private static void updateProgressiveUniforms(RuntimeShader shader, float radius, int width, int height, float top, float bottom) {
+        shader.setFloatUniform("maxRadius", radius);
+        shader.setFloatUniform("textureSize", (float) width, (float) height);
+        shader.setFloatUniform("fadeZoneTopFraction", top);
+        shader.setFloatUniform("fadeZoneBottomFraction", bottom);
+    }
+
 
     public GlassSource getFallbackSource() {
         return fallbackSource;

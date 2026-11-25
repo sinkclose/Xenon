@@ -112,7 +112,7 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
             iBlur3SourceGlass = new GlassSourceRenderNode(null);
             iBlur3SourceGlass.setScrollableNoiseSuppressor(scrollableViewNoiseSuppressor,
                     DownscaleScrollableNoiseSuppressor.DRAW_GLASS);
-            iBlur3SourceGlass.setUnderSource(new org.telegram.utils.glass.source.GlassSourceColor() {
+            iBlur3SourceGlass.setUnderSource(new org.telegram.utils.glass.source.GlassSource() {
                 @Override public void draw(Canvas canvas, float left, float top, float right, float bottom) {
                     canvas.drawColor(getThemedColor(Theme.key_windowBackgroundWhite));
                 }

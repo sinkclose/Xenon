@@ -2114,7 +2114,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         type -> type == DialogsAdapter.VIEW_TYPE_DIALOG
                                 || type == DialogsAdapter.VIEW_TYPE_DIALOG_COMMUNITY
                                 || type == DialogsAdapter.VIEW_TYPE_FORWARD_TO_STORIES_CELL,
-                        dp(12), dp(16), this::drawBackgroundRect, false);
+                        dp(12), dp(16), false);
             }
             additionalClipBottom = dp(200);
         }
@@ -15387,5 +15387,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         keys.add(Theme.key_dialogButtonSelector);
         keys.add(Theme.key_actionBarDefaultSubmenuItem);
         keys.add(Theme.key_actionBarDefaultSubmenuBackground);
+    }
+
+    private void blur3_InvalidateBlur() {
     }
 }

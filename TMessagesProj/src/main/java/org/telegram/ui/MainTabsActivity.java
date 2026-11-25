@@ -1598,7 +1598,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
     private boolean useFixedMaterialTabsBlur() {
         return zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar()
-                && LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) && SharedConfig.chatBlurEnabled();
+                && org.telegram.messenger.LiteMode.isEnabled(org.telegram.messenger.LiteMode.FLAG_LIQUID_GLASS) && SharedConfig.chatBlurEnabled();
     }
 
 
@@ -1643,7 +1643,6 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
             return;
         }
 
-        blur3_updateTabsBlur();
         final int width = fragmentView.getMeasuredWidth();
         final int height = fragmentView.getMeasuredHeight();
 

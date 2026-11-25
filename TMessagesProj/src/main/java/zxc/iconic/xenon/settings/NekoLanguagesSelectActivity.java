@@ -82,7 +82,7 @@ public class NekoLanguagesSelectActivity extends BaseNekoSettingsActivity {
     public View createView(Context context) {
         var fragmentView = super.createView(context);
 
-        var menu = simpleActionBar.createMenu();
+        var menu = actionBar.createMenu();
         createSearchItem(menu, new ActionBarMenuItem.ActionBarMenuItemSearchListener() {
 
             @Override

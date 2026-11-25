@@ -226,6 +226,7 @@ import org.telegram.tgnet.tl.TL_phone;
 import org.telegram.tgnet.tl.TL_stats;
 import org.telegram.tgnet.tl.TL_stories;
 import org.telegram.tgnet.tl.TL_wallet;
+import org.telegram.messenger.utils.OnPostDrawView;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.ActionBarLayout;
 import org.telegram.ui.ActionBar.ActionBarMenu;
@@ -479,7 +480,7 @@ public class ChatActivity extends BaseFragment implements
     private @NonNull BlurredBackgroundDrawableViewFactory navbarContentDrawableFactory;
 
     private final @NonNull GlassSourceWrapped navbarContentSourceWallpaperSharp;
-    private final GlassSource glassWallpaperSource = new GlassSourceWrapped() {
+    private final GlassSource glassWallpaperSource = new GlassSource() {
         @Override
         public void draw(Canvas canvas, float left, float top, float right, float bottom) {
             if (contentView != null && contentView.backgroundView != null) {
@@ -1464,8 +1465,8 @@ public class ChatActivity extends BaseFragment implements
 
     public final static int OPTION_VIEW_STATISTICS = 115;
     public final static int OPTION_WELCOME_REVERT = 116;
-    public final static int OPTION_FEED_EXCLUDE_CHANNEL = 117;
-    public final static int OPTION_SEND_MONEY = 118;
+    public final static int OPTION_FEED_EXCLUDE_CHANNEL = 150;
+    public final static int OPTION_SEND_MONEY = 117;
     public final static int OPTION_STOP_LIVE_LOCATION = 118;
 
     private final static int[] allowedNotificationsDuringChatListAnimations = new int[]{
@@ -2914,6 +2915,11 @@ public class ChatActivity extends BaseFragment implements
         super(args);
 
         navbarContentSourceWallpaper = new GlassSourceWrapped();
+        navbarContentSourceWallpaperSharp = new GlassSourceWrapped();
+        fadeWallpaperSource = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                ? new GlassSourceRenderNode(null) : null;
+        dimWallpaperDrawableFactory = new BlurredBackgroundDrawableViewFactory(
+                fadeWallpaperSource != null ? fadeWallpaperSource : navbarContentSourceWallpaperSharp);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SharedConfig.chatBlurEnabled()) {
             scrollableViewNoiseSuppressor = new DownscaleScrollableNoiseSuppressor();
 
@@ -8228,9 +8234,11 @@ if (feedIntegration != null) {
         };
         progressView.addView(progressView2, LayoutHelper.createFrame(36, 36, Gravity.CENTER));
 
-        progressBar = new RadialProgressView(context, themeDelegate);
-        progressBar.setSize(AndroidUtilities.dp(28));
-        progressBar.setProgressColor(getThemedColor(isCompactMode() ? Theme.key_chat_compact_progress : Theme.key_chat_serviceText));
+        progressBar = new ImageView(context);
+        progressBar.setImageDrawable(new CircularProgressDrawable(
+            AndroidUtilities.dp(28), AndroidUtilities.dp(2.25f),
+            getThemedColor(isCompactMode() ? Theme.key_chat_compact_progress : Theme.key_chat_serviceText)
+        ));
         progressView.addView(progressBar, LayoutHelper.createFrame(32, 32, Gravity.CENTER));
 
         floatingTopicSeparator = new TopicSeparator.Cell(context, currentAccount, themeDelegate) {
@@ -51618,6 +51626,10 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
 
+    private final java.util.List<ActionBarMenuItem.Item> pluginMenuItems = new java.util.ArrayList<>();
+    private java.io.File pendingPluginCacheFile;
+    private boolean pluginMenuItemsBuilt;
+
     private void invalidateAllGlassAttachedViews() {
         // Some glass surfaces are descendants of the captured list. Updating
         // their output is not another change to the underlying chat content.
@@ -52016,6 +52028,298 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         return topicsTabs != null ? topicsTabs.getTabsVisibleSpaceWithPadding(position, dp(NonIslandHelper.chatElements() ? 0 : 7)) : 0;
     }
 
+    private OnPostDrawView invalidateBlurredSourcesView;
+    private int glassSourceCaptureDepth;
+    private int pendingGlassSourceFlags;
+    private long glassListContentVersion;
+    private final RectF glassMessageDirtyRect = new RectF();
+    private final WeakHashMap<View, RectF> glassMessageBounds = new WeakHashMap<>();
+;
+
+    private static final int BLUR_INVALIDATE_FLAG_SCROLL = 1;
+    private static final int BLUR_INVALIDATE_FLAG_POSITIONS = 1 << 1;
+    private static final int BLUR_INVALIDATE_FLAG_CLIP = 1 << 2;
+    private static final int BLUR_INVALIDATE_FLAG_WALLPAPER = 1 << 3;
+    private static final int BLUR_INVALIDATE_FLAG_CONTENT_REGION = 1 << 4;
+
+    /**
+     * Bound only stationary, independent message content. Anything that can move
+     * old pixels or draw outside its row keeps the full source invalidation path.
+     */
+    private boolean invalidateGlassMessageRegion(View target) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || scrollableViewNoiseSuppressor == null
+                || invalidateBlurredSourcesView == null || parentChatActivity != null
+                || chatListView == null || contentView == null
+                || chatListView.getScrollState() != RecyclerView.SCROLL_STATE_IDLE
+                || chatListView.isComputingLayout() || chatListView.isLayoutRequested()
+                || contentView.isLayoutRequested() || chatListView.hasActiveEdgeEffects()
+                || !chatListView.getMatrix().isIdentity() || !contentView.getMatrix().isIdentity()
+                || (chatListItemAnimator != null && chatListItemAnimator.isRunning())
+                || animatorSearchResultAsListVisibility.getFloatValue() != 0f) {
+            return false;
+        }
+        View row = target;
+        while (row != null && row != chatListView && row.getParent() != chatListView) {
+            row = row.getParent() instanceof View ? (View) row.getParent() : null;
+        }
+        if (!(row instanceof ChatMessageCell) || row.getParent() != chatListView) {
+            return false;
+        }
+        ChatMessageCell cell = (ChatMessageCell) row;
+        if (!cell.isAttachedToWindow() || cell.getVisibility() != View.VISIBLE
+                || cell.getWidth() <= 0 || cell.getHeight() <= 0 || cell.isLayoutRequested()
+                || !cell.getMatrix().isIdentity() || cell.getAnimation() != null || cell.getAlpha() != 1f
+                || cell.getCurrentMessagesGroup() != null || cell.hasOutboundsContent()
+                || cell.drawBackgroundInParent() || cell.getTransitionParams().animateChangeProgress != 1f
+                || !ViewPositionWatcher.computeRectInParent(cell, contentView, glassMessageDirtyRect)) {
+            return false;
+        }
+        RectF previousBounds = glassMessageBounds.get(cell);
+        if (previousBounds == null) {
+            glassMessageBounds.put(cell, new RectF(glassMessageDirtyRect));
+            return false;
+        }
+        if (!previousBounds.equals(glassMessageDirtyRect)) {
+            // The old footprint also needs new pixels; use the global fallback.
+            previousBounds.set(glassMessageDirtyRect);
+            return false;
+        }
+        // Include row decoration and filtering neighbours; keep the whole row width
+        // because avatars/time/background may be drawn by the list rather than the cell.
+        glassMessageDirtyRect.left = 0;
+        glassMessageDirtyRect.right = contentView.getWidth();
+        glassMessageDirtyRect.inset(0, -dp(48));
+        invalidateMergedVisibleBlurredPositionsAndSources(BLUR_INVALIDATE_FLAG_CONTENT_REGION);
+        return true;
+    }
+
+    public void invalidatePhotoViewerTransition() {
+        if (contentView != null) {
+            contentView.invalidate();
+            invalidateMergedVisibleBlurredPositionsAndSources(BLUR_INVALIDATE_FLAG_SCROLL);
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+    private long lastFadeBlurUpdateTime;
+    private boolean fadeWallpaperDirty = true;
+    private int fadeWallpaperWidth, fadeWallpaperHeight;
+    private boolean fadeBlurContinuousUpdating;
+    private boolean fadeBlurCapturePending;
+    private boolean fadeBlurCaptureScheduled;
+    private final Choreographer.FrameCallback fadeBlurFrameCallback = new Choreographer.FrameCallback() {
+        @Override
+        public void doFrame(long frameTimeNanos) {
+            if (!fadeBlurContinuousUpdating) {
+                return;
+            }
+            if (!NekoConfig.blurredFadeViewEnabled()) {
+                // Master blur went off (toggle or power saver): swap the fade view
+                // to the stock wallpaper fade and stop the loop, no re-enter needed.
+                syncFadeBlurEnabledState();
+                stopFadeBlurContinuousUpdates();
+                return;
+            }
+            if (fadeBlurCapturePending) {
+                // Retry only a rate-limited source change. A window pre-draw
+                // also happens for our own output, so it cannot identify one.
+                invalidateFadeBlur();
+            }
+            Choreographer.getInstance().postFrameCallback(this);
+        }
+    };
+
+    private void startFadeBlurContinuousUpdates() {
+        if (fadeBlurContinuousUpdating) {
+            return;
+        }
+        fadeBlurContinuousUpdating = true;
+        invalidateFadeBlur();
+        Choreographer.getInstance().postFrameCallback(fadeBlurFrameCallback);
+    }
+
+    private void stopFadeBlurContinuousUpdates() {
+        fadeBlurContinuousUpdating = false;
+        fadeBlurCapturePending = false;
+        fadeBlurCaptureScheduled = false;
+        Choreographer.getInstance().removeFrameCallback(fadeBlurFrameCallback);
+    }
+
+    private void invalidateFadeBlur() {
+        if (glassSourceCaptureDepth != 0 || !NekoConfig.blurredFadeViewEnabled()) {
+            return;
+        }
+        // Capture on pre-draw during opening too, so the first visible frame
+        // already contains messages at both edges. Requests still coalesce.
+        if (fadeBlurCaptureView != null && !fadeBlurCaptureScheduled) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurEnabled()) {
+                final long now = SystemClock.uptimeMillis();
+                if (now - lastFadeBlurUpdateTime < 1000 / Math.max(15, NekoConfig.progressiveFadeBlurRefreshRate)) {
+                    fadeBlurCapturePending = true;
+                    return;
+                }
+                lastFadeBlurUpdateTime = now;
+            }
+            fadeBlurCapturePending = false;
+            fadeBlurCaptureScheduled = true;
+            fadeBlurCaptureView.invalidate(1);
+        }
+    }
+
+    private boolean fadeBlurStockApplied;
+
+    // Keeps the fade view in sync with the master blur switch at runtime: when
+    // blur is turned off (manually or by power saver) the blur fade is swapped
+    // for the stock wallpaper fade used when blurred fade is disabled, and back
+    // when blur returns. Idempotent; no re-enter needed.
+    private void syncFadeBlurEnabledState() {
+        if (fadeBlurFactory == null || chatActivityFadeView == null || contentView == null || actionBar == null) {
+            return;
+        }
+        final boolean enabled = NekoConfig.blurredFadeViewEnabled();
+        if (enabled && fadeBlurStockApplied) {
+            chatActivityFadeView.setup(fadeBlurFactory, dimWallpaperDrawableFactory);
+            chatActivityFadeView.setOpaqueFade(true);
+            chatActivityFadeView.setFadeHeightTop(dp(48), false);
+            chatActivityFadeView.setFadeHeightBottom(dp(48), false);
+            fadeBlurStockApplied = false;
+            checkUi_topFade();
+            chatActivityFadeView.invalidate();
+            startFadeBlurContinuousUpdates();
+        } else if (!enabled && !fadeBlurStockApplied) {
+            chatActivityFadeView.setup(navbarContentDrawableFactory);
+            chatActivityFadeView.setFadeHeightTop(dp(48));
+            chatActivityFadeView.setFadeHeightBottom(dp(48));
+            fadeBlurStockApplied = true;
+            stopFadeBlurContinuousUpdates();
+            checkUi_topFade();
+            chatActivityFadeView.invalidate();
+        }
+        if (enabled) {
+            // Restore settings even when no new content capture is needed.
+            chatActivityFadeView.setDim(isChatFadeDimmingEnabled() ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
+        }
+    }
+
+    private void invalidateFadeBlurImpl() {
+        fadeBlurCaptureScheduled = false;
+        glassSourceCaptureDepth++;
+        try {
+            captureFadeBlur();
+        } finally {
+            glassSourceCaptureDepth--;
+        }
+    }
+
+    private void captureFadeBlur() {
+        if (fadeBlurSource == null || chatActivityFadeView == null || contentView == null) {
+            return;
+        }
+        syncFadeBlurEnabledState();
+        if (!NekoConfig.blurredFadeViewEnabled()) {
+            return;
+        }
+        if (fadeBlurSource.inRecording()) {
+            return;
+        }
+        final int fw = contentView.getWidth();
+        final int fh = contentView.getHeight();
+        if (fw <= 0 || fh <= 0) {
+            fadeBlurCapturePending = true;
+            return;
+        }
+        lastFadeBlurUpdateTime = SystemClock.uptimeMillis();
+        fadeBlurCaptureRect.set(0, 0, fw, fh);
+        int wallpaperColor = getThemedColor(Theme.key_chat_wallpaper);
+        if (Color.alpha(wallpaperColor) < 255) {
+            wallpaperColor = ColorUtils.setAlphaComponent(wallpaperColor, 255);
+        }
+        // The fade snapshot re-resolves its wallpaper from the sources bound in
+        // onUpdateBackgroundDrawable (kept fresh by the wallpaper load event),
+        // so no per-capture source refresh is needed here.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurEnabled()) {
+            final int pixelation = Math.max(2, NekoConfig.blurredFadePixelation);
+            fadeBlurSource.setPixelation(pixelation);
+            int fadeZoneTop = chatActivityFadeView.getFadeZoneTop();
+            float topFraction = fadeZoneTop > dp(48) ? Math.min(1f, (fadeZoneTop - dp(48)) / (float) fh) : 1f;
+            int fadeZoneBottom = chatActivityFadeView.getFadeZoneBottom();
+            float bottomFraction = fadeZoneBottom > 0 ? Math.min(1f, fadeZoneBottom / (float) fh) : 1f;
+            fadeBlurSource.setProgressiveBlur(AndroidUtilities.dpf2(NekoConfig.progressiveFadeBlurMaxRadius) / pixelation, Math.max(1, Math.round(fw / (float) pixelation)), Math.max(1, Math.round(fh / (float) pixelation)), topFraction, bottomFraction, NekoConfig.progressiveFadeBlurSamples);
+        } else {
+            fadeBlurSource.setBlur(AndroidUtilities.dpf2(NekoConfig.blurredFadeBlurStrength));
+            fadeBlurSource.setPixelation(NekoConfig.blurredFadePixelation);
+        }
+        // Capture the actual chat background separately, preserving patterns and
+        // custom drawables that the wallpaper bitmap provider cannot reproduce.
+        if (isChatFadeDimmingEnabled() && (fadeWallpaperDirty || fadeWallpaperWidth != fw || fadeWallpaperHeight != fh
+                || fadeWallpaperSource.needUpdateDisplayList(fw, fh))) {
+            Canvas wallpaperCanvas = fadeWallpaperSource.beginRecording(fw, fh);
+            try {
+                wallpaperCanvas.drawColor(wallpaperColor);
+                // Dimming preserves sharp wallpaper, but triangles belong to the
+                // blurred content and must not be replayed sharply on top of it.
+                contentView.drawWallpaperForFade(wallpaperCanvas, false);
+            } finally {
+                fadeWallpaperSource.endRecording();
+            }
+            fadeWallpaperDirty = false;
+            fadeWallpaperWidth = fw;
+            fadeWallpaperHeight = fh;
+            // Rebuild both consumers after recording: their cached display lists
+            // can survive while a nested wallpaper/fill node is discarded.
+            fadeWallpaperSource.invalidateDisplayListForDrawables();
+            fadeBlurSource.invalidateDisplayListForDrawables();
+        }
+        // Messages and wallpaper particles pass through the blur effect in
+        // dimming mode. The wallpaper itself remains outside that effect.
+        final GlassSource underSource = isChatFadeDimmingEnabled()
+                ? fadeWallpaperSource : navbarContentSourceWallpaper;
+        if (fadeBlurSource.underSource != underSource) {
+            fadeBlurSource.setUnderSource(underSource);
+            // Source composition is recorded inside the edge drawables. A view
+            // invalidation alone would keep their previous wallpaper layer.
+            fadeBlurSource.invalidateDisplayListForDrawables();
+        }
+        Canvas c = fadeBlurSource.beginRecording(fw, fh);
+        try {
+            if (!isChatFadeDimmingEnabled()) {
+                c.drawColor(wallpaperColor);
+                contentView.drawWallpaperForFade(c, true);
+            } else {
+                contentView.drawTrianglesForFade(c);
+            }
+            contentView.drawList(c, fadeBlurCaptureRect);
+        } finally {
+            fadeBlurSource.endRecording();
+        }
+        chatActivityFadeView.setDimColor(wallpaperColor);
+        chatActivityFadeView.setDim(isChatFadeDimmingEnabled() ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
+        chatActivityFadeView.invalidate();
+    }
+
+    private void invalidateMergedVisibleBlurredPositionsAndSourcesPositions() {
+        invalidateBlurCaptures(BLUR_INVALIDATE_FLAG_POSITIONS);
+    }
+
+    private void invalidateMergedVisibleBlurredPositionsAndSources(int flags) {
+        invalidateBlurCaptures(flags);
+    }
+
+    private boolean isChatFadeDimmingEnabled() {
+        return NekoConfig.blurredFadeDimming && !NekoConfig.materialChatElements;
+    }
+
     private void invalidateBlurCaptures(int flags) {
         if (BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_WALLPAPER | BLUR_INVALIDATE_FLAG_CLIP)) {
             fadeWallpaperDirty = true;
@@ -52110,7 +52414,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 actionBarBackgroundPaint.setColor(getThemedColor(Theme.key_actionBarDefault));
             }
             if (progressBar != null) {
-                progressBar.setProgressColor(getThemedColor(isCompactMode() ? Theme.key_chat_compact_progress : Theme.key_chat_serviceText));
+                if (progressBar.getDrawable() instanceof CircularProgressDrawable) {
+                    ((CircularProgressDrawable) progressBar.getDrawable()).setColor(getThemedColor(isCompactMode() ? Theme.key_chat_compact_progress : Theme.key_chat_serviceText));
+                }
             }
             if (bottomChannelButtonsLayout != null) {
                 bottomChannelButtonsLayout.setAccentColor(getThemedColor(Theme.key_featuredStickers_addButton));
@@ -52141,13 +52447,13 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     private void updateThemeColorsExtra() {
         try {
             if (bottomOverlayProgress != null) {
-                bottomOverlayProgress.setProgressColor(getThemedColor(bottomOverlayProgressColorKey));
+                if (bottomOverlayProgress.getDrawable() instanceof CircularProgressDrawable) ((CircularProgressDrawable) bottomOverlayProgress.getDrawable()).setColor(getThemedColor(bottomOverlayProgressColorKey));
             }
             if (pinnedCounterTextView != null) {
                 pinnedCounterTextView.setTextColor(getThemedColor(Theme.key_chat_topPanelTitle));
             }
             if (pinnedProgress != null) {
-                pinnedProgress.setProgressColor(getThemedColor(Theme.key_chat_topPanelLine));
+                if (pinnedProgress.getDrawable() instanceof CircularProgressDrawable) ((CircularProgressDrawable) pinnedProgress.getDrawable()).setColor(getThemedColor(Theme.key_chat_topPanelLine));
             }
             if (emojiStatusSpamHint != null && emojiStatusSpamHintEmojiThemed) {
                 emojiStatusSpamHint.setEmojiColor(getThemedColor(Theme.key_chat_topPanelMessage));

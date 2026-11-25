@@ -282,7 +282,6 @@ import org.telegram.ui.Components.PhotoViewerCoverEditor;
 import org.telegram.ui.Components.PhotoViewerPollAttachButtons;
 import org.telegram.ui.Components.PhotoViewerWebView;
 import org.telegram.ui.Components.PickerBottomLayoutViewer;
-import org.telegram.ui.Components.PipVideoOverlay;
 import org.telegram.ui.Components.PlayPauseDrawable;
 import org.telegram.ui.Components.Premium.LimitReachedBottomSheet;
 import org.telegram.ui.Components.Premium.PremiumFeatureBottomSheet;

@@ -736,7 +736,7 @@ public class TooManyCommunitiesActivity extends BaseFragment {
             }
         }
         if (progressBar != null) {
-            progressBar.setProgressColor(Theme.getColor(Theme.key_progressCircle));
+            if (progressBar.getDrawable() instanceof org.telegram.ui.Components.CircularProgressDrawable) ((org.telegram.ui.Components.CircularProgressDrawable) progressBar.getDrawable()).setColor(Theme.getColor(Theme.key_progressCircle));
         }
     }
 

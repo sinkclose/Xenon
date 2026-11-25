@@ -136,5 +136,14 @@ public class BlurredBackgroundColorProviderThemed implements BlurredBackgroundCo
         if (hasCompactOutline()) return 0;
         return strokeColorBottom;
     }
-}
 
+    private boolean glassTintEnabled = true;
+
+    public void setGlassTintEnabled(boolean enabled) {
+        glassTintEnabled = enabled;
+    }
+
+    public boolean isGlassTintEnabled() {
+        return glassTintEnabled;
+    }
+}

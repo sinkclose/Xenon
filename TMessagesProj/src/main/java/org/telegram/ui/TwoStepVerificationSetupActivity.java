@@ -2179,7 +2179,7 @@ public class TwoStepVerificationSetupActivity extends BaseFragment {
         try {
             final int activated = Theme.getColor(Theme.key_windowBackgroundWhiteInputFieldActivated);
             if (radialProgressView != null) {
-                radialProgressView.setProgressColor(activated);
+                if (radialProgressView.getDrawable() instanceof org.telegram.ui.Components.CircularProgressDrawable) ((org.telegram.ui.Components.CircularProgressDrawable) radialProgressView.getDrawable()).setColor(activated);
             }
         } catch (Exception e) {
             FileLog.e(e);

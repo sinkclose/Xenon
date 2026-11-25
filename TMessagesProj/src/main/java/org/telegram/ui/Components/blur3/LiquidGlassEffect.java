@@ -27,6 +27,25 @@ public class LiquidGlassEffect {
     private float[] effectPoolCenterX;
     private float[] effectPoolCenterY;
 
+    public static void prewarmShaders() {}
+
+    public static LiquidGlassEffect forControlLens(RenderNode node, float refraction, float chromatic, Runnable onReady) {
+        return new LiquidGlassEffect(node);
+    }
+
+    public boolean isConfigurationCurrent() {
+        return true;
+    }
+
+    public void ensureShaders() {}
+
+    public void drawHighlight(android.graphics.Canvas canvas, float alpha) {}
+
+    public void update(float l, float t, float r, float b, float rlt, float rrt, float rrb, float rlb,
+                       float thickness, float intensity, float index, int foregroundColor) {
+        update(r - l, b - t, 0, 0, rlt, rrt, rrb, rlb, thickness, intensity, index, foregroundColor, 0, 0, 1);
+    }
+
     public LiquidGlassEffect(RenderNode node) {
         this.node = node;
         final String code = AndroidUtilities.readRes(R.raw.liquid_glass_shader);

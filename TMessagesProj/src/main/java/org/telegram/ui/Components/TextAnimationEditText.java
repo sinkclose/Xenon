@@ -880,4 +880,8 @@ public class TextAnimationEditText extends EditTextCaption {
         }
         return len;
     }
+
+    public void setCursorColorKey(int key, Theme.ResourcesProvider resourcesProvider) {
+        setCursorColor(Theme.getColor(key, resourcesProvider));
+    }
 }

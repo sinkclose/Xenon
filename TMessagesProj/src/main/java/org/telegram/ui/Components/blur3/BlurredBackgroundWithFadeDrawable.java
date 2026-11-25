@@ -290,4 +290,38 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable implements Theme
             FileLog.e(e);
         }
     }
+
+    private int dimAlpha, dimColor, dimFadeZoneTop;
+    private boolean hardEdge, opaqueFade;
+    private BlurredBackgroundDrawable dimDrawable;
+
+    public void setDimDrawable(BlurredBackgroundDrawable drawable) {
+        dimDrawable = drawable;
+        invalidateSelf();
+    }
+
+    public void setDimFadeZoneTop(int zone) {
+        dimFadeZoneTop = zone;
+        invalidateSelf();
+    }
+
+    public void setDimColor(int color) {
+        dimColor = color;
+        invalidateSelf();
+    }
+
+    public void setHardEdge(boolean hardEdge) {
+        this.hardEdge = hardEdge;
+        invalidateSelf();
+    }
+
+    public void setDimAlpha(int alpha) {
+        dimAlpha = alpha;
+        invalidateSelf();
+    }
+
+    public void setOpaqueFade(boolean opaqueFade) {
+        this.opaqueFade = opaqueFade;
+        invalidateSelf();
+    }
 }

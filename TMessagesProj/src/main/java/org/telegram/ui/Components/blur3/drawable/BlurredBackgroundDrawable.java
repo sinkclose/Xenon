@@ -235,6 +235,29 @@ public class BlurredBackgroundDrawable extends GlassDrawable implements Theme.Co
         }
     }
 
+    public void setIos27Press(float progress, float dissipation, float x, float y,
+                              float left, float top, float right, float bottom) {}
+
+    private float sourceScaleX = 1f, sourceScaleY = 1f, sourceTranslationX, sourceTranslationY;
+
+    /** The surface's Canvas deformation, in this drawable's local coordinates. */
+    public boolean setSourceTransform(float scaleX, float scaleY, float translationX, float translationY) {
+        if (sourceScaleX == scaleX && sourceScaleY == scaleY
+                && sourceTranslationX == translationX && sourceTranslationY == translationY) {
+            return false;
+        }
+        sourceScaleX = scaleX;
+        sourceScaleY = scaleY;
+        sourceTranslationX = translationX;
+        sourceTranslationY = translationY;
+        onSourceOffsetChange(getSourceOffsetX(), getSourceOffsetY());
+        return true;
+    }
+
+    public BlurredBackgroundColorProvider getColorProvider() {
+        return colorProvider;
+    }
+
     public GlassSource getSource() {
         return source;
     }

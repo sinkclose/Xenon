@@ -1500,7 +1500,7 @@ public class NewContactBottomSheet extends BottomSheet implements AdapterView.On
         super.onThemeColorsChanged();
         try {
             if (progressView != null && parentFragment != null) {
-                progressView.setProgressColor(parentFragment.getThemedColor(Theme.key_featuredStickers_buttonText));
+                if (progressView.getDrawable() instanceof org.telegram.ui.Components.CircularProgressDrawable) ((org.telegram.ui.Components.CircularProgressDrawable) progressView.getDrawable()).setColor(parentFragment.getThemedColor(Theme.key_featuredStickers_buttonText));
             }
             if (doneButtonContainer != null && parentFragment != null) {
                 final int doneColor = parentFragment.getThemedColor(Theme.key_featuredStickers_addButton);

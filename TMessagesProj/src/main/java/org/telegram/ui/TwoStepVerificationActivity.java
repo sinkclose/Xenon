@@ -1303,7 +1303,7 @@ public class TwoStepVerificationActivity extends BaseFragment implements Notific
                 floatingButtonIcon.setColor(Theme.getColor(Theme.key_chats_actionIcon));
             }
             if (radialProgressView != null) {
-                radialProgressView.setProgressColor(Theme.getColor(Theme.key_windowBackgroundWhiteInputFieldActivated));
+                if (radialProgressView.getDrawable() instanceof org.telegram.ui.Components.CircularProgressDrawable) ((org.telegram.ui.Components.CircularProgressDrawable) radialProgressView.getDrawable()).setColor(Theme.getColor(Theme.key_windowBackgroundWhiteInputFieldActivated));
             }
     
         } catch (Exception e) {

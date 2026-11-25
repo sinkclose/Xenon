@@ -233,6 +233,16 @@ public class BlurredBackgroundProviderImpl {
         return Color.alpha(Theme.getColor(Theme.key_chat_compact_glassOutline, resourcesProvider)) != 0 ? 0 : color;
     }
 
+    public static int materialChatSurfaceColor(Theme.ResourcesProvider resourcesProvider) {
+        // A fixed Material surface over blur, independent of glass tint and dimming sliders.
+        return Theme.multAlpha(zxc.iconic.xenon.helpers.Md3FilterTabsHelper.getChatSurfaceColor(resourcesProvider),
+                org.telegram.messenger.SharedConfig.chatBlurEnabled() ? 0.90f : 1f);
+    }
+
+    public static BlurredBackgroundProvider chatTitlePill(Theme.ResourcesProvider resourcesProvider) {
+        return topPanel(resourcesProvider);
+    }
+
     public static BlurredBackgroundProvider simpleActionBar(Theme.ResourcesProvider resourcesProvider) {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
             .setBackgroundColor((r, isDark) -> {

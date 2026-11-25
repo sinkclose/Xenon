@@ -43,8 +43,7 @@ public class NekoTriangleSettingsActivity extends BaseNekoSettingsActivity {
         contentView.setBackground(trianglesBackground = new TrianglesBackground());
         // Keep the native rounded sections, allowing the animated activity background to show through.
         listView.setSections(view -> view.getParent() == listView && !UniversalAdapter.isShadow(listView.getChildViewHolder(view).getItemViewType()),
-                type -> !UniversalAdapter.isShadow(type), AndroidUtilities.dp(12), AndroidUtilities.dp(16),
-                (canvas, rect, topRadius, bottomRadius, alpha) -> listView.drawBackgroundRect(canvas, rect, topRadius, bottomRadius, alpha * 0.75f), false);
+                type -> !UniversalAdapter.isShadow(type), AndroidUtilities.dp(12), AndroidUtilities.dp(16), false);
         visibilityItem = actionBar.createMenu().addItem(1, R.drawable.ic_triangles_visibility);
         visibilityItem.setPlainButtonCircle(true);
         visibilityItem.setOnClickListener(view -> toggleSettingsVisibility());

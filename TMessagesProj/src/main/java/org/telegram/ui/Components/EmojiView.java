@@ -9426,7 +9426,7 @@ public class EmojiView extends FrameLayout implements
         @Override
         public void updateColors() {
             try {
-                progressView.setProgressColor(getThemedColor(Theme.key_progressCircle));
+                if (progressView.getDrawable() instanceof org.telegram.ui.Components.CircularProgressDrawable) ((org.telegram.ui.Components.CircularProgressDrawable) progressView.getDrawable()).setColor(getThemedColor(Theme.key_progressCircle));
                 invalidate();
         
             } catch (Exception e) {

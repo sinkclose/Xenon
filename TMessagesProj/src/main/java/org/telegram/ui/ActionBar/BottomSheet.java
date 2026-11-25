@@ -2670,7 +2670,7 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
 
         public static int CELL_TYPE_CALL = 4;
 
-        private BottomSheet bottomSheet;
+        public BottomSheet bottomSheet;
 
         public Builder(Context context) {
             this(context, false);

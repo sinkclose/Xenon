@@ -1626,8 +1626,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         // The background square stays anchored at the top regardless
         // of the foreground avatar's expansion or the list's scroll.
         float squareBottom = contentView.getMeasuredWidth();
-        float titleHeight = nameTextView[1] != null && nameTextView[1].getMeasuredHeight() > 0
-                ? nameTextView[1].getMeasuredHeight() : dp(30);
+        float titleHeight = nameTextView != null && nameTextView.getMeasuredHeight() > 0
+                ? nameTextView.getMeasuredHeight() : dp(30);
         // Use the expanded endpoint, not the title's temporary entrance-animation coordinates.
         float expandedBlurStart = Math.max(0, squareBottom - dp(30) - titleHeight);
         float blurStart = AndroidUtilities.lerp(expandedBlurStart, 0, collapse);
@@ -1650,7 +1650,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         if (photo) {
             renderer.setPhotoHeight(photoBottom);
             renderer.syncAppearanceFrom(profileBackdrop);
-            blurStart = Math.max(0, nameTextView[1].getY());
+            blurStart = Math.max(0, nameTextView.getY());
         }
         renderer.draw(canvas, bitmap, contentView.getMeasuredWidth(), contentView.getMeasuredHeight(),
                 squareBottom, blurStart, collapse, scroll, getThemedColor(Theme.key_windowBackgroundGray));
@@ -5480,9 +5480,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             @Override
             protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
                 if (isRedesignedProfileEnabled() && child == overlaysView
-                        && getRedesignedProfileExpansion() > 0 && nameTextView[1] != null) {
+                        && getRedesignedProfileExpansion() > 0 && nameTextView != null) {
                     // Above the photo, below the title, buttons and gallery controls.
-                    float titleTop = Math.max(0, nameTextView[1].getY());
+                    float titleTop = Math.max(0, nameTextView.getY());
                     // Cover only the photo. Buttons and the list use the root
                     // backdrop, with no moving layer edge at their junction.
                     float bottom = avatarsViewPager != null && avatarsViewPager.getVisibility() == View.VISIBLE
@@ -12491,12 +12491,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 // chained `else if (telegaWarned)` after the premium branch and
                 // therefore never ran for premium users.
                 if (telegaWarned) {
-                    nameTextView[a].setOnClickListener(v -> BulletinFactory.of(ProfileActivity.this)
+                    nameTextView.setOnClickListener(v -> BulletinFactory.of(ProfileActivity.this)
                             .createSimpleBulletin(R.raw.chats_infotip, LocaleController.getString(R.string.TelegaDetectorStatusRisk))
                             .show());
                 } else {
-                    nameTextView[a].setOnClickListener(null);
-                    nameTextView[a].setClickable(false);
+                    nameTextView.setOnClickListener(null);
+                    nameTextView.setClickable(false);
                 }
             }
 
