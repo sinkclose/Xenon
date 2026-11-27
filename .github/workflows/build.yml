@@ -34,9 +34,40 @@ on:
       ref:
         type: string
         default: ''
+    outputs:
+      should_build:
+        description: Whether the target commit allows a build and release
+        value: ${{ jobs.check_commit.outputs.should_build }}
 
 jobs:
+  check_commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
+          sparse-checkout: .github/workflows
+          persist-credentials: false
+
+      - name: Check for [skip release]
+        id: check
+        shell: bash
+        run: |
+          message=$(git log -1 --format=%B)
+          if grep -qiF '[skip release]' <<< "$message"; then
+            echo 'should_build=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'should_build=true' >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: check_commit
+    if: needs.check_commit.outputs.should_build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
