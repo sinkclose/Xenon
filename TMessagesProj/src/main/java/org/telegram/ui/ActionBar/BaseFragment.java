@@ -104,16 +104,29 @@ public abstract class BaseFragment {
     protected boolean hasOwnBackground = false;
     protected boolean isPaused = true;
     private org.telegram.ui.Components.ActivityHeadersController activityHeaders;
+    private org.telegram.ui.Components.SimpleActivityHeadersController simpleActivityHeaders;
     private boolean globalCenteredTitleApplied;
 
     public boolean hasSharedActivityHeader() {
-        return activityHeaders != null;
+        return activityHeaders != null || simpleActivityHeaders != null;
     }
 
     private void detachActivityHeaders() {
+        detachLegacyActivityHeaders();
+        detachSimpleActivityHeaders();
+    }
+
+    private void detachLegacyActivityHeaders() {
         if (activityHeaders != null) {
             activityHeaders.detach();
             activityHeaders = null;
+        }
+    }
+
+    private void detachSimpleActivityHeaders() {
+        if (simpleActivityHeaders != null) {
+            simpleActivityHeaders.detach();
+            simpleActivityHeaders = null;
         }
     }
     protected Dialog parentDialog;
@@ -702,8 +715,12 @@ public abstract class BaseFragment {
     public void onResume() {
         isPaused = false;
         if (activityHeaders == null || !activityHeaders.resume()) {
-            detachActivityHeaders();
+            detachLegacyActivityHeaders();
             activityHeaders = org.telegram.ui.Components.ActivityHeadersController.attach(this);
+        }
+        if (simpleActivityHeaders == null || !simpleActivityHeaders.resume()) {
+            detachSimpleActivityHeaders();
+            simpleActivityHeaders = org.telegram.ui.Components.SimpleActivityHeadersController.attach(this);
         }
         if (fragmentView != null) zxc.iconic.xenon.helpers.ClientFonts.observeWindow(fragmentView);
         if (fragmentView != null && (this instanceof org.telegram.ui.ProfileActivity
@@ -726,6 +743,7 @@ public abstract class BaseFragment {
     @CallSuper
     public void onPause() {
         if (activityHeaders != null) activityHeaders.pause();
+        if (simpleActivityHeaders != null) simpleActivityHeaders.pause();
         if (actionBar != null) {
             actionBar.onPause();
         }

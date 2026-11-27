@@ -635,13 +635,13 @@ public class ChatInputViewsContainer extends FrameLayout implements LiquidTouchD
             return;
         }
 
-        final int oldBound = backgroundWithFadeDrawable.getBounds().top;
-        final int newBound = getMeasuredHeight() - Math.round(blurredBottomHeight);
-
-        if (oldBound != newBound) {
-            backgroundWithFadeDrawable.setBounds(0, newBound, getMeasuredWidth(), getMeasuredHeight());
-            fadeView.invalidate(0, Math.max(0, Math.min(oldBound, newBound)), getMeasuredWidth(), getMeasuredHeight());
-            invalidate(0, Math.max(0, Math.min(oldBound, newBound)), getMeasuredWidth(), getMeasuredHeight());
+        final int width = getMeasuredWidth();
+        final int height = getMeasuredHeight();
+        final int top = Math.max(0, height - Math.round(blurredBottomHeight));
+        final Rect oldBounds = backgroundWithFadeDrawable.getBounds();
+        if (oldBounds.top != top || oldBounds.right != width || oldBounds.bottom != height) {
+            backgroundWithFadeDrawable.setBounds(0, top, width, height);
+            fadeView.invalidate();
         }
     }
 

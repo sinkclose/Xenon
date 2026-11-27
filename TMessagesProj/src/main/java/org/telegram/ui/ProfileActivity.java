@@ -4468,7 +4468,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 updateBottomButtonY();
             }
         };
-        listView.setLegacySections(false);
+        // Bitmap corners paint a solid list background over the avatar backdrop.
+        listView.setLegacySections(isRedesignedProfileEnabled());
         listView.setSections();
         listView.applyPaddingToSections = false;
         // the rows above the list's top go under the header's blur, with their cards
@@ -5796,6 +5797,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         avatarsViewPagerIndicatorView = new PagerIndicatorView(context);
         avatarContainer2.addView(avatarsViewPagerIndicatorView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
+        // The old bar is laid out for transitions, but the simple header owns the visible buttons.
+        actionBar.setVisibility(View.INVISIBLE);
         frameLayout.addView(actionBar);
 
         nameTextView = new SimpleTextView(context) {

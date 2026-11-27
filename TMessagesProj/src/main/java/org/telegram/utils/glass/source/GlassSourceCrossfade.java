@@ -44,14 +44,25 @@ public final class GlassSourceCrossfade implements GlassSource, BlurredBackgroun
 
     @Override
     public void draw(@NonNull Canvas canvas, float left, float top, float right, float bottom) {
+        draw(canvas, left, top, right, bottom, false);
+    }
+
+    @Override
+    public void drawUnblurred(@NonNull Canvas canvas, float left, float top, float right, float bottom) {
+        draw(canvas, left, top, right, bottom, true);
+    }
+
+    private void draw(Canvas canvas, float left, float top, float right, float bottom, boolean unblurred) {
         if (progress < 1f) {
-            from.draw(canvas, left, top, right, bottom);
+            if (unblurred) from.drawUnblurred(canvas, left, top, right, bottom);
+            else from.draw(canvas, left, top, right, bottom);
         }
         if (progress > 0f) {
             if (progress < 1f) {
                 canvas.saveLayerAlpha(left, top, right, bottom, (int) (0xFF * progress));
             }
-            to.draw(canvas, left, top, right, bottom);
+            if (unblurred) to.drawUnblurred(canvas, left, top, right, bottom);
+            else to.draw(canvas, left, top, right, bottom);
             if (progress < 1f) {
                 canvas.restore();
             }

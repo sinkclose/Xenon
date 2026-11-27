@@ -22,4 +22,11 @@ public final class GlassSourceWrapped implements GlassSource {
             sourceInternal.draw(canvas, left, top, right, bottom);
         }
     }
+
+    @Override
+    public void drawUnblurred(@NonNull Canvas canvas, float left, float top, float right, float bottom) {
+        if (sourceInternal != null) {
+            sourceInternal.drawUnblurred(canvas, left, top, right, bottom);
+        }
+    }
 }

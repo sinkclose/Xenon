@@ -341,6 +341,13 @@ public class ProgressiveFadeBlurController {
         capturePending = false;
     }
 
+    public void detach() {
+        stopContinuousUpdates();
+        if (fadeView.getParent() instanceof ViewGroup) {
+            ((ViewGroup) fadeView.getParent()).removeView(fadeView);
+        }
+    }
+
     public void addCaptureView(View view) {
         additionalCaptureViews.add(view);
     }

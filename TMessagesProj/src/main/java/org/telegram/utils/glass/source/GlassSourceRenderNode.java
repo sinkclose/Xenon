@@ -28,6 +28,7 @@ import me.vkryl.core.reference.ReferenceList;
 public final class GlassSourceRenderNode implements GlassSource, BlurredBackgroundDrawableViewFactory.DrawableOwner, GlassFadeBlurredDrawable.GlassFadeDownsampledSource {
     private final GlassSource fallbackSource;
     private final RenderNode renderNode;
+    private RenderNode sharpNode;
     private RenderNodeWithHash renderNodeWithHash;
 
     private DownscaleScrollableNoiseSuppressor scrollableNoiseSuppressor;
@@ -96,7 +97,7 @@ public final class GlassSourceRenderNode implements GlassSource, BlurredBackgrou
     private RecordingCanvas recordingCanvas;
 
     public boolean needUpdateDisplayList(int width, int height) {
-        return !renderNode.hasDisplayList() || renderNode.getWidth() != width || renderNode.getHeight() != height;
+        return !renderNode.hasDisplayList() || renderNode.getWidth() != captureSize(width) || renderNode.getHeight() != captureSize(height);
     }
 
     public RecordingCanvas beginRecording(int width, int height) {
@@ -106,8 +107,25 @@ public final class GlassSourceRenderNode implements GlassSource, BlurredBackgrou
 
         inRecording = true;
 
-        renderNode.setPosition(0, 0, width, height);
-        recordingCanvas = renderNode.beginRecording(width, height);
+        final int captureWidth = captureSize(width);
+        final int captureHeight = captureSize(height);
+        renderNode.setPosition(0, 0, captureWidth, captureHeight);
+        if (sharpNode == null) {
+            sharpNode = new RenderNode("SharpGlassCapture");
+        }
+        sharpNode.setPosition(0, 0, captureWidth, captureHeight);
+        recordingCanvas = sharpNode.beginRecording(captureWidth, captureHeight);
+        if (captureWidth != width || captureHeight != height) {
+            // Shaders work in capture pixels; callers still draw and sample in screen coordinates.
+            renderNode.setPivotX(0);
+            renderNode.setPivotY(0);
+            renderNode.setScaleX(width / (float) captureWidth);
+            renderNode.setScaleY(height / (float) captureHeight);
+            recordingCanvas.scale(captureWidth / (float) width, captureHeight / (float) height);
+        } else {
+            renderNode.setScaleX(1f);
+            renderNode.setScaleY(1f);
+        }
         return recordingCanvas;
     }
 
@@ -116,9 +134,15 @@ public final class GlassSourceRenderNode implements GlassSource, BlurredBackgrou
             throw new IllegalStateException();
         }
 
-        renderNode.endRecording();
-        inRecording = false;
-        recordingCanvas = null;
+        try {
+            sharpNode.endRecording();
+            final RecordingCanvas filtered = renderNode.beginRecording();
+            filtered.drawRenderNode(sharpNode);
+            renderNode.endRecording();
+        } finally {
+            inRecording = false;
+            recordingCanvas = null;
+        }
     }
 
     public boolean isRecordingCanvas(Canvas canvas) {
@@ -131,9 +155,11 @@ public final class GlassSourceRenderNode implements GlassSource, BlurredBackgrou
 
     @Override
     public void draw(@NonNull Canvas canvas, float left, float top, float right, float bottom) {
+        final boolean unblurred = isUnblurredCanvas(canvas);
         if (!canvas.isHardwareAccelerated()) {
             if (fallbackSource != null) {
-                fallbackSource.draw(canvas, left, top, right, bottom);
+                if (unblurred) fallbackSource.drawUnblurred(canvas, left, top, right, bottom);
+                else fallbackSource.draw(canvas, left, top, right, bottom);
             }
             return;
         }
@@ -143,7 +169,8 @@ public final class GlassSourceRenderNode implements GlassSource, BlurredBackgrou
         }
 
         if (underSource != null) {
-            underSource.draw(canvas, left, top, right, bottom);
+            if (unblurred) underSource.drawUnblurred(canvas, left, top, right, bottom);
+            else underSource.draw(canvas, left, top, right, bottom);
         }
         canvas.save();
         if (!noClip) {
@@ -151,9 +178,15 @@ public final class GlassSourceRenderNode implements GlassSource, BlurredBackgrou
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && glassCaptureSourceCanvas != null) {
-            glassCaptureSourceCanvas.draw(canvas, left, top, right, bottom);
+            if (unblurred) glassCaptureSourceCanvas.drawUnblurred(canvas, left, top, right, bottom);
+            else glassCaptureSourceCanvas.draw(canvas, left, top, right, bottom);
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && scrollableNoiseSuppressor != null) {
             scrollableNoiseSuppressor.drawInline(canvas, scrollableNoiseSuppressorIndex);
+        } else if (unblurred && renderNodeWithHash != null) {
+            renderNodeWithHash.drawUnfiltered(canvas);
+        } else if (unblurred && sharpNode != null && sharpNode.hasDisplayList()) {
+            canvas.scale(renderNode.getScaleX(), renderNode.getScaleY());
+            canvas.drawRenderNode(sharpNode);
         } else {
             canvas.drawRenderNode(renderNode);
         }
@@ -250,6 +283,10 @@ public final class GlassSourceRenderNode implements GlassSource, BlurredBackgrou
         this.pixelationScale = Math.max(1f, scale);
     }
 
+    private int captureSize(int size) {
+        return size <= 0 || pixelationScale == 1f ? size : Math.max(1, Math.round(size / pixelationScale));
+    }
+
     @Override
     public void prepareToDraw() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && glassBlurEnabled) syncGlassBlur();
@@ -328,6 +365,7 @@ public final class GlassSourceRenderNode implements GlassSource, BlurredBackgrou
     private int progressiveHeight = -1;
     private float progressiveFadeZoneTopFraction = -1f;
     private float progressiveFadeZoneBottomFraction = -1f;
+    private float progressiveFalloffFraction = -1f;
     private int progressiveSamples = -1;
     private Runnable onProgressiveBlurReadyListener;
     private final Runnable onProgressiveShadersReady = () -> {
@@ -359,13 +397,17 @@ public final class GlassSourceRenderNode implements GlassSource, BlurredBackgrou
                 "uniform float2 direction;\n" +
                 "uniform float fadeZoneTopFraction;\n" +
                 "uniform float fadeZoneBottomFraction;\n" +
+                "uniform float falloffFraction;\n" +
                 "half4 main(float2 coord) {\n" +
                 "    float t = coord.y / textureSize.y;\n" +
                 "    float radius = 0.0;\n" +
                 "    if (fadeZoneTopFraction > 0.0 && t < fadeZoneTopFraction) {\n" +
-                "        radius = maxRadius * (1.0 - t / fadeZoneTopFraction);\n" +
-                "    } else if (fadeZoneBottomFraction > 0.0 && t > 1.0 - fadeZoneBottomFraction) {\n" +
-                "        radius = maxRadius * ((t - (1.0 - fadeZoneBottomFraction)) / fadeZoneBottomFraction);\n" +
+                "        float ramp = falloffFraction > 0.0 ? min(falloffFraction, fadeZoneTopFraction) : fadeZoneTopFraction;\n" +
+                "        radius = maxRadius * min(1.0, (fadeZoneTopFraction - t) / ramp);\n" +
+                "    }\n" +
+                "    if (fadeZoneBottomFraction > 0.0 && t > 1.0 - fadeZoneBottomFraction) {\n" +
+                "        float ramp = falloffFraction > 0.0 ? min(falloffFraction, fadeZoneBottomFraction) : fadeZoneBottomFraction;\n" +
+                "        radius = max(radius, maxRadius * min(1.0, (t - (1.0 - fadeZoneBottomFraction)) / ramp));\n" +
                 "    }\n" +
                 "    if (radius < 0.5) return inputTexture.eval(coord);\n" +
                 "    float2 step = direction * radius / " + h + ".0;\n" +
@@ -380,23 +422,32 @@ public final class GlassSourceRenderNode implements GlassSource, BlurredBackgrou
 
     @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
     public void setProgressiveBlur(float maxRadius, int sourceWidth, int sourceHeight, float fadeZoneTopFraction, float fadeZoneBottomFraction, int samples) {
+        setProgressiveBlur(maxRadius, sourceWidth, sourceHeight, fadeZoneTopFraction, fadeZoneBottomFraction, samples, 0f);
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
+    public void setProgressiveBlur(float maxRadius, int sourceWidth, int sourceHeight, float fadeZoneTopFraction,
+                                   float fadeZoneBottomFraction, int samples, float falloffFraction) {
         if (sourceWidth <= 0 || sourceHeight <= 0) return;
         final float topFraction = Math.max(0f, Math.min(1f, fadeZoneTopFraction));
         final float bottomFraction = Math.max(0f, Math.min(1f, fadeZoneBottomFraction));
         if (maxRadius <= 0f || (topFraction == 0f && bottomFraction == 0f)) {
-            setBlur(0f);
+            setPlainBlur(0f);
             return;
         }
         final int sampleCount = Math.max(3, Math.min(25, samples | 1));
-        if (progressiveEffectApplied && progressiveMaxRadius == maxRadius && progressiveWidth == sourceWidth && progressiveHeight == sourceHeight && progressiveFadeZoneTopFraction == topFraction && progressiveFadeZoneBottomFraction == bottomFraction && progressiveSamples == sampleCount) return;
+        if (progressiveEffectApplied && progressiveMaxRadius == maxRadius && progressiveWidth == sourceWidth && progressiveHeight == sourceHeight
+                && progressiveFadeZoneTopFraction == topFraction && progressiveFadeZoneBottomFraction == bottomFraction
+                && progressiveFalloffFraction == falloffFraction && progressiveSamples == sampleCount) return;
         progressiveMaxRadius = maxRadius;
         progressiveWidth = sourceWidth;
         progressiveHeight = sourceHeight;
         progressiveFadeZoneTopFraction = topFraction;
         progressiveFadeZoneBottomFraction = bottomFraction;
+        progressiveFalloffFraction = falloffFraction;
         progressiveSamples = sampleCount;
         if (progressiveShaderFailed) {
-            setBlur(maxRadius);
+            setPlainBlur(maxRadius);
             return;
         }
         if (progressiveShader == null || progressiveVerticalShader == null || progressiveShaderSamples != sampleCount) {
@@ -410,7 +461,7 @@ public final class GlassSourceRenderNode implements GlassSource, BlurredBackgrou
                 if (progressiveVerticalShader == null) progressiveVerticalShader = GlassShaderCache.acquireProgressive(
                         sampleCount, () -> buildProgressiveBlurShader(sampleCount), onProgressiveShadersReady);
                 if (progressiveShader == null || progressiveVerticalShader == null) {
-                    setBlur(maxRadius);
+                    setPlainBlur(maxRadius);
                     return;
                 }
                 progressiveShader.setFloatUniform("direction", 1f, 0f);
@@ -420,12 +471,12 @@ public final class GlassSourceRenderNode implements GlassSource, BlurredBackgrou
                 // abs(int) AGSL crash): fall back to the platform blur.
                 FileLog.e(e);
                 progressiveShaderFailed = true;
-                setBlur(maxRadius);
+                setPlainBlur(maxRadius);
                 return;
             }
         }
-        updateProgressiveUniforms(progressiveShader, maxRadius, sourceWidth, sourceHeight, topFraction, bottomFraction);
-        updateProgressiveUniforms(progressiveVerticalShader, maxRadius, sourceWidth, sourceHeight, topFraction, bottomFraction);
+        updateProgressiveUniforms(progressiveShader, maxRadius, sourceWidth, sourceHeight, topFraction, bottomFraction, falloffFraction);
+        updateProgressiveUniforms(progressiveVerticalShader, maxRadius, sourceWidth, sourceHeight, topFraction, bottomFraction, falloffFraction);
         // createChainEffect(outer, inner): rasterize horizontal first, then vertical.
         progressiveEffect = RenderEffect.createChainEffect(
                 RenderEffect.createRuntimeShaderEffect(progressiveVerticalShader, "inputTexture"),
@@ -436,11 +487,12 @@ public final class GlassSourceRenderNode implements GlassSource, BlurredBackgrou
     }
 
     @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
-    private static void updateProgressiveUniforms(RuntimeShader shader, float radius, int width, int height, float top, float bottom) {
+    private static void updateProgressiveUniforms(RuntimeShader shader, float radius, int width, int height, float top, float bottom, float falloff) {
         shader.setFloatUniform("maxRadius", radius);
         shader.setFloatUniform("textureSize", (float) width, (float) height);
         shader.setFloatUniform("fadeZoneTopFraction", top);
         shader.setFloatUniform("fadeZoneBottomFraction", bottom);
+        shader.setFloatUniform("falloffFraction", falloff);
     }
 
 

@@ -597,7 +597,14 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                 actionBarVisibleAnimator.cancel();
                 actionBarVisibleAnimator = null;
             }
-            actionBar.getTitlesContainer().setAlpha(1f);
+            if (actionBar != null) {
+                actionBar.getTitlesContainer().setAlpha(1f);
+            } else if (simpleActionBar != null) {
+                simpleActionBar.setTitlesAlpha(1f);
+            }
+            if (actionBarFadeView != null) {
+                actionBarFadeView.setAlpha(1f);
+            }
             return;
         }
         final boolean visible;

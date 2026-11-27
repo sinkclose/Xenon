@@ -687,7 +687,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
     private boolean dialogsMaterialHeaderEnabled() {
         return NekoConfig.materialActivityHeaders && NekoConfig.materialHeadersInDialogs
-                && !onlySelect;
+                && !isDialogPicker();
     }
 
     private int ios27DialogsFirstPosition() {
@@ -797,8 +797,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     private boolean dialogsFadeEnabled() {
-        return !onlySelect && !searchIsShowed && progressToActionMode == 0
+        return !isDialogPicker() && !searchIsShowed && progressToActionMode == 0
                 && (NekoConfig.fadeViewOtherActivities() || NekoConfig.blurredFadeViewEnabled());
+    }
+
+    private boolean isDialogPicker() {
+        return onlySelect || initialDialogsType == DIALOGS_TYPE_FORWARD || clickSelectsDialog();
     }
 
     private ProgressiveFadeBlurController progressiveFadeController;
@@ -5171,6 +5175,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
 
         topBubblesFadeView = new DialogsActivityTopBubblesFadeView(context);
+        topBubblesFadeView.setIos27DimmingAllowed(!isDialogPicker());
         topBubblesFadeView.setColor(Theme.getColor(Theme.key_windowBackgroundGray));
         contentView.addView(topBubblesFadeView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 100, Gravity.TOP));
 
@@ -5342,9 +5347,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
             BlurredBackgroundWithFadeDrawable fadeDrawable = new BlurredBackgroundWithFadeDrawable(
                     iBlur3FactoryFade.create(chatInputViewsContainer, null));
-            if (!SharedConfig.chatBlurEnabled() || LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS)) {
-                fadeDrawable.setFadeHeight(dp(72), true);
-            }
+            fadeDrawable.setFadeHeight(dp(72), true);
+            fadeDrawable.setAlpha(184);
 
             chatInputViewsContainer.setBackgroundWithFadeDrawable(fadeDrawable);
 
@@ -5805,7 +5809,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             final FrameLayout.LayoutParams layoutParams = LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT);
             contentView.addView(actionBar, layoutParams);
         //}
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && NekoConfig.blurredFadeViewEnabled()) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && dialogsFadeEnabled() && NekoConfig.blurredFadeViewEnabled()) {
             progressiveFadeController = new ProgressiveFadeBlurController(contentView, viewPages[0], contentView.indexOfChild(searchTabsAndFiltersLayout), () -> getThemedColor(Theme.key_windowBackgroundGray));
             progressiveFadeController.setContentCapture(contentView, contentView::captureProgressiveBlur);
             progressiveFadeController.setDialogsBlurAllowed(true);
@@ -7157,7 +7161,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             final float s = lerp(dp(7), dp(50), Math.min(topPanelsVisibility, filtersTabVisibility));
             topBubblesFadeView.setPosition(s, Math.min(dp(40), topPanelsHeight + filtersTabHeight - s));
             topBubblesFadeView.setAlpha(dialogsMaterialHeaderEnabled() || dialogsFadeEnabled()
-                    ? 0f : Math.max(filtersTabVisibility, topPanelsVisibility));
+                    ? 0f : Math.max(filtersTabVisibility, topPanelsVisibility) * (isDialogPicker() ? 0.75f : 1f));
         }
     }
 

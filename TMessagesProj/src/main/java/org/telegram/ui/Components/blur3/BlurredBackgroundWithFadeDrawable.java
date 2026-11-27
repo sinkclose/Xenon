@@ -57,14 +57,9 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable implements Theme
     private int dimAlpha = 0;
     private int dimColor = Color.BLACK;
     private BlurredBackgroundDrawable dimDrawable;
-    private int dimFadeZoneTop = -1;
     private final Paint dimGradientPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private Shader dimGradientShader;
     private int dimGradientLast = -1;
-
-    public void setDimFadeZoneTop(int height) {
-        this.dimFadeZoneTop = height;
-    }
 
     public void setDimColor(int color) {
         if (this.dimColor != color) {
@@ -127,7 +122,7 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable implements Theme
         this.fadeHeight = fadeHeight;
         this.opacity = opacity;
         maskFadeGradientPaint.setShader(shader = opaqueFade ? createGradientOpaque(Color.BLACK) : createGradient(Color.BLACK, opacity));
-        colorStaticPaint.setShader(null);
+        gradientShader = null;
         dimGradientShader = null;
 
         matrix.reset();
@@ -278,7 +273,7 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable implements Theme
                     dimGradientPaint.setShader(dimGradientShader);
                 }
                 matrixTmp.set(matrix);
-                matrixTmp.postTranslate(bounds.left, dimFadeZoneTop > 0 ? dimFadeZoneTop + fadeHeight : bounds.top + offset);
+                matrixTmp.postTranslate(bounds.left, bounds.top + offset);
                 dimGradientShader.setLocalMatrix(matrixTmp);
                 canvas.drawRect(bounds, dimGradientPaint);
             }

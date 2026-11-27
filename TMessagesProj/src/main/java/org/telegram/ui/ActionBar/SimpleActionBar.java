@@ -29,6 +29,7 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.ColorUtils;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
@@ -80,6 +81,85 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
     private boolean searchFieldVisible;
 
     private boolean actionModeVisible;
+
+    private boolean materialActivityHeader;
+    private boolean externalHeaderFade;
+    private boolean externalHeaderTitleVisible = true;
+    private boolean plainBackCircle;
+    private org.telegram.ui.Components.FadeHeaderButtonGlass fadeButtonGlass;
+    private final Paint plainButtonCirclePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+    public void setMaterialActivityHeader(boolean enabled) {
+        if (materialActivityHeader == enabled) return;
+        materialActivityHeader = enabled;
+        setPlainBackCircle(enabled);
+        requestLayout();
+        invalidate();
+    }
+
+    public void setExternalHeaderFade(boolean enabled) {
+        if (externalHeaderFade == enabled) return;
+        externalHeaderFade = enabled;
+        invalidate();
+    }
+
+    public void setExternalHeaderTitleVisible(boolean visible) {
+        if (externalHeaderTitleVisible == visible) return;
+        externalHeaderTitleVisible = visible;
+        invalidate();
+    }
+
+    public boolean hasPlainButtonCircles() {
+        return plainBackCircle || materialActivityHeader;
+    }
+
+    public void setPlainBackCircle(boolean enabled) {
+        if (plainBackCircle == enabled) return;
+        plainBackCircle = enabled;
+        // Simple's 46dp button is already centered like ActionBar's 54dp button after its stock 2dp shift;
+        // keep the same resulting plain-circle centers (35dp/44dp) instead of shifting 2dp past them.
+        backButton.setTranslationX(enabled ? dp(materialActivityHeader ? 15 : 6) : 0);
+        if (menu != null) {
+            menu.requestLayout();
+            for (int i = 0; i < menu.getChildCount(); i++) {
+                menu.getChildAt(i).invalidate();
+            }
+        }
+        requestLayout();
+        invalidate();
+    }
+
+    public void setFadeButtonGlass(org.telegram.ui.Components.FadeHeaderButtonGlass glass) {
+        if (fadeButtonGlass == glass) return;
+        if (fadeButtonGlass != null) fadeButtonGlass.release();
+        fadeButtonGlass = glass;
+        if (glass != null) {
+            setClipChildren(false);
+            setClipToPadding(false);
+            if (menu != null) {
+                menu.setClipChildren(false);
+                menu.setClipToPadding(false);
+            }
+        }
+        invalidate();
+        if (menu != null) menu.invalidate();
+    }
+
+    public int beginFadeButtonContent(Canvas canvas, View child, boolean localCanvas) {
+        return fadeButtonGlass != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+                ? fadeButtonGlass.beginChild(canvas, child, localCanvas) : -1;
+    }
+
+    void drawPlainButtonCircle(Canvas canvas, View host, float cx, float cy) {
+        if (!hasPlainButtonCircles()) return;
+        if (!materialActivityHeader && fadeButtonGlass != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+                && fadeButtonGlass.draw(canvas, host, cx, cy)) return;
+        plainButtonCirclePaint.setColor(materialActivityHeader
+                ? ColorUtils.blendARGB(Theme.getColor(Theme.key_windowBackgroundGray, resourcesProvider),
+                    Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider), 0.08f)
+                : Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider));
+        canvas.drawCircle(cx, cy, dp(materialActivityHeader ? 20 : 23), plainButtonCirclePaint);
+    }
 
     private BlurredBackgroundDrawable glassBack;
     private BlurredBackgroundDrawable glassMenu;
@@ -318,7 +398,8 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
      */
     @Override
     public boolean getMenuItemGlassRect(ActionBarMenuItem item, RectF out) {
-        if (item.getParent() == menu && getSearchFactor() == 0 && getActionModeFactor() == 0) {
+        if (item.getParent() == menu && !hasPlainButtonCircles() && !externalHeaderFade
+                && getSearchFactor() == 0 && getActionModeFactor() == 0) {
             computeMenuPill(out);
             return true;
         }
@@ -336,7 +417,19 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
 
         final int p = dp(6);
 
-        if (glassBack != null && backButton.getVisibility() == VISIBLE && backButton.getAlpha() > 0) {
+        if (!materialActivityHeader && fadeButtonGlass != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            final float cx = backButton.getX() + backButton.getWidth() / 2f;
+            final float cy = backButton.getY() + backButton.getHeight() / 2f;
+            fadeButtonGlass.drawToolbar(canvas, this, cx, cy);
+        }
+
+        if (hasPlainButtonCircles() && backButton.getVisibility() == VISIBLE && backButton.getAlpha() > 0) {
+            drawPlainButtonCircle(canvas, this,
+                    backButton.getX() + backButton.getWidth() / 2f,
+                    backButton.getY() + backButton.getHeight() / 2f);
+        }
+
+        if (!hasPlainButtonCircles() && !externalHeaderFade && glassBack != null && backButton.getVisibility() == VISIBLE && backButton.getAlpha() > 0) {
             final float cx = backButton.getX() + backButton.getWidth() / 2f, cy = backButton.getY() + backButton.getHeight() / 2f;
             final float hw = backButton.getWidth() / 2f * backButton.getScaleX(), hh = backButton.getHeight() / 2f * backButton.getScaleY();
             glassBack.setBounds((int) (cx - hw) - p, (int) (cy - hh) - p, (int) (cx + hw) + p, (int) (cy + hh) + p);
@@ -352,7 +445,7 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
             glassDone.draw(canvas);
         }
 
-        if (glassMenu != null) {
+        if (!hasPlainButtonCircles() && !externalHeaderFade && glassMenu != null) {
             final float alpha = computeMenuPill(menuPillRect);
             // a menu growing out of the pill takes over its glass
             final boolean pillInOverlay = isMenuPillInOverlay();
@@ -433,15 +526,22 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
         if (child == menu && isMenuPillInOverlay()) {
             return false; // the overlay draws the buttons inside the menu growing out of their pill
         }
+        if (!externalHeaderTitleVisible && child == titleLayout) {
+            return false;
+        }
+        final int fadeSave = child == backButton ? beginFadeButtonContent(canvas, child, false) : -1;
+        final boolean result;
         if (child == searchLayout && getSearchFactor() < 1f) {
             computeMenuPill(menuPillRect);
             canvas.save();
             canvas.clipRect(menuPillRect);
-            final boolean result = super.drawChild(canvas, child, drawingTime);
+            result = super.drawChild(canvas, child, drawingTime);
             canvas.restore();
-            return result;
+        } else {
+            result = super.drawChild(canvas, child, drawingTime);
         }
-        return super.drawChild(canvas, child, drawingTime);
+        if (fadeSave != -1) canvas.restoreToCount(fadeSave);
+        return result;
     }
 
     private float getSearchPillLeft() {
@@ -552,6 +652,18 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
+        if (menu != null && hasPlainButtonCircles() && !isSearchFieldVisible()) {
+            float rightmostCenter = Float.NEGATIVE_INFINITY;
+            for (int i = 0; i < menu.getChildCount(); i++) {
+                View item = menu.getChildAt(i);
+                if (item instanceof SimpleActionBarMenuItem && item.getVisibility() == VISIBLE && item.getAlpha() > 0f) {
+                    rightmostCenter = Math.max(rightmostCenter, item.getX() + item.getWidth() / 2f);
+                }
+            }
+            if (rightmostCenter != Float.NEGATIVE_INFINITY) {
+                menu.offsetLeftAndRight(Math.round(getWidth() - getDoneButtonSpace(false) - dp(materialActivityHeader ? 44 : 35) - menu.getX() - rightmostCenter));
+            }
+        }
         // custom children (buttons added by screens) are centered in the header row, below the status bar
         final int rowTop = getRowTop();
         final int rowHeight = ActionBar.getCurrentActionBarHeight();
@@ -589,6 +701,14 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
     /** Lets touches that miss the buttons through to the content below, e.g. a collapsing header. */
     public void setForceSkipTouches(boolean value) {
         forceSkipTouches = value;
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        if (fadeButtonGlass != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            fadeButtonGlass.observeTouch(event);
+        }
+        return super.dispatchTouchEvent(event);
     }
 
     @SuppressLint("ClickableViewAccessibility")

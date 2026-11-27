@@ -11,6 +11,8 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.SharedConfig;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.ActionBarMenu;
+import org.telegram.ui.ActionBar.SimpleActionBar;
+import org.telegram.ui.ActionBar.SimpleActionBarMenu;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
@@ -32,7 +34,8 @@ public final class FadeHeaderButtonGlass {
     private final WeakHashMap<View, Button> buttons = new WeakHashMap<>();
     private final ArrayList<Button> active = new ArrayList<>();
     private final RectF barInRoot = new RectF(), childInBar = new RectF();
-    private ActionBar bar;
+    private View bar;
+    private View backButton;
     private LiquidGlassInputGroup group;
     private final Runnable onUnionReady = this::invalidateRoot;
     private boolean grouped;
@@ -48,7 +51,7 @@ public final class FadeHeaderButtonGlass {
         final LiquidTouchEffect effect;
         final RectF bounds = new RectF();
         float x, y;
-        Button(View view, BlurredBackgroundDrawable drawable, ActionBar bar) {
+        Button(View view, BlurredBackgroundDrawable drawable, View bar) {
             this.view = view;
             this.drawable = drawable;
             effect = new LiquidTouchEffect(bar);
@@ -57,10 +60,14 @@ public final class FadeHeaderButtonGlass {
     }
 
     public FadeHeaderButtonGlass(View root, GlassSource source, Theme.ResourcesProvider resources) {
+        this(root, source, resources, null);
+    }
+
+    public FadeHeaderButtonGlass(View root, GlassSource source, Theme.ResourcesProvider resources, BlurredBackgroundColorProvider colorProvider) {
         this.root = root;
         factory = new BlurredBackgroundDrawableViewFactory(source);
         factory.setLiquidGlassEffectAllowed(true);
-        colors = BlurredBackgroundProviderImpl.topPanel(resources);
+        colors = colorProvider != null ? colorProvider : BlurredBackgroundProviderImpl.topPanel(resources);
     }
 
     private void add(View view, float cx, float cy) {
@@ -93,8 +100,19 @@ public final class FadeHeaderButtonGlass {
         active.add(button);
     }
 
-    public void drawToolbar(Canvas canvas, ActionBar toolbar, float backX, float backY) {
+    public boolean drawToolbar(Canvas canvas, ActionBar toolbar, float backX, float backY) {
+        return drawToolbar(canvas, toolbar, toolbar.getBackButton(), toolbar.createMenu(),
+                toolbar.isSearchFieldVisible(), toolbar.isActionModeShowed(), backX, backY);
+    }
+
+    public boolean drawToolbar(Canvas canvas, SimpleActionBar toolbar, float backX, float backY) {
+        return drawToolbar(canvas, toolbar, toolbar.getBackButton(), toolbar.getMenu(),
+                toolbar.isSearchFieldVisible(), toolbar.isActionModeShowed(), backX, backY);
+    }
+
+    private boolean drawToolbar(Canvas canvas, View toolbar, View back, ViewGroup menu, boolean searchVisible, boolean actionModeVisible, float backX, float backY) {
         bar = toolbar;
+        backButton = back;
         boolean wasGrouped = grouped;
         grouped = false;
         if (wasGrouped) {
@@ -102,14 +120,12 @@ public final class FadeHeaderButtonGlass {
         }
         active.clear();
         pressAnimations.sync(toolbar, NekoConfig.liquidChatElements && SharedConfig.chatBlurEnabled());
-        if (!SharedConfig.chatBlurEnabled() || toolbar.isSearchFieldVisible() || toolbar.isActionModeShowed()
-                || !canvas.isHardwareAccelerated()) return;
+        if (!SharedConfig.chatBlurEnabled() || searchVisible || actionModeVisible || !canvas.isHardwareAccelerated()) return false;
         // Window positions include the navigation/page animation transform.
         // Shapes and their source must both remain in toolbar/root coordinates.
-        if (!ViewPositionWatcher.computeRectInParent(bar, root, barInRoot)) return;
-        add(bar.getBackButton(), backX, backY);
-        ActionBarMenu menu = bar.createMenu();
-        if (menu.getVisibility() == View.VISIBLE) {
+        if (!ViewPositionWatcher.computeRectInParent(bar, root, barInRoot)) return false;
+        add(back, backX, backY);
+        if (menu != null && menu.getVisibility() == View.VISIBLE) {
             for (int i = 0; i < menu.getChildCount(); i++) {
                 View child = menu.getChildAt(i);
                 if (!(child instanceof org.telegram.ui.ActionBar.ActionBarMenuItem)
@@ -122,7 +138,7 @@ public final class FadeHeaderButtonGlass {
             // Child icon display lists may be retained while the toolbar redraws.
             // Refresh their referenced surfaces here as well as in draw().
             for (Button button : active) button.drawable.updateDisplayList();
-            return;
+            return true;
         }
         if (group == null || members.length != active.size()) {
             if (group != null) group.release();
@@ -130,7 +146,7 @@ public final class FadeHeaderButtonGlass {
             group = LiquidGlassInputGroup.acquirePrepared(count, onUnionReady);
             if (group == null) {
                 for (Button button : active) button.drawable.updateDisplayList();
-                return;
+                return true;
             }
             members = new BlurredBackgroundDrawable[count];
             bounds = new RectF[count];
@@ -154,6 +170,11 @@ public final class FadeHeaderButtonGlass {
         if (!wasGrouped) {
             for (Button button : active) button.view.invalidate();
         }
+        return true;
+    }
+
+    public boolean isGrouped() {
+        return grouped;
     }
 
     private void invalidateRoot() {
@@ -175,7 +196,7 @@ public final class FadeHeaderButtonGlass {
     public boolean draw(Canvas canvas, View view, float cx, float cy) {
         if (!SharedConfig.chatBlurEnabled() || !canvas.isHardwareAccelerated()) return false;
         if (grouped) return true;
-        Button button = buttons.get(view == bar ? bar.getBackButton() : view);
+        Button button = buttons.get(view == bar ? backButton : view);
         if (button == null || !active.contains(button)) return false;
         int save = canvas.save();
         if (view != bar) canvas.translate(-button.x, -button.y);

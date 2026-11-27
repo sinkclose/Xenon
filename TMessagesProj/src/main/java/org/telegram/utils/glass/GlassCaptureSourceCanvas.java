@@ -207,6 +207,7 @@ public class GlassCaptureSourceCanvas {
     private void drawInline(
             @NonNull Canvas canvas,
             @NonNull SourceIndex index,
+            boolean unblurred,
             float left,
             float top,
             float right,
@@ -218,7 +219,7 @@ public class GlassCaptureSourceCanvas {
                 final RectF normalizedPositionWithOffset =
                         position.getNormalizedPositionWithOffset(index);
                 final int downsample = position.getDownsample(index);
-                final RenderNode renderNode = position.getRenderNode(index);
+                final RenderNode renderNode = unblurred ? position.sharpNode : position.getRenderNode(index);
 
                 canvas.save();
                 canvas.clipRect(position.originalPosition);
@@ -289,7 +290,12 @@ public class GlassCaptureSourceCanvas {
                 float right,
                 float bottom
         ) {
-            drawInline(canvas, index, left, top, right, bottom);
+            drawInline(canvas, index, false, left, top, right, bottom);
+        }
+
+        @Override
+        public void drawUnblurred(@NonNull Canvas canvas, float left, float top, float right, float bottom) {
+            drawInline(canvas, SourceIndex.BLURRED, true, left, top, right, bottom);
         }
 
         @Override
@@ -348,6 +354,7 @@ public class GlassCaptureSourceCanvas {
         /** Within the root: nothing is captured past it, and the heavy blur would pull that transparency in. */
         public final RectF normalizedPositionFrostedGlassWithOffset = new RectF();
 
+        public final RenderNode sharpNode;
         public final RenderNode renderNode;
         public final RenderNode renderNodeGlass;
         public final RenderNode renderNodeGlassFrosted;
@@ -369,6 +376,7 @@ public class GlassCaptureSourceCanvas {
         public int normalizationDownsample = 1;
 
         public Position(int index) {
+            sharpNode = new RenderNode("cap-sharp-" + index);
             renderNode = new RenderNode("cap-" + index);
             renderNode.setUseCompositingLayer(true, null);
             renderNodeGlass = new RenderNode("glass-" + index);
@@ -492,7 +500,8 @@ public class GlassCaptureSourceCanvas {
             frostedGlassHeight = Math.max(1, Math.round(normalizedPositionFrostedGlassWithOffset.height() / frostedGlassDownsample));
 
             renderNode.setPosition(0, 0, glassWidth, glassHeight);
-            RecordingCanvas recordingCanvas = renderNode.beginRecording();
+            sharpNode.setPosition(0, 0, glassWidth, glassHeight);
+            RecordingCanvas recordingCanvas = sharpNode.beginRecording();
             recordingCanvas.save();
             recordingCanvas.scale(
                     1f / glassDownsample, 1f / glassDownsample, 0f, 0f);
@@ -501,6 +510,10 @@ public class GlassCaptureSourceCanvas {
                     -normalizedPositionGlassWithOffset.top);
             capture.capture(recordingCanvas, normalizedPositionGlassWithOffset);
             recordingCanvas.restore();
+            sharpNode.endRecording();
+
+            recordingCanvas = renderNode.beginRecording();
+            recordingCanvas.drawRenderNode(sharpNode);
             renderNode.endRecording();
 
             renderNodeGlass.setPosition(0, 0, glassWidth, glassHeight);

@@ -85,6 +85,16 @@ public class SimpleActionBarMenuItem extends ActionBarMenuItem {
         }
     }
 
+    @Override
+    public void draw(android.graphics.Canvas canvas) {
+        final int fadeSave = parentMenu.parentBar.beginFadeButtonContent(canvas, this, true);
+        if (getIconView() != null && getIconView().getVisibility() == VISIBLE && !parentMenu.isActionMode) {
+            parentMenu.parentBar.drawPlainButtonCircle(canvas, this, getWidth() / 2f, getHeight() / 2f);
+        }
+        super.draw(canvas);
+        if (fadeSave != -1) canvas.restoreToCount(fadeSave);
+    }
+
     /* Sub menu: opens in the overlay of the fragment, falls back to the popup window without one */
 
     @Nullable

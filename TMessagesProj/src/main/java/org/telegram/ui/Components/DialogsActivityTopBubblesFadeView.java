@@ -12,11 +12,14 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.core.graphics.ColorUtils;
 
+import zxc.iconic.xenon.NekoConfig;
+
 public class DialogsActivityTopBubblesFadeView extends View {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Matrix matrix = new Matrix();
     private Shader shader;
     private int lastColor;
+    private boolean ios27DimmingAllowed = true;
     private boolean ios27SeparatorVisible = true;
     private final org.telegram.ui.Components.AnimatedFloat ios27DividerAlpha = new org.telegram.ui.Components.AnimatedFloat(
             0f, this, 0, 260, new org.telegram.ui.Components.CubicBezierInterpolator(.42, 0, .58, 1));
@@ -36,7 +39,7 @@ public class DialogsActivityTopBubblesFadeView extends View {
     }
 
     private void updateIos27Divider() {
-        if (zxc.iconic.xenon.NekoConfig.ios27DimmingEnabled() && ios27SeparatorSource != null && getVisibility() == VISIBLE) {
+        if (ios27DimmingAllowed && NekoConfig.ios27DimmingEnabled() && ios27SeparatorSource != null && getVisibility() == VISIBLE) {
             setIos27SeparatorVisible(HeaderSurfaceDivider.isScrolled(ios27SeparatorSource, ios27SeparatorFirstPosition, ios27SeparatorVisible));
         }
     }
@@ -59,6 +62,11 @@ public class DialogsActivityTopBubblesFadeView extends View {
 
     public DialogsActivityTopBubblesFadeView(Context context) {
         super(context);
+    }
+
+    public void setIos27DimmingAllowed(boolean allowed) {
+        ios27DimmingAllowed = allowed;
+        invalidate();
     }
 
     public void setColor(int color) {
@@ -98,8 +106,9 @@ public class DialogsActivityTopBubblesFadeView extends View {
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
         updateIos27Divider();
-        float dividerAlpha = ios27DividerAlpha.set(zxc.iconic.xenon.NekoConfig.ios27DimmingEnabled() && ios27SeparatorVisible ? 1f : 0f);
-        if (zxc.iconic.xenon.NekoConfig.ios27DimmingEnabled()) {
+        boolean ios27Dimming = ios27DimmingAllowed && NekoConfig.ios27DimmingEnabled();
+        float dividerAlpha = ios27DividerAlpha.set(ios27Dimming && ios27SeparatorVisible ? 1f : 0f);
+        if (ios27Dimming) {
             paint.setShader(null);
             paint.setColor(ColorUtils.setAlphaComponent(org.telegram.ui.ActionBar.Theme.getColor(
                     org.telegram.ui.ActionBar.Theme.key_windowBackgroundGray), 191));

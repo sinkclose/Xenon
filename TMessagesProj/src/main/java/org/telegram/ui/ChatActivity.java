@@ -2962,7 +2962,7 @@ public class ChatActivity extends BaseFragment implements
         glassBackgroundDrawableFactoryFrosted.setLinkedViewsRef(glassAttachedViews);
         scrimBlur3Factory.setLinkedViewsRef(new ReferenceList<>());
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && NekoConfig.blurredFadeViewEnabled()) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             fadeBlurSource = new GlassSourceRenderNode(null);
             fadeBlurSource.setOnProgressiveBlurReadyListener(this::invalidateFadeBlur);
             fadeBlurSource.setUnderSource(isChatFadeDimmingEnabled()
@@ -8176,22 +8176,11 @@ if (feedIntegration != null) {
 
         chatActivityFadeView = new ChatActivityFadeView(context);
         chatActivityFadeView.setResourcesProvider(themeDelegate);
-        fadeBlurStockApplied = false;
-        if (fadeBlurFactory != null) {
-            chatActivityFadeView.setup(fadeBlurFactory, dimWallpaperDrawableFactory);
-            chatActivityFadeView.setDim(isChatFadeDimmingEnabled() ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
-            chatActivityFadeView.setOpaqueFade(true);
-            chatActivityFadeView.setFadeHeightTop(dp(48), false);
-            chatActivityFadeView.setFadeHeightBottom(dp(48), false);
-        } else {
-            // Stock behavior: plain wallpaper fade, no blur/dim extras.
-            chatActivityFadeView.setup(navbarContentDrawableFactory);
-            chatActivityFadeView.setFadeHeightTop(dp(48));
-            chatActivityFadeView.setFadeHeightBottom(dp(48));
-            fadeBlurStockApplied = fadeBlurFactory != null;
-        }
+        fadeBlurStockApplied = !shouldUseChatFadeBlur();
+        progressiveChatFadeApplied = shouldUseProgressiveChatFade();
+        setupChatFade();
         contentView.addView(chatActivityFadeView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
-        if (fadeBlurSource != null) {
+        if (!fadeBlurStockApplied) {
             chatActivityFadeView.post(this::invalidateFadeBlur);
             startFadeBlurContinuousUpdates();
         }
@@ -20298,6 +20287,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         @Override
         protected void dispatchDraw(Canvas canvas) {
             headerGlassPrepared = false;
+            if (!isPaused() && glassSourceCaptureDepth == 0) {
+                syncFadeBlurEnabledState();
+            }
             chatActivityEnterView.checkAnimation();
             updateChatListViewTopPadding();
             if (invalidateMessagesVisiblePart) {
@@ -32836,7 +32828,8 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             fadeBlurSource.invalidateDisplayListForDrawables();
         }
         syncFadeBlurEnabledState();
-        if (fadeBlurSource != null && NekoConfig.blurredFadeViewEnabled()) startFadeBlurContinuousUpdates();
+        if (!fadeBlurStockApplied) startFadeBlurContinuousUpdates();
+        if (chatActivityFadeView != null) checkUi_topFade();
         invalidateFadeBlur();
         if (actionBar != null) actionBar.setLiquidTouchEnabled(NekoConfig.liquidChatElementsEnabled());
         if (chatInputViewsContainer != null) chatInputViewsContainer.setLiquidTouchEnabled(NekoConfig.liquidChatElementsEnabled());
@@ -51344,7 +51337,12 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             + dp(9) + chatInputViewsContainer.getInputBubbleHeight() + dp(7)
             + getTopicTabsSideSize(TopicsTabsView.Position.BOTTOM);
 
-        chatActivityFadeView.setFadeZoneBottom((int) inputHeight);
+        final int fadeHeight = Math.round(inputHeight) + (progressiveChatFadeApplied && !NonIslandHelper.chatElements()
+                && chatInputViewsContainer.getInputBubbleHeight() > 0 ? dp(24) : 0);
+        if (chatActivityFadeView.getFadeZoneBottom() != fadeHeight) {
+            chatActivityFadeView.setFadeZoneBottom(fadeHeight);
+            invalidateFadeBlur();
+        }
 
         int clipBound = contentView.getMeasuredHeight() - (int) inputHeight + dp(36);
         clipBound = androidx.core.math.MathUtils.clamp(clipBound, 0, contentView.getMeasuredHeight());
@@ -51367,12 +51365,12 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     private void checkUi_topFade() {
-        chatActivityFadeView.setIos27Dimming(NekoConfig.ios27DimmingEnabled() && NekoConfig.ios27DimmingInChat
-                        && !NonIslandHelper.chatElements(), actionBar.getMeasuredHeight(),
+        chatActivityFadeView.setIos27Dimming(!isInsideContainer && NekoConfig.ios27DimmingEnabled()
+                        && NekoConfig.ios27DimmingInChat && !NonIslandHelper.chatElements(), actionBar.getMeasuredHeight(),
                 getThemedColor(Theme.key_windowBackgroundGray));
         chatActivityFadeView.setIos27SeparatorSource(chatListView);
         if (NonIslandHelper.chatElements()) {
-            chatActivityFadeView.setFadeZoneTop(0);
+            setChatTopFadeZone(0);
             return;
         }
         if (parentChatActivity != null) {
@@ -51393,24 +51391,15 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
         fadeHeight += dp(36 + 7) * getHashtagTabsShownT();
 
-        if (fadeBlurFactory == null) {
-            // Stock behavior when blurred fade is off: plain wallpaper fade.
-            chatActivityFadeView.setFadeZoneTop((int) fadeHeight);
-            return;
-        }
+        final int boundary = Math.round(fadeHeight);
+        setChatTopFadeZone(boundary + (progressiveChatFadeApplied && boundary > 0 ? dp(CHAT_FADE_FALLOFF_DP) : 0));
+    }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurEnabled()) {
-            final int boundary = actionBar.getMeasuredHeight();
-            chatActivityFadeView.setFadeZoneTop(boundary + dp(48));
-            chatActivityFadeView.setFadeHeightTop(dp(48), false);
-            chatActivityFadeView.setFadeTopAlpha(255);
-            chatActivityFadeView.setDimFadeZoneTop(boundary);
-            return;
+    private void setChatTopFadeZone(int height) {
+        if (chatActivityFadeView.getFadeZoneTop() != height) {
+            chatActivityFadeView.setFadeZoneTop(height);
+            invalidateFadeBlur();
         }
-
-        chatActivityFadeView.setFadeTopAlpha(255);
-        chatActivityFadeView.setDimFadeZoneTop(-1);
-        chatActivityFadeView.setFadeZoneTop((int) fadeHeight);
     }
 
     private void checkUi_messagesSearchListPadding() {
@@ -52197,7 +52186,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             if (!fadeBlurContinuousUpdating) {
                 return;
             }
-            if (!NekoConfig.blurredFadeViewEnabled()) {
+            if (!shouldUseChatFadeBlur()) {
                 // Master blur went off (toggle or power saver): swap the fade view
                 // to the stock wallpaper fade and stop the loop, no re-enter needed.
                 syncFadeBlurEnabledState();
@@ -52230,13 +52219,13 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     private void invalidateFadeBlur() {
-        if (glassSourceCaptureDepth != 0 || !NekoConfig.blurredFadeViewEnabled()) {
+        if (glassSourceCaptureDepth != 0 || fadeBlurStockApplied || !shouldUseChatFadeBlur()) {
             return;
         }
         // Capture on pre-draw during opening too, so the first visible frame
         // already contains messages at both edges. Requests still coalesce.
         if (fadeBlurCaptureView != null && !fadeBlurCaptureScheduled) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurEnabled()) {
+            if (progressiveChatFadeApplied) {
                 final long now = SystemClock.uptimeMillis();
                 if (now - lastFadeBlurUpdateTime < 1000 / Math.max(15, NekoConfig.progressiveFadeBlurRefreshRate)) {
                     fadeBlurCapturePending = true;
@@ -52250,7 +52239,31 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
     }
 
-    private boolean fadeBlurStockApplied;
+    private static final int CHAT_FADE_FALLOFF_DP = 48;
+    private boolean fadeBlurStockApplied = true;
+    private boolean progressiveChatFadeApplied;
+
+    private boolean shouldUseChatFadeBlur() {
+        return fadeBlurFactory != null && !isInsideContainer && !isCompactMode() && NekoConfig.blurredFadeViewEnabled();
+    }
+
+    private boolean shouldUseProgressiveChatFade() {
+        return !fadeBlurStockApplied && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && NekoConfig.progressiveFadeBlurEnabled();
+    }
+
+    private void setupChatFade() {
+        if (fadeBlurStockApplied) {
+            chatActivityFadeView.setup(navbarContentDrawableFactory);
+        } else {
+            chatActivityFadeView.setup(fadeBlurFactory, dimWallpaperDrawableFactory);
+            chatActivityFadeView.setOpaqueFade(true);
+            chatActivityFadeView.setDim(isChatFadeDimmingEnabled() ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
+        }
+        chatActivityFadeView.setFadeHeightTop(dp(CHAT_FADE_FALLOFF_DP), fadeBlurStockApplied);
+        chatActivityFadeView.setFadeHeightBottom(dp(CHAT_FADE_FALLOFF_DP), fadeBlurStockApplied);
+        chatActivityFadeView.invalidate();
+    }
 
     // Keeps the fade view in sync with the master blur switch at runtime: when
     // blur is turned off (manually or by power saver) the blur fade is swapped
@@ -52260,28 +52273,24 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (fadeBlurFactory == null || chatActivityFadeView == null || contentView == null || actionBar == null) {
             return;
         }
-        final boolean enabled = NekoConfig.blurredFadeViewEnabled();
-        if (enabled && fadeBlurStockApplied) {
-            chatActivityFadeView.setup(fadeBlurFactory, dimWallpaperDrawableFactory);
-            chatActivityFadeView.setOpaqueFade(true);
-            chatActivityFadeView.setFadeHeightTop(dp(48), false);
-            chatActivityFadeView.setFadeHeightBottom(dp(48), false);
-            fadeBlurStockApplied = false;
-            checkUi_topFade();
-            chatActivityFadeView.invalidate();
-            startFadeBlurContinuousUpdates();
-        } else if (!enabled && !fadeBlurStockApplied) {
-            chatActivityFadeView.setup(navbarContentDrawableFactory);
-            chatActivityFadeView.setFadeHeightTop(dp(48));
-            chatActivityFadeView.setFadeHeightBottom(dp(48));
-            fadeBlurStockApplied = true;
-            stopFadeBlurContinuousUpdates();
-            checkUi_topFade();
-            chatActivityFadeView.invalidate();
+        final boolean useStock = !shouldUseChatFadeBlur();
+        final boolean sourceChanged = fadeBlurStockApplied != useStock;
+        if (sourceChanged) {
+            fadeBlurStockApplied = useStock;
+            setupChatFade();
         }
-        if (enabled) {
-            // Restore settings even when no new content capture is needed.
-            chatActivityFadeView.setDim(isChatFadeDimmingEnabled() ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
+        final boolean progressive = shouldUseProgressiveChatFade();
+        if (!sourceChanged && progressiveChatFadeApplied == progressive) {
+            return;
+        }
+        progressiveChatFadeApplied = progressive;
+        checkUi_topFade();
+        checkUi_BlurHeight();
+        if (useStock) {
+            stopFadeBlurContinuousUpdates();
+        } else if (!isPaused()) {
+            startFadeBlurContinuousUpdates();
+            invalidateFadeBlur();
         }
     }
 
@@ -52300,7 +52309,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             return;
         }
         syncFadeBlurEnabledState();
-        if (!NekoConfig.blurredFadeViewEnabled()) {
+        if (fadeBlurStockApplied) {
             return;
         }
         if (fadeBlurSource.inRecording()) {
@@ -52321,17 +52330,17 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         // The fade snapshot re-resolves its wallpaper from the sources bound in
         // onUpdateBackgroundDrawable (kept fresh by the wallpaper load event),
         // so no per-capture source refresh is needed here.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && NekoConfig.progressiveFadeBlurEnabled()) {
-            final int pixelation = Math.max(2, NekoConfig.blurredFadePixelation);
-            fadeBlurSource.setPixelation(pixelation);
-            int fadeZoneTop = chatActivityFadeView.getFadeZoneTop();
-            float topFraction = fadeZoneTop > dp(48) ? Math.min(1f, (fadeZoneTop - dp(48)) / (float) fh) : 1f;
-            int fadeZoneBottom = chatActivityFadeView.getFadeZoneBottom();
-            float bottomFraction = fadeZoneBottom > 0 ? Math.min(1f, fadeZoneBottom / (float) fh) : 1f;
-            fadeBlurSource.setProgressiveBlur(AndroidUtilities.dpf2(NekoConfig.progressiveFadeBlurMaxRadius) / pixelation, Math.max(1, Math.round(fw / (float) pixelation)), Math.max(1, Math.round(fh / (float) pixelation)), topFraction, bottomFraction, NekoConfig.progressiveFadeBlurSamples);
+        final boolean progressive = progressiveChatFadeApplied;
+        final int pixelation = Math.max(progressive ? 2 : 1, NekoConfig.blurredFadePixelation);
+        fadeBlurSource.setPixelation(pixelation);
+        if (progressive && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            float topFraction = Math.min(1f, chatActivityFadeView.getFadeZoneTop() / (float) fh);
+            float bottomFraction = Math.min(1f, chatActivityFadeView.getFadeZoneBottom() / (float) fh);
+            fadeBlurSource.setProgressiveBlur(AndroidUtilities.dpf2(NekoConfig.progressiveFadeBlurMaxRadius) / pixelation,
+                    Math.max(1, Math.round(fw / (float) pixelation)), Math.max(1, Math.round(fh / (float) pixelation)),
+                    topFraction, bottomFraction, NekoConfig.progressiveFadeBlurSamples, dp(CHAT_FADE_FALLOFF_DP) / (float) fh);
         } else {
-            fadeBlurSource.setBlur(AndroidUtilities.dpf2(NekoConfig.blurredFadeBlurStrength));
-            fadeBlurSource.setPixelation(NekoConfig.blurredFadePixelation);
+            fadeBlurSource.setPlainBlur(AndroidUtilities.dpf2(NekoConfig.blurredFadeBlurStrength) / pixelation);
         }
         // Capture the actual chat background separately, preserving patterns and
         // custom drawables that the wallpaper bitmap provider cannot reproduce.

@@ -1171,7 +1171,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
 
     @Override
     public void drawHeaderShadow(Canvas canvas, int alpha, int y) {
-        if (headerShadowDrawable != null && SharedConfig.drawActionBarShadow) {
+        if (headerShadowDrawable != null && SharedConfig.drawActionBarShadow && !NekoConfig.disableAppBarShadow) {
             alpha = alpha / 2;
             if (headerShadowDrawable.getAlpha() != alpha) {
                 headerShadowDrawable.setAlpha(alpha);

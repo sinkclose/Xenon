@@ -118,6 +118,11 @@ public class GlassFadeBlurredDrawable extends GlassDrawable {
         }
     }
 
+    @NonNull
+    public GlassFadeDirection getDirection() {
+        return direction;
+    }
+
     public void setMaskRange(@NonNull GlassFadeRangeParams range) {
         maskRange = range;
         shaderDirty = true;

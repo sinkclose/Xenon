@@ -224,7 +224,8 @@ public final class IosBottomSearchView extends FrameLayout {
     private final Runnable onGlassGroupReady = this::postInvalidateOnAnimation;
 
     @Override protected void onDraw(Canvas canvas) {
-        boolean grouped = Build.VERSION.SDK_INT >= 33 && canvas.isHardwareAccelerated()
+        final float closeAlpha = textProgress(progress);
+        final boolean grouped = closeAlpha > 0f && Build.VERSION.SDK_INT >= 33 && canvas.isHardwareAccelerated()
                 && LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
         if (grouped && glassGroup == null) {
             glassGroup = org.telegram.ui.Components.blur3.drawable.LiquidGlassInputGroup.acquirePrepared(2, onGlassGroupReady);
@@ -239,11 +240,11 @@ public final class IosBottomSearchView extends FrameLayout {
                 touchEffects[i].mapBounds(bounds, glassBounds[i]);
                 LiquidTouchEffect.updateBackground(glassMembers[i], touchEffects[i], 0f, 0f);
             }
-            glassVisibility[1] = textProgress(progress);
+            glassVisibility[1] = closeAlpha;
             glassGroup.draw(canvas, glassMembers, glassBounds, glassVisibility, touchEffects);
         } else {
             drawInteractiveSurface(canvas, fieldBounds, fieldGlass, fieldTouch, 1f);
-            drawInteractiveSurface(canvas, closeBounds, closeGlass, closeTouch, textProgress(progress));
+            drawInteractiveSurface(canvas, closeBounds, closeGlass, closeTouch, closeAlpha);
         }
         float size = AndroidUtilities.dp(24) * (1f - .2f * progress);
         float normalCx = fieldBounds.centerX();

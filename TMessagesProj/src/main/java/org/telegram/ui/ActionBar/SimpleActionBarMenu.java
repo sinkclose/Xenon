@@ -268,6 +268,38 @@ public class SimpleActionBarMenu extends LinearLayout {
         }
     }
 
+    private final java.util.IdentityHashMap<View, int[]> plainCircleMargins = new java.util.IdentityHashMap<>();
+
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        final boolean circles = parentBar.hasPlainButtonCircles() && !parentBar.isSearchFieldVisible();
+        if (circles || !plainCircleMargins.isEmpty()) {
+            for (int a = 0, N = getChildCount(); a < N; a++) {
+                final View view = getChildAt(a);
+                if (!(view instanceof SimpleActionBarMenuItem)) continue;
+                final ViewGroup.LayoutParams lp = view.getLayoutParams();
+                if (!(lp instanceof MarginLayoutParams)) continue;
+                final MarginLayoutParams margins = (MarginLayoutParams) lp;
+                if (circles && margins.width > 0 && ((SimpleActionBarMenuItem) view).getIconView() != null) {
+                    if (!plainCircleMargins.containsKey(view)) {
+                        plainCircleMargins.put(view, new int[]{margins.leftMargin, margins.rightMargin});
+                    }
+                    // Glasmio members are 44dp wide with an 8dp gap inside the shared shell.
+                    final int space = dp(org.telegram.ui.Components.NavigationHeaderButtons.modeEnabled() ? 52 : 58) - margins.width;
+                    margins.leftMargin = space / 2;
+                    margins.rightMargin = space - margins.leftMargin;
+                } else {
+                    final int[] original = plainCircleMargins.remove(view);
+                    if (original != null) {
+                        margins.leftMargin = original[0];
+                        margins.rightMargin = original[1];
+                    }
+                }
+            }
+        }
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+    }
+
     private static class Slot implements ListAnimator.Measurable, Destroyable {
         final View view;
         boolean inAnimator;

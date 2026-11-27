@@ -105,6 +105,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     private static final int POSITION_CONTACTS = 1;
     private static final int POSITION_CALLS_OR_SETTINGS = 2;
     private static final int POSITION_PROFILE = 3;
+    private static final int IOS_BOTTOM_FADE_HEIGHT_DP = 16;
 
     private static final int INDEX_CHATS = 0;
     private static final int INDEX_CONTACTS = 1;
@@ -440,7 +441,8 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
         fadeView = new View(context);
         BlurredBackgroundWithFadeDrawable fadeDrawable = new BlurredBackgroundWithFadeDrawable(iBlur3FactoryFade.create(fadeView, null));
-        fadeDrawable.setFadeHeight(dp(60), true);
+        // Leave the actual glass capture unchanged; cover sharp rows under and between the controls.
+        fadeDrawable.setFadeHeight(dp(NekoConfig.iosBottomBar ? IOS_BOTTOM_FADE_HEIGHT_DP : 60), !NekoConfig.iosBottomBar);
         fadeView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         fadeView.setBackground(fadeDrawable);
         fadeView.setVisibility(NekoConfig.showMainTabs ? View.VISIBLE : View.GONE);
@@ -1086,7 +1088,8 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
         ViewGroup.MarginLayoutParams lp;
         {
-            final int height = navigationBarHeight + updateLayoutHeight + dp(isTabsHidden() ? 0 : DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS);
+            final int extraFade = NekoConfig.iosBottomBar ? IOS_BOTTOM_FADE_HEIGHT_DP - DialogsActivity.MAIN_TABS_MARGIN : 0;
+            final int height = navigationBarHeight + updateLayoutHeight + dp(isTabsHidden() ? 0 : DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS + extraFade);
             lp = (ViewGroup.MarginLayoutParams) fadeView.getLayoutParams();
             if (lp.height != height) {
                 lp.height = height;

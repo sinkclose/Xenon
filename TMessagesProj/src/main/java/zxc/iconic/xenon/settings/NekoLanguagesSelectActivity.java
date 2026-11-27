@@ -87,7 +87,13 @@ public class NekoLanguagesSelectActivity extends BaseNekoSettingsActivity {
 
             @Override
             public void onSearchCollapse() {
+                updateActionBarVisible();
                 search(null);
+            }
+
+            @Override
+            public void onSearchExpand() {
+                updateActionBarVisible();
             }
 
             @Override
