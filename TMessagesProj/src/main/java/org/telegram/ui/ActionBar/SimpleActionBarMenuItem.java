@@ -87,6 +87,7 @@ public class SimpleActionBarMenuItem extends ActionBarMenuItem {
 
     @Override
     public void draw(android.graphics.Canvas canvas) {
+        if (!parentMenu.isActionMode && parentMenu.parentBar.hidesNavigationButton()) return;
         final int fadeSave = parentMenu.parentBar.beginFadeButtonContent(canvas, this, true);
         if (getIconView() != null && getIconView().getVisibility() == VISIBLE && !parentMenu.isActionMode) {
             parentMenu.parentBar.drawPlainButtonCircle(canvas, this, getWidth() / 2f, getHeight() / 2f);

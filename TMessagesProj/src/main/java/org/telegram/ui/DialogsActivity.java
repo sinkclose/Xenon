@@ -1198,7 +1198,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 if (!doNotClip && !dialogsFadeEnabled()) {
                     canvas.clipRect(0, -getY() + getActionBarTop() + getActionBarFullHeight(), getMeasuredWidth(), getMeasuredHeight());
                 }
-                if (slideFragmentProgress != 1f) {
+                if (slideFragmentProgress != 1f && child != filterTabsView) {
                     if (slideFragmentLite) {
                         canvas.translate((-1) * dp(slideAmplitudeDp) * (1f - slideFragmentProgress), 0);
                     } else {
@@ -1418,10 +1418,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     progressiveFadeController.setTopOffset(top);
                 // Extend the fade through the header and dissolve it into the rows.
                 final int fadeTop = (int) (compactHeaderBottom + getInlineSearchHeight() + dp(SEARCH_TABS_HEIGHT));
-                final int fadeZone = Math.max(fadeTop, listClipTop + dp(48));
+                final int foldersBottom = filterTabsView != null && !bottomFilterTabs()
+                        && filterTabsView.getVisibility() == View.VISIBLE
+                        ? Math.round(filterTabsView.getY() + filterTabsView.getHeight() * filterTabsView.getAlpha()) : 0;
+                final int fadeZone = Math.max(Math.max(fadeTop, listClipTop + dp(48)), foldersBottom + dp(32));
                 progressiveFadeController.setProgressiveBlurZoneTop(materialHeader ? fadeZone : -1);
                 final int visibleFadeZone = materialHeader
-                        ? Math.max(actionBar.getBottom(), listClipTop) + dp(12) : fadeZone;
+                        ? Math.max(Math.max(actionBar.getBottom(), listClipTop), foldersBottom) + dp(12) : fadeZone;
                 progressiveFadeController.setIos27Dimming(NekoConfig.ios27DimmingEnabled(), dimBottom,
                         getThemedColor(Theme.key_windowBackgroundGray));
                 progressiveFadeController.setIos27SeparatorSource(viewPages[0].listView, ios27DialogsFirstPosition());
@@ -5347,8 +5350,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
             BlurredBackgroundWithFadeDrawable fadeDrawable = new BlurredBackgroundWithFadeDrawable(
                     iBlur3FactoryFade.create(chatInputViewsContainer, null));
-            fadeDrawable.setFadeHeight(dp(72), true);
-            fadeDrawable.setAlpha(184);
+            if (!SharedConfig.chatBlurEnabled() || LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS)) {
+                fadeDrawable.setFadeHeight(dp(72), true);
+            }
 
             chatInputViewsContainer.setBackgroundWithFadeDrawable(fadeDrawable);
 
@@ -7140,10 +7144,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         float topPanelsVisibility = 0;
         float fadeViewT = totalOffset;
 
-        if (filterTabsView != null && !bottomFilterTabs()) {
+        if (filterTabsView != null && !bottomFilterTabs() && filterTabsView.getVisibility() == View.VISIBLE) {
             filterTabsView.setTranslationY(totalOffset - searchOffset);
             filtersTabVisibility = filterTabsView.getAlpha();
-            filtersTabHeight = dp(36 + 7) * filtersTabVisibility;
+            filtersTabHeight = filterTabsView.getMeasuredHeight() * filtersTabVisibility;
             totalOffset += filtersTabHeight;
         }
 
@@ -14620,10 +14624,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         if (filterTabsView != null) {
             final boolean alphaChanged = filterTabsView.getAlpha() != factor;
 
-            final float s = lerp(0.98f, 1f, factor);
             filterTabsView.setAlpha(factor);
-            filterTabsView.setScaleX(s);
-            filterTabsView.setScaleY(s);
             filterTabsView.setVisibility(factor > 0 ? View.VISIBLE : View.GONE);
 
             if (alphaChanged && viewPages[0] != null) {

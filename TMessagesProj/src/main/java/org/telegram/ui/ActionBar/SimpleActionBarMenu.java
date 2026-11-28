@@ -285,7 +285,9 @@ public class SimpleActionBarMenu extends LinearLayout {
                         plainCircleMargins.put(view, new int[]{margins.leftMargin, margins.rightMargin});
                     }
                     // Glasmio members are 44dp wide with an 8dp gap inside the shared shell.
-                    final int space = dp(org.telegram.ui.Components.NavigationHeaderButtons.modeEnabled() ? 52 : 58) - margins.width;
+                    final int pitch = parentBar.isMaterialActivityHeader() ? SimpleActionBar.MATERIAL_BUTTON_PITCH_DP
+                            : org.telegram.ui.Components.NavigationHeaderButtons.modeEnabled() ? 52 : 58;
+                    final int space = dp(pitch) - margins.width;
                     margins.leftMargin = space / 2;
                     margins.rightMargin = space - margins.leftMargin;
                 } else {

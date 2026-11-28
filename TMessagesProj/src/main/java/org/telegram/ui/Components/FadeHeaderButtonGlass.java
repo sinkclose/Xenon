@@ -115,15 +115,16 @@ public final class FadeHeaderButtonGlass {
         backButton = back;
         boolean wasGrouped = grouped;
         grouped = false;
-        if (wasGrouped) {
-            for (Button button : active) button.view.invalidate();
-        }
-        active.clear();
         pressAnimations.sync(toolbar, NekoConfig.liquidChatElements && SharedConfig.chatBlurEnabled());
-        if (!SharedConfig.chatBlurEnabled() || searchVisible || actionModeVisible || !canvas.isHardwareAccelerated()) return false;
+        if (!SharedConfig.chatBlurEnabled() || searchVisible || actionModeVisible || !canvas.isHardwareAccelerated()
+                || !ViewPositionWatcher.computeRectInParent(bar, root, barInRoot)) {
+            if (wasGrouped) for (Button button : active) button.view.invalidate();
+            active.clear();
+            return false;
+        }
         // Window positions include the navigation/page animation transform.
         // Shapes and their source must both remain in toolbar/root coordinates.
-        if (!ViewPositionWatcher.computeRectInParent(bar, root, barInRoot)) return false;
+        active.clear();
         add(back, backX, backY);
         if (menu != null && menu.getVisibility() == View.VISIBLE) {
             for (int i = 0; i < menu.getChildCount(); i++) {
@@ -137,7 +138,10 @@ public final class FadeHeaderButtonGlass {
         if (Build.VERSION.SDK_INT < 33 || !NekoConfig.liquidChatElements || active.isEmpty() || active.size() > 8) {
             // Child icon display lists may be retained while the toolbar redraws.
             // Refresh their referenced surfaces here as well as in draw().
-            for (Button button : active) button.drawable.updateDisplayList();
+            for (Button button : active) {
+                if (wasGrouped) button.view.invalidate();
+                button.drawable.updateDisplayList();
+            }
             return true;
         }
         if (group == null || members.length != active.size()) {
@@ -145,7 +149,10 @@ public final class FadeHeaderButtonGlass {
             int count = active.size();
             group = LiquidGlassInputGroup.acquirePrepared(count, onUnionReady);
             if (group == null) {
-                for (Button button : active) button.drawable.updateDisplayList();
+                for (Button button : active) {
+                    if (wasGrouped) button.view.invalidate();
+                    button.drawable.updateDisplayList();
+                }
                 return true;
             }
             members = new BlurredBackgroundDrawable[count];
@@ -154,7 +161,7 @@ public final class FadeHeaderButtonGlass {
             alpha = new float[count];
             for (int i = 0; i < count; i++) {
                 bounds[i] = new RectF();
-                for (int j = 0; j < count; j++) group.setPairMergeDistance(i, j, AndroidUtilities.dp(6));
+                for (int j = 0; j < count; j++) group.setPairMergeDistance(i, j, AndroidUtilities.dp(12));
             }
         }
         for (int i = 0; i < active.size(); i++) {

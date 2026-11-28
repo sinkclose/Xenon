@@ -57,9 +57,17 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable implements Theme
     private int dimAlpha = 0;
     private int dimColor = Color.BLACK;
     private BlurredBackgroundDrawable dimDrawable;
+    private int dimFadeZoneTop = -1;
     private final Paint dimGradientPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private Shader dimGradientShader;
     private int dimGradientLast = -1;
+
+    public void setDimFadeZoneTop(int height) {
+        if (dimFadeZoneTop != height) {
+            dimFadeZoneTop = height;
+            invalidateSelf();
+        }
+    }
 
     public void setDimColor(int color) {
         if (this.dimColor != color) {
@@ -257,6 +265,7 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable implements Theme
         canvas.drawRect(0, - offset, bounds.width(), bounds.height() - offset, maskFadeGradientPaint);
         canvas.restoreToCount(save);
         if (dimAlpha > 0) {
+            final int dimOffset = dimFadeZoneTop > 0 ? dimFadeZoneTop + fadeHeight - bounds.top : offset;
             if (dimDrawable != null) {
                 // Dim layer shows the wallpaper itself: global transparency comes
                 // from the dimming strength slider, fade shape from the same mask.
@@ -273,7 +282,7 @@ public class BlurredBackgroundWithFadeDrawable extends Drawable implements Theme
                     dimGradientPaint.setShader(dimGradientShader);
                 }
                 matrixTmp.set(matrix);
-                matrixTmp.postTranslate(bounds.left, bounds.top + offset);
+                matrixTmp.postTranslate(bounds.left, bounds.top + dimOffset);
                 dimGradientShader.setLocalMatrix(matrixTmp);
                 canvas.drawRect(bounds, dimGradientPaint);
             }

@@ -82,19 +82,11 @@ public class TopicsSidePanel extends FrameLayout implements NotificationCenter.N
     public interface Delegate {
         /** 0 for all messages; a topic id, or the peer's dialog id in a monoforum or saved messages. */
         void onTopicSelected(long topicId);
-        /** The button over the chat, in a bot forum: back from the sidebar to the tabs. */
         void onProgressChanged(float progress);
         void onNewTopic();
-        /** The avatar and the title: the profile of whose topics they are. */
         void onOpenProfile();
-        /** The chat's own menu, from the button at the right of the title. */
-        void onOpenMenu(View button);
         /** The topic's menu, as on its tab. */
         default boolean onTopicLongClick(TLRPC.TL_forumTopic topic, View row) { return false; }
-        /** Drawn over the dim, under the panel: the sidebar's button of the action bar stays seen. */
-        default void drawOverDim(Canvas canvas) {}
-        /** The room at the right of the screen the sidebar's button needs when pushed with the chat: the panel leaves it. */
-        default int getButtonReserve() { return 0; }
     }
 
     private final int currentAccount;
@@ -105,13 +97,13 @@ public class TopicsSidePanel extends FrameLayout implements NotificationCenter.N
     private final Delegate delegate;
 
     private final FrameLayout panel;
-    private ImageView menuButton;
     private final RecyclerListView listView;
     private final Adapter adapter;
     private final EditText searchField;
     private final Paint dimPaint = new Paint();
 
     private float progress;
+    private boolean predictiveBackActive;
     private View newTopicIsland, topFade, bottomFade;
     private int bottomInset = -1;
     private int rightInset;
@@ -206,7 +198,7 @@ public class TopicsSidePanel extends FrameLayout implements NotificationCenter.N
             }
             subtitle = getString(R.string.Topics);
         }
-        // the avatar, the title and the subtitle open the profile; the button at the right opens the chat's menu
+        // The avatar and title open the profile or the full Saved Messages view.
         final FrameLayout headerView = new FrameLayout(context) {
             private final ButtonBounce bounce = new ButtonBounce(this);
             @Override
@@ -229,22 +221,8 @@ public class TopicsSidePanel extends FrameLayout implements NotificationCenter.N
                 delegate.onOpenProfile();
             }
         });
-        panel.addView(headerView, LayoutHelper.createFrameMarginPx(LayoutHelper.MATCH_PARENT, 48, Gravity.LEFT | Gravity.TOP, dp(6), top - dp(1), dp(52), 0));
+        panel.addView(headerView, LayoutHelper.createFrameMarginPx(LayoutHelper.MATCH_PARENT, 48, Gravity.LEFT | Gravity.TOP, dp(6), top - dp(1), dp(8), 0));
         headerView.addView(avatarView, LayoutHelper.createFrameMarginPx(40, 40, Gravity.LEFT | Gravity.TOP, dp(6), dp(4), 0, 0));
-
-        final ImageView menuButton = new ImageView(context);
-        menuButton.setScaleType(ImageView.ScaleType.CENTER);
-        menuButton.setImageResource(R.drawable.ic_ab_other);
-        menuButton.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_windowBackgroundWhiteBlackText), PorterDuff.Mode.SRC_IN));
-        menuButton.setBackground(Theme.createSelectorDrawable(Theme.multAlpha(getThemedColor(Theme.key_windowBackgroundWhiteBlackText), .06f), Theme.RIPPLE_MASK_CIRCLE_20DP));
-        menuButton.setContentDescription(getString(R.string.AccDescrMoreOptions));
-        menuButton.setOnClickListener(v -> {
-            if (delegate != null) {
-                delegate.onOpenMenu(v);
-            }
-        });
-        panel.addView(menuButton, LayoutHelper.createFrameMarginPx(40, 40, Gravity.RIGHT | Gravity.TOP, 0, top + dp(3), dp(8), 0));
-        this.menuButton = menuButton;
 
         final TextView titleView = new TextView(context);
         titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
@@ -487,10 +465,9 @@ public class TopicsSidePanel extends FrameLayout implements NotificationCenter.N
         panel.setTranslationX(getPanelWidth() * (1f - progress));
     }
 
-    // on a narrow screen the panel is narrower: the sidebar's button pushed with the chat stays at its left
     private void updateContentWidth(int width) {
-        final int reserve = delegate != null ? delegate.getButtonReserve() : 0;
-        final int w = Math.max(dp(200), Math.min(dp(PANEL_WIDTH), width - rightInset - reserve));
+        // Leave room for the chat's back button even on narrow screens.
+        final int w = Math.max(1, Math.min(dp(PANEL_WIDTH), width - rightInset - dp(64)));
         if (w == contentWidth) return;
         contentWidth = w;
         panel.getLayoutParams().width = getPanelWidth();
@@ -559,13 +536,6 @@ public class TopicsSidePanel extends FrameLayout implements NotificationCenter.N
         return chat != null ? chat.title : "";
     }
 
-    /** A saved chat opened from the sidebar has no menu of its own. */
-    public void setMenuAvailable(boolean available) {
-        if (menuButton != null) {
-            menuButton.setVisibility(available ? VISIBLE : GONE);
-        }
-    }
-
     public void setCurrentTopic(long topicId) {
         currentTopicId = topicId;
         adapter.notifyDataSetChanged();
@@ -576,14 +546,43 @@ public class TopicsSidePanel extends FrameLayout implements NotificationCenter.N
     }
 
     public boolean isOpen() {
-        return progress > 0;
+        return progress > 0 || predictiveBackActive;
+    }
+
+    public zxc.iconic.xenon.helpers.PredictiveTabBack.Target getPredictiveBackTarget() {
+        if (!isAttachedToWindow() || progress <= 0) return null;
+        return new zxc.iconic.xenon.helpers.PredictiveTabBack.Target() {
+            private float startProgress;
+
+            @Override
+            public boolean begin() {
+                if (!isAttachedToWindow() || progress <= 0) return false;
+                cancelAnimation();
+                startProgress = progress;
+                predictiveBackActive = true;
+                return true;
+            }
+
+            @Override
+            public void update(float backProgress) {
+                if (predictiveBackActive) setProgress(startProgress * (1f - backProgress));
+            }
+
+            @Override
+            public void end(boolean commit) {
+                if (!predictiveBackActive) return;
+                predictiveBackActive = false;
+                setProgress(commit ? 0f : startProgress);
+                if (commit) AndroidUtilities.hideKeyboard(searchField);
+            }
+        };
     }
 
     // a gesture that started on the panel stays its own until the finger is lifted, even once the panel is closed
     private boolean touching;
 
     public boolean holdsGesture() {
-        return progress > 0 || touching;
+        return isOpen() || touching;
     }
 
     @Override
@@ -595,7 +594,7 @@ public class TopicsSidePanel extends FrameLayout implements NotificationCenter.N
         final boolean result = super.dispatchTouchEvent(ev);
         if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
             touching = false;
-            setVisibility(progress > 0 ? VISIBLE : GONE);
+            setVisibility(isOpen() ? VISIBLE : GONE);
         }
         return result;
     }
@@ -605,7 +604,7 @@ public class TopicsSidePanel extends FrameLayout implements NotificationCenter.N
         progress = Utilities.clamp01(value);
         if (opening && tagsView != null) animateTagsPop();
         panel.setTranslationX(getPanelWidth() * (1f - progress));
-        setVisibility(progress > 0 || touching ? VISIBLE : GONE);
+        setVisibility(isOpen() || touching ? VISIBLE : GONE);
         invalidate();
         if (delegate != null) {
             delegate.onProgressChanged(progress);
@@ -618,6 +617,7 @@ public class TopicsSidePanel extends FrameLayout implements NotificationCenter.N
     }
 
     public void close() {
+        predictiveBackActive = false;
         animateTo(0f, 0);
         AndroidUtilities.hideKeyboard(searchField);
     }
@@ -667,9 +667,6 @@ public class TopicsSidePanel extends FrameLayout implements NotificationCenter.N
     protected void dispatchDraw(@NonNull Canvas canvas) {
         dimPaint.setColor(Theme.multAlpha(0x29000000, progress));
         canvas.drawRect(0, 0, getWidth(), getHeight(), dimPaint);
-        if (delegate != null && progress > 0) {
-            delegate.drawOverDim(canvas);
-        }
         super.dispatchDraw(canvas);
     }
 
@@ -760,6 +757,10 @@ public class TopicsSidePanel extends FrameLayout implements NotificationCenter.N
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        if (predictiveBackActive) {
+            predictiveBackActive = false;
+            setProgress(0);
+        }
         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.topicsDidLoaded);
         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.updateInterfaces);
         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.savedMessagesDialogsUpdate);

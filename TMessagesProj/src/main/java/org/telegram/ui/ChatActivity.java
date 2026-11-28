@@ -483,6 +483,15 @@ public class ChatActivity extends BaseFragment implements
     private final GlassSource glassWallpaperSource = new GlassSource() {
         @Override
         public void draw(Canvas canvas, float left, float top, float right, float bottom) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && canvas.isHardwareAccelerated()
+                    && contentView != null && contentView.drawBlurredWallpaperForGlass(canvas, left, top, right, bottom)) {
+                return;
+            }
+            drawUnblurred(canvas, left, top, right, bottom);
+        }
+
+        @Override
+        public void drawUnblurred(Canvas canvas, float left, float top, float right, float bottom) {
             if (contentView != null && contentView.backgroundView != null) {
                 contentView.drawWallpaperForGlass(canvas, left, top, right, bottom);
             } else {
@@ -524,6 +533,7 @@ public class ChatActivity extends BaseFragment implements
     protected ActionBarMenuItem searchItem;
     protected ActionBarMenuItem topicCreateItem;
     private ActionBarMenuItem topicsPanelItem;
+    private ActionBarMenuItem rightHeaderAvatarItem;
     private TopicsSidePanel topicsPanel;
     private ActionBarMenuItem.Item translateItem;
     private ActionBarMenuItem searchIconItem;
@@ -1914,6 +1924,7 @@ public class ChatActivity extends BaseFragment implements
 
     private final static int chat_menu_topic_create = 73;
     private final static int chat_menu_topics_panel = 75;
+    private final static int chat_menu_header_avatar = -301;
 
     private final static int id_chat_compose_panel = 1000;
 
@@ -4100,11 +4111,11 @@ if (feedIntegration != null) {
         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
             @Override
             public void onItemClick(final int id) {
-                // the chat's menu is also opened from the sidebar: what it does is in the chat
-                if (id != chat_menu_options && id != chat_menu_topics_panel && id != -1 && topicsPanel != null && topicsPanel.isOpen()) {
-                    topicsPanel.close();
-                }
                 if (id == -1) {
+                    if (topicsPanel != null && topicsPanel.isOpen()) {
+                        topicsPanel.close();
+                        return;
+                    }
                     if (isInPollAddOptionMode()) {
                         pollAddOptionModeClose();
                     } else if (actionBar.isActionModeShowed()) {
@@ -4521,9 +4532,23 @@ if (feedIntegration != null) {
             avatarContainer.onDestroy();
         }
         avatarContainer = new ChatAvatarContainer(context, this, currentEncryptedChat != null, themeDelegate) {
+            private final RectF sidebarButtonBounds = new RectF();
+
+            @Override
+            public boolean dispatchTouchEvent(MotionEvent event) {
+                if (event.getActionMasked() == MotionEvent.ACTION_DOWN && topicsPanelItem != null
+                        && topicsPanelItem.isShown()
+                        && ViewPositionWatcher.computeRectInParent(topicsPanelItem, this, sidebarButtonBounds)
+                        && sidebarButtonBounds.contains(event.getX(), event.getY())) {
+                    return false;
+                }
+                return super.dispatchTouchEvent(event);
+            }
+
             @Override
             protected boolean onAvatarClick() {
-                if (NekoConfig.getChatAvatarPlacement() == NekoConfig.AVATAR_PLACEMENT_RIGHT && !NonIslandHelper.chatElements() && headerItem != null) {
+                if (NekoConfig.getChatAvatarPlacement() == NekoConfig.AVATAR_PLACEMENT_RIGHT && !NonIslandHelper.chatElements()
+                        && headerItem != null && headerItem.getAlpha() > 0f) {
                     headerItem.toggleSubMenu();
                     return true;
                 }
@@ -5033,17 +5058,20 @@ if (feedIntegration != null) {
         } else if (isComments) {
             actionBar.setForcedMenuMinWidth(dp(46));
         }
+        rightHeaderAvatarItem = null;
         if (avatarRight) {
-            if (headerItem != null) {
+            if (chatMode == MODE_SAVED && headerItem == null) {
+                rightHeaderAvatarItem = menu.addItemWithWidth(chat_menu_header_avatar, 0, dp(56));
+                rightHeaderAvatarItem.setOnClickListener(null);
+                rightHeaderAvatarItem.setClickable(false);
+                rightHeaderAvatarItem.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            }
+            if (headerItem != null || rightHeaderAvatarItem != null) {
                 avatarContainer.setRightTextInset(AndroidUtilities.dp(16));
                 if (avatarContainer.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
                     ((ViewGroup.MarginLayoutParams) avatarContainer.getLayoutParams()).rightMargin = AndroidUtilities.dp(6);
                 }
-                avatarContainer.setRightAnchorView(headerItem);
-                View iconView = headerItem.getIconView();
-                if (iconView != null) {
-                    iconView.setVisibility(View.INVISIBLE);
-                }
+                updateRightHeaderAvatarAnchor();
                 actionBar.avatarRightBigger = NekoConfig.useBiggerChatAvatar();
             } else {
                 // No header slot at the right (e.g. comments): hide the avatar
@@ -8359,6 +8387,7 @@ if (feedIntegration != null) {
         addProfilePictureButton = null;
         topicsTabs = null;
         topicsPanel = null;
+        actionBar.setChatSidebarOpen(false);
         botAdView = null;
         bizBotButton = null;
 
@@ -10272,7 +10301,14 @@ if (feedIntegration != null) {
             contentView.addView(actionBarSearchTags, LayoutHelper.createFrameMarginPx(LayoutHelper.MATCH_PARENT, 38, Gravity.FILL_HORIZONTAL | Gravity.TOP, 0, -dp(3), 0, 0));
         }
 
-final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawableFactory.create(topPanelLayout, BlurredBackgroundProviderImpl.topPanelChatActivity(themeDelegate));
+        BlurredBackgroundDrawableViewFactory topPanelFactory = glassBackgroundDrawableFactory;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && scrollableViewNoiseSuppressor != null && !NonIslandHelper.chatHeader()) {
+            topPanelFactory = new BlurredBackgroundDrawableViewFactory(
+                    contentView.pinnedGlassSource, contentView.pinnedGlassSource, navbarContentSourceWallpaper);
+            topPanelFactory.setSourceRootView(viewPositionWatcher, parentView);
+            topPanelFactory.setLiquidGlassEffectAllowed(!NonIslandHelper.chatElements() && !NekoConfig.materialChatElements);
+        }
+        final BlurredBackgroundDrawable topPanelLayoutBackground = topPanelFactory.create(topPanelLayout, BlurredBackgroundProviderImpl.topPanelChatActivity(themeDelegate));
         topPanelLayoutBackground.setRadius(dp(NonIslandHelper.chatHeader() ? 0 : 18));
         topPanelLayoutBackground.setPadding(dp(NonIslandHelper.chatHeader() ? 0 : 7));
         topPanelLayout.setBlurredBackground(topPanelLayoutBackground);
@@ -11323,6 +11359,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         topicsPanelItem = menu.addItem(chat_menu_topics_panel, R.drawable.menu_sidebar_right);
         topicsPanelItem.setContentDescription(LocaleController.getString(R.string.Topics));
         topicsPanelItem.setVisibility(View.GONE);
+        if (isSavedMessagesSidebar()) {
+            getMessagesController().getSavedMessagesController().preloadDialogs(false);
+        }
         updateTopicsPanelItem();
     }
 
@@ -11330,8 +11369,23 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (topicsPanelItem == null) return;
         final boolean visible = isTopicsSidebarEnabled() && !searchItemVisible && (actionBar == null || !actionBar.isActionModeShowed());
         topicsPanelItem.setVisibility(visible ? View.VISIBLE : View.GONE);
-        updateHeaderItemCollapsed(visible);
         updateSideButtonsForAttach();
+    }
+
+    private void updateRightHeaderAvatarAnchor() {
+        if (!avatarOnRight || avatarContainer == null) return;
+        if (rightHeaderAvatarItem != null) {
+            rightHeaderAvatarItem.getIconView().setVisibility(View.INVISIBLE);
+        }
+        if (headerItem != null && headerItem.getIconView() != null) {
+            headerItem.getIconView().setVisibility(View.INVISIBLE);
+            if (topicsPanelItem != null && headerItem.getLayoutParams().width != dp(56)) {
+                final ViewGroup.LayoutParams params = headerItem.getLayoutParams();
+                params.width = dp(56);
+                headerItem.setLayoutParams(params);
+            }
+        }
+        avatarContainer.setRightAnchorView(headerItem != null ? headerItem : rightHeaderAvatarItem);
     }
 
     /** With the sidebar's button in the action bar, the attach button stays in the input (and over it) instead of the action bar's menu. */
@@ -11355,150 +11409,6 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 showHeaderItem(true);
             }
         }
-    }
-
-    /**
-     * With the sidebar the chat's menu is opened from it: the menu button takes no room in the action bar, but stays
-     * at its right edge for the menu to drop from (its visibility is toggled in many places).
-     */
-    private void updateHeaderItemCollapsed(boolean collapsed) {
-        if (headerItem == null || !(headerItem.getLayoutParams() instanceof LinearLayout.LayoutParams)) return;
-        final ViewGroup.LayoutParams lp = headerItem.getLayoutParams();
-        final int width = collapsed ? 0 : dp(48);
-        if (lp.width != width) {
-            lp.width = width;
-            headerItem.setLayoutParams(lp);
-        }
-        headerItem.setAlpha(collapsed ? 0f : 1f);
-        headerItem.setClickable(!collapsed);
-    }
-
-    /** The chat's menu (collapsed in the action bar with the sidebar) as a menu of its own from the sidebar's button. */
-    private void showSidebarMenu(View button) {
-        if (headerItem == null || topicsPanel == null) return;
-        headerItem.prepareSubMenu();
-        final ActionBarPopupWindow.ActionBarPopupWindowLayout layout = headerItem.getPopupLayout();
-        // in the screen's overlay: its dim is over the sidebar too (the panel's elevation would lift it over a dim inside)
-        final ItemOptions o = ItemOptions.makeOptions(this, button, true);
-        boolean lastWasGap = true;
-        for (int i = 0; i < layout.getItemsCount(); i++) {
-            final View child = layout.getItemAt(i);
-            if (child == null || child.getVisibility() != View.VISIBLE) continue;
-            if (child instanceof ActionBarPopupWindow.GapView) {
-                if (!lastWasGap) {
-                    o.addGap();
-                    lastWasGap = true;
-                }
-                continue;
-            }
-            if (!(child instanceof ActionBarMenuSubItem)) continue;
-            final ActionBarMenuSubItem subItem = (ActionBarMenuSubItem) child;
-            final CharSequence text = subItem.getTextView().getText();
-            // an item with a drawable of its own (no resource) keeps a copy of it; a lottie can't be shared, its own is made
-            final Drawable ownDrawable = subItem.getIconResId() == 0 ? subItem.getImageView().getDrawable() : null;
-            final Drawable iconDrawable;
-            if (subItem.getTag() instanceof Integer && (Integer) subItem.getTag() == boost_group) {
-                iconDrawable = new RLottieDrawable(R.raw.boosts, dp(24), dp(24));
-            } else if (ownDrawable != null && ownDrawable.getConstantState() != null) {
-                iconDrawable = ownDrawable.getConstantState().newDrawable().mutate();
-            } else {
-                iconDrawable = null;
-            }
-            if (muteItem != null && subItem == muteItem.getView()) {
-                if (getMessagesController().isDialogMuted(dialog_id, getTopicId())) {
-                    o.add(subItem.getIconResId(), text, () -> {
-                        toggleMute(true);
-                        updateTitleIcons(true);
-                        BulletinFactory.createMuteBulletin(ChatActivity.this, false, themeDelegate).show();
-                    });
-                } else {
-                    // the notifications menu, as in the chat's
-                    o.add(subItem.getIconResId(), text, () -> openSidebarMuteMenu(o));
-                }
-            } else if (subItem.getTag() instanceof Integer) {
-                final int id = (Integer) subItem.getTag();
-                o.addIf(true, subItem.getIconResId(), iconDrawable, text, () -> actionBar.getActionBarMenuOnItemClick().onItemClick(id));
-                if (iconDrawable instanceof RLottieDrawable) {
-                    // a lottie plays in its image view, as in the chat's menu
-                    final ActionBarPopupWindow.ActionBarPopupWindowLayout optionsLayout = (ActionBarPopupWindow.ActionBarPopupWindowLayout) o.getLayout();
-                    final View added = optionsLayout.getItemAt(optionsLayout.getItemsCount() - 1);
-                    if (added instanceof ActionBarMenuSubItem && ((ActionBarMenuSubItem) added).getImageView() instanceof RLottieImageView) {
-                        final RLottieImageView imageView = (RLottieImageView) ((ActionBarMenuSubItem) added).getImageView();
-                        imageView.setAnimation((RLottieDrawable) iconDrawable);
-                        imageView.playAnimation();
-                    }
-                }
-            } else {
-                o.addIf(true, subItem.getIconResId(), iconDrawable, text, subItem::performClick);
-            }
-            lastWasGap = false;
-        }
-        // like the action bar menu: the popup covers the button it opens from
-        o.setGravity(Gravity.RIGHT).translate(0, -button.getHeight()).show();
-    }
-
-    private void openSidebarMuteMenu(ItemOptions parent) {
-        final ActionBarPopupWindow.ActionBarPopupWindowLayout layout = (ActionBarPopupWindow.ActionBarPopupWindowLayout) parent.getLayout();
-        final ChatNotificationsPopupWrapper wrapper = new ChatNotificationsPopupWrapper(getContext(), currentAccount, layout.getSwipeBack(), false, false, new ChatNotificationsPopupWrapper.Callback() {
-            @Override
-            public void dismiss() {
-                parent.dismiss();
-            }
-
-            @Override
-            public void toggleSound() {
-                parent.dismiss();
-                SharedPreferences preferences = MessagesController.getNotificationsSettings(currentAccount);
-                boolean enabled = !preferences.getBoolean("sound_enabled_" + NotificationsController.getSharedPrefKey(dialog_id, getTopicId()), true);
-                preferences.edit().putBoolean("sound_enabled_" + NotificationsController.getSharedPrefKey(dialog_id, getTopicId()), enabled).apply();
-                if (BulletinFactory.canShowBulletin(ChatActivity.this)) {
-                    BulletinFactory.createSoundEnabledBulletin(ChatActivity.this, enabled ? NotificationsController.SETTING_SOUND_ON : NotificationsController.SETTING_SOUND_OFF, getResourceProvider()).show();
-                }
-                updateTitleIcons();
-            }
-
-            @Override
-            public void muteFor(int timeInSeconds) {
-                parent.dismiss();
-                if (timeInSeconds == 0) {
-                    if (getMessagesController().isDialogMuted(dialog_id, getTopicId())) {
-                        ChatActivity.this.toggleMute(true);
-                    }
-                    if (BulletinFactory.canShowBulletin(ChatActivity.this)) {
-                        BulletinFactory.createMuteBulletin(ChatActivity.this, NotificationsController.SETTING_MUTE_UNMUTE, timeInSeconds, getResourceProvider()).show();
-                    }
-                } else {
-                    getNotificationsController().muteUntil(dialog_id, getTopicId(), timeInSeconds);
-                    if (BulletinFactory.canShowBulletin(ChatActivity.this)) {
-                        BulletinFactory.createMuteBulletin(ChatActivity.this, NotificationsController.SETTING_MUTE_CUSTOM, timeInSeconds, getResourceProvider()).show();
-                    }
-                }
-            }
-
-            @Override
-            public void showCustomize() {
-                parent.dismiss();
-                if (dialog_id != 0 && chatMode != MODE_SAVED) {
-                    Bundle args = new Bundle();
-                    args.putLong("dialog_id", dialog_id);
-                    if (getTopicId() != 0) {
-                        args.putLong("topic_id", getTopicId());
-                    }
-                    presentFragment(new ProfileNotificationsActivity(args, themeDelegate));
-                }
-            }
-
-            @Override
-            public void toggleMute() {
-                parent.dismiss();
-                ChatActivity.this.toggleMute(true);
-                BulletinFactory.createMuteBulletin(ChatActivity.this, getMessagesController().isDialogMuted(dialog_id, getTopicId()), themeDelegate).show();
-            }
-        }, getResourceProvider());
-        wrapper.update(dialog_id, getTopicId(), null);
-        final int index = layout.addViewToSwipeBack(wrapper.windowLayout);
-        parent.dontDismiss();
-        layout.getSwipeBack().openForeground(index);
     }
 
     private void openSidebarProfile() {
@@ -11550,7 +11460,6 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
         if (topicsPanel != null) {
             topicsPanel.setCurrentTopic(savedDialogId);
-            topicsPanel.setMenuAvailable(headerItem != null);
         }
         updateTopPanel(true);
         updateBottomOverlay(true);
@@ -11580,7 +11489,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
                 @Override
                 public void onProgressChanged(float progress) {
-                    contentView.invalidate();
+                    if (actionBar != null) actionBar.setChatSidebarOpen(progress > 0 || topicsPanel != null && topicsPanel.isOpen());
+                    invalidateFadeBlur();
+                    if (contentView != null) contentView.invalidate();
                 }
 
                 @Override
@@ -11595,33 +11506,15 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
                 }
 
                 @Override
-                public void onOpenMenu(View button) {
-                    showSidebarMenu(button);
-                }
-
-                @Override
                 public boolean onTopicLongClick(TLRPC.TL_forumTopic topic, View row) {
                     return topicsTabs != null && topicsTabs.showTopicOptions(topic, row, true);
                 }
 
-                @Override
-                public void drawOverDim(Canvas canvas) {
-                    drawSidebarButtonOverDim(canvas);
-                }
-
-                @Override
-                public int getButtonReserve() {
-                    final View item = getSidebarButton();
-                    if (item == null) return 0;
-                    final View menu = (View) item.getParent();
-                    return (int) (actionBar.getWidth() - (menu.getX() + item.getX() + item.getWidth() / 2f) + dp(23 + 8));
-                }
             });
             contentView.addView(topicsPanel, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
         }
         if (topicsPanel != null) {
             topicsPanel.setCurrentTopic(isSavedMessagesSidebar() ? getSavedDialogId() : getTopicId());
-            topicsPanel.setMenuAvailable(headerItem != null);
         }
         return topicsPanel;
     }
@@ -11629,33 +11522,13 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     private void openTopicsPanel() {
         if (!isTopicsSidebarEnabled() || ensureTopicsPanel() == null) return;
         AndroidUtilities.hideKeyboard(contentView);
-        // the width leaves room for the sidebar's button where it is now
-        topicsPanel.requestLayout();
         topicsPanel.open();
     }
 
-    private View getSidebarButton() {
-        if (topicsPanelItem == null || topicsPanelItem.getVisibility() != View.VISIBLE || topicsPanelItem.getWidth() == 0 || actionBar == null || !(topicsPanelItem.getParent() instanceof View)) return null;
-        return topicsPanelItem;
-    }
-
-    private Paint sidebarButtonPaint;
-    /** The sidebar's button alone (not the pill of the buttons it is in) over the panel's dim, in a circle of its own. */
-    private void drawSidebarButtonOverDim(Canvas canvas) {
-        final View item = getSidebarButton();
-        if (item == null) return;
-        final View menu = (View) item.getParent();
-        final float x = actionBar.getX() - getTopicsPanelPush() + menu.getX() + item.getX() - topicsPanel.getX();
-        final float y = actionBar.getY() + menu.getY() + item.getY() - topicsPanel.getY();
-        if (sidebarButtonPaint == null) {
-            sidebarButtonPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        }
-        sidebarButtonPaint.setColor(Theme.multAlpha(getThemedColor(Theme.key_windowBackgroundWhite), topicsPanel.getProgress()));
-        canvas.drawCircle(x + item.getWidth() / 2f, y + item.getHeight() / 2f, dp(23), sidebarButtonPaint);
-        canvas.save();
-        canvas.translate(x, y);
-        item.draw(canvas);
-        canvas.restore();
+    public zxc.iconic.xenon.helpers.PredictiveTabBack.Target getTopicsPanelBackTarget() {
+        if (topicsPanel == null || hasShownSheet() || visibleDialog != null && visibleDialog.isShowing()
+                || actionBar != null && actionBar.getOpenMenuOverlay() != null) return null;
+        return topicsPanel.getPredictiveBackTarget();
     }
 
     /** How far the chat is pushed to the left by the topics panel. */
@@ -19503,8 +19376,10 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             if (Build.VERSION.SDK_INT >= 33 && canvas.isHardwareAccelerated() && !headerGlassGroupFailed
                     && (NekoConfig.liquidChatElementsEnabled() || LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS))
                     && !NonIslandHelper.chatElements() && !switchingFromTopics
+                    && openAnimationEnded && !org.telegram.ui.Components.IosPopupMorph.isCapturingBackdrop()
+                    && getTopPanelHeightWithPadding(0) <= 0f
                     && glassSourceCaptureDepth == 0 && getTag(BlurBehindDrawable.TAG_DRAWING_AS_BACKGROUND) == null
-                    && actionBar != null && actionBar.getVisibility() == VISIBLE
+                    && actionBar != null && !actionBar.isChatSidebarOpen() && actionBar.getVisibility() == VISIBLE
                     && topPanelLayout != null && actionBar.getScaleX() == 1f && actionBar.getScaleY() == 1f
                     && topPanelLayout.getScaleX() == 1f && topPanelLayout.getScaleY() == 1f
                     && actionBar.prepareLiquidGlassHeader(headerGlassMembers, headerGlassEffects)
@@ -19562,6 +19437,117 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
 
         private final RectF glassWallpaperCaptureRect = new RectF();
+        private final RectF pinnedGlassRect = new RectF();
+        private final RectF pinnedGlassCaptureBounds = new RectF();
+        private GlassSourceRenderNode pinnedGlassNode;
+        private boolean pinnedGlassDirty = true;
+        private final GlassSource pinnedGlassSource = new PinnedGlassSource();
+
+        private final class PinnedGlassSource implements GlassSource, BlurredBackgroundDrawableViewFactory.DrawableOwner {
+            @Override
+            public BlurredBackgroundDrawable createDrawable() {
+                return new BlurredBackgroundDrawable(this);
+            }
+
+            @Override
+            public void draw(Canvas canvas, float left, float top, float right, float bottom) {
+                drawPinnedGlass(canvas, left, top, right, bottom, false);
+            }
+
+            @Override
+            public void drawUnblurred(Canvas canvas, float left, float top, float right, float bottom) {
+                drawPinnedGlass(canvas, left, top, right, bottom, true);
+            }
+        }
+
+        private void drawPinnedGlass(Canvas canvas, float left, float top, float right, float bottom, boolean sharp) {
+            if (!canvas.isHardwareAccelerated() || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                glassWallpaperSource.drawUnblurred(canvas, left, top, right, bottom);
+                return;
+            }
+            final ViewGroup root = parentChatActivity != null ? parentChatActivity.contentView : this;
+            if (root == null) return;
+            final int start = Math.max(0, (int) Math.floor(top - dp(24)));
+            final int end = Math.min(root.getHeight(), (int) Math.ceil(bottom + dp(24)));
+            final int width = root.getWidth();
+            if (width <= 0 || end <= start || pinnedGlassNode != null && pinnedGlassNode.inRecording()) {
+                glassWallpaperSource.drawUnblurred(canvas, left, top, right, bottom);
+                return;
+            }
+            if (pinnedGlassNode == null) pinnedGlassNode = new GlassSourceRenderNode(navbarContentSourceWallpaper);
+            pinnedGlassNode.setGlassBlur(dp(8));
+            pinnedGlassRect.set(0, start, width, end);
+            if (pinnedGlassDirty || !pinnedGlassCaptureBounds.equals(pinnedGlassRect)
+                    || pinnedGlassNode.needUpdateDisplayList(width, end - start)) {
+                final Canvas recording = pinnedGlassNode.beginRecording(width, end - start);
+                try {
+                    recording.drawColor(getThemedColor(Theme.key_chat_wallpaper) | 0xff000000);
+                    recording.translate(0, -start);
+                    glassWallpaperSource.drawUnblurred(recording, 0, start, width, end);
+                    if (chatListView != null) {
+                        Blur3Utils.captureRelativeParent(mDrawList, recording, pinnedGlassRect, this, root);
+                    }
+                } finally {
+                    pinnedGlassNode.endRecording();
+                }
+                pinnedGlassCaptureBounds.set(pinnedGlassRect);
+                pinnedGlassDirty = false;
+            }
+            final int save = canvas.save();
+            try {
+                canvas.translate(0, start);
+                if (sharp) pinnedGlassNode.drawUnblurred(canvas, left, top - start, right, bottom - start);
+                else pinnedGlassNode.draw(canvas, left, top - start, right, bottom - start);
+            } finally {
+                canvas.restoreToCount(save);
+            }
+        }
+        private android.graphics.RenderNode glassWallpaperNode;
+        private float glassWallpaperRadius = -1;
+        private int glassWallpaperWidth, glassWallpaperHeight;
+        private boolean glassWallpaperDirty = true;
+
+        @androidx.annotation.RequiresApi(Build.VERSION_CODES.S)
+        private boolean drawBlurredWallpaperForGlass(Canvas canvas, float left, float top, float right, float bottom) {
+            final float fullRadius = AndroidUtilities.dpf2(NekoConfig.isAdvancedGlassEnabled()
+                    && LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS)
+                    ? NekoConfig.getGlassBlurRadiusDp() : NekoConfig.blurStrength * 4f / 3f);
+            final View root = parentChatActivity != null ? parentChatActivity.contentView : this;
+            if (!SharedConfig.chatBlurEnabled() || fullRadius <= 0 || root == null
+                    || root.getWidth() <= 0 || root.getHeight() <= 0 || backgroundView == null) return false;
+            final int width = root.getWidth();
+            final int height = root.getHeight();
+            if (glassWallpaperNode == null) {
+                glassWallpaperNode = new android.graphics.RenderNode("Chat glass wallpaper");
+            }
+            final float radius = DownscaleScrollableNoiseSuppressor.downscaleRadius(fullRadius, 2);
+            if (glassWallpaperRadius != radius) {
+                glassWallpaperRadius = radius;
+                glassWallpaperNode.setRenderEffect(android.graphics.RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP));
+            }
+            if (glassWallpaperDirty || !glassWallpaperNode.hasDisplayList()
+                    || glassWallpaperWidth != width || glassWallpaperHeight != height) {
+                final int w = (width + 1) / 2;
+                final int h = (height + 1) / 2;
+                glassWallpaperNode.setPosition(0, 0, w, h);
+                final Canvas recording = glassWallpaperNode.beginRecording(w, h);
+                try {
+                    recording.scale(0.5f, 0.5f);
+                    drawWallpaperForGlass(recording, 0, 0, width, height);
+                } finally {
+                    glassWallpaperNode.endRecording();
+                }
+                glassWallpaperWidth = width;
+                glassWallpaperHeight = height;
+                glassWallpaperDirty = false;
+            }
+            final int save = canvas.save();
+            canvas.clipRect(left, top, right, bottom);
+            canvas.scale(2f, 2f);
+            canvas.drawRenderNode(glassWallpaperNode);
+            canvas.restoreToCount(save);
+            return true;
+        }
 
         public void drawWallpaperForGlass(Canvas canvas, float left, float top, float right, float bottom) {
             final ViewGroup parent = parentChatActivity != null ? parentChatActivity.contentView : this;
@@ -19577,9 +19563,8 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             glassSourceCaptureDepth++;
             try {
                 canvas.clipRect(position);
-                // drawChild reuses the background view's hardware display list.
-                // It preserves its transforms and does not draw messages or glass.
-                super.drawChild(canvas, backgroundView, getDrawingTime());
+                // Replay the wallpaper independently of the screen's transition clip.
+                drawWallpaperForFade(canvas, true);
             } finally {
                 glassSourceCaptureDepth--;
                 canvas.restoreToCount(save);
@@ -20100,10 +20085,9 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
         @Override
         protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
-            // the topics panel pushes the chat to the left
-            // the wallpaper and its top and bottom fades stay: they show behind the panel's rounded corners;
-            // the chat's menu stays too: it is opened over the panel, from its button
-            final float push = child != topicsPanel && child != backgroundView && child != chatActivityFadeView && !(child instanceof SimpleActionBarMenuOverlay) ? getTopicsPanelPush() : 0;
+            // The back button and wallpaper stay in place while the panel pushes the chat aside.
+            final float push = child != actionBar && child != topicsPanel && child != backgroundView
+                    && child != chatActivityFadeView && !(child instanceof SimpleActionBarMenuOverlay) ? getTopicsPanelPush() : 0;
             if (push <= 0) {
                 return drawChildUnpushed(canvas, child, drawingTime);
             }
@@ -38911,7 +38895,6 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
     @Override
     public boolean onBackPressed(boolean invoked) {
-        // the chat's menu is opened over the topics panel: it closes first
         if (actionBar != null && actionBar.getOpenMenuOverlay() != null) {
             if (invoked) actionBar.closeMenuOverlay(true);
             return false;
@@ -51306,10 +51289,6 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     private float inputIslandHeightCurrent;
     private float inputIslandHeightTarget;
 
-    public float getInputIslandHeightTarget() {
-        return inputIslandHeightCurrent;
-    }
-
     private void checkUi_inputIslandHeight() {
         if (contentView == null) {
             return;
@@ -51337,8 +51316,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             + dp(9) + chatInputViewsContainer.getInputBubbleHeight() + dp(7)
             + getTopicTabsSideSize(TopicsTabsView.Position.BOTTOM);
 
-        final int fadeHeight = Math.round(inputHeight) + (progressiveChatFadeApplied && !NonIslandHelper.chatElements()
-                && chatInputViewsContainer.getInputBubbleHeight() > 0 ? dp(24) : 0);
+        final int fadeHeight = Math.round(inputHeight);
         if (chatActivityFadeView.getFadeZoneBottom() != fadeHeight) {
             chatActivityFadeView.setFadeZoneBottom(fadeHeight);
             invalidateFadeBlur();
@@ -51391,8 +51369,18 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         }
         fadeHeight += dp(36 + 7) * getHashtagTabsShownT();
 
-        final int boundary = Math.round(fadeHeight);
-        setChatTopFadeZone(boundary + (progressiveChatFadeApplied && boundary > 0 ? dp(CHAT_FADE_FALLOFF_DP) : 0));
+        final int boundary = (int) fadeHeight;
+        if (progressiveChatFadeApplied && !isInsideContainer) {
+            final int headerBottom = actionBar.getMeasuredHeight();
+            chatActivityFadeView.setFadeHeightTop(dp(CHAT_FADE_FALLOFF_DP), false);
+            chatActivityFadeView.setFadeTopAlpha(255);
+            chatActivityFadeView.setDimFadeZoneTop(headerBottom);
+            setChatTopFadeZone(headerBottom + dp(CHAT_FADE_FALLOFF_DP));
+        } else {
+            if (!fadeBlurStockApplied) chatActivityFadeView.setFadeTopAlpha(255);
+            chatActivityFadeView.setDimFadeZoneTop(-1);
+            setChatTopFadeZone(boundary);
+        }
     }
 
     private void setChatTopFadeZone(int height) {
@@ -51682,6 +51670,11 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
      * they keep showing the previous wallpaper.
      */
     private void invalidateGlassSources() {
+        if (contentView != null) {
+            contentView.glassWallpaperDirty = true;
+            contentView.pinnedGlassDirty = true;
+            if (topPanelLayout != null) topPanelLayout.invalidatePinnedGlass();
+        }
         if (glassBackgroundSourceRenderNode != null) {
             glassBackgroundSourceRenderNode.invalidateWallpaper();
         }
@@ -52175,6 +52168,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
 
 
     private long lastFadeBlurUpdateTime;
+    private float lastFadeBlurSidebarOffset;
     private boolean fadeWallpaperDirty = true;
     private int fadeWallpaperWidth, fadeWallpaperHeight;
     private boolean fadeBlurContinuousUpdating;
@@ -52225,7 +52219,8 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         // Capture on pre-draw during opening too, so the first visible frame
         // already contains messages at both edges. Requests still coalesce.
         if (fadeBlurCaptureView != null && !fadeBlurCaptureScheduled) {
-            if (progressiveChatFadeApplied) {
+            // The live list moves every sidebar frame while the fade stays fixed.
+            if (progressiveChatFadeApplied && getTopicsPanelPush() == lastFadeBlurSidebarOffset) {
                 final long now = SystemClock.uptimeMillis();
                 if (now - lastFadeBlurUpdateTime < 1000 / Math.max(15, NekoConfig.progressiveFadeBlurRefreshRate)) {
                     fadeBlurCapturePending = true;
@@ -52334,13 +52329,15 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         final int pixelation = Math.max(progressive ? 2 : 1, NekoConfig.blurredFadePixelation);
         fadeBlurSource.setPixelation(pixelation);
         if (progressive && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            float topFraction = Math.min(1f, chatActivityFadeView.getFadeZoneTop() / (float) fh);
-            float bottomFraction = Math.min(1f, chatActivityFadeView.getFadeZoneBottom() / (float) fh);
+            final int top = chatActivityFadeView.getFadeZoneTop() - dp(CHAT_FADE_FALLOFF_DP);
+            final int bottom = chatActivityFadeView.getFadeZoneBottom();
+            float topFraction = top > 0 ? Math.min(1f, top / (float) fh) : 1f;
+            float bottomFraction = bottom > 0 ? Math.min(1f, bottom / (float) fh) : 1f;
             fadeBlurSource.setProgressiveBlur(AndroidUtilities.dpf2(NekoConfig.progressiveFadeBlurMaxRadius) / pixelation,
                     Math.max(1, Math.round(fw / (float) pixelation)), Math.max(1, Math.round(fh / (float) pixelation)),
-                    topFraction, bottomFraction, NekoConfig.progressiveFadeBlurSamples, dp(CHAT_FADE_FALLOFF_DP) / (float) fh);
+                    topFraction, bottomFraction, NekoConfig.progressiveFadeBlurSamples);
         } else {
-            fadeBlurSource.setPlainBlur(AndroidUtilities.dpf2(NekoConfig.blurredFadeBlurStrength) / pixelation);
+            fadeBlurSource.setBlur(AndroidUtilities.dpf2(NekoConfig.blurredFadeBlurStrength));
         }
         // Capture the actual chat background separately, preserving patterns and
         // custom drawables that the wallpaper bitmap provider cannot reproduce.
@@ -52374,6 +52371,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             fadeBlurSource.invalidateDisplayListForDrawables();
         }
         Canvas c = fadeBlurSource.beginRecording(fw, fh);
+        final float sidebarOffset = getTopicsPanelPush();
         try {
             if (!isChatFadeDimmingEnabled()) {
                 c.drawColor(wallpaperColor);
@@ -52381,16 +52379,30 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
             } else {
                 contentView.drawTrianglesForFade(c);
             }
-            contentView.drawList(c, fadeBlurCaptureRect);
+            // Only the list slides with the sidebar. Keep the wallpaper and the
+            // fade fixed, and map the capture bounds back into list coordinates.
+            final int save = c.save();
+            try {
+                c.translate(-sidebarOffset, 0);
+                fadeBlurCaptureRect.offset(sidebarOffset, 0);
+                contentView.drawList(c, fadeBlurCaptureRect);
+            } finally {
+                c.restoreToCount(save);
+                fadeBlurCaptureRect.offset(-sidebarOffset, 0);
+            }
         } finally {
             fadeBlurSource.endRecording();
         }
+        lastFadeBlurSidebarOffset = sidebarOffset;
         chatActivityFadeView.setDimColor(wallpaperColor);
         chatActivityFadeView.setDim(isChatFadeDimmingEnabled() ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
         chatActivityFadeView.invalidate();
     }
 
     private void invalidateMergedVisibleBlurredPositionsAndSources(int flags) {
+        if (BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_WALLPAPER)) {
+            invalidateGlassSources();
+        }
         if (BitwiseUtils.hasFlag(flags, BLUR_INVALIDATE_FLAG_WALLPAPER | BLUR_INVALIDATE_FLAG_CLIP)) {
             fadeWallpaperDirty = true;
         }
@@ -52407,6 +52419,10 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
     }
 
     private void invalidateBlurCaptures(int flags) {
+        if (contentView != null && glassSourceCaptureDepth == 0) {
+            contentView.pinnedGlassDirty = true;
+            if (topPanelLayout != null) topPanelLayout.invalidatePinnedGlass();
+        }
         if (BitwiseUtils.hasFlag(flags, GlassEngine.FLAG_INVALIDATED_SCROLL | GlassEngine.FLAG_INVALIDATED_SCROLL_EDGES | GlassEngine.FLAG_INVALIDATED_OTHER)) {
             invalidateFadeBlur();
         }
@@ -52418,7 +52434,7 @@ final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawab
         if (BitwiseUtils.hasFlag(flags, GlassEngine.FLAG_INVALIDATED_POSITIONS)) {
             GlassPositionsArray glassPositionsArray = glassEngine.getAllVisibleDrawablesWithDisplayListPositionsMerged();
             glassPositionsArray.outset(dp(48), dp(48));
-            glassPositionsArray.clip(0, chatListView.getY(), chatListView.getWidth(), chatListView.getY() + chatListView.getHeight());
+            glassPositionsArray.clip(0, 0, contentView.getWidth(), contentView.getHeight());
             scrollableViewNoiseSuppressor.setupRenderNodes(glassPositionsArray);
         }
 

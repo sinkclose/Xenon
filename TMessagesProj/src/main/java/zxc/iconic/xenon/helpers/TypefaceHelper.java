@@ -70,6 +70,13 @@ public class TypefaceHelper {
         return builder;
     }
 
+    public static Typeface getActivityHeaderTypeface(boolean material) {
+        if (supportsRoundedTypeface()) {
+            return createRoundedTypeface(material ? 550 : 650, false);
+        }
+        return material ? Typeface.create("sans-serif", Typeface.NORMAL) : createRoundedTypeface(700, false);
+    }
+
     public static Typeface getSystemEmojiTypeface() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             return null;

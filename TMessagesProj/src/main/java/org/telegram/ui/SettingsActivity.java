@@ -379,7 +379,8 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                 updateAvatarHide();
             }
         };
-        topView.addView(avatarTouchView, LayoutHelper.createFrame(120, 120, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 23 - 12, 0, 0));
+        topView.addView(avatarTouchView, LayoutHelper.createFrame(120, 120, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0,
+                zxc.iconic.xenon.NekoConfig.fadeViewOtherActivities() ? 19 : 11, 0, 0));
         avatarTouchView.setOnClickListener(v -> {
             TLRPC.User user = MessagesController.getInstance(currentAccount).getUser(UserConfig.getInstance(currentAccount).getClientUserId());
             if (user == null) {
@@ -407,7 +408,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         avatarContainer.setPivotX(0);
         avatarContainer.setPivotY(0);
         avatarGooey.addView(avatarContainer, LayoutHelper.createFrame(90, 90, Gravity.TOP | Gravity.LEFT));
-        contentView.addView(avatarGooey, contentView.indexOfChild(listView) + 1, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+        contentView.addView(avatarGooey, contentView.indexOfChild(simpleActionBar), LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
         avatarDrawable = new AvatarDrawable();
         avatarView = new BackupImageView(context);
@@ -641,6 +642,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
     }
 
     public void syncCenterTitle(boolean animated) {
+        if (simpleActionBar != null) simpleActionBar.refreshTitleAlignment();
         if (actionBar == null) return;
         if (zxc.iconic.xenon.NekoConfig.centerTitle) {
             actionBar.setAdditionalTextLeft(0);
@@ -697,7 +699,8 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         final float shownY = y - getListItemTop(topView) + listView.getPaddingTop();
         final float hiddenY = avatarGooey.getHiddenAvatarCenterY(-dp(16));
         // the avatar goes with the list, it must not run into the name below it
-        final float shown = MathUtils.clamp((y - hiddenY) / Math.max(1, shownY - hiddenY), 0f, 1f);
+        final float shown = Math.abs(y - shownY) < dp(1) ? 1f
+                : MathUtils.clamp((y - hiddenY) / Math.max(1, shownY - hiddenY), 0f, 1f);
         final float centerY = Math.max(y, hiddenY);
         avatarListY = y;
         avatarShownY = shownY;
@@ -855,9 +858,6 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         items.add(SettingCell.Factory.of(8, IconBackgroundColors.CYAN.top, IconBackgroundColors.CYAN.bottom, R.drawable.settings_devices, getString(R.string.SettingsDevices), getString(R.string.SettingsDevicesInfo)));
         items.add(SettingCell.Factory.of(9, IconBackgroundColors.ORANGE_DEEP.top, IconBackgroundColors.ORANGE_DEEP.bottom, R.drawable.settings_power, getString(R.string.SettingsPowerSaving), getString(R.string.SettingsPowerSavingInfo)));
         items.add(SettingCell.Factory.of(10, IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom, R.drawable.settings_language, getString(R.string.SettingsLanguage), LocaleController.getCurrentLanguageName()));
-
-        items.add(UItem.asShadow(null));
-        items.add(SettingCell.Factory.of(50, 0xFFD1E4FF, 0xFF9EC5FF, R.drawable.filled_profile_settings, getString(R.string.NekoSettings)));
 
         items.add(UItem.asShadow(null));
         if (!walletAbove && getMessagesController().config.walletAvailable.get()) {

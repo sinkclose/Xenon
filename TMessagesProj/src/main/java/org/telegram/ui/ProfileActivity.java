@@ -431,6 +431,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     private TimerDrawable timerDrawable;
     private ProfileGalleryBlurView avatarsBlurView;
     private final ProfileBackdrop profileBackdrop = new ProfileBackdrop();
+    private final AnimatedFloat profileTitleCenterOffset = new AnimatedFloat(this::scheduleProfileTitleRelayout, 300, CubicBezierInterpolator.EASE_OUT_QUINT);
+    private final Runnable profileTitleRelayout = () -> needLayout(false);
     private final ProfileBackdrop profilePhotoEffects = new ProfileBackdrop();
     private ValueAnimator profileAppearanceAnimator;
     private boolean profileAppearanceQueued;
@@ -2606,6 +2608,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     @Override
     public void onFragmentDestroy() {
         super.onFragmentDestroy();
+        if (nekoHeaderBlur != null) {
+            nekoHeaderBlur.detach();
+        }
+        if (simpleActionBar != null) {
+            simpleActionBar.setFadeButtonGlass(null);
+        }
         if (sharedMediaLayout != null) {
             sharedMediaLayout.onDestroy();
         }
@@ -3565,7 +3573,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             protected void dispatchDraw(Canvas canvas) {
                 updateProfileAvatarColors();
                 drawRedesignedProfileBackdrop(canvas);
-                if (headerBlurFactor > 0 && !isRedesignedProfileEnabled()) {
+                if (headerBlurFactor > 0 && !isRedesignedProfileEnabled() && !NekoConfig.fadeViewOtherActivities()) {
                     // the colored header fades out: the rows go under the header, on the screen's background
                     grayPaint.setColor(getThemedColor(Theme.key_windowBackgroundGray));
                     canvas.drawRect(0, 0, getMeasuredWidth(), getHeaderBarHeight(), grayPaint);
@@ -3712,7 +3720,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 if (child == blurredView) {
                     return true;
                 }
-                if (child == listView && isRedesignedProfileEnabled() && actionBar != null) {
+                if (child == listView && isRedesignedProfileEnabled() && !NekoConfig.fadeViewOtherActivities() && actionBar != null) {
                     // the redesigned header is transparent: the rows must not show through under its title and buttons
                     final float header = ActionBar.getCurrentActionBarHeight() + (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0)
                             + extraHeight + searchTransitionOffset;
@@ -5843,7 +5851,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         nameTextView.setLeftDrawableTopPadding(-AndroidUtilities.dp(1.3f));
         nameTextView.setPivotX(0);
         nameTextView.setPivotY(0);
-        nameTextView.setScrollNonFitText(true);
+        nameTextView.setScrollNonFitText(!NekoConfig.fadeViewOtherActivities());
         nameTextView.setFocusable(true);
         nameTextView.setEllipsizeByGradient(true);
         nameTextView.setOnLongClickListener(v -> {
@@ -6369,6 +6377,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     /** The avatar has hidden into the cutout: the header is the glass of the simple screens, the rows go under it. */
     private float headerBlurFactor;
     private View headerBlurView;
+    private org.telegram.ui.Components.ProgressiveFadeBlurController nekoHeaderBlur;
+    private org.telegram.ui.Components.chat.layouts.ChatActivityFadeView nekoHeaderFade;
+    private org.telegram.ui.Components.FadeHeaderButtonGlass nekoHeaderButtons;
 
     private int getHeaderBarHeight() {
         return (actionBar != null && actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight();
@@ -6496,9 +6507,33 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         }
         final boolean media = sharedMediaLayout != null && sharedMediaLayout.getParent() == listView && sharedMediaLayout.isAttachedToWindow();
         final float alpha = Math.max(Math.min(headerBlurFactor, headerRowsProgress), mediaHeaderAnimationProgress);
+        final boolean nekoFade = NekoConfig.fadeViewOtherActivities();
+        if (nekoHeaderFade != null) {
+            final int edge = Math.max(0, headerBlurView.getHeight() - dp(HEADER_FADE_FALLOFF_DP));
+            final int color = getThemedColor(Theme.key_windowBackgroundGray);
+            final float fadeAlpha = Math.max(alpha, listView.canScrollVertically(-1) ? headerRowsProgress : 0f);
+            final boolean show = nekoFade && fadeAlpha > 0;
+            final boolean blur = show && nekoHeaderBlur != null && nekoHeaderBlur.isEnabled();
+            nekoHeaderFade.setVisibility(show && !blur ? View.VISIBLE : View.GONE);
+            nekoHeaderFade.setAlpha(fadeAlpha);
+            nekoHeaderFade.setFadeZoneTop(edge);
+            nekoHeaderFade.setFadeTopAlpha(NekoConfig.blurredFadeDimming ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
+            nekoHeaderFade.setIos27Dimming(NekoConfig.ios27DimmingEnabled(), edge, color);
+            if (nekoHeaderBlur != null) {
+                nekoHeaderBlur.setAlpha(fadeAlpha);
+                nekoHeaderBlur.setFadeZoneTop(edge);
+                nekoHeaderBlur.setProgressiveBlurZoneTop(edge + dp(31));
+                nekoHeaderBlur.setIos27Dimming(NekoConfig.ios27DimmingEnabled(), edge, color);
+                nekoHeaderBlur.setFadeViewVisibility(blur ? View.VISIBLE : View.GONE);
+            }
+        }
+        final boolean material = NekoConfig.materialActivityHeaders;
+        simpleActionBar.setMaterialActivityHeader(material);
+        simpleActionBar.setPlainBackCircle(material || nekoFade);
+        simpleActionBar.setFadeButtonGlass(!material && nekoFade && SharedConfig.chatBlurEnabled() ? nekoHeaderButtons : null);
         headerBlurView.setAlpha(media ? 0 : alpha);
-        headerBlurView.setVisibility(!media && alpha > 0 ? View.VISIBLE : View.GONE);
-        headerFadeView.setAlpha(media ? alpha : 0);
+        headerBlurView.setVisibility(!nekoFade && !media && alpha > 0 ? View.VISIBLE : View.INVISIBLE);
+        headerFadeView.setAlpha(!nekoFade && media ? alpha : 0);
         if (media) {
             // at the top of the screen wherever the media are
             headerFadeView.setTranslationY(-(listView.getY() + sharedMediaLayout.getY()));
@@ -8534,6 +8569,26 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         headerBlurView = new View(getContext());
         headerBlurView.setBackground(glass.createActionBarFadeDrawable(headerBlurView));
         contentView.addView(headerBlurView, contentView.indexOfChild(avatarContainer2), LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.TOP));
+        nekoHeaderFade = new org.telegram.ui.Components.chat.layouts.ChatActivityFadeView(getContext());
+        nekoHeaderFade.setupColorKey(Theme.key_windowBackgroundGray);
+        nekoHeaderFade.setResourcesProvider(resourcesProvider);
+        nekoHeaderFade.setFadeHeightTop(dp(HEADER_FADE_FALLOFF_DP), false);
+        nekoHeaderFade.setIos27SeparatorSource(listView);
+        nekoHeaderFade.setVisibility(View.GONE);
+        contentView.addView(nekoHeaderFade, contentView.indexOfChild(avatarContainer2),
+                LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            nekoHeaderButtons = new org.telegram.ui.Components.FadeHeaderButtonGlass(contentView,
+                    glass.getGlassSource() != null ? glass.getGlassSource() : org.telegram.utils.glass.source.GlassSourceEmpty.INSTANCE,
+                    resourcesProvider, BlurredBackgroundProviderImpl.simpleActionBar(resourcesProvider));
+            nekoHeaderBlur = new org.telegram.ui.Components.ProgressiveFadeBlurController(contentView, listView,
+                    contentView.indexOfChild(avatarContainer2), () -> getThemedColor(Theme.key_windowBackgroundGray));
+            nekoHeaderBlur.setContentCapture(contentView, iBlur3Capture);
+            nekoHeaderBlur.setUniformBlurAllowed(true);
+            nekoHeaderBlur.setFadeHeightTop(dp(HEADER_FADE_FALLOFF_DP), false);
+            nekoHeaderBlur.setIos27SeparatorSource(listView);
+            nekoHeaderBlur.setFadeViewVisibility(View.GONE);
+        }
         glassEngine.addScrolledView(listView);
         sharedMediaLayout.setPagesGlassEngine(glassEngine);
         // the blur under the header grows with the player above the tabs
@@ -8543,6 +8598,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     }
 
     private int pagesOverscanTop;
+    private static final int HEADER_FADE_FALLOFF_DP = 32;
+    private static final int HEADER_FADE_EXTENSION_DP = 12;
 
     /** The pages reach the screen top: the lists overscan the media up to it, past the header and the status bar. */
     private void applyPagesInsets() {
@@ -8551,8 +8608,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         }
         final int statusBar = actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0;
         final int headerHeight = statusBar + ActionBar.getCurrentActionBarHeight();
-        // the list starts under the header: the tabs go up into the glass header's extra height, 7dp under its buttons
-        final int tabsTop = SharedMediaLayout.getPagesTabsTop(headerHeight) - headerHeight;
+        // Keep the tabs below the header dimming with a gap, including when the media stick to the header.
+        int tabsTop = SharedMediaLayout.getPagesTabsTop(headerHeight) - headerHeight;
+        if (NekoConfig.fadeViewOtherActivities()) {
+            tabsTop = Math.max(tabsTop, dp(HEADER_FADE_EXTENSION_DP + 7));
+        }
         pagesOverscanTop = headerHeight + tabsTop + BaseFragmentSimpleGlass.getOverscan(statusBar);
         sharedMediaLayout.setPagesInsets(tabsTop,
             pagesOverscanTop,
@@ -8560,7 +8620,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             navigationBarHeight + additionNavigationBarHeight);
         // the blur fades out towards its bottom: the subtitle at the bottom of the header row is above the fade, and
         // over the media the tabs and the player are on the blur; both blurs are the same, they take each other's place
-        headerBlurBaseHeight = headerHeight + dp(44);
+        headerBlurBaseHeight = headerHeight + dp(HEADER_FADE_EXTENSION_DP) + dp(HEADER_FADE_FALLOFF_DP);
         updateHeaderBlurHeight();
         checkPagesVisibleOverscan();
     }
@@ -9504,15 +9564,23 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 needLayoutText(diff, 0, false);
 
                 final FrameLayout.LayoutParams params1 = (FrameLayout.LayoutParams) nameTextView.getLayoutParams();
-                float nameX = viewportWidth / 2f - (params1.leftMargin + Math.min(nameTextView.getExactWidth(), params1.width) * nameScale * 0.5f);
+                final float titleCenter = profileTitleCenter(viewportWidth, diff);
+                float nameX = titleCenter - (params1.leftMargin + Math.min(nameTextView.getExactWidth(), params1.width) * nameScale * 0.5f);
                 final FrameLayout.LayoutParams params2 = (FrameLayout.LayoutParams) onlineTextView.getLayoutParams();
                 final float onlineMaxWidth = params2.width;
                 final float onlinePadding = !hasFallbackPhoto && onlineTextView.getExactWidth() <= onlineMaxWidth - onlineTextView.getPaddingLeft() - onlineTextView.getPaddingRight() ? onlineTextView.getPaddingLeft() : 0;
-                float onlineX = viewportWidth / 2f - (params2.leftMargin + onlinePadding + Math.min(onlineTextView.getExactWidth(), onlineMaxWidth) * 0.5f);
+                float onlineX = titleCenter - (params2.leftMargin + onlinePadding + Math.min(onlineTextView.getExactWidth(), onlineMaxWidth) * 0.5f);
                 final FrameLayout.LayoutParams params3 = (FrameLayout.LayoutParams) idTextView.getLayoutParams();
                 final float idMaxWidth = params3.width;
                 final float idPadding = idTextView.getExactWidth() <= idMaxWidth - idTextView.getPaddingLeft() - idTextView.getPaddingRight() ? idTextView.getPaddingLeft() : 0;
-                float idX = viewportWidth / 2f - (params3.leftMargin + idPadding + Math.min(idTextView.getExactWidth(), idMaxWidth) * 0.5f);
+                float idX = titleCenter - (params3.leftMargin + idPadding + Math.min(idTextView.getExactWidth(), idMaxWidth) * 0.5f);
+
+                if (NekoConfig.fadeViewOtherActivities() && !NekoConfig.centerTitle) {
+                    final int leading = dp(72);
+                    nameX = lerp(leading - params1.leftMargin, nameX, diff);
+                    onlineX = lerp(leading - params2.leftMargin - onlinePadding, onlineX, diff);
+                    idX = lerp(leading - params3.leftMargin - idPadding, idX, diff);
+                }
 
                 this.nameX = nameX;
                 this.onlineX = onlineX;
@@ -9677,6 +9745,28 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         needLayoutText(diff, 0, true);
     }
 
+    private float profileTitleCenter(int width, float expanded) {
+        if (openAnimationInProgress) {
+            profileTitleCenterOffset.set(0f, true);
+            return width / 2f;
+        }
+        final float actions = simpleActionBar != null ? simpleActionBar.createMenu().getTargetPillWidth() : dp(46);
+        final float left = dp(64);
+        final float right = width - actions - dp(18);
+        final float center = width / 2f;
+        final float halfText = Math.min(nameTextView.getExactWidth() * nameTextView.getScaleX(), Math.max(0, right - left)) / 2f;
+        final boolean fits = center - halfText >= left && center + halfText <= right;
+        final float offset = profileTitleCenterOffset.set(fits ? 0f : (left + right) / 2f - center);
+        return center + offset * (1f - expanded);
+    }
+
+    private void scheduleProfileTitleRelayout() {
+        if (contentView != null) {
+            contentView.removeCallbacks(profileTitleRelayout);
+            contentView.postOnAnimation(profileTitleRelayout);
+        }
+    }
+
     private void updateTextLayoutBasedOnTranslation() {
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) nameTextView.getLayoutParams();
         int old = params.width;
@@ -9703,8 +9793,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         int viewWidth = AndroidUtilities.isTablet() ? AndroidUtilities.dp(490) : AndroidUtilities.displaySize.x;
         // centered between the buttons of the header, as the title of a simple header
         final float pillWidth = simpleActionBar != null ? simpleActionBar.createMenu().getTargetPillWidth() : dp(46);
-        final int titleSide = (int) Math.max(dp(64), pillWidth + dp(6 + 12));
-        int minOnlineWidth = viewWidth - titleSide * 2;
+        int minOnlineWidth = Math.max(dp(40), viewWidth - dp(64 + 18) - (int) pillWidth);
         int minWidth = (int) (minOnlineWidth / (startWidth != 0 ? 1f : minScale));
         int maxOnlineWidth = startWidth != 0 ? startWidth : viewWidth - AndroidUtilities.dp(18) * 2;
         int maxWidth = startWidth != 0 ? startWidth : (int) (maxOnlineWidth / maxScale);
@@ -11177,7 +11266,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
      * The header of the topics lays them out other than the chat's, so they are measured instead of {@code fallback}.
      */
     private float getPreviousHeaderTranslationX(View view, int which, float fallback) {
-        if (previousTransitionFragment == null || previousTransitionFragment instanceof ChatActivity || fragmentView == null || !(view.getParent() instanceof View)) {
+        if (previousTransitionFragment == null || fragmentView == null || !(view.getParent() instanceof View)) {
             return fallback;
         }
         final ChatAvatarContainer previousAvatarContainer = previousTransitionFragment.getAvatarContainer();
@@ -11190,7 +11279,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         } else {
             previousView = previousActionBar != null ? previousActionBar.getBackButton() : null;
         }
-        if (previousView == null || !ViewPositionWatcher.computeRectInParent(previousView, getPreviousTransitionRoot(), previousAvatarRect)) {
+        final View previousRoot = getPreviousTransitionRoot();
+        if (previousView == null || previousRoot == null || !previousView.isLaidOut()
+                || !ViewPositionWatcher.computeRectInParent(previousView, previousRoot, previousAvatarRect)) {
             return fallback;
         }
         final float previousX = previousAvatarRect.left;
@@ -11200,7 +11291,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         if (which == PREVIOUS_HEADER_BACK) {
             return previousX - (previousAvatarRect.left + view.getLeft());
         }
-        return previousX + previousView.getPaddingLeft() - (previousAvatarRect.left + view.getLeft() + view.getPaddingLeft());
+        final float previousTextOffset = previousView instanceof SimpleTextView
+                ? ((SimpleTextView) previousView).getTextOffsetX() : previousView.getPaddingLeft();
+        final float textOffset = view instanceof SimpleTextView
+                ? ((SimpleTextView) view).getTextOffsetX() : view.getPaddingLeft();
+        return previousX + previousTextOffset - (previousAvatarRect.left + view.getLeft() + textOffset);
     }
 
     /** The topics' header may show another status than the profile, e.g. without the online count: then they crossfade. */

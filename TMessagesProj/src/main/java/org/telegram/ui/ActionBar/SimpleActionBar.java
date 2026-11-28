@@ -82,19 +82,66 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
 
     private boolean actionModeVisible;
 
+    static final int MATERIAL_BUTTON_PITCH_DP = 44;
     private boolean materialActivityHeader;
     private boolean externalHeaderFade;
     private boolean externalHeaderTitleVisible = true;
     private boolean plainBackCircle;
     private org.telegram.ui.Components.FadeHeaderButtonGlass fadeButtonGlass;
+    private boolean navigationButtonsOwned;
+    private boolean drawingNavigationButton;
+
+    public void setNavigationButtonsOwned(boolean owned) {
+        if (navigationButtonsOwned != owned) {
+            navigationButtonsOwned = owned;
+            backButton.invalidate();
+            if (menu != null) {
+                menu.invalidate();
+                for (int i = 0; i < menu.getChildCount(); i++) menu.getChildAt(i).invalidate();
+            }
+            invalidate();
+        }
+    }
+
+    boolean hidesNavigationButton() {
+        return navigationButtonsOwned && !drawingNavigationButton;
+    }
+
+    public boolean areNavigationButtonsOwned() {
+        return navigationButtonsOwned;
+    }
+
+    public void drawNavigationButton(Canvas canvas, View button) {
+        drawingNavigationButton = true;
+        try {
+            button.draw(canvas);
+        } finally {
+            drawingNavigationButton = false;
+        }
+    }
+
+    public Theme.ResourcesProvider getResourcesProvider() {
+        return resourcesProvider;
+    }
     private final Paint plainButtonCirclePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     public void setMaterialActivityHeader(boolean enabled) {
         if (materialActivityHeader == enabled) return;
         materialActivityHeader = enabled;
         setPlainBackCircle(enabled);
+        if (doneButton != null) doneButton.updateColors();
+        applyFactors();
         requestLayout();
         invalidate();
+    }
+
+    boolean isMaterialActivityHeader() {
+        return materialActivityHeader;
+    }
+
+    public int getTitleActionsWidth() {
+        final float menuWidth = menu != null && menu.getVisibility() != GONE ? menu.getTargetPillWidth() : 0;
+        return Math.round(menuWidth + getDoneButtonSpace(true));
     }
 
     public void setExternalHeaderFade(boolean enabled) {
@@ -114,11 +161,12 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
     }
 
     public void setPlainBackCircle(boolean enabled) {
-        if (plainBackCircle == enabled) return;
+        final int translation = enabled ? dp(materialActivityHeader ? 15 : 6) : 0;
+        if (plainBackCircle == enabled && backButton.getTranslationX() == translation) return;
         plainBackCircle = enabled;
         // Simple's 46dp button is already centered like ActionBar's 54dp button after its stock 2dp shift;
         // keep the same resulting plain-circle centers (35dp/44dp) instead of shifting 2dp past them.
-        backButton.setTranslationX(enabled ? dp(materialActivityHeader ? 15 : 6) : 0);
+        backButton.setTranslationX(translation);
         if (menu != null) {
             menu.requestLayout();
             for (int i = 0; i < menu.getChildCount(); i++) {
@@ -146,12 +194,13 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
     }
 
     public int beginFadeButtonContent(Canvas canvas, View child, boolean localCanvas) {
+        if (navigationButtonsOwned) return -1;
         return fadeButtonGlass != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
                 ? fadeButtonGlass.beginChild(canvas, child, localCanvas) : -1;
     }
 
     void drawPlainButtonCircle(Canvas canvas, View host, float cx, float cy) {
-        if (!hasPlainButtonCircles()) return;
+        if (navigationButtonsOwned || !hasPlainButtonCircles()) return;
         if (!materialActivityHeader && fadeButtonGlass != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
                 && fadeButtonGlass.draw(canvas, host, cx, cy)) return;
         plainButtonCirclePaint.setColor(materialActivityHeader
@@ -417,7 +466,7 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
 
         final int p = dp(6);
 
-        if (!materialActivityHeader && fadeButtonGlass != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+        if (!navigationButtonsOwned && !materialActivityHeader && fadeButtonGlass != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
             final float cx = backButton.getX() + backButton.getWidth() / 2f;
             final float cy = backButton.getY() + backButton.getHeight() / 2f;
             fadeButtonGlass.drawToolbar(canvas, this, cx, cy);
@@ -437,7 +486,7 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
             glassBack.draw(canvas);
         }
 
-        if (glassDone != null && doneButton != null && doneButton.drawsGlass() && doneButton.getVisibility() == VISIBLE && doneButton.getAlpha() > 0) {
+        if (!navigationButtonsOwned && !materialActivityHeader && glassDone != null && doneButton != null && doneButton.drawsGlass() && doneButton.getVisibility() == VISIBLE && doneButton.getAlpha() > 0) {
             final float cx = doneButton.getX() + doneButton.getWidth() / 2f, cy = doneButton.getY() + doneButton.getHeight() / 2f;
             final float hw = doneButton.getWidth() / 2f * doneButton.getScaleX(), hh = doneButton.getHeight() / 2f * doneButton.getScaleY();
             glassDone.setBounds((int) (cx - hw) - p, (int) (cy - hh) - p, (int) (cx + hw) + p, (int) (cy + hh) + p);
@@ -523,6 +572,7 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
 
     @Override
     protected boolean drawChild(@NonNull Canvas canvas, View child, long drawingTime) {
+        if (navigationButtonsOwned && (child == backButton || child == doneButton)) return false;
         if (child == menu && isMenuPillInOverlay()) {
             return false; // the overlay draws the buttons inside the menu growing out of their pill
         }
@@ -606,11 +656,10 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
         final int buttonTop = rowTop + (rowHeight - dp(46)) / 2;
         setMargins(backButton, dp(6), buttonTop, 0);
 
-        final float menuWidth = menu != null && menu.getVisibility() != GONE ? menu.getTargetPillWidth() : 0;
-        final float doneSpace = getDoneButtonSpace(true);
-        int titleSide = Math.max(hasBack ? dp(64) : dp(18), menuWidth > 0 || doneSpace > 0 ? (int) (menuWidth + doneSpace) + dp(6 + 12) : 0);
-        titleSide = Math.max(titleSide, titleMinSideInset);
-        titleLayout.setSideInset(titleSide);
+        final int titleLeft = Math.max(titleMinSideInset, hasBack ? dp(64) : dp(18));
+        final int titleRight = Math.max(titleMinSideInset, getTitleActionsWidth() + dp(18));
+        titleLayout.leadingInset = titleLeft;
+        titleLayout.setSideInset(titleRight);
         setMargins(titleLayout, 0, rowTop, 0);
         titleLayout.getLayoutParams().height = rowHeight;
 
@@ -639,7 +688,7 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
             setMargins(searchLayout, (int) getSearchPillLeft(), buttonTop, dp(6));
         }
         if (doneButton != null) {
-            setMargins(doneButton, 0, buttonTop, dp(6));
+            setMargins(doneButton, 0, buttonTop, dp(materialActivityHeader ? 21 : plainBackCircle ? 10 : 6));
         }
 
         super.onMeasure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
@@ -661,7 +710,8 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
                 }
             }
             if (rightmostCenter != Float.NEGATIVE_INFINITY) {
-                menu.offsetLeftAndRight(Math.round(getWidth() - getDoneButtonSpace(false) - dp(materialActivityHeader ? 44 : 35) - menu.getX() - rightmostCenter));
+                // applyFactors supplies the animated offset for the confirm button.
+                menu.offsetLeftAndRight(Math.round(getWidth() - dp(materialActivityHeader ? 44 : 35) - menu.getLeft() - rightmostCenter));
             }
         }
         // custom children (buttons added by screens) are centered in the header row, below the status bar
@@ -870,6 +920,10 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
         titleLayout.setTitle(value);
     }
 
+    public void refreshTitleAlignment() {
+        titleLayout.requestLayout();
+    }
+
     public void setTitleAnimated(CharSequence title, boolean fromBottom, long duration) {
         setTitleAnimated(title, fromBottom, duration, CubicBezierInterpolator.EASE_OUT_QUINT);
     }
@@ -1009,7 +1063,7 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
             return 0;
         }
         final float visible = target ? doneButton.getTargetVisibleFactor() : doneButton.getVisibleFactor() * (1f - getSearchFactor()) * (1f - getActionModeFactor());
-        return (doneButton.getButtonWidth() + dp(12)) * visible;
+        return (materialActivityHeader ? dp(MATERIAL_BUTTON_PITCH_DP) : doneButton.getButtonWidth() + dp(12)) * visible;
     }
 
     public void onMenuButtonPressed() {
@@ -1651,6 +1705,7 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
         SimpleTextView subtitleOutView;
         CharSequence subtitle;
         private int sideInset;
+        private int leadingInset;
 
         TitleLayout(Context context) {
             super(context);
@@ -1669,9 +1724,9 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
                 return;
             }
             final SimpleTextView view = new SimpleTextView(getContext());
-            view.setGravity(Gravity.CENTER);
-            view.setTypeface(AndroidUtilities.bold());
-            view.setTextSize(17);
+            view.setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
+            view.setWidthWrapContent(true);
+            updateTitleTypography(view);
             view.setTextColor(titleColor);
             view.setEmojiColor(titleColor);
             view.setDrawablePadding(dp(4));
@@ -1717,7 +1772,8 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
 
         private SimpleTextView createSubtitleView() {
             final SimpleTextView view = new SimpleTextView(getContext());
-            view.setGravity(Gravity.CENTER);
+            view.setWidthWrapContent(true);
+            view.setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
             view.setTextSize(14);
             view.setTextColor(subtitleColor);
             addView(view, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.TOP));
@@ -1799,11 +1855,12 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
         protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
             final int width = MeasureSpec.getSize(widthMeasureSpec);
             final int height = MeasureSpec.getSize(heightMeasureSpec);
-            final int available = Math.max(0, width - sideInset * 2);
+            final int available = Math.max(0, width - leadingInset - sideInset);
             for (SimpleTextView view : titleViews) {
                 if (view != null && view.getVisibility() != GONE) {
+                    updateTitleTypography(view);
                     view.measure(MeasureSpec.makeMeasureSpec(available, MeasureSpec.AT_MOST),
-                        MeasureSpec.makeMeasureSpec(dp(24) + view.getPaddingTop() + view.getPaddingBottom(), MeasureSpec.AT_MOST));
+                        MeasureSpec.makeMeasureSpec(dp(materialActivityHeader ? 32 : 24) + view.getPaddingTop() + view.getPaddingBottom(), MeasureSpec.AT_MOST));
                 }
             }
             if (hasSubtitle()) {
@@ -1833,9 +1890,9 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
                 final int textTop = hasSubtitle
                     ? (rowHeight / 2 - view.getTextHeight()) / 2 + dp(5)
                     : (rowHeight - view.getTextHeight()) / 2;
-                final int l = (width - view.getMeasuredWidth()) / 2;
+                final int l = titleLeft(width, view.getMeasuredWidth());
                 final int t = textTop - view.getPaddingTop();
-                view.layout(l, t, l + view.getMeasuredWidth(), t + view.getMeasuredHeight());
+                layoutTitle(view, l, t, view.getMeasuredHeight());
             }
             if (hasSubtitle) {
                 for (SimpleTextView view : new SimpleTextView[] { subtitleView, subtitleOutView }) {
@@ -1843,8 +1900,8 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
                         continue;
                     }
                     final int textTop = rowHeight / 2 + (rowHeight / 2 - view.getTextHeight()) / 2 - dp(2);
-                    final int l = (width - view.getMeasuredWidth()) / 2;
-                    view.layout(l, textTop, l + view.getMeasuredWidth(), textTop + view.getTextHeight());
+                    final int l = titleLeft(width, view.getMeasuredWidth());
+                    layoutTitle(view, l, textTop, view.getTextHeight());
                 }
             }
             for (int i = 0, N = getChildCount(); i < N; i++) {
@@ -1855,6 +1912,42 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
                     final int t = (rowHeight - child.getMeasuredHeight()) / 2 + lp.topMargin - lp.bottomMargin;
                     child.layout(l, t, l + child.getMeasuredWidth(), t + child.getMeasuredHeight());
                 }
+            }
+        }
+
+        private void updateTitleTypography(SimpleTextView view) {
+            view.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.getActivityHeaderTypeface(materialActivityHeader));
+            if (materialActivityHeader) {
+                view.setTextSizePx(Math.round(24 * getResources().getDisplayMetrics().scaledDensity));
+            } else {
+                view.setTextSize(!AndroidUtilities.isTablet()
+                        && getResources().getConfiguration().orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE ? 18 : 20);
+            }
+        }
+
+        private int titleLeft(int width, int textWidth) {
+            if (zxc.iconic.xenon.NekoConfig.centerTitle) {
+                final int centered = (width - textWidth) / 2;
+                final int right = width - sideInset;
+                return centered >= leadingInset && centered + textWidth <= right
+                        ? centered : (leadingInset + right - textWidth) / 2;
+            }
+            return org.telegram.messenger.LocaleController.isRTL ? width - sideInset - textWidth : leadingInset;
+        }
+
+        private void layoutTitle(SimpleTextView view, int left, int top, int height) {
+            final int previousLeft = view.getLeft();
+            final boolean animate = view.isLaidOut() && attached && previousLeft != left;
+            final float currentLeft = previousLeft + view.getTranslationX();
+            view.layout(left, top, left + view.getMeasuredWidth(), top + height);
+            if (animate) {
+                view.setTranslationX(currentLeft - left);
+                final android.animation.ObjectAnimator offset = android.animation.ObjectAnimator.ofFloat(
+                        view, View.TRANSLATION_X, currentLeft - left, 0f);
+                offset.setAutoCancel(true);
+                offset.setDuration(300);
+                offset.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
+                offset.start();
             }
         }
     }

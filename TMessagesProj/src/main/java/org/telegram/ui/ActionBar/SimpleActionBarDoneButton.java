@@ -180,11 +180,12 @@ public class SimpleActionBarDoneButton extends View implements FactorAnimator.Ta
         inactiveColor = ColorUtils.blendARGB(Theme.getColor(Theme.key_windowBackgroundGray, resourcesProvider), accentColor, 0.5f);
         contentColor = Theme.getColor(Theme.key_featuredStickers_buttonText, resourcesProvider);
         glassContentColor = parentBar.getItemsColor(false);
-        final int color = style == Style.ACCENT ? contentColor : glassContentColor;
+        final boolean accent = style == Style.ACCENT && !parentBar.isMaterialActivityHeader();
+        final int color = accent ? contentColor : glassContentColor;
         checkDrawable.setColorFilter(new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN));
         progressDrawable.setColor(color);
         textPaint.setColor(color);
-        setBackground(Theme.createRadSelectorDrawable(style == Style.ACCENT ? Theme.multAlpha(contentColor, 0.2f) : parentBar.getItemsBackgroundColor(false), dp(23), dp(23)));
+        setBackground(Theme.createRadSelectorDrawable(accent ? Theme.multAlpha(contentColor, 0.2f) : parentBar.getItemsBackgroundColor(false), dp(23), dp(23)));
         invalidate();
     }
 
@@ -193,7 +194,7 @@ public class SimpleActionBarDoneButton extends View implements FactorAnimator.Ta
     }
 
     int getButtonWidth() {
-        if (shape == Shape.ICON || TextUtils.isEmpty(text)) {
+        if (parentBar.isMaterialActivityHeader() || shape == Shape.ICON || TextUtils.isEmpty(text)) {
             return dp(46);
         }
         return Math.max(dp(46), (int) Math.ceil(textWidth) + dp(32));
@@ -212,7 +213,11 @@ public class SimpleActionBarDoneButton extends View implements FactorAnimator.Ta
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
         final float w = getWidth(), h = getHeight();
-        if (style == Style.ACCENT) {
+        final boolean inNavigation = parentBar.getDoneButton() == this && parentBar.areNavigationButtonsOwned();
+        final boolean material = parentBar.isMaterialActivityHeader();
+        if (material) {
+            parentBar.drawPlainButtonCircle(canvas, this, w / 2f, h / 2f);
+        } else if (style == Style.ACCENT && !inNavigation) {
             fillPaint.setColor(ColorUtils.blendARGB(inactiveColor, accentColor, activeAnimator.getFloatValue()));
             rect.set(0, 0, w, h);
             canvas.drawRoundRect(rect, h / 2f, h / 2f, fillPaint);
@@ -224,7 +229,7 @@ public class SimpleActionBarDoneButton extends View implements FactorAnimator.Ta
             canvas.save();
             canvas.scale(scale, scale, w / 2f, h / 2f);
             final int alpha = (int) (255 * (1f - loading));
-            if (shape == Shape.ICON || TextUtils.isEmpty(text)) {
+            if (inNavigation || material || shape == Shape.ICON || TextUtils.isEmpty(text)) {
                 final int iw = checkDrawable.getIntrinsicWidth(), ih = checkDrawable.getIntrinsicHeight();
                 checkDrawable.setBounds((int) ((w - iw) / 2f), (int) ((h - ih) / 2f), (int) ((w + iw) / 2f), (int) ((h + ih) / 2f));
                 checkDrawable.setAlpha(alpha);

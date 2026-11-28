@@ -22,14 +22,29 @@ public final class HeaderButtonGroupMotion {
     public HeaderButtonPulse pulse = new HeaderButtonPulse();
     public final LinkedHashMap<String, Layer> layers = new LinkedHashMap<>();
     private final LinkedHashMap<String, Float> positions = new LinkedHashMap<>();
+    private final boolean anchorRight;
     private List<String> signature;
     private float returnIn;
+
+    public HeaderButtonGroupMotion() {
+        this(false);
+    }
+
+    public HeaderButtonGroupMotion(boolean anchorRight) {
+        this.anchorRight = anchorRight;
+    }
+
+    public float layerLeft(Layer layer) {
+        return anchorRight ? width.value - layer.x.value - layer.width : layer.x.value;
+    }
 
     public void retarget(LinkedHashMap<String, Float> actions, float gap) {
         List<String> keys = new ArrayList<>(actions.keySet());
         if (signature == null && keys.isEmpty()) return;
         boolean changed = !keys.equals(signature);
         boolean initialized = signature != null;
+        float targetWidth = gap * Math.max(0, actions.size() - 1);
+        for (float buttonWidth : actions.values()) targetWidth += buttonWidth;
         if (changed && initialized) {
             pulse.trigger();
             float sum = 0;
@@ -37,7 +52,10 @@ public final class HeaderButtonGroupMotion {
             float nextX = 0;
             for (Map.Entry<String, Float> action : actions.entrySet()) {
                 Float oldX = positions.get(action.getKey());
-                if (oldX != null) { sum += nextX - oldX; matches++; }
+                if (oldX != null) {
+                    sum += anchorRight ? oldX - (targetWidth - nextX - action.getValue()) : nextX - oldX;
+                    matches++;
+                }
                 nextX += action.getValue() + gap;
             }
             kick.target = matches == 0 ? 0 : sum / matches / 6;
@@ -51,15 +69,15 @@ public final class HeaderButtonGroupMotion {
             Layer layer = layers.get(action.getKey());
             if (layer == null) { layer = new Layer(); layers.put(action.getKey(), layer); }
             layer.width = action.getValue();
-            layer.x.target = nextX;
-            if (!layer.positioned) { layer.x.snap(nextX); layer.positioned = true; }
+            layer.x.target = anchorRight ? targetWidth - nextX - layer.width : nextX;
+            if (!layer.positioned) { layer.x.snap(layer.x.target); layer.positioned = true; }
             layer.visibility.target = 1;
             nextX += layer.width + gap;
         }
         for (Map.Entry<String, Layer> entry : layers.entrySet()) {
             if (!actions.containsKey(entry.getKey())) entry.getValue().visibility.target = 0;
         }
-        if (!actions.isEmpty()) width.target = Math.max(0, nextX - gap);
+        if (!actions.isEmpty()) width.target = Math.max(0, targetWidth);
         presence.target = actions.isEmpty() ? 0 : 1;
         if (!initialized) width.snap(width.target);
         positions.clear();

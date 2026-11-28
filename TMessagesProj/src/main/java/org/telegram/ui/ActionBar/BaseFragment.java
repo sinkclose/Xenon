@@ -730,6 +730,7 @@ public abstract class BaseFragment {
             zxc.iconic.xenon.helpers.RoundedUiFonts.observe(fragmentView);
         }
         if (actionBar != null) zxc.iconic.xenon.helpers.ClientFonts.applyToView(actionBar);
+        if (simpleActionBar != null) zxc.iconic.xenon.helpers.ClientFonts.applyToView(simpleActionBar);
         if (actionBar != null) {
             syncGlobalCenteredTitle();
             actionBar.onResume();

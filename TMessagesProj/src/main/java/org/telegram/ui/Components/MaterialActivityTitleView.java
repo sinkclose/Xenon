@@ -4,7 +4,6 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Canvas;
 import android.graphics.Paint;
-import android.graphics.Typeface;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
@@ -72,9 +71,7 @@ public class MaterialActivityTitleView extends View {
         title.setCollapsedAndExpandedTextColor(ColorStateList.valueOf(foreground));
         if (fontGeneration != generation) {
             fontGeneration = generation;
-            title.setTypefaces(TypefaceHelper.supportsRoundedTypeface()
-                    ? TypefaceHelper.createRoundedTypeface(550, false)
-                    : ClientFonts.resolve(Typeface.create("sans-serif", Typeface.NORMAL)));
+            title.setTypefaces(ClientFonts.resolve(TypefaceHelper.getActivityHeaderTypeface(true)));
         }
         int horizontal = centered ? Gravity.CENTER_HORIZONTAL : Gravity.START;
         title.setExpandedTextGravity(Gravity.BOTTOM | Gravity.START);

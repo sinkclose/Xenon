@@ -220,6 +220,7 @@ public class TextMessageEnterTransition implements MessageEnterTransitionContain
                     .setBreakStrategy(StaticLayout.BREAK_STRATEGY_HIGH_QUALITY)
                     .setHyphenationFrequency(StaticLayout.HYPHENATION_FREQUENCY_NONE)
                     .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                    .setIncludePad(false)
                     .build();
         } else {
             layout = new StaticLayout(text, textPaint, width, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
@@ -229,7 +230,8 @@ public class TextMessageEnterTransition implements MessageEnterTransitionContain
         ViewPositionWatcher.computeCoordinatesInParent(chatActivityEnterView.getEditField(), chatActivity.contentView, tmpPointF);
         float textViewY = tmpPointF.y;
         fromStartX = tmpPointF.x;
-        fromStartY = textViewY + dp(10) - chatActivityEnterView.getEditField().getScrollY() + linesOffset;
+        fromStartY = textViewY + chatActivityEnterView.getEditField().getTotalPaddingTop()
+                - chatActivityEnterView.getEditField().getScrollY() + linesOffset;
         toXOffset = 0;
         float minX = Float.MAX_VALUE;
         for (int i = 0; i < layout.getLineCount(); i++) {
@@ -300,12 +302,14 @@ public class TextMessageEnterTransition implements MessageEnterTransitionContain
                         .setBreakStrategy(StaticLayout.BREAK_STRATEGY_HIGH_QUALITY)
                         .setHyphenationFrequency(StaticLayout.HYPHENATION_FREQUENCY_NONE)
                         .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                        .setIncludePad(false)
                         .build();
 
                 rtlLayout = StaticLayout.Builder.obtain(rtlText, 0, rtlText.length(), textPaint, width)
                         .setBreakStrategy(StaticLayout.BREAK_STRATEGY_HIGH_QUALITY)
                         .setHyphenationFrequency(StaticLayout.HYPHENATION_FREQUENCY_NONE)
                         .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                        .setIncludePad(false)
                         .build();
             } else {
                 layout = new StaticLayout(normalText, textPaint, width, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0, false);
@@ -358,9 +362,6 @@ public class TextMessageEnterTransition implements MessageEnterTransitionContain
             replayObjectFromColor = replyObjectTextView.getTextColor();
             drawableFromTop -= dp(46);
         }
-
-        listViewTargetBottomPadding = listView.getPaddingBottom()
-            - (chatActivity.getInputIslandHeightTarget() - chatActivityEnterView.getEmptyInputHeight());
 
         gradientMatrix = new Matrix();
         gradientPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -434,7 +435,6 @@ public class TextMessageEnterTransition implements MessageEnterTransitionContain
     private final RectF messageReplySelectorRect = new RectF();
     private Path replyRoundRect;
     private float[] roundRectRadii;
-    private float listViewTargetBottomPadding;
 
     public void onDraw(Canvas canvas) {
         if (drawBitmaps && !initBitmaps && crossfadeTextBitmap != null && messageView.getTransitionParams().wasDraw) {
@@ -462,9 +462,10 @@ public class TextMessageEnterTransition implements MessageEnterTransitionContain
             return;
         } else {
             messageViewX = messageView.getX() + listView.getX() - container.getX();
-            messageViewY = messageView.getTop() + messageView.getPaddingTop() + listView.getTop() - container.getY();
-
-            messageViewY -= (listViewTargetBottomPadding - listView.getPaddingBottom());
+            // The list already repositions the cell as the composer changes height.
+            // Ignore the item's own add translation: this overlay animates that distance.
+            messageViewY = messageView.getTop() + messageView.getPaddingTop()
+                    + listView.getY() - listView.getScrollY() - container.getY();
 
             lastMessageX = messageViewX;
             lastMessageY = messageViewY;
@@ -770,9 +771,12 @@ public class TextMessageEnterTransition implements MessageEnterTransitionContain
         } else {
             scale2 = 1f;
         }
+        final float textBlockY = toY + textLayoutBlock.textYOffset(messageView.getMessageObject().textLayoutBlocks, messageView.transitionParams)
+                + textLayoutBlock.padTop + messageView.transitionYOffsetForDrawables;
+        final float textDrawY = lerp(fromY, textBlockY, progress);
 
         canvas.save();
-        canvas.translate(fromX * (1f - progressX) + (toX - toXOffset) * progressX, fromY * (1f - progress) + (toY + textLayoutBlock.textYOffset(messageView.getMessageObject().textLayoutBlocks, messageView.transitionParams)) * progress);
+        canvas.translate(fromX * (1f - progressX) + (toX - toXOffset) * progressX, textDrawY);
         canvas.scale(scale, scale * scale2, 0, 0);
 
         if (drawBitmaps) {
@@ -803,7 +807,7 @@ public class TextMessageEnterTransition implements MessageEnterTransitionContain
 
         if (rtlLayout != null) {
             canvas.save();
-            canvas.translate(fromX * (1f - progressX) + (toX - toXOffsetRtl) * progressX, fromY * (1f - progress) + (toY + textLayoutBlock.textYOffset(messageView.getMessageObject().textLayoutBlocks, messageView.transitionParams)) * progress);
+            canvas.translate(fromX * (1f - progressX) + (toX - toXOffsetRtl) * progressX, textDrawY);
             canvas.scale(scale, scale * scale2, 0, 0);
             if (drawBitmaps) {
                 if (crossfade) {

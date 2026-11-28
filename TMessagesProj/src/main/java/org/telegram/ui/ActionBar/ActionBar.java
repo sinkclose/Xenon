@@ -285,10 +285,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         setPlainBackCircle(enabled);
         if (menu != null) menu.setGlassMode(!enabled && glassMode && !nonIsland);
         for (SimpleTextView title : titleTextView) {
-            if (title != null) title.setTypeface(enabled && !zxc.iconic.xenon.helpers.TypefaceHelper.supportsRoundedTypeface()
-                    ? Typeface.create("sans-serif", Typeface.NORMAL)
-                    : zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(
-                            zxc.iconic.xenon.helpers.TypefaceHelper.supportsRoundedTypeface() ? (materialActivityHeader ? 550 : 650) : 700, false));
+            if (title != null) title.setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.getActivityHeaderTypeface(enabled));
         }
         requestLayout();
         invalidate();
@@ -313,6 +310,18 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     public boolean areNavigationButtonsOwned() { return navigationButtonsOwned; }
 
     public boolean isChatHeader() { return parentFragment instanceof org.telegram.ui.ChatActivity; }
+
+    private boolean chatSidebarOpen;
+
+    public void setChatSidebarOpen(boolean open) {
+        if (chatSidebarOpen == open) return;
+        chatSidebarOpen = open;
+        invalidate();
+    }
+
+    public boolean isChatSidebarOpen() {
+        return chatSidebarOpen;
+    }
 
     public void setDialogsNavigationTitleAlpha(float alpha) {
         if (parentFragment instanceof org.telegram.ui.DialogsActivity) {
@@ -833,6 +842,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
     @Override
     protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
+        if (chatSidebarOpen && child != backButtonImageView) return true;
         if (navigationButtonsOwned && child == backButtonImageView) return true;
         if (navigationButtonsOwned && !isSearchFieldVisible && child == navigationButtonOverlay && hasNavigationButtonOverlay()) return true;
         if (ownsChatNavigationTitle() && isChatNavigationTitleChild(child)) return true;
@@ -990,8 +1000,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             ThemeBind.textColor(titleTextView[i], Theme.key_actionBarDefaultTitle, resourcesProvider);
         }
         titleTextView[i].setEmojiColor(titleTextView[i].getTextColor());
-        titleTextView[i].setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.createRoundedTypeface(
-                zxc.iconic.xenon.helpers.TypefaceHelper.supportsRoundedTypeface() ? (materialActivityHeader ? 550 : 650) : 700, false));
+        titleTextView[i].setTypeface(zxc.iconic.xenon.helpers.TypefaceHelper.getActivityHeaderTypeface(materialActivityHeader));
         titleTextView[i].setDrawablePadding(dp(4));
         titleTextView[i].setPadding(0, dp(8), 0, dp(8));
         titleTextView[i].setRightDrawableTopPadding(-dp(1));
@@ -2996,17 +3005,26 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     }
 
     public int getCenteredPillMaxWidth() {
-        int maxWidth = getMeasuredWidth() - dp(6 + 46 + 6 + 6 + 46 + 6);
-        if (textOnlyPill && chatAvatarContainer != null) {
-            int avatarRight = chatAvatarContainer.getAvatarRightEdge();
-            if (avatarRight > 0) {
-                maxWidth = Math.min(maxWidth, getMeasuredWidth() - 2 * (avatarRight + dp(8)));
-            }
-        }
-        return maxWidth;
+        final int menuWidth = getChatTitleTrailingWidth();
+        return Math.max(0, getMeasuredWidth() - getChatTitleLeadingInset(dp(6 + 46 + 6)) - dp(6) - Math.max(dp(52), menuWidth));
     }
 
-    private final FactorAnimator animatorAvatarContainerWidth = new FactorAnimator(0, this, CubicBezierInterpolator.EASE_OUT_QUINT, 380);
+    private int getChatTitleLeadingInset(int fallback) {
+        if (textOnlyPill && chatAvatarContainer != null) {
+            final int avatarEnd = chatAvatarContainer.getAvatarRightEdge();
+            if (avatarEnd > 0) return Math.max(fallback, avatarEnd + dp(8));
+        }
+        return fallback;
+    }
+
+    private int getChatTitleTrailingWidth() {
+        return hasForcedMenuWidth ? forcedMenuWidth : Math.max(
+                (int) animatorMenuItemsWidth.getToFactor(), hasForcedMenuMinWidth ? forcedMenuMinWidth : 0);
+    }
+
+    private final org.telegram.ui.Components.AnimatedFloat chatTitleOffset =
+            new org.telegram.ui.Components.AnimatedFloat(this, 300, CubicBezierInterpolator.EASE_OUT_QUINT);
+    private final FactorAnimator animatorAvatarContainerWidth = new FactorAnimator(0, this, CubicBezierInterpolator.EASE_OUT_QUINT, 300);
     private final BoolAnimator animatorAvatarContainerHasAvatar = new BoolAnimator(0, this, CubicBezierInterpolator.EASE_OUT_QUINT, 380);
 
     private final FactorAnimator animatorMenuItemsWidth = new FactorAnimator(0, this, CubicBezierInterpolator.EASE_OUT_QUINT, 320);
@@ -3059,15 +3077,9 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         final int rightOffset = lerp(menuWidthWithPadding, Math.max(menuWidthWithPadding, p + s), 1f - animatorAvatarContainerHasAvatar.getFloatValue());
         final int leftDefault = lerp(backButtonImageView != null && backButtonImageView.getVisibility() == View.VISIBLE ? s + p : 0, s + p, 1f - animatorAvatarContainerHasAvatar.getFloatValue());
         final int rightDefault = getWidth() - rightOffset;
-        final int widthDefault = rightDefault - leftDefault;
+        final int widthDefault = Math.max(0, rightDefault - getChatTitleLeadingInset(leftDefault));
         int result = lerp(Math.min(widthDefault, (int) animatorAvatarContainerWidth.getFactor() + p * 2), widthDefault, Math.max(searchFactor, getActionModeFactor()));
-        if (textOnlyPill) {
-            int avatarRight = chatAvatarContainer.getAvatarRightEdge();
-            if (avatarRight > 0) {
-                result = Math.min(result, getWidth() - 2 * (avatarRight + dp(8)));
-            }
-        }
-        return result;
+        return Math.max(0, result);
     }
 
     public void setForcedMenuWidth(int width) {
@@ -3227,7 +3239,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     public boolean prepareLiquidGlassHeader(BlurredBackgroundDrawable[] members, LiquidTouchEffect[] effects) {
         if (navigationButtonsOwned || materialActivityHeader || externalHeaderFade || !glassMode || nonIsland || glassOnlyBack || plainBackCircle
                 || liquidAvatar == null || actionModeVisible || searchFactor > 0f
-                || glassDrawable == null || glassDrawableBack == null) return false;
+                || glassDrawable == null || glassDrawableBack == null || isMenuPillInOverlay()) return false;
         prepareLiquidGlassSurfaces();
         members[0] = glassDrawableBack;
         members[1] = glassDrawable;
@@ -3272,7 +3284,11 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         } else if (chatAvatarContainer != null) {
             final int width = getCurrentChatPillWidth();
             if (centerChatHeader || textOnlyPill) {
-                left = (getWidth() - width) / 2;
+                final int screenLeft = (getWidth() - width) / 2;
+                final int leftBound = getChatTitleLeadingInset(leftDefault);
+                final int targetLeft = screenLeft >= leftBound && screenLeft + width <= rightDefault
+                        ? screenLeft : (leftBound + rightDefault - width) / 2;
+                left = screenLeft + Math.round(chatTitleOffset.set(targetLeft - screenLeft));
             } else {
                 left = (rightDefault + leftDefault - width) / 2;
             }
@@ -3375,7 +3391,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             fadeButtonGlass.drawToolbar(canvas, this, dp(35), (t + b) / 2f);
         }
 
-        if (!liquidGlassGroupDrawn && (nonIsland || !ownsChatNavigationTitle())) {
+        if (!chatSidebarOpen && !liquidGlassGroupDrawn && (nonIsland || !ownsChatNavigationTitle())) {
             drawTitleSurface(canvas);
         }
         if (!navigationButtonsOwned && !materialActivityHeader && !externalHeaderFade && glassDrawableBack != null && hasBackButton && !nonIsland && !liquidGlassGroupDrawn) {
@@ -3392,7 +3408,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             if (liquidTouchAllowed()) liquidBack.drawHighlight(canvas, dp(23), dp(6));
             if (save != -1) canvas.restoreToCount(save);
         }
-        if (!navigationButtonsOwned && !materialActivityHeader && !externalHeaderFade && glassDrawableMenu != null && menuWidth > 0 && !nonIsland && !glassOnlyBack && !doNotDrawGlassMenu && !avatarRightBigger && !liquidGlassGroupDrawn && !isMenuPillInOverlay()) {
+        if (!chatSidebarOpen && !navigationButtonsOwned && !materialActivityHeader && !externalHeaderFade && glassDrawableMenu != null && menuWidth > 0 && !nonIsland && !glassOnlyBack && !doNotDrawGlassMenu && !avatarRightBigger && !liquidGlassGroupDrawn && !isMenuPillInOverlay()) {
             glassDrawableMenu.setBounds(getWidth() - Math.max(s, menuWidth) - p * 2, t, getWidth(), b);
             glassDrawableMenu.setAlpha(hasForcedMenuWidth ? 255 : (int) (255 * animatorHasMenuItems.getFloatValue()));
             boolean liquidSelection = actionModeVisible && actionMode != null && liquidTouchAllowed();

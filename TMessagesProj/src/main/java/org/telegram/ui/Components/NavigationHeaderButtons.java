@@ -12,12 +12,14 @@ import android.os.Build;
 import android.os.SystemClock;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewParent;
 import androidx.annotation.RequiresApi;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LiteMode;
 import org.telegram.messenger.SharedConfig;
 import org.telegram.ui.ActionBar.ActionBar;
+import org.telegram.ui.ActionBar.SimpleActionBar;
 import org.telegram.ui.ActionBar.ActionBarLayout;
 import org.telegram.ui.ActionBar.ActionBarMenu;
 import org.telegram.ui.ActionBar.ActionBarMenuItem;
@@ -47,6 +49,7 @@ public final class NavigationHeaderButtons {
     private final GlassSourceRenderNode source = new GlassSourceRenderNode(null);
     private final BlurredBackgroundDrawableViewFactory factory = new BlurredBackgroundDrawableViewFactory(source);
     private final ArrayList<ActionBar> managed = new ArrayList<>();
+    private final ArrayList<SimpleActionBar> managedSimple = new ArrayList<>();
     private final ArrayList<BaseFragment> pages = new ArrayList<>();
     private final ArrayList<View> leadingActions = new ArrayList<>();
     private final ArrayList<View> trailingActions = new ArrayList<>();
@@ -183,7 +186,7 @@ public final class NavigationHeaderButtons {
     private final class Icon {
         final RenderNode pixels = new RenderNode("RetainedHeaderForeground");
         View action;
-        ActionBar bar;
+        ViewGroup bar;
         float lastBlur = -1;
         final HeaderButtonGroupMotion.Layer motion;
         final LiquidPressAnimationSuppressor pressless = new LiquidPressAnimationSuppressor();
@@ -198,26 +201,27 @@ public final class NavigationHeaderButtons {
             Canvas canvas = pixels.beginRecording();
             try {
                 canvas.translate(pad + (motion.width - action.getWidth()) / 2f, pad + (height - action.getHeight()) / 2f);
-                bar.drawNavigationButton(canvas, action);
+                if (bar instanceof ActionBar) {
+                    ((ActionBar) bar).drawNavigationButton(canvas, action);
+                } else {
+                    ((SimpleActionBar) bar).drawNavigationButton(canvas, action);
+                }
             } finally { pixels.endRecording(); }
         }
 
-        void draw(Canvas canvas, float groupAlpha) { draw(canvas, groupAlpha, 0); }
-        void draw(Canvas canvas, float groupAlpha, float popupBlur) {
+        void draw(Canvas canvas, float groupAlpha, float left) {
             record();
             if (!pixels.hasDisplayList()) return;
             float p = motion.visibility.value;
             int step = foregroundBlurStep(p);
-            float blur = Math.max(popupBlur, AndroidUtilities.dpf2(step * FOREGROUND_BLUR_STEP_DP));
+            float blur = AndroidUtilities.dpf2(step * FOREGROUND_BLUR_STEP_DP);
             if (lastBlur != blur) {
-                RenderEffect blurEffect = popupBlur == blur && popupBlur > .01f
-                        ? RenderEffect.createBlurEffect(blur, blur, Shader.TileMode.DECAL) : foregroundBlurEffect(step);
-                pixels.setRenderEffect(blurEffect);
+                pixels.setRenderEffect(foregroundBlurEffect(step));
                 lastBlur = blur;
             }
             pixels.setAlpha(groupAlpha * clamp(p));
             int save = canvas.save();
-            canvas.translate(motion.x.value, 0);
+            canvas.translate(left, 0);
             float scale = HeaderButtonGroupMotion.foregroundScale(p, animate);
             canvas.scale(scale, scale, motion.width / 2, AndroidUtilities.dp(22));
             canvas.translate(-AndroidUtilities.dp(32), -AndroidUtilities.dp(32));
@@ -243,7 +247,7 @@ public final class NavigationHeaderButtons {
             bounds.set(owner.bounds[index]);
             float width=group.motion.width.value,height=AndroidUtilities.dp(44);
             float cx=group.x+width/2+(owner.animate?group.motion.kick.value:0)
-                    +(icon.motion.x.value+icon.motion.width/2-width/2)*group.sx;
+                    +(group.motion.layerLeft(icon.motion)+icon.motion.width/2-width/2)*group.sx;
             through.set(cx-icon.motion.width*group.sx/2,group.y+height/2-height*group.sy/2,
                     cx+icon.motion.width*group.sx/2,group.y+height/2+height*group.sy/2);
             group.press.mapBounds(through,through);
@@ -254,7 +258,7 @@ public final class NavigationHeaderButtons {
             bounds.set(owner.bounds[index]);
             float width=group.motion.width.value,height=AndroidUtilities.dp(44);
             float cx=group.x+width/2+(owner.animate?group.motion.kick.value:0)
-                    +(icon.motion.x.value+icon.motion.width/2-width/2)*group.sx;
+                    +(group.motion.layerLeft(icon.motion)+icon.motion.width/2-width/2)*group.sx;
             through.set(cx-icon.motion.width*group.sx/2,group.y+height/2-height*group.sy/2,
                     cx+icon.motion.width*group.sx/2,group.y+height/2+height*group.sy/2);
             group.press.mapBounds(through,through);
@@ -289,31 +293,37 @@ public final class NavigationHeaderButtons {
 
     private final class Group {
         MenuSource menuSource;
-        final HeaderButtonGroupMotion motion = new HeaderButtonGroupMotion();
+        final HeaderButtonGroupMotion motion;
         final HeaderButtonSpring inset = new HeaderButtonSpring(0);
         final HeaderButtonSpring surfacePresence = new HeaderButtonSpring(1);
         final LinkedHashMap<String, Icon> icons = new LinkedHashMap<>();
         final LiquidTouchEffect press = new LiquidTouchEffect(host);
         final BlurredBackgroundDrawable surface = factory.create(host).setRadius(AndroidUtilities.dp(22)).setPadding(0);
         final boolean leading;
-        ActionBar colorBar;
+        ViewGroup colorBar;
         boolean positioned;
         float x, y, sx = 1, sy = 1;
-        Group(boolean leading) { this.leading = leading; }
+        Group(boolean leading) {
+            this.leading = leading;
+            motion = new HeaderButtonGroupMotion(!leading);
+        }
 
         float actionWidth(View action) {
-            return !leading && ((ActionBarMenuItem) action).getIconView() == null
+            return !leading && action instanceof ActionBarMenuItem && ((ActionBarMenuItem) action).getIconView() == null
                     ? Math.max(AndroidUtilities.dp(44), action.getWidth()) : AndroidUtilities.dp(44);
         }
 
-        void retarget(ArrayList<View> actions, ActionBar bar) {
-            boolean chat = bar != null && bar.isChatHeader();
+        void retarget(ArrayList<View> actions, ViewGroup bar) {
+            final ActionBar legacy = bar instanceof ActionBar ? (ActionBar) bar : null;
+            boolean chat = legacy != null && legacy.isChatHeader();
             LinkedHashMap<String, Float> widths = new LinkedHashMap<>();
             LinkedHashMap<String, View> views = new LinkedHashMap<>();
             for (View action : actions) {
-                String visual = leading ? "back:" + ((android.widget.ImageView) action).getDrawable().getClass().getName()
-                        : String.valueOf(((ActionBarMenuItem) action).getNavigationIconKey());
-                if (chat && bar.isChatNavigationAvatar(action)) visual = "chat:avatar";
+                String visual = leading ? "back:" + (legacy != null
+                        ? ((android.widget.ImageView) action).getDrawable().getClass().getName()
+                        : action.getContentDescription()) : action instanceof ActionBarMenuItem
+                        ? String.valueOf(((ActionBarMenuItem) action).getNavigationIconKey()) : "header:done";
+                if (chat && legacy.isChatNavigationAvatar(action)) visual = "chat:avatar";
                 String key = visual;
                 int occurrence = 1;
                 while (views.containsKey(key)) key = visual + ":" + occurrence++;
@@ -336,9 +346,10 @@ public final class NavigationHeaderButtons {
                 if (chat) {
                     float center = layoutCoordinate(bar, true) + actionCenter(edge, bar, true);
                     targetInset = (leading ? center : host.getWidth() - center) - actionWidth(edge) / 2f;
+                    if (!leading) targetInset = AndroidUtilities.dp(7);
                 }
                 inset.target = targetInset;
-                surfacePresence.target = !chat || bar.hasChatNavigationSurface(leading) ? 1 : 0;
+                surfacePresence.target = !chat || legacy.hasChatNavigationSurface(leading) ? 1 : 0;
                 if (!positioned) {
                     inset.snap(inset.target);
                     surfacePresence.snap(surfacePresence.target);
@@ -356,12 +367,13 @@ public final class NavigationHeaderButtons {
             }
             if (bar != null && colorBar != bar) {
                 colorBar = bar;
-                surface.setColorProvider(chat ? BlurredBackgroundProviderImpl.topPanelChatActivity(bar.getResourcesProvider())
-                        : BlurredBackgroundProviderImpl.topPanel(bar.getResourcesProvider()));
+                Theme.ResourcesProvider resources = legacy != null ? legacy.getResourcesProvider() : ((SimpleActionBar) bar).getResourcesProvider();
+                surface.setColorProvider(chat ? BlurredBackgroundProviderImpl.topPanelChatActivity(resources)
+                        : BlurredBackgroundProviderImpl.topPanel(resources));
             }
         }
 
-        boolean advance(float dt) {
+        boolean advance(float dt, boolean animate) {
             boolean moving = motion.advance(dt, animate) | inset.advance(dt, animate) | surfacePresence.advance(dt, animate);
             for (Iterator<Map.Entry<String, Icon>> it = icons.entrySet().iterator(); it.hasNext();) {
                 Map.Entry<String, Icon> entry = it.next();
@@ -407,7 +419,7 @@ public final class NavigationHeaderButtons {
             float width = motion.width.value, height = AndroidUtilities.dp(44);
             canvas.translate(x + (animate ? motion.kick.value : 0), y);
             canvas.scale(sx, sy, width / 2, height / 2);
-            for (Icon icon : icons.values()) icon.draw(canvas, foregroundAlpha);
+            for (Icon icon : icons.values()) icon.draw(canvas, foregroundAlpha, motion.layerLeft(icon.motion));
             canvas.restoreToCount(save);
         }
 
@@ -453,6 +465,15 @@ public final class NavigationHeaderButtons {
     private boolean eligible(ActionBar bar) {
         if (bar == null || bar.getVisibility() != View.VISIBLE
                 || bar.isSearchFieldVisible() || bar.isActionModeShowed()) return false;
+        return belongsToHost(bar);
+    }
+
+    private boolean eligible(SimpleActionBar bar) {
+        return bar != null && bar.getVisibility() == View.VISIBLE && bar.hasPlainButtonCircles()
+                && !bar.isSearchFieldVisible() && !bar.isActionModeShowed() && belongsToHost(bar);
+    }
+
+    private boolean belongsToHost(View bar) {
         ViewParent parent = bar.getParent();
         while (parent != null && parent != host) {
             if (parent instanceof ActionBarLayout) return false;
@@ -472,7 +493,7 @@ public final class NavigationHeaderButtons {
         return coordinate;
     }
 
-    private static float actionCenter(View action, ActionBar bar, boolean horizontal) {
+    private static float actionCenter(View action, ViewGroup bar, boolean horizontal) {
         float center = (horizontal ? action.getWidth() : action.getHeight()) / 2f;
         for (View view = action; view != bar; view = (View) view.getParent()) {
             center += horizontal ? view.getX() : view.getY();
@@ -503,17 +524,34 @@ public final class NavigationHeaderButtons {
                 managed.remove(i);
             }
         }
+        for (int i = managedSimple.size() - 1; i >= 0; i--) {
+            SimpleActionBar bar = managedSimple.get(i);
+            if (!eligible(bar)) {
+                bar.setNavigationButtonsOwned(false);
+                managedSimple.remove(i);
+            }
+        }
         pages.clear();
         for (BaseFragment fragment : host.getFragmentStack()) {
             if (fragment instanceof MainTabsActivity) ((MainTabsActivity) fragment).collectNavigationHeaderFragments(pages);
             else pages.add(fragment);
         }
-        for (BaseFragment page : pages) register(page.getActionBar());
+        for (BaseFragment page : pages) {
+            register(page.getActionBar());
+            final SimpleActionBar simple = page.getSimpleActionBar();
+            if (eligible(simple) && !managedSimple.contains(simple)) {
+                managedSimple.add(simple);
+                simple.setNavigationButtonsOwned(true);
+            }
+        }
         pages.clear();
         BaseFragment fragment = host.getNavigationHeaderFragment();
         ActionBar bar = fragment == null ? null : fragment.getActionBar();
-        currentBar = eligible(bar) ? bar : null;
-        nativeChatControls = bar != null && bar.isChatHeader() && bar.isShown() && currentBar == null;
+        SimpleActionBar simple = fragment == null ? null : fragment.getSimpleActionBar();
+        if (!eligible(simple)) simple = null;
+        currentBar = simple == null && eligible(bar) ? bar : null;
+        final boolean sidebarOpen = bar != null && bar.isChatSidebarOpen();
+        nativeChatControls = simple == null && bar != null && bar.isChatHeader() && bar.isShown() && currentBar == null;
         leadingActions.clear();
         trailingActions.clear();
         if (currentBar != null && currentBar.getWidth() > 0) {
@@ -521,7 +559,7 @@ public final class NavigationHeaderButtons {
             View back = currentBar.getBackButton();
             if (visible(back) && ((android.widget.ImageView) back).getDrawable() != null) leadingActions.add(back);
             ActionBarMenu menu = currentBar.createMenu();
-            if (menu.getVisibility() == View.VISIBLE) {
+            if (!sidebarOpen && menu.getVisibility() == View.VISIBLE) {
                 for (int i = 0; i < menu.getChildCount(); i++) {
                     View child = menu.getChildAt(i);
                     if (child instanceof ActionBarMenuItem && visible(child)) trailingActions.add(child);
@@ -537,9 +575,29 @@ public final class NavigationHeaderButtons {
                 if (!leadingActions.isEmpty()) groups[0].y = top + actionCenter(leadingActions.get(0), currentBar, false);
                 if (!trailingActions.isEmpty()) groups[1].y = top + actionCenter(trailingActions.get(trailingActions.size() - 1), currentBar, false);
             }
+        } else if (simple != null && simple.getWidth() > 0) {
+            if (!managedSimple.contains(simple)) {
+                managedSimple.add(simple);
+                simple.setNavigationButtonsOwned(true);
+            }
+            View back = simple.getBackButton();
+            if (visible(back) && simple.getBackButtonDrawable() != null) leadingActions.add(back);
+            ViewGroup menu = simple.getMenu();
+            if (menu != null && menu.getVisibility() == View.VISIBLE) {
+                for (int i = 0; i < menu.getChildCount(); i++) {
+                    View child = menu.getChildAt(i);
+                    if (child instanceof ActionBarMenuItem && visible(child)) trailingActions.add(child);
+                }
+            }
+            final float top = layoutCoordinate(simple, false) + simple.getTranslationY()
+                    + (simple.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0);
+            groups[0].y = groups[1].y = top + (ActionBar.getCurrentActionBarHeight() - AndroidUtilities.dp(44)) / 2f;
+            if (visible(simple.getDoneButton())) trailingActions.add(simple.getDoneButton());
         }
-        groups[0].retarget(leadingActions, currentBar);
-        groups[1].retarget(trailingActions, currentBar);
+        final ViewGroup buttonBar = simple != null ? simple : currentBar;
+        groups[0].retarget(leadingActions, buttonBar);
+        groups[1].retarget(trailingActions, buttonBar);
+        if (sidebarOpen) groups[1].advance(0, false);
         long now = SystemClock.uptimeMillis();
         frameDelta = lastFrame == 0 ? 0 : Math.min(1, (now - lastFrame) / 1000f);
         lastFrame = now;
@@ -552,7 +610,8 @@ public final class NavigationHeaderButtons {
     private boolean visible(View view) { return view != null && view.getVisibility() == View.VISIBLE && view.getWidth() > 0 && view.getAlpha() > 0; }
 
     private void updateTitleMotion() {
-        ActionBar bar = currentBar != null && currentBar.isChatHeader() && currentBar.getWidth() > 0 ? currentBar : null;
+        ActionBar bar = currentBar != null && currentBar.isChatHeader() && !currentBar.isChatSidebarOpen()
+                && currentBar.getWidth() > 0 ? currentBar : null;
         activeChatTitle = null;
         for (ChatTitle title : chatTitles) {
             if (title.bar == bar) activeChatTitle = title;
@@ -567,7 +626,7 @@ public final class NavigationHeaderButtons {
             ChatTitle title = it.next();
             title.setVisible(title == activeChatTitle);
             // Search and selection draw the native header while they own the toolbar.
-            if (!title.bar.areNavigationButtonsOwned() && title.bar.isShown()
+            if (title.bar.isChatSidebarOpen() || !title.bar.areNavigationButtonsOwned() && title.bar.isShown()
                     && (title.bar.isSearchFieldVisible() || title.bar.isActionModeShowed())) {
                 title.visibility.snap(0);
             }
@@ -589,7 +648,7 @@ public final class NavigationHeaderButtons {
         recording = false;
         content.endRecording();
         destination.drawRenderNode(content);
-        boolean moving = groups[0].advance(frameDelta) | groups[1].advance(frameDelta);
+        boolean moving = groups[0].advance(frameDelta, animate) | groups[1].advance(frameDelta, animate);
         boolean present = false;
         for (int i = 0; i < 2; i++) { groups[i].geometry(i); present |= surfaceAlpha[i] > .001f; }
         if (activeChatTitle != null) activeChatTitle.record();
@@ -679,8 +738,10 @@ public final class NavigationHeaderButtons {
                 float x = group.localX(event.getX()), y = group.localY(event.getY());
                 if (y < 0 || y > AndroidUtilities.dp(44)) continue;
                 for (Icon icon : group.icons.values()) {
-                    if (icon.action != null && icon.action.isEnabled() && !icon.bar.isChatNavigationAvatar(icon.action)
-                            && x >= icon.motion.x.value && x <= icon.motion.x.value + icon.motion.width) {
+                    final float left = group.motion.layerLeft(icon.motion);
+                    if (icon.action != null && icon.action.isEnabled()
+                            && !(icon.bar instanceof ActionBar && ((ActionBar) icon.bar).isChatNavigationAvatar(icon.action))
+                            && x >= left && x <= left + icon.motion.width) {
                         touched = icon;
                         touchedGroup = group;
                         break;
@@ -691,7 +752,7 @@ public final class NavigationHeaderButtons {
         if (touched == null) return false;
         touchedGroup.press.onTouchEvent(event, NekoConfig.liquidChatElements);
         MotionEvent local = MotionEvent.obtain(event);
-        local.setLocation(touchedGroup.localX(event.getX()) - touched.motion.x.value + (touched.action.getWidth() - touched.motion.width) / 2,
+        local.setLocation(touchedGroup.localX(event.getX()) - touchedGroup.motion.layerLeft(touched.motion) + (touched.action.getWidth() - touched.motion.width) / 2,
                 touchedGroup.localY(event.getY()) + (touched.action.getHeight() - AndroidUtilities.dp(44)) / 2);
         touched.action.dispatchTouchEvent(local);
         local.recycle();
@@ -721,6 +782,8 @@ public final class NavigationHeaderButtons {
             bar.setDialogsNavigationTitleAlpha(1f);
         }
         managed.clear();
+        for (SimpleActionBar bar : managedSimple) bar.setNavigationButtonsOwned(false);
+        managedSimple.clear();
         leadingActions.clear();
         trailingActions.clear();
         currentBar = null;

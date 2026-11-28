@@ -1971,7 +1971,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
 
         photoVideoOptionsItem = new ImageView(context);
         photoVideoOptionsItem.setContentDescription(getString("AccDescrMoreOptions", R.string.AccDescrMoreOptions));
-        photoVideoOptionsItem.setTranslationY(actionBar.hasPlainButtonCircles() ? 0 : dp(10));
+        photoVideoOptionsItem.setTranslationY(actionBar != null && !actionBar.hasPlainButtonCircles() ? dp(10) : 0);
         photoVideoOptionsItem.setVisibility(View.INVISIBLE);
 
         if (simpleActionBar == null && !isArchivedOnlyStoriesView() && !isSearchingStories()) {
@@ -12012,10 +12012,15 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
      */
     private void updatePageBackground(MediaPage page) {
         final boolean sections = page.listView.hasSections();
+        final boolean redesigned = profileActivity instanceof ProfileActivity
+                && ((ProfileActivity) profileActivity).isRedesignedProfileEnabled();
         if (sections) {
-            page.listView.setSectionsDrawBackground(pagesFullscreen);
+            page.listView.setSectionsDrawBackground(pagesFullscreen && !redesigned);
         }
-        page.setDrawPageBackground(pagesFullscreen && !sections && page.selectedType != TAB_POLL);
+        if (redesigned) {
+            ThemeBind.backgroundColor(page.listView, ThemeBind.alpha(Theme.key_windowBackgroundGray, 0), resourcesProvider);
+        }
+        page.setDrawPageBackground(pagesFullscreen && !redesigned && !sections && page.selectedType != TAB_POLL);
         if (page.selectedType == TAB_POLL) {
             final Drawable wallpaper = PreviewView.getBackgroundDrawable(
                 page.wallpaper != null ? page.wallpaper : page.getBackground(),

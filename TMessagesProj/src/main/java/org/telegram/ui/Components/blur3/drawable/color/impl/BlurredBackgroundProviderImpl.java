@@ -54,6 +54,11 @@ public class BlurredBackgroundProviderImpl {
     }
 
     public static BlurredBackgroundProvider mainTabs(Theme.ResourcesProvider resourcesProvider) {
+        return mainTabs(resourcesProvider, () -> false);
+    }
+
+    public static BlurredBackgroundProvider mainTabs(Theme.ResourcesProvider resourcesProvider,
+                                                      java.util.function.BooleanSupplier neutralTint) {
         if (MainTabsUiHelper.isMaterial3NavigationBar()) {
             // Material navigation uses a semantic surface over plain blur, without refraction.
             return new BlurredBackgroundProviderBuilder(resourcesProvider)
@@ -72,7 +77,7 @@ public class BlurredBackgroundProviderImpl {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
             .setBackgroundColor((r, isDark) -> {
                 final float alpha = glassTintAlpha(LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.86f : 0.82f);
-                if (useBlackWhiteTint()) {
+                if (neutralTint.getAsBoolean() || usesStyledListSurface() || useBlackWhiteTint()) {
                     return blackWhiteBase(isDark, alpha);
                 }
                 final int colorBg = Theme.getColor(Theme.key_windowBackgroundWhite, r);
@@ -91,7 +96,7 @@ public class BlurredBackgroundProviderImpl {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
             .setBackgroundColor((r, isDark) -> {
                 final float alpha = glassTintAlpha(LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.86f : 0.82f);
-                if (useBlackWhiteTint()) {
+                if (usesStyledListSurface() || useBlackWhiteTint()) {
                     return blackWhiteBase(isDark, alpha);
                 }
                 final int colorBg = Theme.getColor(Theme.key_windowBackgroundWhite, r);
@@ -104,6 +109,11 @@ public class BlurredBackgroundProviderImpl {
             .setShadowLayer(dpf2(2.667f), 0, dpf2(0.85f))
             .setStrokeWidth(dpf2(0.4f), dpf2(0.4f))
             .build();
+    }
+
+    private static boolean usesStyledListSurface() {
+        return zxc.iconic.xenon.helpers.M3SectionsHelper.isEnabled()
+                || zxc.iconic.xenon.helpers.IosListItemsHelper.isEnabled();
     }
 
     public static BlurredBackgroundProvider tabsPanelNoShadow(Theme.ResourcesProvider resourcesProvider) {

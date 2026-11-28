@@ -157,6 +157,7 @@ public final class SimpleActivityHeadersController {
 
         plain = new ChatActivityFadeView(host.getContext());
         plain.setupColorKey(Theme.key_windowBackgroundGray);
+        plain.setResourcesProvider(fragment.getResourceProvider());
         plain.setOpaqueFade(true);
         plain.setFadeHeightTop(AndroidUtilities.dp(32), false);
         plain.setVisibility(View.GONE);
@@ -417,7 +418,7 @@ public final class SimpleActivityHeadersController {
             surface.setLayoutParams(params);
             surface.setBackgroundColor(color);
         }
-        final float fadeAlpha = upstreamFadeAlpha();
+        final float fadeAlpha = fragment instanceof org.telegram.ui.SettingsActivity ? 1f : upstreamFadeAlpha();
         surface.setAlpha(fadeAlpha);
         surface.setVisibility(fade ? View.GONE : View.VISIBLE);
 
@@ -428,7 +429,7 @@ public final class SimpleActivityHeadersController {
         bar.setExternalHeaderTitleVisible(!material || !normal);
         title.setVisibility(material && normal ? View.VISIBLE : View.GONE);
         if (material && normal) {
-            final int actionsWidth = bar.getMenu() == null ? 0 : bar.getMenu().getMeasuredWidth();
+            final int actionsWidth = bar.getTitleActionsWidth();
             final int leadingInset = bar.getBackButton() != null && bar.getBackButton().getVisibility() == View.VISIBLE
                     ? AndroidUtilities.dp(80) : AndroidUtilities.dp(24);
             title.update(bar.getTitle(), progress, NekoConfig.centerTitle, true, color,

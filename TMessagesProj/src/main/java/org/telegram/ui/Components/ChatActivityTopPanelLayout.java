@@ -54,6 +54,13 @@ public class ChatActivityTopPanelLayout extends AnimatedLinearLayout implements 
     BlurredBackgroundDrawable backgroundDrawable;
     private boolean liquidGlassGroupDrawn;
 
+    public void invalidatePinnedGlass() {
+        if (backgroundDrawable != null && getMetadata().getTotalVisibility() > 0) {
+            backgroundDrawable.invalidateDisplayList();
+            invalidate();
+        }
+    }
+
     public BlurredBackgroundDrawable prepareLiquidGlassGroup() {
         checkBoundsAndClipping();
         return backgroundDrawable;

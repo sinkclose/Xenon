@@ -3456,6 +3456,9 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
         if (drawBackground) {
             // only this decoration draws it
             setLegacySections(false);
+            if (sectionsItemDecoration != null) {
+                ThemeBind.backgroundColor(this, bitmapSectionsBackgroundColorKey, resourcesProvider);
+            }
         }
         if (bitmapSectionsItemDecoration != null) {
             bitmapSectionsItemDecoration.setDrawBackground(drawBackground);
@@ -3496,7 +3499,8 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
         if (isSectionView == null || isViewTypeSection == null || drawSectionBackground == null) {
             return;
         }
-        if (!legacySections) {
+        if (!legacySections && !M3SectionsHelper.isEnabled()
+                && !zxc.iconic.xenon.helpers.IosListItemsHelper.isEnabled()) {
             bitmapSectionsItemDecoration = new BitmapSectionsItemDecoration(
                     this,
                     isSectionView,

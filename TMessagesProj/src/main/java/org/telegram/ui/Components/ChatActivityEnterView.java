@@ -809,10 +809,6 @@ public class ChatActivityEnterView extends FrameLayout implements
 
     private boolean materialInputLayout;
 
-    public int getEmptyInputHeight() {
-        return dp(materialInputLayout ? 52 : DEFAULT_HEIGHT);
-    }
-
     public boolean isMaterialInputField() {
         return materialInputLayout && !recordingAudioVideo && recordInterfaceState == 0
                 && (recordedAudioPanel == null || recordedAudioPanel.getVisibility() != VISIBLE);

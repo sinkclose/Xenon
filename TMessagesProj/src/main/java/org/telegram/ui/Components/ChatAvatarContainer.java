@@ -890,7 +890,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         final int maxTextWidth;
         if (textOnlyPill) {
             int pillMaxWidth = actionBar != null ? actionBar.getCenteredPillMaxWidth() : Integer.MAX_VALUE;
-            maxTextWidth = Math.min(availableWidth, pillMaxWidth - dp(34));
+            maxTextWidth = Math.max(0, Math.min(availableWidth, pillMaxWidth - dp(34)));
         } else {
             maxTextWidth = availableWidth;
         }

@@ -3,6 +3,7 @@ package org.telegram.ui.Components;
 import static org.telegram.messenger.AndroidUtilities.dp;
 
 import android.content.Context;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.util.SparseArray;
@@ -23,6 +24,7 @@ import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
+import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.UserObject;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.tgnet.tl.TL_stories;
@@ -39,6 +41,7 @@ import org.telegram.ui.Components.Paint.ShapeDetector;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
 import org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl;
+import org.telegram.ui.Components.chat.layouts.ChatActivityFadeView;
 import org.telegram.ui.Components.glass.GlassTabView;
 import org.telegram.ui.DialogsActivity;
 import org.telegram.ui.MainTabsLayout;
@@ -50,6 +53,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import me.vkryl.android.animator.BoolAnimator;
+import zxc.iconic.xenon.NekoConfig;
 
 /** The shared media of a chat, or the stories of a peer, as a simple glass screen: fullscreen pages under the glass header and tabs. */
 public class MediaActivity extends BaseFragment implements SharedMediaLayout.SharedMediaPreloaderDelegate, FloatingDebugProvider, NotificationCenter.NotificationCenterDelegate {
@@ -85,6 +89,9 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
     private BoolAnimator actionModeBottomAnimator;
 
     private View listTopOverlay;
+    private ChatActivityFadeView headerFade;
+    private ProgressiveFadeBlurController headerBlur;
+    private FadeHeaderButtonGlass headerButtonGlass;
 
     private Runnable applyBulletin;
 
@@ -131,6 +138,8 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
     @Override
     public void onFragmentDestroy() {
         super.onFragmentDestroy();
+        if (headerBlur != null) headerBlur.detach();
+        if (simpleActionBar != null) simpleActionBar.setFadeButtonGlass(null);
         getNotificationCenter().removeObserver(this, NotificationCenter.userInfoDidLoad);
         getNotificationCenter().removeObserver(this, NotificationCenter.currentUserPremiumStatusChanged);
         getNotificationCenter().removeObserver(this, NotificationCenter.storiesEnabledUpdate);
@@ -162,6 +171,12 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
         return true;
     }
 
+    @Override
+    public void onResume() {
+        super.onResume();
+        updateHeaderStyle();
+    }
+
     private boolean isStoriesType() {
         return type == TYPE_STORIES || type == TYPE_ARCHIVED_CHANNEL_STORIES;
     }
@@ -169,6 +184,8 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
     @Override
     public View createView(Context context) {
         setHasOwnBackground(true);
+        simpleActionBar.setMaterialActivityHeader(NekoConfig.materialActivityHeaders);
+        simpleActionBar.setPlainBackCircle(NekoConfig.materialActivityHeaders || NekoConfig.fadeViewOtherActivities());
         simpleActionBar.setBackButtonDrawable(new BackDrawable(false));
         simpleActionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
             @Override
@@ -227,6 +244,7 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
         glass.setCapture((canvas, position) -> sharedMediaLayout.capturePages(canvas, position, frameLayout));
         sharedMediaLayout.setPagesGlassEngine(glassEngine);
         simpleActionBar.setBackground(null);
+        createHeaderFade(context, frameLayout);
 
         updateTitle(false);
         if (type == TYPE_STORIES_SEARCH && storiesCount != -1) {
@@ -417,6 +435,76 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
         });
     }
 
+    private void createHeaderFade(Context context, FrameLayout root) {
+        if (headerBlur != null) {
+            headerBlur.detach();
+            headerBlur = null;
+        }
+        simpleActionBar.setFadeButtonGlass(null);
+        headerButtonGlass = null;
+        headerFade = new ChatActivityFadeView(context);
+        headerFade.setupColorKey(Theme.key_windowBackgroundGray);
+        headerFade.setResourcesProvider(getResourceProvider());
+        headerFade.setFadeHeightTop(dp(32), false);
+        headerFade.setOpaqueFade(true);
+        sharedMediaLayout.addPagesOverlay(headerFade, LayoutHelper.MATCH_PARENT);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            headerBlur = new ProgressiveFadeBlurController(sharedMediaLayout, sharedMediaLayout,
+                    sharedMediaLayout.indexOfChild(headerFade) + 1, () -> getThemedColor(Theme.key_windowBackgroundGray));
+            headerBlur.setUniformBlurAllowed(true);
+            headerBlur.setOpaqueFade(true);
+            headerBlur.setFadeHeightTop(dp(32), false);
+            headerBlur.setContentCapture(root, (canvas, position) -> sharedMediaLayout.capturePages(canvas, position, root));
+            headerBlur.setCaptureOnDraw();
+        }
+        updateHeaderCaptureView();
+    }
+
+    private void updateHeaderCaptureView() {
+        if (headerFade == null || sharedMediaLayout == null) return;
+        final RecyclerListView list = sharedMediaLayout.getCurrentListView();
+        headerFade.setIos27SeparatorSource(list);
+        if (headerBlur != null) {
+            headerBlur.setCaptureViews(sharedMediaLayout, list == null ? null : java.util.Collections.singletonList(list));
+            headerBlur.setIos27SeparatorSource(list);
+            headerBlur.requestCapture();
+        }
+    }
+
+    private void updateHeaderStyle() {
+        if (headerFade == null || simpleActionBar == null) return;
+        final boolean material = NekoConfig.materialActivityHeaders;
+        final boolean fade = NekoConfig.fadeViewOtherActivities();
+        final boolean glassButtons = !material && fade && SharedConfig.chatBlurEnabled();
+        simpleActionBar.setMaterialActivityHeader(material);
+        simpleActionBar.setPlainBackCircle(material || fade);
+        if (glassButtons && headerButtonGlass == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            final org.telegram.utils.glass.source.GlassSource source = getBaseSimpleGlass().getGlassSource();
+            if (source != null) {
+                headerButtonGlass = new FadeHeaderButtonGlass(fragmentView, source, getResourceProvider(),
+                        BlurredBackgroundProviderImpl.simpleActionBar(getResourceProvider()));
+            }
+        }
+        simpleActionBar.setFadeButtonGlass(glassButtons ? headerButtonGlass : null);
+        final int headerBottom = mSystemInsets.top + ActionBar.getCurrentActionBarHeight();
+        final int color = getThemedColor(Theme.key_windowBackgroundGray);
+        final boolean blurred = fade && headerBlur != null && headerBlur.isEnabled();
+        listTopOverlay.setVisibility(fade ? View.GONE : View.VISIBLE);
+        headerFade.setVisibility(fade && !blurred ? View.VISIBLE : View.GONE);
+        headerFade.setFadeZoneTop(headerBottom);
+        headerFade.setFadeTopAlpha(NekoConfig.blurredFadeDimming ? NekoConfig.blurredFadeDimStrength * 255 / 100 : 0);
+        headerFade.setIos27Dimming(NekoConfig.ios27DimmingEnabled(), headerBottom, color);
+        if (headerBlur != null) {
+            headerBlur.setFadeViewVisibility(blurred ? View.VISIBLE : View.GONE);
+            headerBlur.setFadeZoneTop(headerBottom);
+            headerBlur.setProgressiveBlurZoneTop(headerBottom + dp(31));
+            headerBlur.setIos27Dimming(NekoConfig.ios27DimmingEnabled(), headerBottom, color);
+            if (blurred) headerBlur.startContinuousUpdates();
+            else headerBlur.stopContinuousUpdates();
+        }
+    }
+
     private void applyInsets() {
         if (sharedMediaLayout == null) {
             return;
@@ -442,6 +530,7 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
             navigationBarFadeView.setVisibility(mSystemInsets.bottom >= dp(40) || bottomTabsHeight > 0 ? View.VISIBLE : View.GONE);
             navigationBarFadeView.requestLayout();
         }
+        updateHeaderStyle();
         checkStoriesBottom();
     }
 
@@ -539,6 +628,7 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
             @Override
             protected void onSelectedTabChanged() {
                 super.onSelectedTabChanged();
+                updateHeaderCaptureView();
                 updateMediaCount();
             }
 
@@ -620,6 +710,7 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
 
             @Override
             protected void onTabProgress(float progress) {
+                if (headerBlur != null) headerBlur.requestCapture();
                 if (type != TYPE_STORIES) {
                     return;
                 }

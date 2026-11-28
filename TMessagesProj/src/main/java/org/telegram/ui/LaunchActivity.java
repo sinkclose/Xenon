@@ -1046,6 +1046,14 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 || visibleActionMode != null || !sheetFragmentsStack.isEmpty()
                 || actionBarLayout.isTransitionAnimationInProgress() || actionBarLayout.isSwipeInProgress()
                 || !onBackPressed(false) || GroupCallPip.onBackPressed(false)) return null;
+        final BaseFragment chatContainer = AndroidUtilities.isTablet() && rightActionBarLayout != null
+                && (layersActionBarLayout == null || layersActionBarLayout.getFragmentStack().isEmpty())
+                && rightActionBarLayout.getLastFragment() != null
+                ? rightActionBarLayout.getLastFragment() : actionBarLayout.getLastFragment();
+        if (chatContainer instanceof ChatActivity) {
+            final zxc.iconic.xenon.helpers.PredictiveTabBack.Target sidebar = ((ChatActivity) chatContainer).getTopicsPanelBackTarget();
+            if (sidebar != null) return sidebar;
+        }
         if (AndroidUtilities.isTablet() && (rightActionBarLayout != null && !rightActionBarLayout.getFragmentStack().isEmpty()
                 || layersActionBarLayout != null && !layersActionBarLayout.getFragmentStack().isEmpty())) return null;
         BaseFragment root = actionBarLayout.getLastFragment();

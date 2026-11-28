@@ -105,7 +105,6 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     private static final int POSITION_CONTACTS = 1;
     private static final int POSITION_CALLS_OR_SETTINGS = 2;
     private static final int POSITION_PROFILE = 3;
-    private static final int IOS_BOTTOM_FADE_HEIGHT_DP = 16;
 
     private static final int INDEX_CHATS = 0;
     private static final int INDEX_CONTACTS = 1;
@@ -173,7 +172,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         source.setupRenderer(new RenderNodeWithHash.Renderer() {
             @Override
             public void renderNodeCalculateHash(IBlur3Hash hash) {
-                hash.add(getThemedColor(Theme.key_windowBackgroundWhite));
+                hash.add(getEstBackgroundColor());
                 hash.add(SharedConfig.chatBlurEnabled());
                 hash.add(useMaterialTabsBlur());
                 hash.add(useFixedMaterialTabsBlur());
@@ -209,7 +208,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
                 final int width = fragmentView.getMeasuredWidth();
                 final int height = fragmentView.getMeasuredHeight();
 
-                canvas.drawColor(getThemedColor(Theme.key_windowBackgroundWhite));
+                canvas.drawColor(getEstBackgroundColor());
 
                 for (int a = 0, N = fragmentsArr.size(); a < N; a++) {
                     final FragmentState state = fragmentsArr.valueAt(a);
@@ -287,10 +286,11 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     }
 
     private int getEstBackgroundColor() {
+        final int dialogs = MainTabsManager.getPosition(MainTabsManager.TabType.CHATS);
         return ColorUtils.blendARGB(
                 getThemedColor(Theme.key_windowBackgroundGray),
                 getThemedColor(Theme.key_windowBackgroundWhite),
-                viewPager != null ? viewPager.getPositionVisibility(0) : 1);
+                viewPager != null && dialogs >= 0 ? viewPager.getPositionVisibility(dialogs) : 0);
     }
 
     private boolean tabletLayout;
@@ -419,7 +419,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         iBlur3FactoryGlass.setLiquidGlassEffectAllowed(!zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar());
         iosSearchFactory = iBlur3FactoryGlass;
 
-        tabsViewBackground = iBlur3FactoryGlass.create(tabsView, BlurredBackgroundProviderImpl.mainTabs(resourceProvider));
+        tabsViewBackground = iBlur3FactoryGlass.create(tabsView, BlurredBackgroundProviderImpl.mainTabs(resourceProvider, this::isSettingsTabSelected));
         if (!zxc.iconic.xenon.helpers.MainTabsUiHelper.isMaterial3NavigationBar()) {
             BlurredBackgroundDrawable lens = iBlur3FactoryGlass.create(tabsView, null);
             lens.setPadding(0);
@@ -441,8 +441,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
         fadeView = new View(context);
         BlurredBackgroundWithFadeDrawable fadeDrawable = new BlurredBackgroundWithFadeDrawable(iBlur3FactoryFade.create(fadeView, null));
-        // Leave the actual glass capture unchanged; cover sharp rows under and between the controls.
-        fadeDrawable.setFadeHeight(dp(NekoConfig.iosBottomBar ? IOS_BOTTOM_FADE_HEIGHT_DP : 60), !NekoConfig.iosBottomBar);
+        fadeDrawable.setFadeHeight(dp(60), true);
         fadeView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         fadeView.setBackground(fadeDrawable);
         fadeView.setVisibility(NekoConfig.showMainTabs ? View.VISIBLE : View.GONE);
@@ -1001,8 +1000,18 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
     public GlassTabView[] tabs;
     private List<MainTabsManager.Tab> currentTabsConfig = new ArrayList<>();
+    private boolean settingsTabSelected;
+
+    private boolean isSettingsTabSelected() {
+        return settingsTabSelected;
+    }
 
     public void selectTab(int position, boolean animated) {
+        final boolean settings = position >= 0 && position == MainTabsManager.getPosition(MainTabsManager.TabType.SETTINGS);
+        if (settingsTabSelected != settings) {
+            settingsTabSelected = settings;
+            if (tabsViewBackground != null) tabsViewBackground.updateColors();
+        }
         if (tabsView != null && position >= 0 && position < tabs.length) {
             tabsView.setTabSelected(tabs[position], animated);
             return;
@@ -1088,8 +1097,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
         ViewGroup.MarginLayoutParams lp;
         {
-            final int extraFade = NekoConfig.iosBottomBar ? IOS_BOTTOM_FADE_HEIGHT_DP - DialogsActivity.MAIN_TABS_MARGIN : 0;
-            final int height = navigationBarHeight + updateLayoutHeight + dp(isTabsHidden() ? 0 : DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS + extraFade);
+            final int height = navigationBarHeight + updateLayoutHeight + dp(isTabsHidden() ? 0 : DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS);
             lp = (ViewGroup.MarginLayoutParams) fadeView.getLayoutParams();
             if (lp.height != height) {
                 lp.height = height;

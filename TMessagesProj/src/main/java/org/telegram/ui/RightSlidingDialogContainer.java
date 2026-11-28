@@ -264,6 +264,10 @@ public abstract class RightSlidingDialogContainer extends FrameLayout {
     }
 
     public zxc.iconic.xenon.helpers.PredictiveTabBack.Target getPredictiveBackTarget() {
+        if (isOpenned && openAnimator == null && !replaceAnimationInProgress && currentFragment instanceof ChatActivity) {
+            final zxc.iconic.xenon.helpers.PredictiveTabBack.Target sidebar = ((ChatActivity) currentFragment).getTopicsPanelBackTarget();
+            if (sidebar != null) return sidebar;
+        }
         if (currentActionBarView != null && currentActionBarView.isSearchFieldVisible()) {
             return currentActionBarView.getPredictiveSearchBackTarget();
         }
